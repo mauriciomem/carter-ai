@@ -1,0 +1,9 @@
+{
+  "carter-github": {
+    "type": "local",
+    "command": ["npx", "-y", "@modelcontextprotocol/server-github"],
+    "env": {
+      "GITHUB_TOKEN": "${GITHUB_TOKEN}"
+    }
+  }
+}

@@ -1,0 +1,9 @@
+{
+  "carter-terraform": {
+    "type": "local",
+    "command": ["npx", "-y", "@hashicorp/terraform-mcp-server"],
+    "env": {
+      "TF_TOKEN": "${TF_TOKEN}"
+    }
+  }
+}
