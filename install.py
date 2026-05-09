@@ -132,6 +132,87 @@ def _vscode_settings_path(base_dir: Path | None) -> Path:
 
 
 # ──────────────────────────────────────────────────────────────────────────────
+# JSONC parsing (JSON with Comments — used by VS Code settings.json)
+# ──────────────────────────────────────────────────────────────────────────────
+
+
+def _strip_jsonc(text: str) -> str:
+    """Strip // and /* */ comments and trailing commas from JSONC text.
+
+    Handles comments inside strings correctly (leaves them alone).
+    """
+    result: list[str] = []
+    i = 0
+    n = len(text)
+
+    while i < n:
+        c = text[i]
+
+        # String literal — copy verbatim, including any // or /* inside
+        if c == '"':
+            result.append(c)
+            i += 1
+            while i < n:
+                sc = text[i]
+                result.append(sc)
+                if sc == '\\' and i + 1 < n:
+                    i += 1
+                    result.append(text[i])
+                elif sc == '"':
+                    break
+                i += 1
+            i += 1
+            continue
+
+        # Single-line comment
+        if c == '/' and i + 1 < n and text[i + 1] == '/':
+            # Skip to end of line
+            i += 2
+            while i < n and text[i] != '\n':
+                i += 1
+            continue
+
+        # Block comment
+        if c == '/' and i + 1 < n and text[i + 1] == '*':
+            i += 2
+            while i + 1 < n and not (text[i] == '*' and text[i + 1] == '/'):
+                i += 1
+            i += 2  # skip */
+            continue
+
+        result.append(c)
+        i += 1
+
+    # Remove trailing commas before } or ]
+    import re
+    cleaned = "".join(result)
+    cleaned = re.sub(r',\s*([}\]])', r'\1', cleaned)
+    return cleaned
+
+
+def _load_jsonc(path: Path) -> dict | None:
+    """Load a JSONC file (JSON with Comments). Returns None on failure."""
+    try:
+        raw = path.read_text()
+        stripped = _strip_jsonc(raw)
+        return json.loads(stripped)
+    except (json.JSONDecodeError, OSError) as e:
+        log_debug(f"JSONC parse failed for {path}: {e}")
+        return None
+
+
+def _write_json_preserving(path: Path, data: dict, original_text: str | None) -> None:
+    """Write JSON data to a file.
+
+    If the original file used JSONC features (comments, trailing commas),
+    we cannot preserve those through a round-trip. We write clean JSON
+    with the same indent style.
+    """
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(data, indent=2) + "\n")
+
+
+# ──────────────────────────────────────────────────────────────────────────────
 # File hashing
 # ──────────────────────────────────────────────────────────────────────────────
 
@@ -390,14 +471,26 @@ def install_knowledge(
 # ──────────────────────────────────────────────────────────────────────────────
 
 
-def _merge_json_key(file_path: Path, key: str, entries: dict) -> None:
-    """Merge entries into a specific key of a JSON file."""
+def _merge_json_key(file_path: Path, key: str, entries: dict, backup_root: Path | None = None) -> None:
+    """Merge entries into a specific key of a JSON file.
+
+    Handles JSONC (JSON with Comments) used by VS Code settings.json.
+    Backs up the file before any modification.
+    """
     data: dict = {}
     if file_path.exists():
-        try:
-            data = json.loads(file_path.read_text())
-        except json.JSONDecodeError:
-            log_warn(f"Could not parse {file_path}, creating new file")
+        # Back up before modifying
+        if backup_root:
+            _backup_file(file_path, backup_root)
+
+        data = _load_jsonc(file_path)
+        if data is None:
+            log_err(f"Could not parse {file_path} — skipping to avoid data loss")
+            log_warn(
+                "The file may contain syntax errors. Fix them and re-run the installer.",
+                f"File: {file_path}",
+            )
+            return
 
     if key not in data:
         data[key] = {}
@@ -413,8 +506,7 @@ def _merge_json_key(file_path: Path, key: str, entries: dict) -> None:
             )
 
     data[key].update(entries)
-    file_path.parent.mkdir(parents=True, exist_ok=True)
-    file_path.write_text(json.dumps(data, indent=2) + "\n")
+    _write_json_preserving(file_path, data, None)
 
 
 def configure_mcp_servers(
@@ -422,6 +514,7 @@ def configure_mcp_servers(
     base_dir: Path | None,
     manifest: dict,
     prereqs: dict[str, bool],
+    backup_root: Path | None = None,
 ) -> int:
     log_step("Configuring MCP servers...")
     count = 0
@@ -435,7 +528,7 @@ def configure_mcp_servers(
             src = REPO_ROOT / "mcp" / "copilot" / f"{server}.json"
             copilot_entries.update(json.loads(src.read_text()))
 
-        _merge_json_key(vscode_settings, "mcp.servers", copilot_entries)
+        _merge_json_key(vscode_settings, "mcp.servers", copilot_entries, backup_root)
         for server in servers:
             log_ok(f"carter-{server} → VS Code settings.json")
             count += 1
@@ -478,7 +571,7 @@ def configure_mcp_servers(
             src = REPO_ROOT / "mcp" / "opencode" / f"{server}.json"
             opencode_entries.update(json.loads(src.read_text()))
 
-        _merge_json_key(opencode_config, "mcp", opencode_entries)
+        _merge_json_key(opencode_config, "mcp", opencode_entries, backup_root)
         for server in servers:
             log_ok(f"carter-{server} → opencode.json")
             count += 1
@@ -563,17 +656,17 @@ def uninstall(targets: list[str], base_dir: Path | None, prereqs: dict[str, bool
         log_step("Removing MCP servers (VS Code)...")
         vscode_settings = _vscode_settings_path(base_dir)
         if vscode_settings.exists():
-            try:
-                data = json.loads(vscode_settings.read_text())
+            data = _load_jsonc(vscode_settings)
+            if data is not None:
                 mcp = data.get("mcp.servers", {})
                 removed = [k for k in list(mcp.keys()) if k.startswith("carter-")]
                 for k in removed:
                     del mcp[k]
                     log_ok(f"Removed {k} from settings.json")
                 data["mcp.servers"] = mcp
-                vscode_settings.write_text(json.dumps(data, indent=2) + "\n")
-            except json.JSONDecodeError:
-                log_warn("Could not parse VS Code settings.json")
+                _write_json_preserving(vscode_settings, data, None)
+            else:
+                log_err("Could not parse VS Code settings.json — skipping to avoid data loss")
 
         # Copilot CLI
         if prereqs.get("copilot", False) and not base_dir:
@@ -593,17 +686,17 @@ def uninstall(targets: list[str], base_dir: Path | None, prereqs: dict[str, bool
         log_step("Removing MCP servers (OpenCode)...")
         opencode_config = _opencode_base(base_dir) / "opencode.json"
         if opencode_config.exists():
-            try:
-                data = json.loads(opencode_config.read_text())
+            data = _load_jsonc(opencode_config)
+            if data is not None:
                 mcp = data.get("mcp", {})
                 removed = [k for k in list(mcp.keys()) if k.startswith("carter-")]
                 for k in removed:
                     del mcp[k]
                     log_ok(f"Removed {k} from opencode.json")
                 data["mcp"] = mcp
-                opencode_config.write_text(json.dumps(data, indent=2) + "\n")
-            except json.JSONDecodeError:
-                log_warn("Could not parse opencode.json")
+                _write_json_preserving(opencode_config, data, None)
+            else:
+                log_err("Could not parse opencode.json — skipping to avoid data loss")
 
     # Remove manifest
     manifest_path = _copilot_base(base_dir) / ".carter-manifest.json"
@@ -708,7 +801,7 @@ def main() -> None:
     skill_stats = install_skills(targets, args.base_dir, manifest, backup_root)
     install_instructions(targets, args.base_dir, manifest, backup_root)
     knowledge_count = install_knowledge(args.base_dir, manifest, backup_root)
-    mcp_count = configure_mcp_servers(targets, args.base_dir, manifest, prereqs)
+    mcp_count = configure_mcp_servers(targets, args.base_dir, manifest, prereqs, backup_root)
 
     # Write manifest
     manifest_path = write_manifest(manifest, args.base_dir)

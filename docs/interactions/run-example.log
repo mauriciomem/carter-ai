@@ -1,0 +1,205 @@
+ai-stuff/ai-assistant git:(main) ✗ 20:19:36
+> uv run install.py 
+
+ Carter Installer v1.0
+ Target: copilot, opencode
+
+→ Detecting environment...
+  OS: Darwin | Python: 3.13.7 | uv: 0.11.8 (Homebrew 2026-04-27 aarch64-apple-darwin)
+
+→ Checking prerequisites...
+  ✓ VS Code 1.118.1
+  ✓ gh CLI gh version 2.89.0 (2026-03-26)
+  ✓ terraform Terraform v1.15.0
+  ✓ jq jq-1.8.1
+  ✓ copilot CLI GitHub Copilot CLI 1.0.44.
+  ✓ opencode 1.14.39
+
+→ Checking credentials...
+  ⚠ GITHUB_TOKEN
+    export GITHUB_TOKEN="your-value"
+  ⚠ TF_TOKEN
+    export TF_TOKEN="your-value"
+  ⚠ ATLASSIAN_API_TOKEN
+    export ATLASSIAN_API_TOKEN="your-value"
+  ⚠ ATLASSIAN_EMAIL
+    export ATLASSIAN_EMAIL="your-value"
+  ⚠ ATLASSIAN_URL
+    export ATLASSIAN_URL="your-value"
+
+→ Installing agents...
+  ✓ ~/.copilot/agents/carter-architect.md
+  ✓ ~/.config/opencode/agents/carter-architect.md
+  ✓ ~/.copilot/agents/carter-devops.md
+  ✓ ~/.config/opencode/agents/carter-devops.md
+  ✓ ~/.copilot/agents/carter-engineer.md
+  ✓ ~/.config/opencode/agents/carter-engineer.md
+  ✓ ~/.copilot/agents/carter-learner.md
+  ✓ ~/.config/opencode/agents/carter-learner.md
+  ✓ ~/.copilot/agents/carter-maestro.md
+  ✓ ~/.config/opencode/agents/carter-maestro.md
+  ✓ ~/.copilot/agents/carter-pm.md
+  ✓ ~/.config/opencode/agents/carter-pm.md
+
+→ Installing skills...
+  ✓ ~/.copilot/skills/carter-adr/SKILL.md
+  ✓ ~/.config/opencode/skills/carter-adr/SKILL.md
+  ✓ ~/.copilot/skills/carter-code-review/SKILL.md
+  ✓ ~/.config/opencode/skills/carter-code-review/SKILL.md
+  ✓ ~/.copilot/skills/carter-design-review/SKILL.md
+  ✓ ~/.config/opencode/skills/carter-design-review/SKILL.md
+  ✓ ~/.copilot/skills/carter-diagram/SKILL.md
+  ✓ ~/.config/opencode/skills/carter-diagram/SKILL.md
+  ✓ ~/.copilot/skills/carter-distill/SKILL.md
+  ✓ ~/.config/opencode/skills/carter-distill/SKILL.md
+  ✓ ~/.copilot/skills/carter-explain/SKILL.md
+  ✓ ~/.config/opencode/skills/carter-explain/SKILL.md
+  ✓ ~/.copilot/skills/carter-git-strategy/SKILL.md
+  ✓ ~/.config/opencode/skills/carter-git-strategy/SKILL.md
+  ✓ ~/.copilot/skills/carter-golang/SKILL.md
+  ✓ ~/.config/opencode/skills/carter-golang/SKILL.md
+  ✓ ~/.copilot/skills/carter-mistakes/SKILL.md
+  ✓ ~/.config/opencode/skills/carter-mistakes/SKILL.md
+  ✓ ~/.copilot/skills/carter-pipeline/SKILL.md
+  ✓ ~/.config/opencode/skills/carter-pipeline/SKILL.md
+  ✓ ~/.copilot/skills/carter-plan/SKILL.md
+  ✓ ~/.config/opencode/skills/carter-plan/SKILL.md
+  ✓ ~/.copilot/skills/carter-python/SKILL.md
+  ✓ ~/.config/opencode/skills/carter-python/SKILL.md
+  ✓ ~/.copilot/skills/carter-research/SKILL.md
+  ✓ ~/.config/opencode/skills/carter-research/SKILL.md
+  ✓ ~/.copilot/skills/carter-risk/SKILL.md
+  ✓ ~/.config/opencode/skills/carter-risk/SKILL.md
+  ✓ ~/.copilot/skills/carter-terraform/SKILL.md
+  ✓ ~/.config/opencode/skills/carter-terraform/SKILL.md
+  ✓ ~/.copilot/skills/carter-test-first/SKILL.md
+  ✓ ~/.config/opencode/skills/carter-test-first/SKILL.md
+  ✓ ~/.copilot/skills/carter-triage/SKILL.md
+  ✓ ~/.config/opencode/skills/carter-triage/SKILL.md
+
+→ Installing instructions...
+  ✓ ~/.copilot/instructions/copilot-instructions.md
+  ✓ ~/.config/opencode/instructions/copilot-instructions.md
+
+→ Initializing knowledge base...
+  ✓ ~/.copilot/knowledge/debugging.md
+  ✓ ~/.copilot/knowledge/decisions.md
+  ✓ ~/.copilot/knowledge/infrastructure.md
+  ✓ ~/.copilot/knowledge/mistakes.md
+  ✓ ~/.copilot/knowledge/patterns.md
+  ✓ ~/.copilot/knowledge/project-history.md
+
+→ Configuring MCP servers...
+  ⚠ Could not parse /Users/mmitolo/Library/Application Support/Code/User/settings.json, creating new file
+  ✓ carter-github → VS Code settings.json
+  ✓ carter-terraform → VS Code settings.json
+  ✓ carter-atlassian → VS Code settings.json
+  ✓ carter-github → copilot mcp add
+  ✓ carter-terraform → copilot mcp add
+  ✓ carter-atlassian → copilot mcp add
+  ⚠ Existing "github" server found in opencode.json
+    Carter will install as "carter-github" (separate entry). You may want to remove "github" to avoid duplicate tools.
+  ⚠ Existing "terraform" server found in opencode.json
+    Carter will install as "carter-terraform" (separate entry). You may want to remove "terraform" to avoid duplicate tools.
+  ⚠ Existing "atlassian" server found in opencode.json
+    Carter will install as "carter-atlassian" (separate entry). You may want to remove "atlassian" to avoid duplicate tools.
+  ✓ carter-github → opencode.json
+  ✓ carter-terraform → opencode.json
+  ✓ carter-atlassian → opencode.json
+
+✓ Installation complete
+  Agents: 12
+  Skills: 34
+  MCP servers: 9
+  Knowledge files: 6 new
+  Manifest: ~/.copilot/.carter-manifest.json
+ai-stuff/ai-assistant git:(main) ✗ 20:20:22
+> uv run install.py --uninstall
+
+ Carter Installer v1.0
+ Target: copilot, opencode
+
+→ Detecting environment...
+  OS: Darwin | Python: 3.13.7 | uv: 0.11.8 (Homebrew 2026-04-27 aarch64-apple-darwin)
+
+→ Checking prerequisites...
+  ✓ VS Code 1.118.1
+  ✓ gh CLI gh version 2.89.0 (2026-03-26)
+  ✓ terraform Terraform v1.15.0
+  ✓ jq jq-1.8.1
+  ✓ copilot CLI GitHub Copilot CLI 1.0.44.
+  ✓ opencode 1.14.39
+
+→ Uninstalling Carter...
+  ✓ Removed ~/.copilot/agents/carter-architect.md
+  ✓ Removed ~/.config/opencode/agents/carter-architect.md
+  ✓ Removed ~/.copilot/agents/carter-devops.md
+  ✓ Removed ~/.config/opencode/agents/carter-devops.md
+  ✓ Removed ~/.copilot/agents/carter-engineer.md
+  ✓ Removed ~/.config/opencode/agents/carter-engineer.md
+  ✓ Removed ~/.copilot/agents/carter-learner.md
+  ✓ Removed ~/.config/opencode/agents/carter-learner.md
+  ✓ Removed ~/.copilot/agents/carter-maestro.md
+  ✓ Removed ~/.config/opencode/agents/carter-maestro.md
+  ✓ Removed ~/.copilot/agents/carter-pm.md
+  ✓ Removed ~/.config/opencode/agents/carter-pm.md
+  ✓ Removed ~/.copilot/skills/carter-adr/SKILL.md
+  ✓ Removed ~/.config/opencode/skills/carter-adr/SKILL.md
+  ✓ Removed ~/.copilot/skills/carter-code-review/SKILL.md
+  ✓ Removed ~/.config/opencode/skills/carter-code-review/SKILL.md
+  ✓ Removed ~/.copilot/skills/carter-design-review/SKILL.md
+  ✓ Removed ~/.config/opencode/skills/carter-design-review/SKILL.md
+  ✓ Removed ~/.copilot/skills/carter-diagram/SKILL.md
+  ✓ Removed ~/.config/opencode/skills/carter-diagram/SKILL.md
+  ✓ Removed ~/.copilot/skills/carter-distill/SKILL.md
+  ✓ Removed ~/.config/opencode/skills/carter-distill/SKILL.md
+  ✓ Removed ~/.copilot/skills/carter-explain/SKILL.md
+  ✓ Removed ~/.config/opencode/skills/carter-explain/SKILL.md
+  ✓ Removed ~/.copilot/skills/carter-git-strategy/SKILL.md
+  ✓ Removed ~/.config/opencode/skills/carter-git-strategy/SKILL.md
+  ✓ Removed ~/.copilot/skills/carter-golang/SKILL.md
+  ✓ Removed ~/.config/opencode/skills/carter-golang/SKILL.md
+  ✓ Removed ~/.copilot/skills/carter-mistakes/SKILL.md
+  ✓ Removed ~/.config/opencode/skills/carter-mistakes/SKILL.md
+  ✓ Removed ~/.copilot/skills/carter-pipeline/SKILL.md
+  ✓ Removed ~/.config/opencode/skills/carter-pipeline/SKILL.md
+  ✓ Removed ~/.copilot/skills/carter-plan/SKILL.md
+  ✓ Removed ~/.config/opencode/skills/carter-plan/SKILL.md
+  ✓ Removed ~/.copilot/skills/carter-python/SKILL.md
+  ✓ Removed ~/.config/opencode/skills/carter-python/SKILL.md
+  ✓ Removed ~/.copilot/skills/carter-research/SKILL.md
+  ✓ Removed ~/.config/opencode/skills/carter-research/SKILL.md
+  ✓ Removed ~/.copilot/skills/carter-risk/SKILL.md
+  ✓ Removed ~/.config/opencode/skills/carter-risk/SKILL.md
+  ✓ Removed ~/.copilot/skills/carter-terraform/SKILL.md
+  ✓ Removed ~/.config/opencode/skills/carter-terraform/SKILL.md
+  ✓ Removed ~/.copilot/skills/carter-test-first/SKILL.md
+  ✓ Removed ~/.config/opencode/skills/carter-test-first/SKILL.md
+  ✓ Removed ~/.copilot/skills/carter-triage/SKILL.md
+  ✓ Removed ~/.config/opencode/skills/carter-triage/SKILL.md
+  ✓ Removed ~/.copilot/instructions/copilot-instructions.md
+  ✓ Removed ~/.config/opencode/instructions/copilot-instructions.md
+  ✓ Removed ~/.copilot/knowledge/debugging.md
+  ✓ Removed ~/.copilot/knowledge/decisions.md
+  ✓ Removed ~/.copilot/knowledge/infrastructure.md
+  ✓ Removed ~/.copilot/knowledge/mistakes.md
+  ✓ Removed ~/.copilot/knowledge/patterns.md
+  ✓ Removed ~/.copilot/knowledge/project-history.md
+
+→ Removing MCP servers (VS Code)...
+  ✓ Removed carter-github from settings.json
+  ✓ Removed carter-terraform from settings.json
+  ✓ Removed carter-atlassian from settings.json
+
+→ Removing MCP servers (Copilot CLI)...
+  ✓ Removed carter-github from Copilot CLI
+  ✓ Removed carter-terraform from Copilot CLI
+  ✓ Removed carter-atlassian from Copilot CLI
+
+→ Removing MCP servers (OpenCode)...
+  ✓ Removed carter-github from opencode.json
+  ✓ Removed carter-terraform from opencode.json
+  ✓ Removed carter-atlassian from opencode.json
+  ✓ Removed manifest
+
+✓ Uninstall complete

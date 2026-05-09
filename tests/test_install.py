@@ -230,6 +230,160 @@ class TestMCPMerging:
         data = json.loads(settings.read_text())
         assert data["editor.fontSize"] == 14
 
+    def test_handles_jsonc_with_comments(self, base_dir: Path) -> None:
+        """VS Code settings.json uses JSONC — comments must not break parsing."""
+        settings = base_dir / "vscode" / "settings.json"
+        settings.parent.mkdir(parents=True, exist_ok=True)
+        settings.write_text("""{
+  // Editor settings
+  "editor.fontSize": 14,
+  "workbench.colorTheme": "Lunar-dark-theme",
+  /* MCP servers block */
+  "mcp.servers": {}
+}
+""")
+
+        entries = {"carter-github": {"command": "npx"}}
+        install._merge_json_key(settings, "mcp.servers", entries)
+
+        data = json.loads(settings.read_text())
+        assert data["editor.fontSize"] == 14
+        assert data["workbench.colorTheme"] == "Lunar-dark-theme"
+        assert "carter-github" in data["mcp.servers"]
+
+    def test_handles_jsonc_with_trailing_commas(self, base_dir: Path) -> None:
+        """VS Code allows trailing commas in settings.json."""
+        settings = base_dir / "vscode" / "settings.json"
+        settings.parent.mkdir(parents=True, exist_ok=True)
+        settings.write_text("""{
+  "editor.fontSize": 14,
+  "mcp.servers": {},
+}
+""")
+
+        entries = {"carter-github": {"command": "npx"}}
+        install._merge_json_key(settings, "mcp.servers", entries)
+
+        data = json.loads(settings.read_text())
+        assert data["editor.fontSize"] == 14
+        assert "carter-github" in data["mcp.servers"]
+
+    def test_handles_jsonc_comments_inside_strings(self, base_dir: Path) -> None:
+        """Comments inside string values must not be stripped."""
+        settings = base_dir / "vscode" / "settings.json"
+        settings.parent.mkdir(parents=True, exist_ok=True)
+        settings.write_text("""{
+  "custom-ui-style.stylesheet": {
+    // This is a comment
+    ".tab:not(:hover) .tab-actions": {
+      "opacity": "0"
+    }
+  },
+  "mcp.servers": {},
+}
+""")
+
+        entries = {"carter-github": {"command": "npx"}}
+        install._merge_json_key(settings, "mcp.servers", entries)
+
+        data = json.loads(settings.read_text())
+        assert ".tab:not(:hover) .tab-actions" in data["custom-ui-style.stylesheet"]
+        assert "carter-github" in data["mcp.servers"]
+
+    def test_unparseable_file_not_overwritten(self, base_dir: Path) -> None:
+        """If a file is truly broken (not just JSONC), do NOT overwrite it."""
+        settings = base_dir / "vscode" / "settings.json"
+        settings.parent.mkdir(parents=True, exist_ok=True)
+        original = "<<<this is not json at all>>>"
+        settings.write_text(original)
+
+        entries = {"carter-github": {"command": "npx"}}
+        install._merge_json_key(settings, "mcp.servers", entries)
+
+        # File must not be overwritten — original content preserved
+        assert settings.read_text() == original
+
+    def test_backup_created_before_modify(self, base_dir: Path) -> None:
+        """Settings file is backed up before any modification."""
+        settings = base_dir / "vscode" / "settings.json"
+        settings.parent.mkdir(parents=True, exist_ok=True)
+        settings.write_text(json.dumps({"editor.fontSize": 14}))
+
+        backup_root = base_dir / "backup"
+        entries = {"carter-github": {"command": "npx"}}
+        install._merge_json_key(settings, "mcp.servers", entries, backup_root)
+
+        backup_file = backup_root / "settings.json"
+        assert backup_file.exists()
+        backup_data = json.loads(backup_file.read_text())
+        assert backup_data["editor.fontSize"] == 14
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# JSONC parsing
+# ──────────────────────────────────────────────────────────────────────────────
+
+
+class TestJSONCParsing:
+    def test_strip_single_line_comments(self) -> None:
+        text = '{\n  // comment\n  "key": "value"\n}'
+        result = json.loads(install._strip_jsonc(text))
+        assert result == {"key": "value"}
+
+    def test_strip_block_comments(self) -> None:
+        text = '{\n  /* block\n     comment */\n  "key": "value"\n}'
+        result = json.loads(install._strip_jsonc(text))
+        assert result == {"key": "value"}
+
+    def test_strip_trailing_commas(self) -> None:
+        text = '{\n  "a": 1,\n  "b": 2,\n}'
+        result = json.loads(install._strip_jsonc(text))
+        assert result == {"a": 1, "b": 2}
+
+    def test_preserves_comments_inside_strings(self) -> None:
+        text = '{\n  "url": "https://example.com // not a comment",\n  "key": "value"\n}'
+        result = json.loads(install._strip_jsonc(text))
+        assert result["url"] == "https://example.com // not a comment"
+
+    def test_preserves_slashes_inside_strings(self) -> None:
+        text = '{\n  "path": "/* keep this */"\n}'
+        result = json.loads(install._strip_jsonc(text))
+        assert result["path"] == "/* keep this */"
+
+    def test_load_jsonc_returns_none_on_garbage(self, tmp_path: Path) -> None:
+        f = tmp_path / "bad.json"
+        f.write_text("not json {{{")
+        assert install._load_jsonc(f) is None
+
+    def test_load_jsonc_returns_none_on_missing_file(self, tmp_path: Path) -> None:
+        f = tmp_path / "missing.json"
+        assert install._load_jsonc(f) is None
+
+    def test_realistic_vscode_settings(self) -> None:
+        """Parse a realistic VS Code settings.json with mixed JSONC features."""
+        text = """{
+  "workbench.colorTheme": "Lunar-dark-theme",
+  // Font settings
+  "editor.fontFamily": "Fira Code",
+  "custom-ui-style.stylesheet": {
+    // Hide tab close buttons until hover
+    ".tab:not(:hover) .tab-actions": {
+      "opacity": "0",
+      "transition": "opacity 0.15s ease"
+    },
+    ".tab .tab-actions": {
+      "transition": "opacity 0.15s ease"
+    }
+  },
+  /* MCP configuration */
+  "mcp.servers": {},
+}"""
+        result = json.loads(install._strip_jsonc(text))
+        assert result["workbench.colorTheme"] == "Lunar-dark-theme"
+        assert result["editor.fontFamily"] == "Fira Code"
+        assert ".tab:not(:hover) .tab-actions" in result["custom-ui-style.stylesheet"]
+        assert "mcp.servers" in result
+
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Manifest

@@ -2,7 +2,7 @@
 
 An AI assistant with expert personalities for software architecture, engineering, DevOps, learning, and project management.
 
-Carter runs on **VS Code Copilot**, **Copilot CLI**, and **OpenCode CLI** — the same agents, skills, and MCP integrations work across all three surfaces.
+Carter runs on **VS Code**, **Copilot CLI**, and **OpenCode CLI**. The same agents, skills, and MCP integrations work across all three surfaces.
 
 ## Quick Start
 
@@ -42,7 +42,7 @@ See [.env.example](.env.example) for the full list.
 @carter-maestro help me design a microservice for user authentication
 ```
 
-Maestro analyzes your request and routes to the right specialist — or chains multiple specialists for cross-domain tasks.
+Maestro analyzes your request and routes to the right specialist or chains multiple specialists for cross-domain tasks.
 
 ### Direct Agent Access
 
@@ -146,9 +146,17 @@ Knowledge files: `decisions.md`, `mistakes.md`, `patterns.md`, `debugging.md`, `
 
 ## Testing
 
+The test suite validates the installer with 20 tests across 8 test classes covering file installation, idempotency, JSON merging, manifest management, uninstall, and hashing. 
+
 ```bash
+# Run all tests
 uv run --with pytest pytest tests/ -v
+
+# Run a specific class
+uv run --with pytest pytest tests/test_install.py::TestMCPMerging -v
 ```
+
+See [docs/testing.md](docs/testing.md) for the full testing guide — test coverage details, fixture reference, and how to extend the suite.
 
 ## Project Structure
 
