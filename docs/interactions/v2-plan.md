@@ -6,13 +6,97 @@
 
 ## 1. Overview
 
-v2 extends Carter with six workstreams that can be implemented independently. Each has its own prerequisites, implementation steps, and acceptance criteria. They are ordered by value/effort ratio.
+v2 extends Carter with seven workstreams that can be implemented independently. Each has its own prerequisites, implementation steps, and acceptance criteria. They are ordered by value/effort ratio.
 
 ---
 
-## 2. Workstreams
+## 2. Skill Architecture
 
-### 2.1 Rich CLI Output
+This section defines how Carter skills are structured, organized, and extended.
+
+### 2.1 Skill Types
+
+| Type | Pattern | When to use |
+|------|---------|-------------|
+| **Tool skill** | Router SKILL.md + sub-files | Technology-specific skills (terraform, packer, python, etc.) |
+| **Process skill** | Single SKILL.md | Methodology/workflow skills (adr, code-review, plan, etc.) |
+
+### 2.2 Router Pattern (Tool Skills)
+
+Tool skills use SKILL.md as an entry point that routes to specialized sub-files:
+
+```
+skills/carter-<tool>/
+├── SKILL.md        # Entry point: core conventions + routing table
+├── <topic-a>.md    # Specialized reference (loaded on demand)
+├── <topic-b>.md    # Another specialized reference
+└── <topic-c>.md    # ...
+```
+
+**SKILL.md structure:**
+1. Standard frontmatter (`name`, `description`, `argument-hint`)
+2. `<routing>` section with a keyword → file mapping table
+3. `<guidelines>` section with core conventions (always loaded)
+
+**Routing mechanism:** The routing table instructs the agent to use `read_file` to load the sibling file before answering. The agent matches request keywords against the table and loads only the relevant sub-file. If no specialized topic matches, the core guidelines in SKILL.md are sufficient.
+
+**Example routing table:**
+```markdown
+| File | Load when the request involves |
+|------|-------------------------------|
+| testing.md  | .tftest.hcl, assertions, run blocks |
+| modules.md  | module extraction, moved blocks, state migration |
+```
+
+### 2.3 Split Threshold
+
+A tool skill should be split into sub-files when:
+- The main SKILL.md exceeds **~300 lines**, OR
+- The skill covers a **clearly distinct subtopic** that can stand alone
+
+Until then, keep everything in SKILL.md. The skill is "router-ready" — new subtopics go into sub-files rather than bloating the main file.
+
+### 2.4 Naming Conventions
+
+**Skill directories:** `carter-<tool-name>` (lowercase, hyphens)
+
+**Sub-files:**
+- Lowercase with hyphens (`github-cli.md`, not `GitHubCLI.md`)
+- Short, descriptive **topic nouns** (`testing.md`, not `how-to-test.md`)
+- No prefix repetition (`aws.md`, not `packer-aws.md` — it's already inside `carter-packer/`)
+- `SKILL.md` is always the entry point — never rename it
+
+### 2.5 Installer Behavior
+
+The installer copies **all files** in a skill directory, not just SKILL.md. This means sub-files are automatically installed alongside SKILL.md without any changes to the installer.
+
+### 2.6 Current Skill Inventory
+
+**Router skills (tool, with sub-files):**
+
+| Skill | Sub-files |
+|-------|-----------|
+| `carter-terraform` | `testing.md`, `modules.md`, `import.md`, `stacks.md` |
+| `carter-packer` | `aws.md`, `azure.md`, `windows.md`, `hcp.md` |
+| `carter-pipeline` | `github-cli.md`, `strategies.md`, `actions.md` |
+
+**Router-ready skills (tool, single file for now):**
+
+| Skill | Lines | Expand when |
+|-------|-------|-------------|
+| `carter-python` | ~216 | pytest deep-dive, packaging/uv, async patterns |
+| `carter-golang` | ~254 | go test, concurrency, modules |
+| `carter-atlassian` | ~259 | Confluence operations, automation rules |
+
+**Process skills (single SKILL.md, no sub-files expected):**
+
+`carter-adr`, `carter-code-review`, `carter-design-review`, `carter-diagram`, `carter-distill`, `carter-explain`, `carter-mistakes`, `carter-plan`, `carter-research`, `carter-risk`, `carter-test-first`, `carter-triage`
+
+---
+
+## 3. Workstreams
+
+### 3.1 Rich CLI Output
 
 **Goal:** Upgrade installer output from ANSI/stdlib to `rich` for progress bars, tables, tree views, panels, and spinners.
 
@@ -58,33 +142,46 @@ v2 extends Carter with six workstreams that can be implemented independently. Ea
 
 ---
 
-### 2.2 Additional Skills
+### 3.2 Additional Skills
 
-**Goal:** Add the skills deferred from v1.
+**Goal:** Add new skills and restructure existing ones following the Skill Architecture (Section 2).
 
-| Skill | Agent | Description | Implementation Notes |
-|-------|-------|-------------|---------------------|
-| `carter-refactor` | Engineer | Identify and apply refactoring patterns | Detect code smells (long methods, duplicated code, god objects), suggest specific refactoring patterns (Extract Method, Replace Conditional with Polymorphism, etc.), provide before/after examples |
-| `carter-container` | DevOps | Dockerfile and Kubernetes manifests | Dockerfile best practices (multi-stage, non-root, minimal images), K8s manifests (Deployments, Services, ConfigMaps), Helm chart review, security scanning (Trivy) |
-| `carter-roadmap` | PM | Milestone-based roadmaps | Visual timeline generation (Mermaid Gantt), milestone dependency mapping, resource allocation across milestones, integration with Jira epics via MCP |
-| `carter-standup` | PM | Standup summaries from Git/Jira | Pull recent git commits, open/closed Jira issues, PR activity; summarize into "Yesterday / Today / Blockers" format; supports team-level rollups |
+#### Completed
+
+| Change | Type | Details |
+|--------|------|---------|
+| `carter-terraform` restructured | Tool (router) | Trimmed to ~255-line entry point + 4 sub-files: `testing.md`, `modules.md`, `import.md`, `stacks.md` |
+| `carter-packer` created | Tool (router) | New skill from external reference. Entry point + 4 sub-files: `aws.md`, `azure.md`, `windows.md`, `hcp.md` |
+| `carter-pipeline` merged | Tool (router) | Absorbed `carter-git-strategy`. Entry point covers core git; sub-files: `github-cli.md`, `strategies.md`, `actions.md` |
+| `carter-git-strategy` deleted | — | Content merged into `carter-pipeline/strategies.md` |
+| `carter-atlassian` created | Tool (single) | Jira operations + ticket writing best practices via Atlassian MCP server |
+| Installer updated | Infrastructure | Now copies all files in a skill directory, not just SKILL.md |
+
+#### Remaining
+
+| Skill | Type | Agent | Description |
+|-------|------|-------|-------------|
+| `carter-refactor` | Process (single) | Engineer | Detect code smells, suggest refactoring patterns (Extract Method, Replace Conditional with Polymorphism, etc.), provide before/after examples |
+| `carter-container` | Tool (router) | DevOps | Dockerfile best practices, K8s manifests, Helm chart review. Anticipated sub-files: `dockerfile.md`, `kubernetes.md`, `helm.md` |
+| `carter-roadmap` | Process (single) | PM | Visual timeline generation (Mermaid Gantt), milestone dependency mapping, Jira epic integration via MCP |
+| `carter-standup` | Process (single) | PM | Pull recent git commits, Jira issues, PR activity; summarize into "Yesterday / Today / Blockers" format |
 
 **Implementation per skill:**
 1. Create `skills/carter-<name>/SKILL.md` with standard frontmatter
-2. Update the relevant agent's `.md` file to list the new skill
-3. Update the installer to include the new skill (automatic — installer copies all `skills/carter-*/`)
-4. Add golden file for snapshot tests
+2. For tool skills: add `<routing>` section if starting with sub-files, or mark as router-ready
+3. Update the relevant agent's `.md` file to list the new skill
+4. Installer picks up new skills automatically (copies all `skills/carter-*/` contents)
 5. Update README skill table
 
-**Acceptance criteria:** Each skill responds correctly when invoked, follows Carter's global instructions, and integrates with relevant MCP servers.
+**Acceptance criteria:** Each skill responds correctly when invoked, follows Carter's global instructions, follows Skill Architecture conventions (Section 2), and integrates with relevant MCP servers.
 
 ---
 
-### 2.3 Additional MCP Servers
+### 3.3 Additional MCP Servers
 
-**Goal:** Add AWS and Vault MCP servers with appropriate guardrails.
+**Goal:** Add AWS and Vault MCP servers with appropriate guardrails. Each gets a corresponding **tool skill** (single SKILL.md, router-ready — expand to sub-files when crossing ~300 lines).
 
-#### 2.3.1 AWS MCP Server (`carter-aws`)
+#### 3.3.1 AWS MCP Server (`carter-aws`)
 
 **Security considerations:**
 - Use OIDC/assume-role where possible (no long-lived access keys)
@@ -124,7 +221,7 @@ v2 extends Carter with six workstreams that can be implemented independently. Ea
 
 ---
 
-### 2.4 Docker Integration Tests
+### 3.4 Docker Integration Tests
 
 **Goal:** End-to-end testing of the installer in clean environments.
 
@@ -192,7 +289,7 @@ jobs:
 
 ---
 
-### 2.5 Git-Backed Knowledge Sync
+### 3.5 Git-Backed Knowledge Sync
 
 **Goal:** Enable syncing Carter's knowledge base across machines via a Git repository.
 
@@ -250,7 +347,7 @@ jobs:
 
 ---
 
-### 2.6 Packaging
+### 3.6 Packaging
 
 **Goal:** Distribute Carter as an installable Python tool via `uvx`.
 
@@ -361,30 +458,31 @@ uvx carter install --target copilot
 
 ---
 
-## 3. Implementation Order
+## 4. Implementation Order
 
 Recommended sequence based on dependencies and value:
 
-| Phase | Workstream | Depends On | Estimated Complexity |
-|-------|-----------|------------|---------------------|
-| v2.1 | Rich CLI Output | v1 complete | Low — output layer only |
-| v2.2 | Additional Skills | v1 complete | Low — follows established pattern |
-| v2.3 | Docker Integration Tests | v1 complete | Medium — Docker + CI setup |
-| v2.4 | Additional MCP Servers | v1 complete, v2.3 (for testing) | Medium — security review needed |
-| v2.5 | Git-Backed Knowledge Sync | v1 complete | Medium — Git operations + conflict handling |
-| v2.6 | Packaging | v2.1 (for Rich), v2.2 (all skills) | High — restructure + publish pipeline |
+| Phase | Workstream | Status | Depends On | Complexity |
+|-------|-----------|--------|------------|------------|
+| v2.1 | Rich CLI Output (3.1) | Not started | v1 complete | Low |
+| v2.2 | Additional Skills (3.2) | **Partial** — terraform/packer/pipeline/atlassian done; refactor/container/roadmap/standup remaining | v1 complete | Low |
+| v2.3 | Additional MCP Servers (3.3) | Not started | v1 complete, v2.4 (for testing) | Medium |
+| v2.4 | Docker Integration Tests (3.4) | Not started | v1 complete | Medium |
+| v2.5 | Git-Backed Knowledge Sync (3.5) | Not started | v1 complete | Medium |
+| v2.6 | Packaging (3.6) | Not started | v2.1 (Rich), v2.2 (all skills) | High |
 
-**Recommended approach:** Implement v2.1 and v2.2 first (quick wins), then v2.3 (testing foundation for the rest), then v2.4/v2.5 in parallel, and v2.6 last since it benefits from having all other features stabilized.
+**Recommended approach:** Finish v2.2 remaining skills and v2.1 (quick wins), then v2.4 (testing foundation), then v2.3/v2.5 in parallel, and v2.6 last.
 
 ---
 
-## 4. Migration Notes
+## 5. Migration Notes
 
 ### v1 → v2 Upgrade Path
 
 - **No breaking changes** — v2 is additive. All v1 installations continue to work.
+- **Skill architecture** — Existing single-file skills continue to work. Router pattern is additive.
 - **Rich output** — Automatic when `rich` is available via PEP 723. Falls back to ANSI.
-- **New skills** — Added by re-running `uv run install.py` after `git pull`.
+- **New skills** — Added by re-running `uv run install.py` after `git pull`. Installer copies all files in each skill directory.
 - **New MCP servers** — Opt-in via `--with-aws` / `--with-vault` flags.
 - **Packaging** — `uvx carter install` is equivalent to `uv run install.py`. Both work.
 - **Knowledge sync** — Opt-in. Existing knowledge files are preserved. User runs `--knowledge-repo` when ready.

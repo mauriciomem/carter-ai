@@ -79,10 +79,25 @@ class TestInstallSkills:
         assert skills_dir.exists()
 
         skill_dirs = sorted(d.name for d in skills_dir.iterdir() if d.is_dir())
-        assert len(skill_dirs) == 17
+        assert len(skill_dirs) == 18
         for d in skill_dirs:
             assert d.startswith("carter-")
             assert (skills_dir / d / "SKILL.md").exists()
+
+        # carter-terraform has sub-files alongside SKILL.md
+        tf_dir = skills_dir / "carter-terraform"
+        for sub in ("testing.md", "modules.md", "import.md", "stacks.md"):
+            assert (tf_dir / sub).exists()
+
+        # carter-packer has sub-files alongside SKILL.md
+        pk_dir = skills_dir / "carter-packer"
+        for sub in ("aws.md", "azure.md", "windows.md", "hcp.md"):
+            assert (pk_dir / sub).exists()
+
+        # carter-pipeline has sub-files alongside SKILL.md
+        pl_dir = skills_dir / "carter-pipeline"
+        for sub in ("github-cli.md", "strategies.md", "actions.md"):
+            assert (pl_dir / sub).exists()
 
     def test_creates_opencode_skills(self, base_dir: Path) -> None:
         manifest = {"files": [], "file_hashes": {}}
@@ -91,7 +106,7 @@ class TestInstallSkills:
 
         skills_dir = base_dir / "opencode" / "skills"
         skill_dirs = sorted(d.name for d in skills_dir.iterdir() if d.is_dir())
-        assert len(skill_dirs) == 17
+        assert len(skill_dirs) == 18
 
 
 class TestInstallInstructions:

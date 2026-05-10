@@ -413,15 +413,18 @@ def install_skills(
         if not skill_file.exists():
             continue
 
-        if "copilot" in targets:
-            dst = _copilot_base(base_dir) / "skills" / skill_dir.name / "SKILL.md"
-            status = _install_file(skill_file, dst, manifest, backup_root)
-            stats[status] += 1
+        skill_files = [f for f in sorted(skill_dir.iterdir()) if f.is_file()]
+        for src_file in skill_files:
+            rel = src_file.relative_to(skill_dir)
+            if "copilot" in targets:
+                dst = _copilot_base(base_dir) / "skills" / skill_dir.name / rel
+                status = _install_file(src_file, dst, manifest, backup_root)
+                stats[status] += 1
 
-        if "opencode" in targets:
-            dst = _opencode_base(base_dir) / "skills" / skill_dir.name / "SKILL.md"
-            status = _install_file(skill_file, dst, manifest, backup_root)
-            stats[status] += 1
+            if "opencode" in targets:
+                dst = _opencode_base(base_dir) / "skills" / skill_dir.name / rel
+                status = _install_file(src_file, dst, manifest, backup_root)
+                stats[status] += 1
 
     return stats
 
