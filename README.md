@@ -108,6 +108,8 @@ User
 
 Carter-ops is a deterministic CLI executor for write operations (Git and Jira). It separates reads (handled by MCP servers and direct commands) from writes (handled by carter-ops with a two-phase approval flow).
 
+The protocol is enforced across all surfaces — VS Code, Copilot CLI, and OpenCode — through three layers: global instructions, agent definitions, and skill blocks. No matter which agent handles your request or which surface you use, write operations always go through carter-ops.
+
 ```bash
 # Dry-run — shows what would happen
 carter-ops git-commit --message "feat: add auth" --files src/auth.py --dry-run

@@ -26,10 +26,13 @@ If the task spans multiple domains, execute agents sequentially and pass context
 | Infrastructure, CI/CD, deployment, IaC | @carter-devops | deploy, pipeline, terraform, container, git, AWS, CI/CD, kubernetes |
 | Learning, documentation, explanation | @carter-learner | explain, learn, document, research, why, how does, teach |
 | Planning, project management, tracking | @carter-pm | plan, roadmap, risk, milestone, sprint, standup, WBS, tasks |
+| Deterministic write operations | @carter-devops or @carter-pm (auto-detect) | ops:, commit, push, branch, git-flow, create ticket, jira-comment, jira-create |
 
 ## Dispatch Rules
 
-**Direct answer** — When the request is trivial (quick clarification, simple factual answer), respond directly without delegation.
+**Write operations — always use carter-ops** — Any request that creates, modifies, or pushes git state (branch, commit, push) or Jira state (create ticket, comment, transition) MUST use `carter-ops` as described in Carter's global instructions. This applies whether you handle the request directly or delegate to a specialist. Never run `git add`, `git commit`, `git push`, `git checkout -b`, or Jira API calls directly — always use `carter-ops` with `--dry-run` first, then `--execute` after approval.
+
+**Direct answer** — When the request is trivial (quick clarification, simple factual answer) AND does not involve a write operation, respond directly without delegation.
 
 **Single-agent dispatch** — When the request clearly falls within one domain, delegate to that agent via `runSubagent`.
 
@@ -47,3 +50,20 @@ If the task spans multiple domains, execute agents sequentially and pass context
 - `carter-distill` — Promote `/memories/` notes to curated `~/.copilot/knowledge/` entries
 
 </routing>
+
+## Deterministic Operations — carter-ops
+
+When handling write operations directly (e.g., in Copilot CLI where delegation is not available), follow this protocol:
+
+1. Determine which `carter-ops` operation to use:
+   - Branch creation → `carter-ops git-branch --name <name> --from <base>`
+   - Commit files → `carter-ops git-commit --message "<msg>" --files <files>`
+   - Push branch → `carter-ops git-push --branch <branch>`
+   - Full flow → `carter-ops git-flow --branch <name> --message "<msg>" --files <files>`
+   - Jira comment → `carter-ops jira-comment --ticket <key> --body "<text>"`
+   - Jira create → `carter-ops jira-create --project <key> --type <type> --summary "<text>"`
+2. Run with `--dry-run` and show the JSON plan to the user
+3. On approval, run with `--execute`
+4. Report the result
+
+Never run raw `git commit`, `git push`, `git checkout -b`, or Jira API calls. Use `carter-ops`.

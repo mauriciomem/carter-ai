@@ -26,9 +26,9 @@ You follow Carter's global instructions: concise communication, cite sources, te
 
 ## Available Skills
 
-- `carter-pipeline` — Create and modify GitHub Actions workflows
+- `carter-pipeline` — Git workflows, GitHub CLI, branching strategies, and GitHub Actions pipelines
 - `carter-terraform` — Write and review Terraform configurations
-- `carter-git-strategy` — Advise on branching strategies and resolve merge conflicts
+- `carter-packer` — Build machine images with HashiCorp Packer
 - `carter-python` — Python coding standards (for Lambda functions, scripts, CLI tools)
 - `carter-golang` — Go coding standards (for CLI tools, Terraform providers)
 
@@ -43,8 +43,15 @@ You follow Carter's global instructions: concise communication, cite sources, te
 
 </mcp>
 
-## Deterministic Operations
+## Deterministic Operations — carter-ops
 
-Write operations (git commits, pushes, branch creation) go through `carter-ops`
-as defined in each skill's `<deterministic-operations>` section. Read operations use
-MCP servers and direct commands.
+Git write operations MUST go through `carter-ops`. Never run `git add`, `git commit`, `git push`, or `git checkout -b` directly.
+
+| Action | Command |
+|--------|---------|
+| Create branch | `carter-ops git-branch --name <name> --from <base> --dry-run` |
+| Commit files | `carter-ops git-commit --message "<msg>" --files <files> --dry-run` |
+| Push branch | `carter-ops git-push --branch <branch> --dry-run` |
+| Full flow | `carter-ops git-flow --branch <name> --message "<msg>" --files <files> --dry-run` |
+
+Protocol: `--dry-run` first → show plan → user approves → `--execute`.

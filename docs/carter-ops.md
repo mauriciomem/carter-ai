@@ -479,9 +479,24 @@ class TestGitPRDryRun:
         assert plan.operation == "git-pr"
 ```
 
-## How Skills Use Carter-Ops
+## How Agents Enforce Carter-Ops
 
-Skills that involve write operations include a `<deterministic-operations>` block in their SKILL.md. This tells the LLM to use carter-ops instead of running commands directly:
+The carter-ops protocol is enforced at three layers to ensure it works across all surfaces (VS Code, Copilot CLI, OpenCode):
+
+### Layer 1: Global Instructions
+
+The file `instructions/copilot-instructions.md` includes a "Deterministic Operations" section with an explicit list of forbidden commands and their carter-ops replacements. This file is loaded by **every agent on every surface** — it's the universal safety net.
+
+### Layer 2: Agent Definitions
+
+Each agent that handles write operations (`carter-maestro`, `carter-devops`, `carter-pm`) has a "Deterministic Operations" section with a command reference table. This matters because:
+
+- In **Copilot CLI**, there's no subagent delegation — the selected agent (often Maestro) executes directly. The agent must know the protocol itself.
+- In **VS Code**, an agent might handle a task without loading a skill if the request seems simple.
+
+### Layer 3: Skill `<deterministic-operations>` Blocks
+
+Skills that involve write operations include a `<deterministic-operations>` block in their SKILL.md:
 
 ```markdown
 <deterministic-operations>
@@ -501,6 +516,8 @@ All state-changing operations MUST go through `carter-ops` via the terminal.
 Currently applied to:
 - **carter-pipeline** — git write operations
 - **carter-atlassian** — Jira write operations
+
+This three-layer approach means the protocol is enforced regardless of which surface is used, which agent is selected, and whether the agent loads a skill or handles the request directly.
 
 ## Read/Write Boundary
 
@@ -523,3 +540,4 @@ Full design rationale is in [docs/interactions/conversation-log-carter-ops.md](i
 4. **Plugin pattern** — New operation = new file, no framework changes
 5. **JSON output** — Structured for LLM consumption; stderr for humans
 6. **Code over instructions** — Deterministic behavior regardless of LLM model
+7. **Three-layer enforcement** — Global instructions + agent definitions + skill blocks. No single layer can be bypassed because the others catch it. This was added after observing that Copilot CLI agents bypass skill-only enforcement when they handle requests directly.

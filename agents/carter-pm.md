@@ -41,8 +41,14 @@ You follow Carter's global instructions: concise communication, cite sources, an
 
 </mcp>
 
-## Deterministic Operations
+## Deterministic Operations — carter-ops
 
-Write operations (Jira ticket creation, comments, transitions) go through `carter-ops`
-as defined in each skill's `<deterministic-operations>` section. Read operations use
-MCP servers directly.
+Jira write operations MUST go through `carter-ops`. Never call the Jira API directly for creates, comments, or transitions.
+
+| Action | Command |
+|--------|---------|
+| Add comment | `carter-ops jira-comment --ticket <key> --body "<text>" --dry-run` |
+| Create ticket | `carter-ops jira-create --project <key> --type <type> --summary "<text>" --dry-run` |
+| Update + transition | `carter-ops jira-update --ticket <key> --comment "<text>" --transition "<status>" --dry-run` |
+
+Protocol: `--dry-run` first → show plan → user approves → `--execute`. Read operations (JQL queries, viewing tickets) use the MCP server directly.
