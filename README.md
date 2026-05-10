@@ -34,6 +34,15 @@ export ATLASSIAN_URL="https://your-domain.atlassian.net"
 
 See [.env.example](.env.example) for the full list.
 
+## Getting Started
+
+After installation, see the [Getting Started Walkthrough](docs/getting-started.md) for two end-to-end examples:
+
+1. **Non-operational task** — Ask Maestro to design an API, watch it route to the right specialist and produce an architecture
+2. **Operational task** — Ask Maestro to commit and push code, watch it invoke carter-ops with dry-run approval
+
+Both examples use the Copilot CLI and show the full conversation flow.
+
 ## Usage
 
 ### Through the Orchestrator
