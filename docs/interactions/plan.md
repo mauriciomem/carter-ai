@@ -198,13 +198,14 @@ Credentials are **never** stored in config files. MCP configs reference environm
 
 Required environment variables:
 
-| Variable | Server | Required |
+| Variable | Server/Tool | Required |
 |---|---|---|
 | `GITHUB_TOKEN` | carter-github | Yes |
 | `TF_TOKEN` | carter-terraform | Yes |
-| `ATLASSIAN_API_TOKEN` | carter-atlassian | Yes |
-| `ATLASSIAN_EMAIL` | carter-atlassian | Yes |
-| `ATLASSIAN_URL` | carter-atlassian | Yes |
+| `ATLASSIAN_API_TOKEN` | carter-atlassian, carter-ops | Yes |
+| `ATLASSIAN_EMAIL` | carter-atlassian, carter-ops | Yes |
+| `ATLASSIAN_URL` | carter-atlassian, carter-ops | Yes |
+| `JIRA_TOKEN` | carter-ops (Jira operations) | For Jira ops |
 
 The installer validates these at install time and warns on missing values with setup instructions.
 
@@ -330,13 +331,18 @@ v2 upgrade for rich output:
 5. Write agent files to target locations
 6. Write skill files to target locations
 7. Write global instructions
-8. Configure MCP servers:
+8. Install carter-ops:
+   - Copy `ops/` → `~/.carter/ops/`
+   - Generate `~/.carter/config.toml` (defaults, auto-detect `signing_key` from `git config user.signingkey`)
+   - Create `~/.local/bin/carter-ops` wrapper
+   - OS-aware PATH check: warn if `~/.local/bin` not on `$PATH` (macOS → `~/.zshrc`, Linux → detect active shell)
+9. Configure MCP servers:
    - VS Code: merge `carter-*` entries into `settings.json`
    - Copilot CLI: run `copilot mcp add carter-*` commands
    - OpenCode: merge `carter-*` entries into `opencode.json`
-9. Initialize knowledge base (only on first install)
-10. Write manifest (`~/.copilot/.carter-manifest.json`)
-11. Print summary
+10. Initialize knowledge base (only on first install)
+11. Write manifest (`~/.copilot/.carter-manifest.json`) — includes `~/.carter/` files
+12. Print summary
 
 ### 8.4 Manifest
 
@@ -441,6 +447,13 @@ Example output (default):
   ✓ carter-atlassian → copilot mcp add
   ✓ carter-atlassian → opencode.json
 
+→ Installing carter-ops...
+  ✓ ~/.carter/ops/ (7 operations)
+  ✓ ~/.carter/config.toml
+  ✓ ~/.local/bin/carter-ops
+  ⚠ ~/.local/bin is not on PATH — add to ~/.zshrc:
+    export PATH="$HOME/.local/bin:$PATH"
+
 → Initializing knowledge base...
   ✓ ~/.copilot/knowledge/ (6 topic files)
 
@@ -448,6 +461,7 @@ Example output (default):
   Agents: 6 (copilot: 6, opencode: 6)
   Skills: 17
   MCP servers: 3 (VS Code: 3, Copilot CLI: 3, OpenCode: 3)
+  carter-ops: 7 operations (5 atomic, 2 composite)
   Manifest: ~/.copilot/.carter-manifest.json
 ```
 
@@ -645,14 +659,39 @@ carter/
 ├── instructions/                       # Shared instruction files
 │   └── copilot-instructions.md         # Global user-level instructions
 │
+├── ops/                                # carter-ops deterministic executor (source)
+│   ├── carter_ops.py                   # CLI entry point (PEP 723 inline deps)
+│   ├── operations/                     # Operation plugins (auto-discovered)
+│   │   ├── __init__.py                 # Auto-discovers Operation subclasses
+│   │   ├── git_branch.py
+│   │   ├── git_commit.py
+│   │   ├── git_push.py
+│   │   ├── git_flow.py                 # Composite: branch → commit → push
+│   │   ├── jira_comment.py
+│   │   ├── jira_create.py
+│   │   └── jira_update.py              # Composite: comment + transition
+│   ├── attribution.py                  # Footer templates, git author config
+│   ├── output.py                       # Structured JSON output formatting
+│   └── config.py                       # Config file + env var loading
+│
 ├── docs/                               # Project documentation
 │   ├── plan.md                         # This file
+│   ├── conversation-log-carter-ops.md  # carter-ops design session log
 │   └── conversation-log.md             # Design conversation log
 │
 └── tests/                              # Installer tests
     ├── test_install.py                 # Unit + snapshot tests
     ├── golden/                         # Golden files for snapshots
     ├── integration/                    # Docker integration tests (v2)
+    ├── ops/                            # carter-ops tests
+    │   ├── conftest.py                 # Fixtures: temp git repo, mock Jira
+    │   ├── test_git_branch.py
+    │   ├── test_git_commit.py
+    │   ├── test_git_push.py
+    │   ├── test_git_flow.py
+    │   ├── test_jira_comment.py
+    │   ├── test_jira_create.py
+    │   └── test_jira_update.py
     └── conftest.py                     # Shared fixtures
 ```
 
@@ -710,6 +749,17 @@ carter/
 ## 13. v2 Roadmap
 
 Features deferred from v1, organized by priority:
+
+### 13.0 Deterministic Operations — `carter-ops`
+
+- Cross-cutting Python CLI executor for write operations (Git, Jira)
+- Stateless two-phase: `--dry-run` → approve → `--execute`
+- Attribution: `carter-bot` as git author (SSH-signed), footer in Jira comments
+- Plugin-based extension: new operation = new Python module in `operations/`
+- Append-only JSONL audit log at `~/.carter/audit.log`
+- `ops:` fast-path keyword at Maestro routing level
+- MCP for reads, `carter-ops` for writes
+- Full design: [v2-plan.md §3.0](v2-plan.md) and [conversation-log-carter-ops.md](conversation-log-carter-ops.md)
 
 ### 13.1 Rich CLI Output
 
@@ -769,10 +819,12 @@ Features deferred from v1, organized by priority:
 |---|---|
 | Agent/skill framework | VS Code Copilot agents, Copilot CLI agents, OpenCode agents |
 | Installer | Python 3.11+, stdlib only (v1), `rich` (v2) |
+| Deterministic executor | `carter-ops` — Python CLI, PEP 723, `httpx` for Jira REST API |
 | Python tooling | `uv` (run, build, publish) |
-| MCP servers | GitHub, Terraform/HCP, Atlassian |
+| MCP servers | GitHub, Terraform/HCP, Atlassian (reads); `carter-ops` (writes) |
 | Testing | pytest, `tmp_path`, snapshot tests (v1); Docker (v2) |
 | Version control | Git, GitHub |
 | CI/CD | GitHub Actions |
 | Knowledge persistence | Markdown files in `~/.copilot/knowledge/` |
 | Session memory | Copilot memory system (`/memories/`) |
+| Audit log | Append-only JSONL at `~/.carter/audit.log` |

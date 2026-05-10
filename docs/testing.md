@@ -4,7 +4,7 @@ This document covers the Carter test suite — what it tests, how to run it, how
 
 ## Overview
 
-The test suite validates the **installer** (`install.py`), which is the only executable code in the project. Everything else — agents, skills, MCP configs, knowledge templates — are static Markdown or JSON files that the installer copies to the right locations on disk.
+The test suite validates the **installer** (`install.py`) and the **carter-ops CLI** (`ops/carter_ops.py`). Everything else — agents, skills, MCP configs, knowledge templates — are static Markdown or JSON files that the installer copies to the right locations on disk.
 
 The tests run in full isolation using temporary directories, so they never touch your real `~/.copilot/` or `~/.config/opencode/` paths.
 
@@ -46,8 +46,11 @@ No external mocking libraries are used. The installer accepts a `base_dir` param
 
 ```
 tests/
-├── conftest.py         # Shared fixtures
-└── test_install.py     # All installer tests (20 tests, 8 classes)
+├── conftest.py         # Shared fixtures (base_dir, settings, etc.)
+├── test_install.py     # Installer tests (39 tests, 11 classes)
+└── ops/
+    ├── conftest.py     # Ops path setup
+    └── test_operations.py  # Carter-ops tests (45 tests, 17 classes)
 ```
 
 ## Fixtures (conftest.py)
@@ -90,8 +93,8 @@ Validates that skill directories and their `SKILL.md` files are created.
 
 | Test | What It Verifies |
 |------|-----------------|
-| `test_creates_copilot_skills` | 17 `carter-*` skill directories, each with a `SKILL.md`, under Copilot target |
-| `test_creates_opencode_skills` | Same 17 directories under OpenCode target |
+| `test_creates_copilot_skills` | 18 `carter-*` skill directories, each with a `SKILL.md`, sub-files for terraform/packer/pipeline |
+| `test_creates_opencode_skills` | Same 18 directories under OpenCode target |
 
 ### TestInstallInstructions (1 test)
 
@@ -117,15 +120,20 @@ Validates that running the installer multiple times is safe.
 | `test_second_run_unchanged` | A second install reports all 6 agent files as `unchanged` (0 created, 0 updated) |
 | `test_modified_file_detected_as_updated` | If a file is modified externally, the installer detects and reports it as `updated` |
 
-### TestMCPMerging (3 tests)
+### TestMCPMerging (8 tests)
 
-Validates JSON merging logic for VS Code `settings.json`.
+Validates JSON merging logic for VS Code `settings.json`, including JSONC edge cases.
 
 | Test | What It Verifies |
-|------|-----------------|
+|------|------------------|
 | `test_merge_into_empty_settings` | Carter MCP servers are added to an empty `settings.json` |
 | `test_preserves_existing_servers` | Existing non-Carter MCP servers survive the merge |
 | `test_preserves_other_settings` | Non-MCP settings (e.g., `editor.fontSize`) are untouched |
+| `test_handles_jsonc_with_comments` | Single-line and block comments don't break parsing |
+| `test_handles_jsonc_with_trailing_commas` | VS Code's trailing commas are handled |
+| `test_handles_jsonc_comments_inside_strings` | Comments inside string values are preserved |
+| `test_unparseable_file_not_overwritten` | Truly broken files are left untouched |
+| `test_backup_created_before_modify` | Settings file is backed up before modification |
 
 ### TestManifest (2 tests)
 
@@ -153,7 +161,96 @@ Validates the SHA-256 hashing utility used for change detection.
 |------|-----------------|
 | `test_sha256_consistent` | Same file produces the same hash on repeated calls; hash starts with `sha256:` |
 | `test_sha256_different_content` | Different content produces different hashes |
+### TestInstallOps (6 tests)
 
+Validates carter-ops installation: file copying, config generation, wrapper script, and idempotency.
+
+| Test | What It Verifies |
+|------|------------------|
+| `test_copies_ops_files` | All ops files (carter_ops.py, config.py, attribution.py, output.py, operations/*) are copied to `base_dir/carter/ops/` |
+| `test_generates_config_toml` | `config.toml` is generated with `[attribution]`, `[git]`, and `[jira]` sections |
+| `test_does_not_overwrite_existing_config` | Custom config.toml content is preserved on re-install |
+| `test_creates_wrapper_script` | `carter-ops` wrapper is created at `base_dir/local/bin/` with `#!/bin/bash`, executable permission |
+| `test_manifest_tracks_ops_files` | All ops files are tracked in the manifest |
+| `test_idempotent` | Second install reports `unchanged` with 0 `created` |
+
+## Carter-Ops Tests (`tests/ops/test_operations.py`)
+
+The ops test file validates the carter-ops CLI and all operations. It uses `sys.path` manipulation to import from the `ops/` directory directly.
+
+### TestConfig (4 tests)
+
+| Test | What It Verifies |
+|------|------------------|
+| `test_load_defaults` | Default config has `carter-bot` name and email |
+| `test_load_from_toml` | Config values are loaded from a TOML file |
+| `test_env_vars_override` | `ATLASSIAN_URL`, `ATLASSIAN_EMAIL`, `JIRA_TOKEN` override file values |
+| `test_validate_jira_missing` | Missing Jira credentials produce 3 validation errors |
+
+### TestAttribution (4 tests)
+
+| Test | What It Verifies |
+|------|------------------|
+| `test_git_author` | Author string matches `carter-bot <email>` format |
+| `test_append_jira_footer` | Footer is appended to comment body |
+| `test_attribution_summary_git` | Git summary includes bot name |
+| `test_attribution_summary_jira` | Jira summary includes bot name |
+
+### TestOutput (4 tests)
+
+| Test | What It Verifies |
+|------|------------------|
+| `test_dry_run_output` | Dry-run output has correct phase, operation, steps |
+| `test_execute_output` | Execute output has success flag |
+| `test_error_output` | Error output includes code, message, suggestion |
+| `test_error_output_no_suggestion` | Suggestion field is omitted when empty |
+
+### TestOperationRegistry (3 tests)
+
+| Test | What It Verifies |
+|------|------------------|
+| `test_discover_operations` | All 7 operations are discovered and registered |
+| `test_get_operation` | Looking up by name returns the correct instance |
+| `test_get_unknown_operation` | Unknown name returns `None` |
+
+### Operation Dry-Run Tests (6 classes, 12 tests)
+
+Every operation's `dry_run()` method is tested directly — these are always safe (no side effects).
+
+| Class | Tests | What It Verifies |
+|-------|-------|------------------|
+| `TestGitBranchDryRun` | 3 | Plan steps, validation (missing name, invalid format) |
+| `TestGitCommitDryRun` | 2 | Commit plan includes author, validation (missing message) |
+| `TestGitPushDryRun` | 1 | Push plan includes branch |
+| `TestGitFlowDryRun` | 2 | Composite plan has 6 steps and 3 side effects, validation |
+| `TestJiraCommentDryRun` | 3 | Plan includes ticket key, validation (missing ticket, bad format) |
+| `TestJiraCreateDryRun` | 2 | Plan includes project/type, validation (missing project) |
+| `TestJiraUpdateDryRun` | 2 | Composite plan has 2 side effects, validation (no action) |
+
+### CLI Parsing Tests (9 tests)
+
+| Test | What It Verifies |
+|------|------------------|
+| `test_parse_list` | `--list` is recognized |
+| `test_parse_dry_run` | Operation, params, and phase are parsed correctly |
+| `test_parse_execute` | `--execute` phase with comma-separated files |
+| `test_parse_empty` | Empty args return empty operation |
+| `test_list_operations` | `main(["--list"])` outputs all operations as JSON |
+| `test_no_operation_shows_error` | Missing operation exits with code 1 |
+| `test_no_phase_shows_error` | Missing `--dry-run`/`--execute` exits with code 1 |
+| `test_unknown_operation` | Unknown operation exits with code 1 |
+| `test_validation_error` | Missing required params exits with code 1 + JSON error |
+| `test_dry_run_success` | Valid dry-run exits with code 0 + JSON plan |
+
+### Execute Tests (3 classes, 5 tests)
+
+Execution tests use `unittest.mock.patch` to mock `subprocess.run`, verifying the operations call git correctly without actually running commands.
+
+| Class | Tests | What It Verifies |
+|-------|-------|------------------|
+| `TestGitBranchExecute` | 2 | Success (3 subprocess calls), failure on CalledProcessError |
+| `TestGitCommitExecute` | 1 | Success with commit SHA extraction |
+| `TestGitPushExecute` | 2 | Success, rejection produces suggestion field |
 ## Extending the Test Suite
 
 ### When to Add Tests
@@ -298,3 +395,7 @@ Check that the CI runner has `uv` and Python 3.11+ installed. See the GitHub Act
 ### A test is failing after adding a new agent/skill
 
 If you added a new file (e.g., a 7th agent), update the expected counts in the relevant test assertions. Search for the current count (e.g., `== 6`) and update it.
+
+### Ops tests fail with `ModuleNotFoundError`
+
+The ops tests manipulate `sys.path` to import from `ops/`. Make sure you're running from the repo root and that `tests/ops/conftest.py` exists (it adds the path).

@@ -40,3 +40,9 @@ You follow Carter's global instructions: concise communication, cite sources, an
 - **carter-github**: Read-only — check PR status, review project progress in repositories
 
 </mcp>
+
+## Deterministic Operations
+
+Write operations (Jira ticket creation, comments, transitions) go through `carter-ops`
+as defined in each skill's `<deterministic-operations>` section. Read operations use
+MCP servers directly.

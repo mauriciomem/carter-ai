@@ -83,9 +83,9 @@ User
 | **Maestro** | Orchestration, routing | triage, distill |
 | **Architect** | System design, cloud, trade-offs | design-review, diagram, adr |
 | **Engineer** | Code quality, testing, patterns | code-review, test-first, python, golang |
-| **DevOps** | CI/CD, IaC, containers, git | pipeline, terraform, git-strategy, python, golang |
+| **DevOps** | CI/CD, IaC, containers, git | pipeline, terraform, packer, python, golang |
 | **Learner** | Explanation, research, memory | explain, mistakes, research |
-| **PM** | Planning, risk, agile | plan, risk |
+| **PM** | Planning, risk, agile | plan, risk, atlassian |
 
 ### MCP Servers
 
@@ -94,6 +94,24 @@ User
 | `carter-github` | Repos, PRs, issues, Actions |
 | `carter-terraform` | Terraform configs, state, plans |
 | `carter-atlassian` | Jira issues, Confluence pages |
+
+## Carter-Ops
+
+Carter-ops is a deterministic CLI executor for write operations (Git and Jira). It separates reads (handled by MCP servers and direct commands) from writes (handled by carter-ops with a two-phase approval flow).
+
+```bash
+# Dry-run — shows what would happen
+carter-ops git-commit --message "feat: add auth" --files src/auth.py --dry-run
+
+# Execute — does it after approval
+carter-ops git-commit --message "feat: add auth" --files src/auth.py --execute
+```
+
+All output is structured JSON. Git commits are attributed to `carter-bot` and signed with your SSH key. Jira comments include a bot footer.
+
+Operations: `git-branch`, `git-commit`, `git-push`, `git-flow` (composite), `jira-comment`, `jira-create`, `jira-update` (composite).
+
+See [docs/carter-ops.md](docs/carter-ops.md) for the full reference.
 
 ## Installer
 
@@ -121,9 +139,11 @@ uv run install.py -vv
 2. Validates environment variables for MCP servers
 3. Backs up existing Carter files
 4. Copies agents and skills to `~/.copilot/` and `~/.config/opencode/`
-5. Configures MCP servers in VS Code, Copilot CLI, and OpenCode
-6. Initializes the knowledge base at `~/.copilot/knowledge/`
-7. Writes a manifest for idempotent updates and clean uninstall
+5. Installs carter-ops to `~/.carter/ops/` with a wrapper at `~/.local/bin/carter-ops`
+6. Generates `~/.carter/config.toml` with auto-detected signing key
+7. Configures MCP servers in VS Code, Copilot CLI, and OpenCode
+8. Initializes the knowledge base at `~/.copilot/knowledge/`
+9. Writes a manifest for idempotent updates and clean uninstall
 
 ### Updating
 
@@ -133,7 +153,7 @@ git pull
 uv run install.py
 ```
 
-The installer detects changes via file hashing — only modified files are updated.
+The installer detects changes via file hashing. Only modified files are updated.
 
 ## Knowledge Base
 
@@ -146,7 +166,7 @@ Knowledge files: `decisions.md`, `mistakes.md`, `patterns.md`, `debugging.md`, `
 
 ## Testing
 
-The test suite validates the installer with 20 tests across 8 test classes covering file installation, idempotency, JSON merging, manifest management, uninstall, and hashing. 
+The test suite has 84 tests across two test files — installer tests (`test_install.py`) and carter-ops tests (`tests/ops/test_operations.py`) — covering file installation, idempotency, JSON merging, manifest management, ops CLI parsing, operation dry-runs, and mocked execution.
 
 ```bash
 # Run all tests
@@ -165,15 +185,20 @@ carter-ai/
 ├── install.py              # Installer (PEP 723, stdlib only)
 ├── install.sh              # Wrapper script
 ├── agents/                 # Agent definitions (6 agents)
-├── skills/                 # Skill definitions (17 skills)
+├── skills/                 # Skill definitions (18 skills)
+├── ops/                    # carter-ops CLI executor
+│   ├── carter_ops.py       # Entry point
+│   ├── operations/         # Plugin-based operations
+│   ├── config.py           # Config loader (TOML + env vars)
+│   ├── attribution.py      # Bot attribution helpers
+│   └── output.py           # Structured JSON output
 ├── knowledge/              # Knowledge base templates
 ├── mcp/                    # MCP server config templates
 │   ├── copilot/            # VS Code format
 │   └── opencode/           # OpenCode format
 ├── instructions/           # Global instructions
-├── prompts/                # Original design prompts
-├── docs/                   # Plan and conversation log
-└── tests/                  # Installer tests
+├── docs/                   # Documentation and design logs
+└── tests/                  # Installer + ops tests
 ```
 
 ## Troubleshooting

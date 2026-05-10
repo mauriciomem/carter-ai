@@ -257,3 +257,26 @@ Epics are containers — keep the description high-level and link child stories.
 6. **No orphan tickets** — every story should belong to an epic; every task should have context
 
 </guidelines>
+
+<deterministic-operations>
+## Write Operations — Use carter-ops
+
+All state-changing Jira operations MUST go through `carter-ops` via the terminal.
+
+**Protocol:**
+1. Prepare the parameters using the domain knowledge and templates in this skill
+2. Run `carter-ops <operation> [params] --dry-run` to generate the plan
+3. Present the plan to the user for approval
+4. On approval, run `carter-ops <operation> [params] --execute`
+5. Report the structured result to the user
+
+**Available operations:**
+| Operation | When to use |
+|-----------|-------------|
+| `jira-comment` | Adding a comment to a ticket (`--ticket`, `--body`) |
+| `jira-create` | Creating a new ticket (`--project`, `--type`, `--summary`, `--description`, `--priority`, `--labels`) |
+| `jira-update` | Comment + optionally transition status (`--ticket`, `--comment`, `--transition`) |
+
+Do NOT use the MCP server for write operations (create, comment, transition).
+Read operations (JQL queries, viewing tickets, listing transitions) use the `carter-atlassian` MCP server as before.
+</deterministic-operations>

@@ -42,3 +42,9 @@ You follow Carter's global instructions: concise communication, cite sources, te
 - **carter-terraform**: Full access — read/write configurations, manage state, run plans
 
 </mcp>
+
+## Deterministic Operations
+
+Write operations (git commits, pushes, branch creation) go through `carter-ops`
+as defined in each skill's `<deterministic-operations>` section. Read operations use
+MCP servers and direct commands.

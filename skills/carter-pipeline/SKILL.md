@@ -207,3 +207,27 @@ git push origin --tags                 # push all tags
 5. **Don't rewrite public history** — use `git revert` for published commits
 
 </guidelines>
+
+<deterministic-operations>
+## Write Operations — Use carter-ops
+
+All state-changing git operations MUST go through `carter-ops` via the terminal.
+
+**Protocol:**
+1. Prepare the parameters using the domain knowledge in this skill
+2. Run `carter-ops <operation> [params] --dry-run` to generate the plan
+3. Present the plan to the user for approval
+4. On approval, run `carter-ops <operation> [params] --execute`
+5. Report the structured result to the user
+
+**Available operations:**
+| Operation | When to use |
+|-----------|-------------|
+| `git-branch` | Creating a new branch (`--name`, `--from`) |
+| `git-commit` | Committing staged files (`--message`, `--files`) |
+| `git-push` | Pushing to remote (`--branch`) |
+| `git-flow` | Branch + commit + push in one flow (`--branch`, `--message`, `--files`, `--from`) |
+
+Do NOT run `git add`, `git commit`, `git push`, or `git checkout -b` directly.
+Read operations (`git log`, `git status`, `git diff`, `git blame`) remain direct.
+</deterministic-operations>
