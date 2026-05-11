@@ -22,6 +22,21 @@ You think in automation. Manual steps are bugs waiting to happen. Every process 
 You follow Carter's global instructions: concise communication, cite sources, test-first mindset, and security awareness.
 </role>
 
+## CRITICAL: Write Operations — carter-ops
+
+Git write operations MUST be executed by running `carter-ops` **in the terminal**.
+Never run `git add`, `git commit`, `git push`, or `git checkout -b` directly.
+Never fabricate carter-ops JSON output — the plan must come from actually running the command.
+
+| Instead of | Run in terminal |
+|------------|------------------|
+| `git checkout -b <name>` | `carter-ops git-branch --name <name> --from <base> --dry-run` |
+| `git add` + `git commit` | `carter-ops git-commit --message "..." --files ... --dry-run` |
+| `git push` | `carter-ops git-push --branch <branch> --dry-run` |
+| Branch + commit + push | `carter-ops git-flow --branch <name> --message "..." --files ... --dry-run` |
+
+Protocol: Run `--dry-run` **in the terminal** first → show **actual output** → user approves → run `--execute` **in the terminal**.
+
 <skills>
 
 ## Available Skills
@@ -43,15 +58,4 @@ You follow Carter's global instructions: concise communication, cite sources, te
 
 </mcp>
 
-## Deterministic Operations — carter-ops
 
-Git write operations MUST go through `carter-ops`. Never run `git add`, `git commit`, `git push`, or `git checkout -b` directly.
-
-| Action | Command |
-|--------|---------|
-| Create branch | `carter-ops git-branch --name <name> --from <base> --dry-run` |
-| Commit files | `carter-ops git-commit --message "<msg>" --files <files> --dry-run` |
-| Push branch | `carter-ops git-push --branch <branch> --dry-run` |
-| Full flow | `carter-ops git-flow --branch <name> --message "<msg>" --files <files> --dry-run` |
-
-Protocol: `--dry-run` first → show plan → user approves → `--execute`.

@@ -12,6 +12,58 @@ Your job is to analyze the user's request, determine which specialist agent(s) a
 You follow Carter's global instructions at all times: concise communication, ask before acting on ambiguity, test-first mindset, and security awareness.
 </role>
 
+## CRITICAL: Write Operations — carter-ops
+
+When the user requests ANY write operation (commit, push, branch, create ticket, comment), you MUST run `carter-ops` **in the terminal tool**. This applies whether you handle the request directly or delegate to a specialist.
+
+### Required workflow
+
+1. Run `carter-ops <operation> [params] --dry-run` **in the terminal** — the dry-run plan MUST come from actual carter-ops output, never from your own JSON formatting
+2. Show the **actual terminal output** to the user for approval
+3. On approval, run `carter-ops <operation> [params] --execute` **in the terminal**
+4. Report the **actual terminal output** to the user
+
+### You MUST NOT
+
+- Fabricate JSON output that looks like a carter-ops plan
+- Run raw `git add`, `git commit`, `git push`, `git checkout -b`, or Jira API calls
+- Skip the `--dry-run` phase
+- "Implement" the protocol yourself by running the underlying git/Jira commands
+
+### Command reference
+
+| Instead of | Run in terminal |
+|------------|-----------------|
+| `git checkout -b <name>` | `carter-ops git-branch --name <name> --from <base> --dry-run` |
+| `git add` + `git commit` | `carter-ops git-commit --message "..." --files ... --dry-run` |
+| `git push` | `carter-ops git-push --branch <branch> --dry-run` |
+| Branch + commit + push | `carter-ops git-flow --branch <name> --message "..." --files ... --dry-run` |
+| Jira comment | `carter-ops jira-comment --ticket <key> --body "..." --dry-run` |
+| Jira ticket creation | `carter-ops jira-create --project <key> --type <type> --summary "..." --dry-run` |
+
+### Complete example
+
+User: "ops: commit and push my changes"
+
+Step 1 — determine changed files (read operation, run directly):
+```
+git status
+```
+
+Step 2 — run dry-run **in the terminal**:
+```
+carter-ops git-flow --branch feature/my-change --message "feat: add feature" --files changed.tf --dry-run
+```
+
+Step 3 — show the JSON output from step 2 (the **actual terminal output**) to the user and ask for approval
+
+Step 4 — after approval, run execute **in the terminal**:
+```
+carter-ops git-flow --branch feature/my-change --message "feat: add feature" --files changed.tf --execute
+```
+
+Step 5 — show the JSON result from step 4 to the user
+
 <routing>
 
 ## Agent Routing
@@ -30,7 +82,7 @@ If the task spans multiple domains, execute agents sequentially and pass context
 
 ## Dispatch Rules
 
-**Write operations — always use carter-ops** — Any request that creates, modifies, or pushes git state (branch, commit, push) or Jira state (create ticket, comment, transition) MUST use `carter-ops` as described in Carter's global instructions. This applies whether you handle the request directly or delegate to a specialist. Never run `git add`, `git commit`, `git push`, `git checkout -b`, or Jira API calls directly — always use `carter-ops` with `--dry-run` first, then `--execute` after approval.
+**Write operations — always run carter-ops in the terminal** — Any request that creates, modifies, or pushes git state (branch, commit, push) or Jira state (create ticket, comment, transition) MUST be handled by running `carter-ops` in the terminal as described in the "CRITICAL: Write Operations" section above. Never run `git add`, `git commit`, `git push`, `git checkout -b`, or Jira API calls directly. Never fabricate carter-ops output — the plan must come from actually running the command.
 
 **Direct answer** — When the request is trivial (quick clarification, simple factual answer) AND does not involve a write operation, respond directly without delegation.
 
@@ -50,20 +102,3 @@ If the task spans multiple domains, execute agents sequentially and pass context
 - `carter-distill` — Promote `/memories/` notes to curated `~/.copilot/knowledge/` entries
 
 </routing>
-
-## Deterministic Operations — carter-ops
-
-When handling write operations directly (e.g., in Copilot CLI where delegation is not available), follow this protocol:
-
-1. Determine which `carter-ops` operation to use:
-   - Branch creation → `carter-ops git-branch --name <name> --from <base>`
-   - Commit files → `carter-ops git-commit --message "<msg>" --files <files>`
-   - Push branch → `carter-ops git-push --branch <branch>`
-   - Full flow → `carter-ops git-flow --branch <name> --message "<msg>" --files <files>`
-   - Jira comment → `carter-ops jira-comment --ticket <key> --body "<text>"`
-   - Jira create → `carter-ops jira-create --project <key> --type <type> --summary "<text>"`
-2. Run with `--dry-run` and show the JSON plan to the user
-3. On approval, run with `--execute`
-4. Report the result
-
-Never run raw `git commit`, `git push`, `git checkout -b`, or Jira API calls. Use `carter-ops`.

@@ -26,6 +26,34 @@ If the request does not match any specialized topic, use the core guidelines bel
 
 </routing>
 
+<deterministic-operations>
+
+## CRITICAL: Write Operations — Run carter-ops in the terminal
+
+All state-changing git operations MUST be executed by running `carter-ops` **in the terminal**.
+Do NOT run `git add`, `git commit`, `git push`, or `git checkout -b` directly.
+Do NOT fabricate carter-ops JSON output — the plan must come from actually running the command.
+
+**Required workflow:**
+1. Prepare the parameters using the domain knowledge in this skill
+2. Run `carter-ops <operation> [params] --dry-run` **in the terminal** to generate the plan
+3. Show the **actual terminal output** to the user for approval
+4. On approval, run `carter-ops <operation> [params] --execute` **in the terminal**
+5. Report the **actual terminal output** to the user
+
+**Available operations:**
+
+| Instead of | Run in terminal |
+|------------|-----------------|
+| `git checkout -b <name>` | `carter-ops git-branch --name <name> --from <base> --dry-run` |
+| `git add` + `git commit` | `carter-ops git-commit --message "..." --files ... --dry-run` |
+| `git push` | `carter-ops git-push --branch <branch> --dry-run` |
+| Branch + commit + push | `carter-ops git-flow --branch <name> --message "..." --files ... --dry-run` |
+
+Read operations (`git log`, `git status`, `git diff`, `git blame`) remain direct — no carter-ops needed.
+
+</deterministic-operations>
+
 <guidelines>
 
 ## Git Best Practices
@@ -50,53 +78,42 @@ git config --global init.defaultBranch main
 # Start work — always pull latest first
 git checkout main
 git pull
-git checkout -b feature/PROJ-123-add-auth
 
-# Stage and commit
-git add -p                    # stage interactively — review each hunk
-git commit -m "feat(auth): add OAuth2 login flow"
+# Create branch, make changes, commit, and push — use carter-ops:
+# carter-ops git-flow --branch feature/PROJ-123-add-auth --message "feat: ..." --files src/auth.py --dry-run
 
-# Stay current with main
+# Stay current with main (read operation — run directly)
 git fetch origin
 git rebase origin/main        # rebase feature branch onto latest main
-
-# Push
-git push -u origin feature/PROJ-123-add-auth
 ```
 
-### Staging
+### Reviewing Changes Before Writing
 
-| Command | Use when |
-|---------|----------|
-| `git add -p` | Reviewing changes hunk-by-hunk (preferred) |
-| `git add <file>` | Adding specific files |
-| `git add .` | Only when you've already reviewed with `git diff` |
-| `git reset HEAD <file>` | Unstaging a file |
+Use these read commands to inspect changes before running carter-ops:
 
-**Never use** `git add .` blindly — always review changes first.
+```bash
+git diff                       # unstaged changes
+git diff --staged              # staged changes
+git status                     # working tree status
+```
 
-### Committing
+### Commit Message Conventions
+
+When preparing the `--message` parameter for carter-ops:
 
 - **Atomic commits** — each commit is one logical change that compiles and passes tests
 - **Present tense** — "add feature" not "added feature"
+- **Conventional format** — `feat:`, `fix:`, `docs:`, `refactor:`, `test:`, `chore:`
 - **Reference tickets** — include ticket IDs in commit body or branch name
 - **No WIP commits on shared branches** — squash before pushing to PR
-
-```bash
-# Good: atomic, descriptive
-git commit -m "fix(api): handle timeout on /users endpoint"
-
-# Interactive rebase to clean up before PR
-git rebase -i origin/main    # squash fixups, reword messages
-```
 
 ### Branching
 
 ```bash
+# Read operations — run directly
 git branch                     # list local branches
 git branch -a                  # list all branches (including remote)
-git checkout -b <name>         # create and switch to new branch
-git switch <name>              # switch branches (modern syntax)
+git switch <name>              # switch to existing branch
 git branch -d <name>           # delete merged branch
 git branch -D <name>           # force-delete unmerged branch
 ```
@@ -105,7 +122,9 @@ git branch -D <name>           # force-delete unmerged branch
 - Delete branches after merging
 - Never commit directly to `main`
 
-### Fetching, Pulling, and Pushing
+**Creating branches** — use `carter-ops git-branch` (see deterministic-operations above).
+
+### Fetching and Pulling
 
 ```bash
 # Fetch — download remote changes without merging
@@ -115,14 +134,7 @@ git fetch --all --prune        # all remotes, clean stale branches
 # Pull — fetch + integrate
 git pull                       # fetch + rebase (if configured)
 git pull --rebase              # explicit rebase
-
-# Push
-git push -u origin <branch>   # first push, set upstream
-git push                      # subsequent pushes
-git push --force-with-lease   # safe force-push (rejects if remote has new commits)
 ```
-
-**Never use** `git push --force` — use `--force-with-lease` instead.
 
 ### Merging and Rebasing
 
@@ -201,33 +213,9 @@ git push origin --tags                 # push all tags
 ## Safety Rules
 
 1. **Never force-push shared branches** — only force-push personal feature branches with `--force-with-lease`
-2. **Always review before staging** — `git diff` or `git add -p`
+2. **Always review before committing** — use `git diff` to check changes before running `carter-ops git-commit`
 3. **Pull before push** — stay current to avoid conflicts
 4. **Don't commit secrets** — use `.gitignore` and secret managers
 5. **Don't rewrite public history** — use `git revert` for published commits
 
 </guidelines>
-
-<deterministic-operations>
-## Write Operations — Use carter-ops
-
-All state-changing git operations MUST go through `carter-ops` via the terminal.
-
-**Protocol:**
-1. Prepare the parameters using the domain knowledge in this skill
-2. Run `carter-ops <operation> [params] --dry-run` to generate the plan
-3. Present the plan to the user for approval
-4. On approval, run `carter-ops <operation> [params] --execute`
-5. Report the structured result to the user
-
-**Available operations:**
-| Operation | When to use |
-|-----------|-------------|
-| `git-branch` | Creating a new branch (`--name`, `--from`) |
-| `git-commit` | Committing staged files (`--message`, `--files`) |
-| `git-push` | Pushing to remote (`--branch`) |
-| `git-flow` | Branch + commit + push in one flow (`--branch`, `--message`, `--files`, `--from`) |
-
-Do NOT run `git add`, `git commit`, `git push`, or `git checkout -b` directly.
-Read operations (`git log`, `git status`, `git diff`, `git blame`) remain direct.
-</deterministic-operations>

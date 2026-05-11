@@ -481,43 +481,48 @@ class TestGitPRDryRun:
 
 ## How Agents Enforce Carter-Ops
 
-The carter-ops protocol is enforced at three layers to ensure it works across all surfaces (VS Code, Copilot CLI, OpenCode):
+The carter-ops protocol is enforced at three layers to ensure it works across all surfaces (VS Code, Copilot CLI, OpenCode). Each layer uses **explicit terminal invocation language** — instructions say "run in the terminal" not "use carter-ops" — because LLMs interpret "use" as "apply the concept" rather than "invoke the CLI."
+
+### Anti-Pattern: Protocol Mime
+
+In testing, agents would **understand** the carter-ops protocol, recognize `ops:` triggers, format their own JSON plan, ask for approval — then run raw `git commit` and `git push`. The model **mimed** the protocol without invoking the tool. This happens because:
+
+1. "Use carter-ops" is ambiguous — the model applies the concept by fabricating output
+2. `<guidelines>` sections with raw git write command examples provide a competing template
+3. Carter-ops instructions at the bottom of files lose primacy to earlier content
+
+All three layers now address this with: imperative terminal language, explicit fabrication prohibition, write command examples removed from guidelines, and carter-ops sections positioned first.
 
 ### Layer 1: Global Instructions
 
-The file `instructions/copilot-instructions.md` includes a "Deterministic Operations" section with an explicit list of forbidden commands and their carter-ops replacements. This file is loaded by **every agent on every surface** — it's the universal safety net.
+The file `instructions/copilot-instructions.md` starts with a "CRITICAL: Write Operations" section — positioned **first**, before all other instructions. It includes:
+- Explicit forbidden commands list
+- Required workflow with "**in the terminal**" at every step
+- "What NOT to do" section with wrong (fabricated output, raw git) and right (actual carter-ops terminal output) examples
+
+This file is loaded by **every agent on every surface** — it's the universal safety net.
 
 ### Layer 2: Agent Definitions
 
-Each agent that handles write operations (`carter-maestro`, `carter-devops`, `carter-pm`) has a "Deterministic Operations" section with a command reference table. This matters because:
+Each agent that handles write operations (`carter-maestro`, `carter-devops`, `carter-pm`) has a "CRITICAL: Write Operations" section **positioned immediately after `</role>`** — before routing rules, skills, or MCP config. This matters because:
 
 - In **Copilot CLI**, there's no subagent delegation — the selected agent (often Maestro) executes directly. The agent must know the protocol itself.
 - In **VS Code**, an agent might handle a task without loading a skill if the request seems simple.
+- **Primacy**: The constraint appears before the agent starts planning its approach.
+
+Maestro's section includes a complete step-by-step example showing the exact terminal commands for a git-flow operation.
 
 ### Layer 3: Skill `<deterministic-operations>` Blocks
 
-Skills that involve write operations include a `<deterministic-operations>` block in their SKILL.md:
-
-```markdown
-<deterministic-operations>
-## Write Operations — Use carter-ops
-
-All state-changing operations MUST go through `carter-ops` via the terminal.
-
-**Protocol:**
-1. Prepare the parameters using the domain knowledge in this skill
-2. Run `carter-ops <operation> [params] --dry-run` to generate the plan
-3. Present the plan to the user for approval
-4. On approval, run `carter-ops <operation> [params] --execute`
-5. Report the structured result to the user
-</deterministic-operations>
-```
+Skills that involve write operations include a `<deterministic-operations>` block **positioned before `<guidelines>`** in their SKILL.md. This ensures the agent reads the constraint before seeing any command examples. Write command examples (git commit, git push, git add) have been **removed from `<guidelines>`** — only read command examples remain.
 
 Currently applied to:
 - **carter-pipeline** — git write operations
 - **carter-atlassian** — Jira write operations
 
-This three-layer approach means the protocol is enforced regardless of which surface is used, which agent is selected, and whether the agent loads a skill or handles the request directly.
+### Why Three Layers
+
+No single layer is guaranteed to be loaded on every surface. Copilot CLI may not load user-level instructions (Layer 1). An agent might skip a skill for "simple" requests (Layer 3). The agent file (Layer 2) is the most reliably loaded, but all three reinforce the same constraint with the same language.
 
 ## Read/Write Boundary
 
@@ -540,4 +545,4 @@ Full design rationale is in [docs/interactions/conversation-log-carter-ops.md](i
 4. **Plugin pattern** — New operation = new file, no framework changes
 5. **JSON output** — Structured for LLM consumption; stderr for humans
 6. **Code over instructions** — Deterministic behavior regardless of LLM model
-7. **Three-layer enforcement** — Global instructions + agent definitions + skill blocks. No single layer can be bypassed because the others catch it. This was added after observing that Copilot CLI agents bypass skill-only enforcement when they handle requests directly.
+7. **Three-layer enforcement with explicit terminal invocation** — Global instructions + agent definitions + skill blocks, all using imperative "run in the terminal" language. Previous iterations used advisory language ("use carter-ops") which models interpreted as "implement the protocol yourself." v3 adds explicit negative examples ("do NOT fabricate output"), removes competing write command examples from skill guidelines, and positions the constraint first in every file.

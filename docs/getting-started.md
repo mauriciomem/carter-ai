@@ -89,12 +89,12 @@ copilot --agent carter-maestro -i \
 
 ### What happens
 
-1. **Maestro receives the request** and recognizes it as a DevOps/git operation
-2. **Maestro routes to `carter-devops`**, which has the `carter-pipeline` skill
-3. **DevOps reads the `<deterministic-operations>` block** in the pipeline skill — it knows git writes must go through carter-ops
-4. **DevOps runs carter-ops with `--dry-run`** and shows you the plan
-5. **You approve** (or reject/modify)
-6. **DevOps runs carter-ops with `--execute`** and reports the result
+1. **Maestro receives the request** and recognizes it as a git write operation
+2. **Maestro runs `carter-ops git-flow ... --dry-run` in the terminal** — the plan MUST come from actual carter-ops output, never fabricated
+3. **You see the JSON plan** (actual terminal output) and approve or reject
+4. **Maestro runs `carter-ops git-flow ... --execute` in the terminal** and reports the result
+
+The same flow works across all surfaces — VS Code, Copilot CLI, and OpenCode. The agent never runs raw `git commit`, `git push`, or `git checkout -b` directly.
 
 ### Example conversation
 
