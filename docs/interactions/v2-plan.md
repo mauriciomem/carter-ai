@@ -484,13 +484,20 @@ The keyword is optional — without it, the normal inference chain still works.
 The installer (`install.py`) adds these steps:
 
 1. **Copy `ops/`** → `~/.carter/ops/`
-2. **Generate `~/.carter/config.toml`** with defaults. Auto-detect `signing_key` from `git config user.signingkey`.
+2. **Generate `~/.carter/config.toml`** with defaults. Auto-detect `signing_key` from `git config user.signingkey`. Use `--bot-name` value if provided.
 3. **Create `~/.local/bin/carter-ops`** wrapper script
 4. **PATH check** — OS-aware detection:
    - macOS: check `~/.zshrc` for `~/.local/bin`
    - Linux: check `~/.bashrc` or `~/.zshrc` (detect active shell)
    - If not on PATH, warn: `Add export PATH="$HOME/.local/bin:$PATH" to your shell profile`
 5. **Manifest update** — Track `~/.carter/` files alongside existing `~/.copilot/` files
+
+**CLI flags:**
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--mcp` | off | Install and configure MCP servers. Without this flag, MCP servers are skipped. |
+| `--bot-name NAME` | `carter-bot` | Git commit author name for carter-ops attribution. Used in `config.toml` and email derivation. |
 
 **Installer output addition:**
 ```
@@ -537,7 +544,6 @@ tests/
 |---|---|
 | Proper Python project | Promote to `src/` layout, `pyproject.toml`, proper packaging |
 | Install-time skill injection | `--with-ops` flag injects `<deterministic-operations>` blocks into skills at install time |
-| `git-pr` | Create draft PR via `gh pr create`. Detection: `gh pr list --head <branch>` to check for existing PR. Default `--draft` |
 | Rollback operations | `git-undo` (reset last commit), `jira-delete-comment` |
 | Jira mock server tests | `pytest-httpserver` or `respx` for Jira integration tests |
 | Confluence operations | Add `confluence-create`, `confluence-update` operations |

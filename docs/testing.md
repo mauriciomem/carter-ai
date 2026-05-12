@@ -47,7 +47,7 @@ No external mocking libraries are used. The installer accepts a `base_dir` param
 ```
 tests/
 ├── conftest.py         # Shared fixtures (base_dir, settings, etc.)
-├── test_install.py     # Installer tests (39 tests, 11 classes)
+├── test_install.py     # Installer tests (44 tests, 13 classes)
 └── ops/
     ├── conftest.py     # Ops path setup
     └── test_operations.py  # Carter-ops tests (45 tests, 17 classes)
@@ -173,7 +173,24 @@ Validates carter-ops installation: file copying, config generation, wrapper scri
 | `test_creates_wrapper_script` | `carter-ops` wrapper is created at `base_dir/local/bin/` with `#!/bin/bash`, executable permission |
 | `test_manifest_tracks_ops_files` | All ops files are tracked in the manifest |
 | `test_idempotent` | Second install reports `unchanged` with 0 `created` |
+### TestBotName (3 tests)
 
+Validates the `--bot-name` CLI flag for custom git attribution.
+
+| Test | What It Verifies |
+|------|-------------------|
+| `test_default_bot_name` | Default config uses `carter-bot` name and derived email |
+| `test_custom_bot_name` | `--bot-name "acme-bot"` produces `acme-bot` name and `acme-bot@users.noreply.github.com` email |
+| `test_custom_bot_name_footer` | Footer text uses the custom bot name |
+
+### TestMCPFlag (2 tests)
+
+Validates the `--mcp` flag for opt-in MCP server installation.
+
+| Test | What It Verifies |
+|------|-------------------|
+| `test_no_mcp_flag_skips_servers` | Without `--mcp`, no MCP server entries are written to settings files |
+| `test_mcp_flag_installs_servers` | With `--mcp`, MCP server entries are written to VS Code settings |
 ## Carter-Ops Tests (`tests/ops/test_operations.py`)
 
 The ops test file validates the carter-ops CLI and all operations. It uses `sys.path` manipulation to import from the `ops/` directory directly.

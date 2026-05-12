@@ -134,6 +134,12 @@ uv run install.py
 uv run install.py --target copilot
 uv run install.py --target opencode
 
+# Include MCP server configuration
+uv run install.py --mcp
+
+# Custom bot name for git attribution
+uv run install.py --bot-name "my-bot"
+
 # Uninstall
 uv run install.py --uninstall
 
@@ -147,14 +153,13 @@ uv run install.py -vv
 ### What the Installer Does
 
 1. Detects OS and checks prerequisites
-2. Validates environment variables for MCP servers
-3. Backs up existing Carter files
-4. Copies agents and skills to `~/.copilot/` and `~/.config/opencode/`
-5. Installs carter-ops to `~/.carter/ops/` with a wrapper at `~/.local/bin/carter-ops`
-6. Generates `~/.carter/config.toml` with auto-detected signing key
-7. Configures MCP servers in VS Code, Copilot CLI, and OpenCode
-8. Initializes the knowledge base at `~/.copilot/knowledge/`
-9. Writes a manifest for idempotent updates and clean uninstall
+2. Backs up existing Carter files
+3. Copies agents and skills to `~/.copilot/` and `~/.config/opencode/`
+4. Installs carter-ops to `~/.carter/ops/` with a wrapper at `~/.local/bin/carter-ops`
+5. Generates `~/.carter/config.toml` with auto-detected signing key and bot name
+6. Configures MCP servers in VS Code, Copilot CLI, and OpenCode (only with `--mcp`)
+7. Initializes the knowledge base at `~/.copilot/knowledge/`
+8. Writes a manifest for idempotent updates and clean uninstall
 
 ### Updating
 
@@ -177,7 +182,7 @@ Knowledge files: `decisions.md`, `mistakes.md`, `patterns.md`, `debugging.md`, `
 
 ## Testing
 
-The test suite has 84 tests across two test files — installer tests (`test_install.py`) and carter-ops tests (`tests/ops/test_operations.py`) — covering file installation, idempotency, JSON merging, manifest management, ops CLI parsing, operation dry-runs, and mocked execution.
+The test suite has 89 tests across two test files — installer tests (`test_install.py`) and carter-ops tests (`tests/ops/test_operations.py`) — covering file installation, idempotency, JSON merging, manifest management, ops CLI parsing, operation dry-runs, and mocked execution.
 
 ```bash
 # Run all tests
