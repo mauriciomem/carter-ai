@@ -47,7 +47,7 @@ No external mocking libraries are used. The installer accepts a `base_dir` param
 ```
 tests/
 ├── conftest.py         # Shared fixtures (base_dir, settings, etc.)
-├── test_install.py     # Installer tests (44 tests, 13 classes)
+├── test_install.py     # Installer tests (57 tests, 17 classes)
 └── ops/
     ├── conftest.py     # Ops path setup
     └── test_operations.py  # Carter-ops tests (45 tests, 17 classes)
@@ -93,8 +93,8 @@ Validates that skill directories and their `SKILL.md` files are created.
 
 | Test | What It Verifies |
 |------|-----------------|
-| `test_creates_copilot_skills` | 18 `carter-*` skill directories, each with a `SKILL.md`, sub-files for terraform/packer/pipeline |
-| `test_creates_opencode_skills` | Same 18 directories under OpenCode target |
+| `test_creates_copilot_skills` | 19 `carter-*` skill directories, each with a `SKILL.md`, sub-files for terraform/packer/pipeline |
+| `test_creates_opencode_skills` | Same 19 directories under OpenCode target |
 
 ### TestInstallInstructions (1 test)
 
@@ -191,6 +191,38 @@ Validates the `--mcp` flag for opt-in MCP server installation.
 |------|-------------------|
 | `test_no_mcp_flag_skips_servers` | Without `--mcp`, no MCP server entries are written to settings files |
 | `test_mcp_flag_installs_servers` | With `--mcp`, MCP server entries are written to VS Code settings |
+
+### TestCarterOpsSkill (2 tests)
+
+Validates that the carter-ops skill is installed alongside other skills.
+
+| Test | What It Verifies |
+|------|-------------------|
+| `test_carter_ops_skill_installed` | `carter-ops/SKILL.md` exists under copilot skills and contains `ops:`, `carter-ops`, and `dry-run` |
+| `test_carter_ops_skill_opencode` | `carter-ops/SKILL.md` exists under OpenCode skills |
+
+### TestOpenCodeRules (3 tests)
+
+Validates OpenCode global rules file generation.
+
+| Test | What It Verifies |
+|------|-------------------|
+| `test_creates_agents_md` | `AGENTS.md` is created under OpenCode root with `ops:` and `carter-ops` references |
+| `test_skipped_for_copilot_only` | `AGENTS.md` is not created when target is copilot only |
+| `test_does_not_overwrite` | Existing `AGENTS.md` content is preserved |
+
+### TestOpsOneLiner (3 tests)
+
+Validates the ops enforcement one-liner across agents and skills.
+
+| Test | What It Verifies |
+|------|-------------------|
+| `test_agents_have_ops_oneliner` | All 6 agent files contain `ops:` and `carter-ops` references |
+| `test_no_critical_section_in_agents` | No agent file contains the old `CRITICAL: Write Operations` section |
+| `test_no_deterministic_ops_in_skills` | Pipeline and atlassian skills have no `<deterministic-operations>` blocks |
+
+### TestJSONCParsing (5 tests)
+
 ## Carter-Ops Tests (`tests/ops/test_operations.py`)
 
 The ops test file validates the carter-ops CLI and all operations. It uses `sys.path` manipulation to import from the `ops/` directory directly.

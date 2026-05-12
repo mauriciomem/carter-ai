@@ -108,7 +108,7 @@ User
 
 Carter-ops is a deterministic CLI executor for write operations (Git and Jira). It separates reads (handled by MCP servers and direct commands) from writes (handled by carter-ops with a two-phase approval flow).
 
-The protocol is enforced across all surfaces — VS Code, Copilot CLI, and OpenCode — through three layers: global instructions, agent definitions, and skill blocks. Each layer uses explicit terminal invocation language ("run in the terminal") with fabrication prohibition to ensure agents invoke the carter-ops CLI rather than implementing the protocol themselves.
+The protocol is enforced by a single `carter-ops` skill that every agent loads when the user prefixes a request with `ops:`. A one-liner in each agent file triggers the skill, which contains the complete workflow, command reference, and anti-fabrication rules in one place.
 
 ```bash
 # Dry-run — shows what would happen
@@ -182,7 +182,7 @@ Knowledge files: `decisions.md`, `mistakes.md`, `patterns.md`, `debugging.md`, `
 
 ## Testing
 
-The test suite has 89 tests across two test files — installer tests (`test_install.py`) and carter-ops tests (`tests/ops/test_operations.py`) — covering file installation, idempotency, JSON merging, manifest management, ops CLI parsing, operation dry-runs, and mocked execution.
+The test suite has 97 tests across two test files — installer tests (`test_install.py`) and carter-ops tests (`tests/ops/test_operations.py`) — covering file installation, idempotency, JSON merging, manifest management, ops CLI parsing, operation dry-runs, and mocked execution.
 
 ```bash
 # Run all tests

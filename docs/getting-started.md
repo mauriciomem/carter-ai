@@ -83,24 +83,24 @@ Operational tasks modify external state — git commits, branch creation, Jira u
 
 ```bash
 copilot --agent carter-maestro -i \
-  "I've finished the auth module in src/auth.py. Create a feature branch, \
-   commit this file, and push it. Use PROJ-42 as the ticket reference."
+  "ops: Create a feature branch, commit src/auth.py, and push it. \
+   Use PROJ-42 as the ticket reference."
 ```
 
 ### What happens
 
-1. **Maestro receives the request** and recognizes it as a git write operation
-2. **Maestro runs `carter-ops git-flow ... --dry-run` in the terminal** — the plan MUST come from actual carter-ops output, never fabricated
+1. **Maestro sees the `ops:` prefix** and loads the `carter-ops` skill
+2. **The skill instructs the agent to run `carter-ops git-flow ... --dry-run` in the terminal** — the plan MUST come from actual carter-ops output, never fabricated
 3. **You see the JSON plan** (actual terminal output) and approve or reject
-4. **Maestro runs `carter-ops git-flow ... --execute` in the terminal** and reports the result
+4. **The agent runs `carter-ops git-flow ... --execute` in the terminal** and reports the result
 
 The same flow works across all surfaces — VS Code, Copilot CLI, and OpenCode. The agent never runs raw `git commit`, `git push`, or `git checkout -b` directly.
 
 ### Example conversation
 
 ```
-You: I've finished the auth module in src/auth.py. Create a feature branch,
-     commit this file, and push it. Use PROJ-42 as the ticket reference.
+You: ops: Create a feature branch, commit src/auth.py, and push it.
+     Use PROJ-42 as the ticket reference.
 
 Carter (Maestro → DevOps):
 

@@ -79,7 +79,7 @@ class TestInstallSkills:
         assert skills_dir.exists()
 
         skill_dirs = sorted(d.name for d in skills_dir.iterdir() if d.is_dir())
-        assert len(skill_dirs) == 18
+        assert len(skill_dirs) == 19
         for d in skill_dirs:
             assert d.startswith("carter-")
             assert (skills_dir / d / "SKILL.md").exists()
@@ -106,7 +106,7 @@ class TestInstallSkills:
 
         skills_dir = base_dir / "opencode" / "skills"
         skill_dirs = sorted(d.name for d in skills_dir.iterdir() if d.is_dir())
-        assert len(skill_dirs) == 18
+        assert len(skill_dirs) == 19
 
 
 class TestInstallInstructions:
@@ -653,3 +653,102 @@ class TestMCPFlag:
         assert "carter-github" in servers
         assert "carter-terraform" in servers
         assert "carter-atlassian" in servers
+
+
+class TestCarterOpsSkill:
+    def test_carter_ops_skill_installed(self, base_dir: Path) -> None:
+        """carter-ops skill should be installed alongside other skills."""
+        manifest = {"files": [], "file_hashes": {}}
+        backup = base_dir / "backup"
+        install.install_skills(["copilot"], base_dir, manifest, backup)
+
+        skill_md = base_dir / "copilot" / "skills" / "carter-ops" / "SKILL.md"
+        assert skill_md.exists()
+        content = skill_md.read_text()
+        assert "ops:" in content
+        assert "carter-ops" in content
+        assert "dry-run" in content
+
+    def test_carter_ops_skill_opencode(self, base_dir: Path) -> None:
+        """carter-ops skill should be installed for OpenCode target too."""
+        manifest = {"files": [], "file_hashes": {}}
+        backup = base_dir / "backup"
+        install.install_skills(["opencode"], base_dir, manifest, backup)
+
+        skill_md = base_dir / "opencode" / "skills" / "carter-ops" / "SKILL.md"
+        assert skill_md.exists()
+
+
+class TestOpenCodeRules:
+    def test_creates_agents_md(self, base_dir: Path) -> None:
+        """OpenCode global rules file should be created."""
+        manifest = {"files": [], "file_hashes": {}}
+        backup = base_dir / "backup"
+        install.install_opencode_rules(["opencode"], base_dir, manifest, backup)
+
+        agents_md = base_dir / "opencode" / "AGENTS.md"
+        assert agents_md.exists()
+        content = agents_md.read_text()
+        assert "ops:" in content
+        assert "carter-ops" in content
+
+    def test_skipped_for_copilot_only(self, base_dir: Path) -> None:
+        """OpenCode rules should not be created when target is copilot only."""
+        manifest = {"files": [], "file_hashes": {}}
+        backup = base_dir / "backup"
+        install.install_opencode_rules(["copilot"], base_dir, manifest, backup)
+
+        agents_md = base_dir / "opencode" / "AGENTS.md"
+        assert not agents_md.exists()
+
+    def test_does_not_overwrite(self, base_dir: Path) -> None:
+        """Existing AGENTS.md should not be overwritten."""
+        manifest = {"files": [], "file_hashes": {}}
+        backup = base_dir / "backup"
+        agents_md = base_dir / "opencode" / "AGENTS.md"
+        agents_md.parent.mkdir(parents=True, exist_ok=True)
+        agents_md.write_text("# Custom rules\n")
+
+        install.install_opencode_rules(["opencode"], base_dir, manifest, backup)
+        assert agents_md.read_text() == "# Custom rules\n"
+
+
+class TestOpsOneLiner:
+    def test_agents_have_ops_oneliner(self, base_dir: Path) -> None:
+        """All agent files should contain the ops: one-liner."""
+        manifest = {"files": [], "file_hashes": {}}
+        backup = base_dir / "backup"
+        install.install_agents(["copilot"], base_dir, manifest, backup)
+
+        agents_dir = base_dir / "copilot" / "agents"
+        for agent_file in agents_dir.glob("carter-*.md"):
+            content = agent_file.read_text()
+            assert "ops:" in content, f"{agent_file.name} missing ops: reference"
+            assert "carter-ops" in content, f"{agent_file.name} missing carter-ops reference"
+
+    def test_no_critical_section_in_agents(self, base_dir: Path) -> None:
+        """Agent files should not have the old CRITICAL section."""
+        manifest = {"files": [], "file_hashes": {}}
+        backup = base_dir / "backup"
+        install.install_agents(["copilot"], base_dir, manifest, backup)
+
+        agents_dir = base_dir / "copilot" / "agents"
+        for agent_file in agents_dir.glob("carter-*.md"):
+            content = agent_file.read_text()
+            assert "## CRITICAL: Write Operations" not in content, (
+                f"{agent_file.name} still has CRITICAL section"
+            )
+
+    def test_no_deterministic_ops_in_skills(self, base_dir: Path) -> None:
+        """Pipeline and atlassian skills should not have deterministic-operations blocks."""
+        manifest = {"files": [], "file_hashes": {}}
+        backup = base_dir / "backup"
+        install.install_skills(["copilot"], base_dir, manifest, backup)
+
+        skills_dir = base_dir / "copilot" / "skills"
+        for skill_name in ("carter-pipeline", "carter-atlassian"):
+            skill_md = skills_dir / skill_name / "SKILL.md"
+            content = skill_md.read_text()
+            assert "<deterministic-operations>" not in content, (
+                f"{skill_name}/SKILL.md still has deterministic-operations block"
+            )

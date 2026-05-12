@@ -26,34 +26,6 @@ If the request does not match any specialized topic, use the core guidelines bel
 
 </routing>
 
-<deterministic-operations>
-
-## CRITICAL: Write Operations — Run carter-ops in the terminal
-
-All state-changing git operations MUST be executed by running `carter-ops` **in the terminal**.
-Do NOT run `git add`, `git commit`, `git push`, or `git checkout -b` directly.
-Do NOT fabricate carter-ops JSON output — the plan must come from actually running the command.
-
-**Required workflow:**
-1. Prepare the parameters using the domain knowledge in this skill
-2. Run `carter-ops <operation> [params] --dry-run` **in the terminal** to generate the plan
-3. Show the **actual terminal output** to the user for approval
-4. On approval, run `carter-ops <operation> [params] --execute` **in the terminal**
-5. Report the **actual terminal output** to the user
-
-**Available operations:**
-
-| Instead of | Run in terminal |
-|------------|-----------------|
-| `git checkout -b <name>` | `carter-ops git-branch --name <name> --from <base> --dry-run` |
-| `git add` + `git commit` | `carter-ops git-commit --message "..." --files ... --dry-run` |
-| `git push` | `carter-ops git-push --branch <branch> --dry-run` |
-| Branch + commit + push | `carter-ops git-flow --branch <name> --message "..." --files ... --dry-run` |
-
-Read operations (`git log`, `git status`, `git diff`, `git blame`) remain direct — no carter-ops needed.
-
-</deterministic-operations>
-
 <guidelines>
 
 ## Git Best Practices

@@ -489,48 +489,25 @@ class TestGitPRDryRun:
 
 ## How Agents Enforce Carter-Ops
 
-The carter-ops protocol is enforced at three layers to ensure it works across all surfaces (VS Code, Copilot CLI, OpenCode). Each layer uses **explicit terminal invocation language** — instructions say "run in the terminal" not "use carter-ops" — because LLMs interpret "use" as "apply the concept" rather than "invoke the CLI."
+The carter-ops protocol is enforced through a single `carter-ops` skill and a one-liner trigger in every agent file. When a user prefixes a request with `ops:`, any agent loads the skill and follows it exactly.
 
-### Anti-Pattern: Protocol Mime
+### Architecture
 
-In testing, agents would **understand** the carter-ops protocol, recognize `ops:` triggers, format their own JSON plan, ask for approval — then run raw `git commit` and `git push`. The model **mimed** the protocol without invoking the tool. This happens because:
+1. **One-liner in every agent file** — Each agent (maestro, devops, pm, architect, engineer, learner) contains: *"When the user's request starts with `ops:`, load the `carter-ops` skill and follow its instructions exactly."* The same one-liner appears in `copilot-instructions.md` and OpenCode's `AGENTS.md`.
 
-1. "Use carter-ops" is ambiguous — the model applies the concept by fabricating output
-2. `<guidelines>` sections with raw git write command examples provide a competing template
-3. Carter-ops instructions at the bottom of files lose primacy to earlier content
+2. **Single `carter-ops/SKILL.md`** — Contains the complete protocol: workflow (dry-run → approval → execute), command reference table, anti-fabrication rules, and read/write boundary. This is the single source of truth — no protocol knowledge is duplicated elsewhere.
 
-All three layers now address this with: imperative terminal language, explicit fabrication prohibition, write command examples removed from guidelines, and carter-ops sections positioned first.
+3. **Opt-in via `ops:` prefix** — The protocol activates only when the user explicitly requests it. No magic detection of "write operations." This eliminates false positives and keeps agent files lightweight.
 
-### Layer 1: Global Instructions
+### Why This Works
 
-The file `instructions/copilot-instructions.md` starts with a "CRITICAL: Write Operations" section — positioned **first**, before all other instructions. It includes:
-- Explicit forbidden commands list
-- Required workflow with "**in the terminal**" at every step
-- "What NOT to do" section with wrong (fabricated output, raw git) and right (actual carter-ops terminal output) examples
+Previous versions (v1–v3) duplicated ~210 lines of enforcement instructions across global instructions, agent definitions, and skill `<deterministic-operations>` blocks. Despite three layers of increasingly explicit instructions, agents still "mimed" the protocol — fabricating JSON output instead of invoking the CLI. The fundamental problem: **instructions cannot force tool invocation.**
 
-This file is loaded by **every agent on every surface** — it's the universal safety net.
-
-### Layer 2: Agent Definitions
-
-Each agent that handles write operations (`carter-maestro`, `carter-devops`, `carter-pm`) has a "CRITICAL: Write Operations" section **positioned immediately after `</role>`** — before routing rules, skills, or MCP config. This matters because:
-
-- In **Copilot CLI**, there's no subagent delegation — the selected agent (often Maestro) executes directly. The agent must know the protocol itself.
-- In **VS Code**, an agent might handle a task without loading a skill if the request seems simple.
-- **Primacy**: The constraint appears before the agent starts planning its approach.
-
-Maestro's section includes a complete step-by-step example showing the exact terminal commands for a git-flow operation.
-
-### Layer 3: Skill `<deterministic-operations>` Blocks
-
-Skills that involve write operations include a `<deterministic-operations>` block **positioned before `<guidelines>`** in their SKILL.md. This ensures the agent reads the constraint before seeing any command examples. Write command examples (git commit, git push, git add) have been **removed from `<guidelines>`** — only read command examples remain.
-
-Currently applied to:
-- **carter-pipeline** — git write operations
-- **carter-atlassian** — Jira write operations
-
-### Why Three Layers
-
-No single layer is guaranteed to be loaded on every surface. Copilot CLI may not load user-level instructions (Layer 1). An agent might skip a skill for "simple" requests (Layer 3). The agent file (Layer 2) is the most reliably loaded, but all three reinforce the same constraint with the same language.
+The v4 approach works because:
+- **Less surface area** — One skill vs. three layers of duplicated blocks. Less instruction text means less room for misinterpretation.
+- **Explicit trigger** — `ops:` is unambiguous. The skill is loaded or it isn't.
+- **Single source of truth** — Protocol changes require editing one file, not five.
+- **Portable** — Agent files are shared across VS Code, Copilot CLI, and OpenCode. The one-liner works on all surfaces.
 
 ## Read/Write Boundary
 
@@ -553,4 +530,4 @@ Full design rationale is in [docs/interactions/conversation-log-carter-ops.md](i
 4. **Plugin pattern** — New operation = new file, no framework changes
 5. **JSON output** — Structured for LLM consumption; stderr for humans
 6. **Code over instructions** — Deterministic behavior regardless of LLM model
-7. **Three-layer enforcement with explicit terminal invocation** — Global instructions + agent definitions + skill blocks, all using imperative "run in the terminal" language. Previous iterations used advisory language ("use carter-ops") which models interpreted as "implement the protocol yourself." v3 adds explicit negative examples ("do NOT fabricate output"), removes competing write command examples from skill guidelines, and positions the constraint first in every file.
+7. **Single skill + keyword trigger (v4)** — Replaced three-layer enforcement (global instructions + agent CRITICAL sections + skill `<deterministic-operations>` blocks) with a single `carter-ops` skill activated by the `ops:` prefix. A one-liner in every agent file triggers the skill. Previous versions duplicated ~210 lines of instructions; v4 uses ~40 lines in one skill + 8 one-liners.
