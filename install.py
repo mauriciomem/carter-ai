@@ -449,6 +449,38 @@ def install_instructions(
         _install_file(src, dst, manifest, backup_root)
 
 
+_OPENCODE_AGENTS_MD = """\
+# Carter — Global Rules
+
+When the user's request starts with `ops:`, load the `carter-ops` skill and follow its instructions exactly.
+
+## Memory
+- Record mistakes and key learnings to `/memories/`.
+- Consult `~/.copilot/knowledge/` before proposing solutions to check for past decisions and lessons.
+"""
+
+
+def install_opencode_rules(
+    targets: list[str],
+    base_dir: Path | None,
+    manifest: dict,
+    backup_root: Path,
+) -> None:
+    """Generate ~/.config/opencode/AGENTS.md for OpenCode global rules."""
+    if "opencode" not in targets:
+        return
+    log_step("Installing OpenCode global rules...")
+    dst = _opencode_base(base_dir) / "AGENTS.md"
+    dst.parent.mkdir(parents=True, exist_ok=True)
+    if dst.exists():
+        log_skip(f"{str(dst).replace(str(_home()), '~')} (exists, not overwriting)")
+        manifest["files"].append(str(dst))
+    else:
+        dst.write_text(_OPENCODE_AGENTS_MD)
+        log_ok(str(dst).replace(str(_home()), "~"))
+        manifest["files"].append(str(dst))
+
+
 def install_knowledge(
     base_dir: Path | None,
     manifest: dict,
@@ -942,6 +974,7 @@ def main() -> None:
     agent_stats = install_agents(targets, args.base_dir, manifest, backup_root)
     skill_stats = install_skills(targets, args.base_dir, manifest, backup_root)
     install_instructions(targets, args.base_dir, manifest, backup_root)
+    install_opencode_rules(targets, args.base_dir, manifest, backup_root)
     knowledge_count = install_knowledge(args.base_dir, manifest, backup_root)
     ops_stats = install_ops(args.base_dir, manifest, backup_root, bot_name=args.bot_name)
 

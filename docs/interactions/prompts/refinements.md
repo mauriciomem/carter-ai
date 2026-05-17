@@ -63,6 +63,20 @@ Structured Result
 
 Review our existing conversation, the plan.md and v2-plan.md files, and the current codebase to have context. Analyse this prompt and think of a solution that better fit this use case. Ask for any clarification.
 
+## carter-ops deterministic approach refinements.
+
+I don't like the current deterministic approach and the carter-ops calling methodology. It seems too rigid.
+Read the docs/interactions folder (skip docs/interactions/prompt folder) and RETHINK EVERYTHING.
+Look for best practices on trusted websites.
+I left another orchestrator agent file, jennai-maestro.md, as an extra reference if needed.
+ANALYZE EVERYTHING DEEPLY AND ASK FOR ANY CLARIFICATIONS IF NEEDED.
+The deterministic approach should be:
+ - scalable and extensible, without requiring a very long section like "## CRITICAL: Write Operations — carter-ops" in the carter-maestro.md orchestration agent.
+ - lightweight, concrete, and functional. Usage of a keyword should be enough.
+ - not tied only to "write operations." It should be treated as an operational task when the keyword "ops:" is invoked.
+I leave it up to you to decide whether to call carter-ops via the orchestrator, subagent, skill, etc. Use your judgment based on the context and the research you have done. Come up with a plan. This plan should be exclusively for this scope.
+REMEMBER: There will be other trivial and operational tasks not tied to carter-ops if the keyword "ops:" is not involved.
+
 
 ## operations refinements:
 
@@ -164,3 +178,5 @@ credential.https://gist.github.com.helper=
 credential.https://gist.github.com.helper=!/opt/homebrew/bin/gh auth git-credential
 gpg.format=ssh
 commit.gpgsign=true
+
+

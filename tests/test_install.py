@@ -691,6 +691,8 @@ class TestOpenCodeRules:
         content = agents_md.read_text()
         assert "ops:" in content
         assert "carter-ops" in content
+        assert "knowledge" in content
+        assert "/memories/" in content
 
     def test_skipped_for_copilot_only(self, base_dir: Path) -> None:
         """OpenCode rules should not be created when target is copilot only."""
