@@ -1,18 +1,22 @@
 ---
 name: carter-distill
-description: Promote quick notes from /memories/ into curated knowledge entries in ~/.copilot/knowledge/
+description: Promote notes from ~/.carter/memories/ and /memories/ into curated knowledge entries in ~/.copilot/knowledge/
 argument-hint: "[optional: topic filter]"
 ---
 
 <objective>
-Review recent notes in `/memories/` and promote valuable learnings into structured, curated entries in `~/.copilot/knowledge/`.
+Review recent notes in `~/.carter/memories/` (visible memory) and `/memories/` (platform memory) and promote valuable learnings into structured, curated entries in `~/.copilot/knowledge/`.
 </objective>
 
 <workflow>
 
 ## Distill Process
 
-1. **Read** — Scan all notes in `/memories/` (user-scope and repo-scope).
+1. **Read** — Scan notes from both sources:
+   - `~/.carter/memories/user/` — persistent cross-project notes
+   - `~/.carter/memories/repo/` — project-specific notes (all repos)
+   - `~/.carter/memories/session/` — conversation working notes
+   - `/memories/` — platform memory (if available on this surface)
 
 2. **Classify** — For each note, determine which knowledge topic it belongs to:
    | Topic File | Content Type |
@@ -41,7 +45,12 @@ Review recent notes in `/memories/` and promote valuable learnings into structur
    - Number of entries created per topic
    - Any notes skipped (duplicates or unclear)
 
-7. **Suggest cleanup** — Recommend which `/memories/` notes can be deleted now that they've been promoted.
+7. **Suggest cleanup** — Recommend which notes can be deleted now that they've been promoted:
+   - Session files (`~/.carter/memories/session/`) that were fully promoted — offer to delete with confirmation.
+   - User/repo files that were fully promoted — flag them but require explicit confirmation before deleting.
+   - Platform `/memories/` notes that were promoted — suggest deletion.
+
+8. **Suggest reflect** — If multiple patterns or recurring mistakes were promoted, suggest running `carter-reflect` to check whether agent or skill files should be updated.
 
 </workflow>
 
@@ -50,4 +59,5 @@ Review recent notes in `/memories/` and promote valuable learnings into structur
 - Preserve the user's original intent — don't rephrase so aggressively that meaning is lost.
 - When in doubt about classification, ask the user.
 - If a note spans multiple topics, create entries in each relevant file.
+- Deduplicate across both memory sources — a note may exist in both `~/.carter/memories/` and `/memories/`.
 </guidelines>

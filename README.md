@@ -171,14 +171,19 @@ uv run install.py
 
 The installer detects changes via file hashing. Only modified files are updated.
 
-## Knowledge Base
+## Memory and Knowledge
 
-Carter learns from experience through a two-tier memory system:
+Carter learns from experience through a three-tier memory system:
 
-- **Fast capture** (`/memories/`) — Quick notes during conversations
+- **Visible memory** (`~/.carter/memories/`) — Browseable Markdown files: `user/` (cross-project), `session/` (per-conversation), `repo/<name>/` (per-project). Works on all surfaces.
+- **Platform memory** (`/memories/`) — VS Code's built-in memory tool. Auto-loads into context. Written alongside visible memory on supported surfaces.
 - **Curated knowledge** (`~/.copilot/knowledge/`) — Structured entries promoted via `@carter-maestro distill`
 
+Three skills drive the lifecycle: `carter-mistakes` (capture) → `carter-distill` (promote to knowledge) → `carter-reflect` (propose agent/skill improvements from patterns).
+
 Knowledge files: `decisions.md`, `mistakes.md`, `patterns.md`, `debugging.md`, `infrastructure.md`, `project-history.md`
+
+See [docs/memory-and-knowledge.md](docs/memory-and-knowledge.md) for the full reference.
 
 ## Testing
 

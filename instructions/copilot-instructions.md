@@ -10,8 +10,9 @@ When the user's request starts with `ops:`, load the `carter-ops` skill and foll
 - At any doubt, ask for clarification before proceeding.
 
 ## Memory
-- Record mistakes and key learnings to `/memories/`.
-- Consult `~/.copilot/knowledge/` before proposing solutions to check for past decisions and lessons.
+- Record mistakes and key learnings to `~/.carter/memories/` (visible) and `/memories/` (platform).
+- Use `~/.carter/memories/user/` for cross-project notes, `repo/<name>/` for project-specific notes, and `session/` for conversation-scoped working notes.
+- Consult `~/.carter/memories/` and `~/.copilot/knowledge/` before proposing solutions to check for past decisions and lessons.
 
 ## Security
 - Always consider OWASP Top 10 in code and architecture reviews.

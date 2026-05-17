@@ -25,7 +25,9 @@ Capture mistakes, failures, and lessons learned into Carter's memory system for 
 
 5. **Lesson** — What should be done differently next time? This is the most important part.
 
-6. **Write to memory** — Store as a structured note in `/memories/`:
+6. **Write to memory** — Store as a structured note in two locations:
+
+   **Primary (visible)** — Write to `~/.carter/memories/user/` (or `~/.carter/memories/repo/<repo-name>/` if the mistake is project-specific):
    ```markdown
    ## Mistake: [Title]
    - **Date:** YYYY-MM-DD
@@ -37,6 +39,8 @@ Capture mistakes, failures, and lessons learned into Carter's memory system for 
    - **Tags:** [keywords for searchability]
    ```
 
+   **Secondary (platform)** — Also write the same note to `/memories/` using the platform memory tool (for auto-loading in VS Code). On surfaces where the platform memory tool is unavailable, skip this step.
+
 7. **Suggest distill** — If there are several accumulated notes, suggest running `carter-distill` to promote them to the curated knowledge base.
 
 </workflow>
@@ -44,6 +48,6 @@ Capture mistakes, failures, and lessons learned into Carter's memory system for 
 <guidelines>
 - No blame — focus on the systemic cause, not who did it.
 - Be specific — "Terraform apply failed" is not useful. "Terraform apply failed because the S3 bucket policy referenced a deleted IAM role" is.
-- Check for existing entries — before recording, check `~/.copilot/knowledge/mistakes.md` for duplicates.
+- Check for existing entries — before recording, check `~/.copilot/knowledge/mistakes.md` and `~/.carter/memories/` for duplicates.
 - Tags matter — they enable future searchability. Include technology, error type, and domain.
 </guidelines>

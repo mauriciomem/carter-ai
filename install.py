@@ -455,8 +455,9 @@ _OPENCODE_AGENTS_MD = """\
 When the user's request starts with `ops:`, load the `carter-ops` skill and follow its instructions exactly.
 
 ## Memory
-- Record mistakes and key learnings to `/memories/`.
-- Consult `~/.copilot/knowledge/` before proposing solutions to check for past decisions and lessons.
+- Record mistakes and key learnings to `~/.carter/memories/` (visible) and `/memories/` (platform, if available).
+- Use `~/.carter/memories/user/` for cross-project notes, `repo/<name>/` for project-specific notes, and `session/` for conversation-scoped working notes.
+- Consult `~/.carter/memories/` and `~/.copilot/knowledge/` before proposing solutions to check for past decisions and lessons.
 """
 
 
@@ -479,6 +480,28 @@ def install_opencode_rules(
         dst.write_text(_OPENCODE_AGENTS_MD)
         log_ok(str(dst).replace(str(_home()), "~"))
         manifest["files"].append(str(dst))
+
+
+def install_memories(
+    base_dir: Path | None,
+    manifest: dict,
+) -> int:
+    """Create ~/.carter/memories/ directory structure."""
+    log_step("Initializing memory directories...")
+    memories_dir = _carter_base(base_dir) / "memories"
+    count = 0
+
+    for scope in ("user", "session", "repo"):
+        scope_dir = memories_dir / scope
+        if scope_dir.exists():
+            log_skip(f"{str(scope_dir).replace(str(_home()), '~')} (exists)")
+        else:
+            scope_dir.mkdir(parents=True, exist_ok=True)
+            log_ok(str(scope_dir).replace(str(_home()), "~"))
+            count += 1
+        manifest["files"].append(str(scope_dir))
+
+    return count
 
 
 def install_knowledge(
@@ -976,6 +999,7 @@ def main() -> None:
     install_instructions(targets, args.base_dir, manifest, backup_root)
     install_opencode_rules(targets, args.base_dir, manifest, backup_root)
     knowledge_count = install_knowledge(args.base_dir, manifest, backup_root)
+    memory_count = install_memories(args.base_dir, manifest)
     ops_stats = install_ops(args.base_dir, manifest, backup_root, bot_name=args.bot_name)
 
     if args.mcp:
@@ -999,6 +1023,7 @@ def main() -> None:
     _log(f"  Ops files: {total_ops}")
     _log(f"  MCP servers: {mcp_count}")
     _log(f"  Knowledge files: {knowledge_count} new")
+    _log(f"  Memory dirs: {memory_count} new")
     _log(f"  Manifest: {str(manifest_path).replace(str(_home()), '~')}")
 
     # Show update stats if relevant

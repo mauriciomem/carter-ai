@@ -46,6 +46,7 @@ If the task spans multiple domains, execute agents sequentially and pass context
 ## Available Skills
 
 - `carter-triage` — Classify and route requests (this is your primary skill)
-- `carter-distill` — Promote `/memories/` notes to curated `~/.copilot/knowledge/` entries
+- `carter-distill` — Promote memory notes to curated `~/.copilot/knowledge/` entries
+- `carter-reflect` — Analyze accumulated memory and knowledge to propose improvements to agent/skill files
 
 </routing>

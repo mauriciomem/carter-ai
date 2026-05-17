@@ -79,7 +79,7 @@ class TestInstallSkills:
         assert skills_dir.exists()
 
         skill_dirs = sorted(d.name for d in skills_dir.iterdir() if d.is_dir())
-        assert len(skill_dirs) == 19
+        assert len(skill_dirs) == 20
         for d in skill_dirs:
             assert d.startswith("carter-")
             assert (skills_dir / d / "SKILL.md").exists()
@@ -106,7 +106,7 @@ class TestInstallSkills:
 
         skills_dir = base_dir / "opencode" / "skills"
         skill_dirs = sorted(d.name for d in skills_dir.iterdir() if d.is_dir())
-        assert len(skill_dirs) == 19
+        assert len(skill_dirs) == 20
 
 
 class TestInstallInstructions:
@@ -754,3 +754,84 @@ class TestOpsOneLiner:
             assert "<deterministic-operations>" not in content, (
                 f"{skill_name}/SKILL.md still has deterministic-operations block"
             )
+
+
+class TestInstallMemories:
+    def test_creates_memory_directories(self, base_dir: Path) -> None:
+        """Memory directories should be created under ~/.carter/memories/."""
+        manifest = {"files": [], "file_hashes": {}}
+        count = install.install_memories(base_dir, manifest)
+
+        memories_dir = base_dir / "carter" / "memories"
+        assert (memories_dir / "user").is_dir()
+        assert (memories_dir / "session").is_dir()
+        assert (memories_dir / "repo").is_dir()
+        assert count == 3
+
+    def test_idempotent(self, base_dir: Path) -> None:
+        """Second install should report 0 new directories."""
+        manifest = {"files": [], "file_hashes": {}}
+        install.install_memories(base_dir, manifest)
+        manifest2 = {"files": [], "file_hashes": {}}
+        count = install.install_memories(base_dir, manifest2)
+        assert count == 0
+
+    def test_manifest_tracks_directories(self, base_dir: Path) -> None:
+        """All memory directories should be tracked in manifest."""
+        manifest = {"files": [], "file_hashes": {}}
+        install.install_memories(base_dir, manifest)
+        assert len(manifest["files"]) == 3
+
+
+class TestCarterReflectSkill:
+    def test_reflect_skill_installed(self, base_dir: Path) -> None:
+        """carter-reflect skill should be installed alongside other skills."""
+        manifest = {"files": [], "file_hashes": {}}
+        backup = base_dir / "backup"
+        install.install_skills(["copilot"], base_dir, manifest, backup)
+
+        skill_md = base_dir / "copilot" / "skills" / "carter-reflect" / "SKILL.md"
+        assert skill_md.exists()
+        content = skill_md.read_text()
+        assert "reflect" in content.lower()
+        assert "~/.carter/memories/" in content
+        assert "~/.copilot/knowledge/" in content
+
+    def test_reflect_skill_opencode(self, base_dir: Path) -> None:
+        """carter-reflect skill should be installed for OpenCode target too."""
+        manifest = {"files": [], "file_hashes": {}}
+        backup = base_dir / "backup"
+        install.install_skills(["opencode"], base_dir, manifest, backup)
+
+        skill_md = base_dir / "opencode" / "skills" / "carter-reflect" / "SKILL.md"
+        assert skill_md.exists()
+
+
+class TestVisibleMemoryReferences:
+    def test_instructions_reference_visible_memory(self, base_dir: Path) -> None:
+        """Global instructions should reference ~/.carter/memories/."""
+        manifest = {"files": [], "file_hashes": {}}
+        backup = base_dir / "backup"
+        install.install_instructions(["copilot"], base_dir, manifest, backup)
+
+        instructions = (base_dir / "copilot" / "instructions" / "copilot-instructions.md").read_text()
+        assert "~/.carter/memories/" in instructions
+
+    def test_opencode_rules_reference_visible_memory(self, base_dir: Path) -> None:
+        """OpenCode AGENTS.md should reference ~/.carter/memories/."""
+        manifest = {"files": [], "file_hashes": {}}
+        backup = base_dir / "backup"
+        install.install_opencode_rules(["opencode"], base_dir, manifest, backup)
+
+        agents_md = (base_dir / "opencode" / "AGENTS.md").read_text()
+        assert "~/.carter/memories/" in agents_md
+        assert "knowledge" in agents_md
+
+    def test_maestro_has_reflect_skill(self, base_dir: Path) -> None:
+        """Maestro agent should list carter-reflect as a skill."""
+        manifest = {"files": [], "file_hashes": {}}
+        backup = base_dir / "backup"
+        install.install_agents(["copilot"], base_dir, manifest, backup)
+
+        maestro = (base_dir / "copilot" / "agents" / "carter-maestro.md").read_text()
+        assert "carter-reflect" in maestro
