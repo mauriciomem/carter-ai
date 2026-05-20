@@ -46,6 +46,12 @@ Perform a structured code review focusing on quality, maintainability, security,
 - Are data structures appropriate for the access patterns?
 - Could hot paths be optimized?
 
+### 7. Post-Change Hygiene
+- Is there dead code left behind (unused variables, orphaned helpers, stale imports)?
+- Were existing abstractions reused, or was something reimplemented that already exists?
+- Are there leftover artifacts from a previous approach (commented-out code, redundant logic branches)?
+- Does the change leave the codebase cleaner than before?
+
 </review-checklist>
 
 <output-format>

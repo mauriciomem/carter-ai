@@ -77,6 +77,9 @@ The deterministic approach should be:
 I leave it up to you to decide whether to call carter-ops via the orchestrator, subagent, skill, etc. Use your judgment based on the context and the research you have done. Come up with a plan. This plan should be exclusively for this scope.
 REMEMBER: There will be other trivial and operational tasks not tied to carter-ops if the keyword "ops:" is not involved.
 
+## inter platform operation
+
+Review existing code base layout (docs, instructions, knowledge, mcp, ops, skills, agents) and our conversation and explain how memory and knowledge systems work in Carter. How is it used? How it can be triggered? Give a much detail as possible and create a document in docs/ explaining what it is, the memory and knowlege process, and any other data worth mentioned. At any doubt ask.
 
 ## operations refinements:
 

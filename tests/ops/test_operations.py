@@ -542,3 +542,432 @@ class TestGitPushExecute:
         result = op.execute({"branch": "feature/test"}, cfg)
         assert result.success is False
         assert "suggestion" in result.data
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# GitHub config
+# ──────────────────────────────────────────────────────────────────────────────
+
+
+class TestGitHubConfig:
+    def test_validate_github_missing_token(self, tmp_path: Path) -> None:
+        from config import Config
+
+        cfg = Config.load(tmp_path / "nonexistent.toml")
+        errors = cfg.validate_github()
+        assert any("GITHUB_TOKEN" in e for e in errors)
+
+    def test_validate_github_with_token(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        from config import Config
+
+        monkeypatch.setenv("GITHUB_TOKEN", "ghp_testtoken123")
+        cfg = Config.load(tmp_path / "nonexistent.toml")
+        errors = cfg.validate_github()
+        assert errors == []
+
+
+class TestGitHubAttribution:
+    def test_append_github_footer(self) -> None:
+        from attribution import append_github_footer
+        from config import Config
+
+        cfg = Config()
+        result = append_github_footer("Status update", cfg)
+        assert result.startswith("Status update")
+        assert "carter-bot" in result
+        assert "---" in result
+
+    def test_attribution_summary_github(self) -> None:
+        from attribution import attribution_summary
+        from config import Config
+
+        cfg = Config()
+        summary = attribution_summary(cfg, "github")
+        assert "carter-bot" in summary
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# gh-issue
+# ──────────────────────────────────────────────────────────────────────────────
+
+
+class TestGhIssueDryRun:
+    def test_dry_run(self) -> None:
+        from config import Config
+        from operations import discover_operations, get_operation
+
+        discover_operations()
+        op = get_operation("gh-issue")
+        cfg = Config()
+        plan = op.dry_run(
+            {"repo": "owner/repo", "title": "Bug report", "body": "Details here"},
+            cfg,
+        )
+        assert plan.operation == "gh-issue"
+        assert any("owner/repo" in s for s in plan.steps)
+
+    def test_validate_missing_repo(self) -> None:
+        from operations import discover_operations, get_operation
+
+        discover_operations()
+        op = get_operation("gh-issue")
+        errors = op.validate({"title": "Test"})
+        assert any("--repo" in e for e in errors)
+
+    def test_validate_bad_repo_format(self) -> None:
+        from operations import discover_operations, get_operation
+
+        discover_operations()
+        op = get_operation("gh-issue")
+        errors = op.validate({"repo": "noslash", "title": "Test"})
+        assert any("owner/repo" in e for e in errors)
+
+    def test_validate_missing_title(self) -> None:
+        from operations import discover_operations, get_operation
+
+        discover_operations()
+        op = get_operation("gh-issue")
+        errors = op.validate({"repo": "owner/repo"})
+        assert any("--title" in e for e in errors)
+
+
+class TestGhIssueExecute:
+    @patch("httpx.post")
+    def test_execute_success(self, mock_post: MagicMock) -> None:
+        from config import Config
+        from operations import discover_operations, get_operation
+
+        mock_resp = MagicMock()
+        mock_resp.json.return_value = {
+            "number": 42,
+            "html_url": "https://github.com/owner/repo/issues/42",
+            "title": "Bug report",
+        }
+        mock_resp.raise_for_status = MagicMock()
+        mock_post.return_value = mock_resp
+
+        discover_operations()
+        op = get_operation("gh-issue")
+        cfg = Config(github_token="ghp_test")
+        result = op.execute(
+            {"repo": "owner/repo", "title": "Bug report", "body": "Details"},
+            cfg,
+        )
+        assert result.success is True
+        assert result.data["number"] == 42
+
+    @patch("httpx.post")
+    def test_execute_http_error(self, mock_post: MagicMock) -> None:
+        import httpx as _httpx
+
+        from config import Config
+        from operations import discover_operations, get_operation
+
+        mock_resp = MagicMock()
+        mock_resp.status_code = 403
+        mock_resp.text = "Forbidden"
+        mock_post.side_effect = _httpx.HTTPStatusError(
+            "Forbidden", request=MagicMock(), response=mock_resp,
+        )
+
+        discover_operations()
+        op = get_operation("gh-issue")
+        cfg = Config(github_token="ghp_test")
+        result = op.execute(
+            {"repo": "owner/repo", "title": "Bug report"},
+            cfg,
+        )
+        assert result.success is False
+        assert "403" in result.data["error"]
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# gh-issue-comment
+# ──────────────────────────────────────────────────────────────────────────────
+
+
+class TestGhIssueCommentDryRun:
+    def test_dry_run(self) -> None:
+        from config import Config
+        from operations import discover_operations, get_operation
+
+        discover_operations()
+        op = get_operation("gh-issue-comment")
+        cfg = Config()
+        plan = op.dry_run(
+            {"repo": "owner/repo", "issue": "42", "body": "Looks good"},
+            cfg,
+        )
+        assert plan.operation == "gh-issue-comment"
+        assert any("42" in s for s in plan.steps)
+
+    def test_validate_missing_fields(self) -> None:
+        from operations import discover_operations, get_operation
+
+        discover_operations()
+        op = get_operation("gh-issue-comment")
+        errors = op.validate({})
+        assert len(errors) == 3  # repo, issue, body
+
+
+class TestGhIssueCommentExecute:
+    @patch("httpx.post")
+    def test_execute_success(self, mock_post: MagicMock) -> None:
+        from config import Config
+        from operations import discover_operations, get_operation
+
+        mock_resp = MagicMock()
+        mock_resp.json.return_value = {
+            "id": 123,
+            "html_url": "https://github.com/owner/repo/issues/42#issuecomment-123",
+        }
+        mock_resp.raise_for_status = MagicMock()
+        mock_post.return_value = mock_resp
+
+        discover_operations()
+        op = get_operation("gh-issue-comment")
+        cfg = Config(github_token="ghp_test")
+        result = op.execute(
+            {"repo": "owner/repo", "issue": "42", "body": "Looks good"},
+            cfg,
+        )
+        assert result.success is True
+        assert result.data["comment_id"] == 123
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# gh-pr
+# ──────────────────────────────────────────────────────────────────────────────
+
+
+class TestGhPrDryRun:
+    def test_dry_run(self) -> None:
+        from config import Config
+        from operations import discover_operations, get_operation
+
+        discover_operations()
+        op = get_operation("gh-pr")
+        cfg = Config()
+        plan = op.dry_run(
+            {"repo": "owner/repo", "title": "Add feature", "head": "feature/x", "base": "main"},
+            cfg,
+        )
+        assert plan.operation == "gh-pr"
+        assert any("feature/x" in s for s in plan.steps)
+        assert any("main" in s for s in plan.steps)
+
+    def test_validate_missing_fields(self) -> None:
+        from operations import discover_operations, get_operation
+
+        discover_operations()
+        op = get_operation("gh-pr")
+        errors = op.validate({})
+        assert len(errors) == 4  # repo, title, head, base
+
+
+class TestGhPrExecute:
+    @patch("httpx.post")
+    def test_execute_success(self, mock_post: MagicMock) -> None:
+        from config import Config
+        from operations import discover_operations, get_operation
+
+        mock_resp = MagicMock()
+        mock_resp.json.return_value = {
+            "number": 99,
+            "html_url": "https://github.com/owner/repo/pull/99",
+            "title": "Add feature",
+            "draft": False,
+        }
+        mock_resp.raise_for_status = MagicMock()
+        mock_post.return_value = mock_resp
+
+        discover_operations()
+        op = get_operation("gh-pr")
+        cfg = Config(github_token="ghp_test")
+        result = op.execute(
+            {"repo": "owner/repo", "title": "Add feature", "head": "feature/x", "base": "main"},
+            cfg,
+        )
+        assert result.success is True
+        assert result.data["number"] == 99
+
+    @patch("httpx.post")
+    def test_execute_draft(self, mock_post: MagicMock) -> None:
+        from config import Config
+        from operations import discover_operations, get_operation
+
+        mock_resp = MagicMock()
+        mock_resp.json.return_value = {
+            "number": 100,
+            "html_url": "https://github.com/owner/repo/pull/100",
+            "title": "Draft PR",
+            "draft": True,
+        }
+        mock_resp.raise_for_status = MagicMock()
+        mock_post.return_value = mock_resp
+
+        discover_operations()
+        op = get_operation("gh-pr")
+        cfg = Config(github_token="ghp_test")
+        result = op.execute(
+            {"repo": "owner/repo", "title": "Draft PR", "head": "feat/y", "base": "main", "draft": True},
+            cfg,
+        )
+        assert result.success is True
+        assert result.data["draft"] is True
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# gh-pr-comment
+# ──────────────────────────────────────────────────────────────────────────────
+
+
+class TestGhPrCommentDryRun:
+    def test_dry_run(self) -> None:
+        from config import Config
+        from operations import discover_operations, get_operation
+
+        discover_operations()
+        op = get_operation("gh-pr-comment")
+        cfg = Config()
+        plan = op.dry_run(
+            {"repo": "owner/repo", "pr": "99", "body": "LGTM"},
+            cfg,
+        )
+        assert plan.operation == "gh-pr-comment"
+        assert any("99" in s for s in plan.steps)
+
+    def test_validate_missing_fields(self) -> None:
+        from operations import discover_operations, get_operation
+
+        discover_operations()
+        op = get_operation("gh-pr-comment")
+        errors = op.validate({})
+        assert len(errors) == 3  # repo, pr, body
+
+
+class TestGhPrCommentExecute:
+    @patch("httpx.post")
+    def test_execute_success(self, mock_post: MagicMock) -> None:
+        from config import Config
+        from operations import discover_operations, get_operation
+
+        mock_resp = MagicMock()
+        mock_resp.json.return_value = {
+            "id": 456,
+            "html_url": "https://github.com/owner/repo/pull/99#issuecomment-456",
+        }
+        mock_resp.raise_for_status = MagicMock()
+        mock_post.return_value = mock_resp
+
+        discover_operations()
+        op = get_operation("gh-pr-comment")
+        cfg = Config(github_token="ghp_test")
+        result = op.execute(
+            {"repo": "owner/repo", "pr": "99", "body": "LGTM"},
+            cfg,
+        )
+        assert result.success is True
+        assert result.data["comment_id"] == 456
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Subcommands: audit and config
+# ──────────────────────────────────────────────────────────────────────────────
+
+
+class TestAuditSubcommand:
+    def test_audit_success(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        import carter_ops
+
+        # Redirect audit log to tmp
+        monkeypatch.setattr(carter_ops, "AUDIT_LOG", tmp_path / "audit.log")
+
+        rc = carter_ops.main([
+            "audit",
+            "--operation", "git-flow",
+            "--params", '{"branch": "feature/x", "message": "feat: x"}',
+            "--result", "success",
+            "--identifiers", '{"commit_sha": "abc1234"}',
+        ])
+        assert rc == 0
+
+        # Verify audit log was written
+        log_content = (tmp_path / "audit.log").read_text()
+        import json
+        entry = json.loads(log_content.strip())
+        assert entry["operation"] == "git-flow"
+        assert entry["result"] == "success"
+        assert entry["identifiers"]["commit_sha"] == "abc1234"
+        assert entry["params"]["branch"] == "feature/x"
+
+    def test_audit_missing_operation(self, capsys: pytest.CaptureFixture) -> None:
+        import carter_ops
+
+        rc = carter_ops.main(["audit", "--result", "success"])
+        assert rc == 1
+
+    def test_audit_missing_result(self, capsys: pytest.CaptureFixture) -> None:
+        import carter_ops
+
+        rc = carter_ops.main(["audit", "--operation", "git-flow"])
+        assert rc == 1
+
+    def test_audit_minimal(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        import carter_ops
+
+        monkeypatch.setattr(carter_ops, "AUDIT_LOG", tmp_path / "audit.log")
+
+        rc = carter_ops.main([
+            "audit",
+            "--operation", "git-push",
+            "--result", "failure",
+        ])
+        assert rc == 0
+
+        import json
+        entry = json.loads((tmp_path / "audit.log").read_text().strip())
+        assert entry["operation"] == "git-push"
+        assert entry["result"] == "failure"
+
+
+class TestConfigSubcommand:
+    def test_config_emit(self, capsys: pytest.CaptureFixture, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        import carter_ops
+
+        # Create a test config file
+        config_toml = tmp_path / "config.toml"
+        config_toml.write_text(
+            '[attribution]\n'
+            'name = "test-bot"\n'
+            'email = "test-bot@example.com"\n'
+            'footer = "Generated by test-bot."\n'
+            '\n'
+            '[git]\n'
+            'signing_key = ""\n'
+        )
+
+        # Monkey-patch Config.load to use our test config
+        from config import Config
+        original_load = Config.load
+
+        @classmethod
+        def mock_load(cls, config_path=None):
+            return original_load(config_toml)
+
+        monkeypatch.setattr(Config, "load", mock_load)
+
+        rc = carter_ops.main(["config", "--emit"])
+        assert rc == 0
+
+        import json
+        captured = capsys.readouterr()
+        data = json.loads(captured.out)
+        assert data["bot_name"] == "test-bot"
+        assert data["bot_email"] == "test-bot@example.com"
+
+    def test_config_no_flag(self, capsys: pytest.CaptureFixture) -> None:
+        import carter_ops
+
+        rc = carter_ops.main(["config"])
+        assert rc == 1

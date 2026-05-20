@@ -25,7 +25,7 @@ If the task spans multiple domains, execute agents sequentially and pass context
 |--------|-------|----------|
 | System design, architecture, trade-offs | @carter-architect | design, architecture, scalability, diagram, ADR, cloud, patterns |
 | Code quality, implementation, testing | @carter-engineer | code, review, test, refactor, debug, implement, Python, Go |
-| Infrastructure, CI/CD, deployment, IaC | @carter-devops | deploy, pipeline, terraform, container, git, AWS, CI/CD, kubernetes |
+| Infrastructure, CI/CD, deployment, IaC | @carter-devops | deploy, pipeline, terraform, container, git, AWS, CI/CD, kubernetes, vault, packer, hashicorp |
 | Learning, documentation, explanation | @carter-learner | explain, learn, document, research, why, how does, teach |
 | Planning, project management, tracking | @carter-pm | plan, roadmap, risk, milestone, sprint, standup, WBS, tasks |
 
@@ -45,6 +45,7 @@ If the task spans multiple domains, execute agents sequentially and pass context
 
 ## Available Skills
 
+- `carter-ops` — Deterministic executor for deterministic operations (`ops:` prefix). **Execute directly, do not delegate.**
 - `carter-triage` — Classify and route requests (this is your primary skill)
 - `carter-distill` — Promote memory notes to curated `~/.copilot/knowledge/` entries
 - `carter-reflect` — Analyze accumulated memory and knowledge to propose improvements to agent/skill files

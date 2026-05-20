@@ -2,29 +2,31 @@
 # requires-python = ">=3.11"
 # dependencies = ["httpx"]
 # ///
-"""Carter-ops — deterministic CLI executor for Git and Jira write operations.
+"""Carter-ops — deterministic CLI for operational tasks.
 
-Stateless two-phase workflow:
+The model executes write operations directly in the terminal with bot
+attribution flags. This CLI provides:
+  - audit: Post-hoc audit logging after model-driven execution
+  - config --emit: Print config values for model consumption
+  - --list: List available operation names
+
+Legacy support (backward compat):
   carter-ops <operation> [params] --dry-run   → shows the plan
   carter-ops <operation> [params] --execute   → executes the plan
 
 All output is JSON to stdout. Human-readable errors go to stderr.
 
 Exit codes:
-  0 — Success (dry-run plan or execution completed)
+  0 — Success
   1 — Validation error (missing params, bad ticket key, etc.)
   2 — Execution error (git push rejected, Jira API 403, etc.)
   3 — Configuration error (missing env vars, signing key not found)
 
 Usage:
-  uv run carter_ops.py git-branch --name feature/PROJ-123 --dry-run
-  uv run carter_ops.py git-commit --message "feat: add auth" --files src/auth.py --dry-run
-  uv run carter_ops.py git-push --dry-run
-  uv run carter_ops.py git-flow --branch feature/X --message "feat: X" --dry-run
-  uv run carter_ops.py jira-comment --ticket PROJ-123 --body "Status update" --dry-run
-  uv run carter_ops.py jira-create --project PROJ --type Story --summary "Add auth" --dry-run
-  uv run carter_ops.py jira-update --ticket PROJ-123 --comment "Done" --transition "Done" --dry-run
-  uv run carter_ops.py --list
+  carter-ops audit --operation git-flow --params '{"branch":"x"}' --result success
+  carter-ops config --emit
+  carter-ops --list
+  carter-ops git-flow --branch feature/X --message "feat: X" --dry-run  (legacy)
 """
 from __future__ import annotations
 
@@ -121,12 +123,92 @@ def _parse_argv(argv: list[str]) -> tuple[str, dict[str, Any], str]:
     return operation, params, phase
 
 
+def _handle_audit(params: dict[str, Any]) -> int:
+    """Append an audit entry from model's direct execution."""
+    operation = params.get("operation", "")
+    if not operation:
+        emit_error("--operation is required for audit")
+        return 1
+
+    result_status = params.get("result", "")
+    if not result_status:
+        emit_error("--result is required for audit (success or failure)")
+        return 1
+
+    entry: dict[str, Any] = {
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "operation": operation,
+        "phase": "execute",
+        "result": result_status,
+    }
+
+    # Parse --params JSON
+    params_json = params.get("params", "")
+    if params_json:
+        try:
+            entry["params"] = json.loads(params_json) if isinstance(params_json, str) else params_json
+        except (json.JSONDecodeError, TypeError):
+            entry["params"] = {"raw": str(params_json)}
+
+    # Parse --identifiers JSON
+    identifiers_json = params.get("identifiers", "")
+    if identifiers_json:
+        try:
+            entry["identifiers"] = json.loads(identifiers_json) if isinstance(identifiers_json, str) else identifiers_json
+        except (json.JSONDecodeError, TypeError):
+            entry["identifiers"] = {"raw": str(identifiers_json)}
+
+    _audit(entry)
+    emit({"status": "logged", "operation": operation, "result": result_status})
+    return 0
+
+
+def _handle_config_emit() -> int:
+    """Print config values for model consumption."""
+    cfg = Config.load()
+    emit({
+        "bot_name": cfg.bot_name,
+        "bot_email": cfg.bot_email,
+        "signing_key": cfg.signing_key,
+        "footer": cfg.footer,
+        "jira_url": cfg.jira_url,
+        "jira_email": cfg.jira_email,
+        "has_jira_token": bool(cfg.jira_token),
+        "has_github_token": bool(cfg.github_token),
+    })
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     if argv is None:
         argv = sys.argv[1:]
 
-    # Discover all operations
+    # Discover all operations (for legacy --dry-run/--execute support)
     discover_operations()
+
+    # Handle subcommands: audit, config
+    if argv and argv[0] == "audit":
+        _, params, _ = _parse_argv(argv[1:])
+        # Re-parse: audit uses positional-style --key value pairs
+        audit_params: dict[str, Any] = {}
+        i = 1
+        while i < len(argv):
+            arg = argv[i]
+            if arg.startswith("--") and i + 1 < len(argv) and not argv[i + 1].startswith("--"):
+                audit_params[arg[2:]] = argv[i + 1]
+                i += 2
+            elif arg.startswith("--"):
+                audit_params[arg[2:]] = True
+                i += 1
+            else:
+                i += 1
+        return _handle_audit(audit_params)
+
+    if argv and argv[0] == "config":
+        if "--emit" in argv:
+            return _handle_config_emit()
+        emit_error("Usage: carter-ops config --emit")
+        return 1
 
     operation_name, params, phase = _parse_argv(argv)
 
@@ -159,6 +241,12 @@ def main(argv: list[str] | None = None) -> int:
     # Validate config for domain
     if operation_name.startswith("jira-"):
         cfg_errors = cfg.validate_jira()
+        if cfg_errors:
+            emit(error_output(operation_name, "CONFIG_ERROR", "; ".join(cfg_errors)))
+            return 3
+
+    if operation_name.startswith("gh-"):
+        cfg_errors = cfg.validate_github()
         if cfg_errors:
             emit(error_output(operation_name, "CONFIG_ERROR", "; ".join(cfg_errors)))
             return 3

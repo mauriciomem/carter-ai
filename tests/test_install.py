@@ -667,7 +667,22 @@ class TestCarterOpsSkill:
         content = skill_md.read_text()
         assert "ops:" in content
         assert "carter-ops" in content
-        assert "dry-run" in content
+        # Skill teaches direct execution with attribution
+        assert "APPROVE" in content
+        assert "git commit" in content
+
+    def test_carter_ops_skill_template_substitution(self, base_dir: Path) -> None:
+        """carter-ops skill should have template vars substituted at install time."""
+        manifest = {"files": [], "file_hashes": {}}
+        backup = base_dir / "backup"
+        install.install_skills(["copilot"], base_dir, manifest, backup)
+
+        skill_md = base_dir / "copilot" / "skills" / "carter-ops" / "SKILL.md"
+        content = skill_md.read_text()
+        # Template placeholders should be replaced with actual values
+        assert "{{BOT_NAME}}" not in content
+        assert "{{BOT_EMAIL}}" not in content
+        assert "{{SIGNING_KEY}}" not in content
 
     def test_carter_ops_skill_opencode(self, base_dir: Path) -> None:
         """carter-ops skill should be installed for OpenCode target too."""

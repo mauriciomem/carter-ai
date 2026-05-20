@@ -1,30 +1,36 @@
 # Carter-Ops
 
-Carter-ops is a deterministic CLI executor for write operations. It enforces a clear boundary: **MCP servers handle reads**, **carter-ops handles writes**. Every write operation goes through a two-phase approval flow — dry-run first, execute after approval.
+Carter-ops provides **bot attribution**, **audit logging**, and **configuration** for write operations performed by Carter agents. The model executes commands directly in the terminal with the correct attribution flags; carter-ops provides the supporting utilities.
 
 ## Why
 
-LLMs interpret natural-language instructions inconsistently across models. A shared instructions file telling agents "always confirm before committing" works sometimes, but breaks across Claude, GPT-4, Gemini, and model updates.
-
-Carter-ops moves the deterministic zone from instructions to code. The LLM prepares the parameters; carter-ops validates and executes them identically every time.
+LLMs can reliably run git commands, `gh` CLI, and `curl`. Previous approaches tried to force models to call a CLI tool instead of running commands directly. This failed across every model provider. The current design works WITH model behavior: the model runs commands directly, carter-ops handles attribution config and audit logging.
 
 ## Architecture
 
 ```
-User request
+User: "ops: create branch, commit changes, push"
   │
-  └─→ Agent (carter-devops / carter-pm)
+  └─→ Model (loads carter-ops skill)
         │
-        ├─ READ: MCP servers, direct commands (git log, JQL, etc.)
+        ├─ ASSESS: git status, git diff (read operations — run directly)
         │
-        └─ WRITE: carter-ops via terminal
-              │
-              ├─ --dry-run  → JSON plan shown to user
-              ├─ user approves
-              └─ --execute  → deterministic execution → JSON result
+        ├─ PLAN: Show structured plan with exact commands + attribution flags
+        │
+        ├─ APPROVE: User confirms
+        │
+        ├─ EXECUTE: Run commands directly in terminal
+        │    git checkout -b <branch>
+        │    git add <files>
+        │    git commit --author='bot <email>' -S -m "message"
+        │    git push -u origin <branch>
+        │
+        ├─ AUDIT: carter-ops audit --operation ... --result success
+        │
+        └─ REPORT: Show result to user
 ```
 
-Carter-ops is a **dumb executor**. It never decides what to do — only does what it's told, safely. Content generation (commit messages, ticket descriptions) is the skill's domain.
+The model is the executor. Carter-ops is a **utility** — it provides config values and audit logging, not execution.
 
 ## Getting Started
 
@@ -34,6 +40,7 @@ Carter-ops is a **dumb executor**. It never decides what to do — only does wha
 - [uv](https://docs.astral.sh/uv/)
 - Git (for git operations)
 - Jira API access (for Jira operations — optional)
+- GitHub API access (for GitHub operations — optional)
 
 ### Installation
 
@@ -68,6 +75,10 @@ Expected output:
 ```json
 {
   "operations": [
+    "gh-issue",
+    "gh-issue-comment",
+    "gh-pr",
+    "gh-pr-comment",
     "git-branch",
     "git-commit",
     "git-flow",
@@ -124,6 +135,16 @@ export ATLASSIAN_URL="https://your-domain.atlassian.net"
 ```
 
 Environment variables override config file values for `jira_url` and `jira_email`.
+
+### GitHub Environment Variables
+
+GitHub operations require a personal access token:
+
+```bash
+export GITHUB_TOKEN="ghp_your_token_here"
+```
+
+The token needs `repo` scope for private repos, or `public_repo` for public repos only.
 
 ## Usage
 
@@ -313,6 +334,90 @@ carter-ops jira-update \
   --dry-run
 ```
 
+### GitHub Operations
+
+GitHub operations require `GITHUB_TOKEN` to be set.
+
+#### `gh-issue`
+
+Create a new GitHub issue. The carter-bot footer is automatically appended to the body.
+
+| Param | Required | Description |
+|-------|----------|-------------|
+| `--repo` | Yes | Repository in `owner/repo` format |
+| `--title` | Yes | Issue title |
+| `--body` | No | Issue body (Markdown) |
+| `--labels` | No | Comma-separated labels |
+
+```bash
+carter-ops gh-issue \
+  --repo owner/repo \
+  --title "Bug: auth fails on refresh" \
+  --body "Token refresh returns 401" \
+  --labels bug,auth \
+  --dry-run
+```
+
+#### `gh-issue-comment`
+
+Comment on an existing GitHub issue.
+
+| Param | Required | Description |
+|-------|----------|-------------|
+| `--repo` | Yes | Repository in `owner/repo` format |
+| `--issue` | Yes | Issue number |
+| `--body` | Yes | Comment text (Markdown) |
+
+```bash
+carter-ops gh-issue-comment \
+  --repo owner/repo \
+  --issue 42 \
+  --body "Fixed in commit abc1234" \
+  --dry-run
+```
+
+#### `gh-pr`
+
+Create a new GitHub pull request.
+
+| Param | Required | Description |
+|-------|----------|-------------|
+| `--repo` | Yes | Repository in `owner/repo` format |
+| `--title` | Yes | PR title |
+| `--head` | Yes | Source branch |
+| `--base` | Yes | Target branch |
+| `--body` | No | PR description (Markdown) |
+| `--draft` | No | Create as draft PR |
+
+```bash
+carter-ops gh-pr \
+  --repo owner/repo \
+  --title "feat: add auth module" \
+  --head feature/auth \
+  --base main \
+  --body "Implements OAuth2 flow" \
+  --draft \
+  --dry-run
+```
+
+#### `gh-pr-comment`
+
+Comment on an existing GitHub pull request.
+
+| Param | Required | Description |
+|-------|----------|-------------|
+| `--repo` | Yes | Repository in `owner/repo` format |
+| `--pr` | Yes | PR number |
+| `--body` | Yes | Comment text (Markdown) |
+
+```bash
+carter-ops gh-pr-comment \
+  --repo owner/repo \
+  --pr 99 \
+  --body "LGTM, approving" \
+  --dry-run
+```
+
 ## Output Contract
 
 ### JSON to stdout
@@ -383,6 +488,13 @@ Comments are posted under your Jira account (API limitation). A footer is append
 
 > _This comment was generated by carter-bot._
 
+### GitHub
+
+Issues, PRs, and comments are posted under your GitHub account (using your token). A Markdown footer is appended:
+
+> ---
+> _This was generated by carter-bot._
+
 Both the author name, email, and footer text are configurable in `~/.carter/config.toml`.
 
 ## Audit Log
@@ -413,7 +525,11 @@ ops/
     ├── git_flow.py          # git-flow (composite: branch → commit → push)
     ├── jira_comment.py      # jira-comment
     ├── jira_create.py       # jira-create
-    └── jira_update.py       # jira-update (composite: comment + transition)
+    ├── jira_update.py       # jira-update (composite: comment + transition)
+    ├── gh_issue.py          # gh-issue
+    ├── gh_issue_comment.py  # gh-issue-comment
+    ├── gh_pr.py             # gh-pr
+    └── gh_pr_comment.py     # gh-pr-comment
 ```
 
 ### Installed Layout
@@ -487,47 +603,60 @@ class TestGitPRDryRun:
         assert plan.operation == "git-pr"
 ```
 
-## How Agents Enforce Carter-Ops
+## How Agents Use Carter-Ops
 
-The carter-ops protocol is enforced through a single `carter-ops` skill and a one-liner trigger in every agent file. When a user prefixes a request with `ops:`, any agent loads the skill and follows it exactly.
+The carter-ops protocol is activated through a single `carter-ops` skill and a one-liner trigger in every agent file. When a user prefixes a request with `ops:`, any agent loads the skill and follows it exactly.
 
 ### Architecture
 
 1. **One-liner in every agent file** — Each agent (maestro, devops, pm, architect, engineer, learner) contains: *"When the user's request starts with `ops:`, load the `carter-ops` skill and follow its instructions exactly."* The same one-liner appears in `copilot-instructions.md` and OpenCode's `AGENTS.md`.
 
-2. **Single `carter-ops/SKILL.md`** — Contains the complete protocol: workflow (dry-run → approval → execute), command reference table, anti-fabrication rules, and read/write boundary. This is the single source of truth — no protocol knowledge is duplicated elsewhere.
+2. **Single `carter-ops/SKILL.md`** — Contains the complete protocol: workflow (assess → plan → approve → execute → audit → report), command templates with attribution flags, error recovery patterns, and read/write boundary. This is the single source of truth.
 
 3. **Opt-in via `ops:` prefix** — The protocol activates only when the user explicitly requests it. No magic detection of "write operations." This eliminates false positives and keeps agent files lightweight.
 
 ### Why This Works
 
-Previous versions (v1–v3) duplicated ~210 lines of enforcement instructions across global instructions, agent definitions, and skill `<deterministic-operations>` blocks. Despite three layers of increasingly explicit instructions, agents still "mimed" the protocol — fabricating JSON output instead of invoking the CLI. The fundamental problem: **instructions cannot force tool invocation.**
+Previous approaches tried to force models to call the `carter-ops` CLI instead of running commands directly. Despite increasingly explicit instructions across multiple layers, agents consistently "mimed" the protocol — fabricating JSON output or running raw commands. The fundamental insight: **instructions cannot force tool invocation.**
 
-The v4 approach works because:
-- **Less surface area** — One skill vs. three layers of duplicated blocks. Less instruction text means less room for misinterpretation.
-- **Explicit trigger** — `ops:` is unambiguous. The skill is loaded or it isn't.
-- **Single source of truth** — Protocol changes require editing one file, not five.
-- **Portable** — Agent files are shared across VS Code, Copilot CLI, and OpenCode. The one-liner works on all surfaces.
+The current design works WITH model behavior:
+- **Models know git commands** — Let them run git commands with attribution flags, instead of prohibiting it
+- **Plans are model-generated** — No fake/real distinction. The plan IS what the model intends. The user verifies it.
+- **Approval gate is natural** — Models already pause before destructive operations. The skill formalizes this existing behavior.
+- **Audit is post-hoc utility** — `carter-ops audit` logs after the fact. If skipped, git/GitHub/Jira history remains authoritative.
+- **Template substitution** — Attribution values are baked into SKILL.md at install time. The model reads them directly.
 
 ## Read/Write Boundary
 
-| Operation type | Tool |
+| Operation type | How |
 |---|---|
-| Git writes (commit, push, branch) | `carter-ops` via terminal |
-| Git reads (log, status, diff, blame) | Direct git commands |
-| Jira writes (create, comment, transition) | `carter-ops` via terminal |
+| Git writes (commit, push, branch) | Model runs git commands directly with `--author` and `-S` flags |
+| Git reads (log, status, diff, blame) | Direct git commands (no `ops:` needed) |
+| Jira writes (create, comment, transition) | Model runs `curl` to REST API v2 |
 | Jira reads (search, view ticket) | `carter-atlassian` MCP server |
-| GitHub reads (PRs, issues, Actions) | `carter-github` MCP server |
-| GitHub writes (create PR, merge) | Future `carter-ops` operation |
+| GitHub reads (PRs, issues, Actions) | `carter-github` MCP server or `gh` CLI |
+| GitHub writes (issues, PRs, comments) | Model runs `gh` CLI with footer |
+
+## Carter-Ops CLI Reference
+
+The CLI is a **utility**, not an executor:
+
+| Command | Purpose |
+|---|---|
+| `carter-ops audit --operation <name> --params '<json>' --result <status> --identifiers '<json>'` | Append audit entry |
+| `carter-ops config --emit` | Print config values (bot name, email, signing key) |
+| `carter-ops --list` | List available operation names |
+
+Legacy `--dry-run` / `--execute` commands still work for backward compatibility.
 
 ## Design Decisions
 
-Full design rationale is in [docs/interactions/conversation-log-carter-ops.md](interactions/conversation-log-carter-ops.md). Key decisions:
+Full design rationale is in [docs/interactions/conversation-log-carter-ops.md](interactions/conversation-log-carter-ops.md) and [docs/interactions/v3-carter-ops-enforcement.md](interactions/v3-carter-ops-enforcement.md). Key decisions:
 
-1. **CLI over MCP server** — LLMs can reliably call CLI tools via terminal across all surfaces
-2. **Stateless two-phase** — No execution IDs to track; replay params for execute
+1. **Direct execution over CLI middleman** — Models run commands directly. Attribution is injected via flags. A previous CLI-based approach failed because instructions cannot force tool invocation.
+2. **Stateless audit** — No execution IDs to track; audit is post-hoc best-effort
 3. **Python** — Matches the existing toolchain; `uv run` for dependency isolation
-4. **Plugin pattern** — New operation = new file, no framework changes
-5. **JSON output** — Structured for LLM consumption; stderr for humans
-6. **Code over instructions** — Deterministic behavior regardless of LLM model
-7. **Single skill + keyword trigger (v4)** — Replaced three-layer enforcement (global instructions + agent CRITICAL sections + skill `<deterministic-operations>` blocks) with a single `carter-ops` skill activated by the `ops:` prefix. A one-liner in every agent file triggers the skill. Previous versions duplicated ~210 lines of instructions; v4 uses ~40 lines in one skill + 8 one-liners.
+4. **Install-time template substitution** — Bot name, email, signing key baked into SKILL.md so models can read values directly
+5. **JSON output** — Config and audit commands emit structured JSON to stdout
+6. **Behavior over code** — Model behavior (showing plans, running commands) IS the deterministic path. Code (CLI) provides utilities, not enforcement.
+7. **Single skill + keyword trigger** — One `carter-ops` skill activated by `ops:` prefix. A one-liner in every agent file triggers the skill. Single source of truth for the protocol.

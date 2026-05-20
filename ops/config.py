@@ -56,6 +56,11 @@ class Config:
     jira_email: str = ""
     jira_token: str = ""
 
+    # GitHub
+    github_token: str = ""
+    github_owner: str = ""
+    github_repo: str = ""
+
     @classmethod
     def load(cls, config_path: Path | None = None) -> Config:
         cfg = cls()
@@ -87,6 +92,11 @@ class Config:
         cfg.jira_url = os.environ.get("ATLASSIAN_URL", "") or cfg.jira_url
         cfg.jira_email = os.environ.get("ATLASSIAN_EMAIL", "") or cfg.jira_email
 
+        # GitHub
+        cfg.github_token = os.environ.get("GITHUB_TOKEN", "")
+        cfg.github_owner = os.environ.get("GITHUB_OWNER", "") or cfg.github_owner
+        cfg.github_repo = os.environ.get("GITHUB_REPO", "") or cfg.github_repo
+
         # Auto-detect signing key from git config if not set
         if not cfg.signing_key:
             cfg.signing_key = _detect_signing_key()
@@ -107,6 +117,12 @@ class Config:
             errors.append("ATLASSIAN_EMAIL not set")
         if not self.jira_token:
             errors.append("JIRA_TOKEN or ATLASSIAN_API_TOKEN not set")
+        return errors
+
+    def validate_github(self) -> list[str]:
+        errors = []
+        if not self.github_token:
+            errors.append("GITHUB_TOKEN not set")
         return errors
 
 

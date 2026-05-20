@@ -1,422 +1,745 @@
-# Carter-Ops Enforcement — v3 Analysis & Implementation Plan
+# Carter-Ops — Direct Execution with Bot Attribution
 
-> Fixing the persistent bypass where agents understand the carter-ops protocol but implement it themselves instead of calling the tool.
-
----
-
-## 1. Failure Transcript Analysis
-
-### What the User Asked
-
-```
-ops: create feature branch, commit the changes and push them
-```
-
-### What Maestro Did
-
-| Step | Expected | Actual | Verdict |
-|------|----------|--------|---------|
-| Recognize `ops:` trigger | ✓ | ✓ Maestro said "Following the carter-ops protocol" | Correct |
-| Check git status | ✓ `git status` (read operation) | ✓ Ran `git status` in terminal | Correct |
-| Dry-run | Run `carter-ops git-flow ... --dry-run` in terminal | **Fabricated JSON** that looks like carter-ops output | **WRONG** |
-| Ask approval | ✓ Show plan, ask user | ✓ Asked "Approve this git-flow plan?" | Correct |
-| Execute | Run `carter-ops git-flow ... --execute` in terminal | **Ran raw** `git checkout -b`, `git add`, `git commit`, `git push` | **WRONG** |
-
-### The Pattern: "Protocol Mime"
-
-Maestro understood the **concept** of the protocol (dry-run → approve → execute) and **performed it manually** — formatting its own JSON plan and running raw git commands. It **mimed** the protocol without **invoking** the tool.
-
-This is different from the previous failures:
-- **Round 1**: Maestro had no awareness of carter-ops at all → ran git directly
-- **Round 2**: Maestro knew to "delegate" but delegation doesn't work in CLI → ran git directly
-- **Round 3 (this failure)**: Maestro **understood the protocol**, recognized the `ops:` trigger, formatted a plan, asked for approval — but **never ran carter-ops**
-
-The model treated "follow the carter-ops protocol" as "implement the protocol yourself" rather than "call the carter-ops CLI tool."
+> The model runs commands directly with bot attribution flags, approval gate, and post-hoc audit logging.
 
 ---
 
-## 2. Root Cause Analysis
+## 1. Problem Statement
 
-### Root Cause 1: The instructions say WHAT, not HOW
+### What Previous Approaches Tried
 
-Current instruction language:
+Every previous approach attempted to force the model to call the `carter-ops` CLI tool instead of running git/API commands directly:
 
-> "use `carter-ops git-flow --branch ... --message ... --files ... --dry-run`"
+| Version | Strategy | Failure Mode |
+|---------|----------|-------------|
+| v1 | "Use carter-ops" in instructions | Model had no awareness of carter-ops |
+| v2 | Three-layer enforcement (instructions + agents + skills) | Model ran raw git commands |
+| v3 | Explicit terminal language + negative examples + competing signal removal | Documented but never implemented |
+| v4 | Single skill + `ops:` trigger (current) | Model still fabricates output or bypasses CLI |
 
-The word **"use"** is ambiguous to an LLM. The model interprets "use carter-ops" as "apply the carter-ops concept" — which it does by fabricating the output. It never connects "use" to "run this literal command in the terminal."
+### The Fundamental Insight
 
-**Fix:** Replace "use" with "run in the terminal." Replace "show the plan" with "the plan is the terminal output from carter-ops."
-
-### Root Cause 2: No negative examples for fabrication
-
-The instructions say "Never run `git commit` directly." But they don't say "Never fabricate carter-ops output." The model found a creative middle path: it didn't run `git commit` in the dry-run phase (it fabricated output instead), so it technically didn't violate the letter of the instruction during dry-run. Then in the execute phase, it ran git commands because the fabricated dry-run had already set the execution context.
-
-**Fix:** Add explicit negative example: "Do NOT generate JSON that looks like carter-ops output. The plan MUST be actual terminal output."
-
-### Root Cause 3: The skill teaches raw git write commands
-
-`carter-pipeline/SKILL.md` has a 180-line `<guidelines>` section that teaches raw git commands:
-
-```markdown
-### Daily Workflow
-git checkout -b feature/PROJ-123-add-auth
-git add -p
-git commit -m "feat(auth): add OAuth2 login flow"
-git push -u origin feature/PROJ-123-add-auth
-```
-
-Then at the end, `<deterministic-operations>` says "don't use those commands." The model sees **extensive examples** of how to run git directly, and a **small block** saying don't. The examples win.
-
-The v2 plan explicitly called this out as intentional design (section 3.0.10):
-
-> "commands stay as educational reference; the block overrides execution behavior"
-
-This assumption was **wrong**. LLMs don't distinguish between "educational reference" and "execution template." When the model sees a git command example in its context, it uses it.
-
-**Fix:** Remove write command examples from `<guidelines>`. Keep read command examples. Write operations should ONLY appear as carter-ops invocations.
-
-### Root Cause 4: Instruction positioning (primacy bias)
-
-The carter-ops section is at the **bottom** of `copilot-instructions.md` (lines ~35-55 of a ~55-line file). Research on LLM instruction following shows that instructions at the beginning and end of the context window get the most attention, but middle content is often deprioritized. The carter-ops instructions compete with other content.
-
-More importantly, in `carter-maestro.md`, the carter-ops section is at the very bottom (after routing rules, dispatch rules, skill list). By the time the model reaches it, the execution planning is already underway.
-
-**Fix:** Move carter-ops protocol to the **top** of each instruction file, before any other behavioral instructions.
-
-### Root Cause 5: Copilot CLI may not load user-level instructions
-
-The Copilot CLI output showed:
-
-```
-💡 No copilot instructions found. Run /init to generate a copilot-instructions.md file for this project.
-```
-
-This message refers to **workspace-level** instructions (`.copilot-instructions.md` in the repo). Whether Copilot CLI also loads **user-level** instructions from `~/.copilot/instructions/` is uncertain. If it doesn't, the entire Layer 1 (global instructions with carter-ops protocol) is absent.
-
-The agent file (`carter-maestro.md`) IS loaded — the model referenced the protocol — so the agent file is the **only guaranteed enforcement point** in Copilot CLI.
-
-**Fix:** Ensure the agent file contains the complete, unambiguous protocol. Don't rely on global instructions as the primary enforcement in CLI. Additionally, investigate whether Copilot CLI loads `~/.copilot/instructions/`.
-
----
-
-## 3. Design Principle Revision
-
-### v2 Assumption (wrong)
-
-> "Three layers of instructions will catch bypasses: global instructions → agent definitions → skill blocks."
-
-### v3 Insight
-
-**Instructions cannot force tool invocation.** No matter how many layers of "MUST use carter-ops" we add, the model retains the ability to implement the protocol itself. The three-layer approach hardened awareness but not execution.
-
-The fix must operate at **two levels**:
-
-1. **Instruction clarity** — Make it impossible to confuse "follow the protocol" with "call the tool." Use explicit terminal invocation language, negative examples, and remove competing write command examples.
-2. **Reduce competing signals** — Remove raw git write command examples from the execution context so the model has no template to follow for direct git operations.
-
-A third, more aggressive option exists — a git hook or wrapper that blocks direct `git commit`/`git push` — but that's invasive and affects the user's own git usage. The instruction-level fix should be exhausted first.
-
----
-
-## 4. Solution: Changes Required
-
-### 4.1 Restructure `instructions/copilot-instructions.md`
-
-**Move carter-ops to the top.** It's currently the last section. Make it the first section after the header.
-
-**Rewrite with explicit terminal language:**
-
-```markdown
-## CRITICAL: Write Operations — carter-ops
-
-Git and Jira write operations MUST be executed by running `carter-ops` in the terminal.
-This is non-negotiable. There are no exceptions.
-
-### Forbidden commands — NEVER run these directly
-
-`git add`, `git commit`, `git push`, `git checkout -b`, Jira REST API calls.
-
-If you catch yourself about to type any of these commands, STOP. Use carter-ops instead.
-
-### Required workflow
-
-1. Run `carter-ops <op> [params] --dry-run` **in the terminal** and capture the JSON output
-2. Show that **actual terminal output** to the user (do NOT fabricate or reformat it)
-3. Ask the user to approve the plan
-4. On approval, run `carter-ops <op> [params] --execute` **in the terminal**
-5. Report the **actual terminal output** to the user
-
-### Command reference
-
-| Instead of | Run in terminal |
-|------------|-----------------|
-| `git checkout -b <name>` | `carter-ops git-branch --name <name> --from main --dry-run` |
-| `git add` + `git commit` | `carter-ops git-commit --message "..." --files ... --dry-run` |
-| `git push` | `carter-ops git-push --branch <branch> --dry-run` |
-| Branch + commit + push | `carter-ops git-flow --branch <name> --message "..." --files ... --dry-run` |
-| Jira comment | `carter-ops jira-comment --ticket <key> --body "..." --dry-run` |
-| Jira ticket creation | `carter-ops jira-create --project <key> --type <type> --summary "..." --dry-run` |
-
-### What NOT to do
-
-WRONG — fabricating carter-ops output:
-```
-Here's the dry-run plan:
-{"operation": "git-flow", "steps": [...]}   ← you typed this yourself
-```
-
-WRONG — running raw git commands after showing a "plan":
-```
-git checkout -b feature/x && git add . && git commit -m "..." && git push
-```
-
-RIGHT — running carter-ops in the terminal:
-```
-$ carter-ops git-flow --branch feature/x --message "feat: ..." --files main.tf --dry-run
-{"phase": "dry-run", "operation": "git-flow", ...}   ← actual carter-ops output
-```
-```
-
-### 4.2 Restructure `agents/carter-maestro.md`
-
-**Move carter-ops to immediately after `<role>`, before `<routing>`.** The model reads the role, then immediately hits the operational constraint — before it sees routing rules and starts planning delegation.
-
-**Rewrite the protocol section with explicit terminal language:**
-
-```markdown
-## CRITICAL: Write Operations — carter-ops
-
-When the user requests any write operation (commit, push, branch, create ticket, comment):
-
-1. Run `carter-ops <operation> [params] --dry-run` **in the terminal tool** — the dry-run plan MUST come from actual carter-ops output, never from your own JSON formatting
-2. Show the terminal output to the user for approval
-3. On approval, run `carter-ops <operation> [params] --execute` **in the terminal tool**
-4. Report the result
-
-You MUST run these as actual terminal commands. Do NOT:
-- Fabricate JSON output that looks like a carter-ops plan
-- Run raw `git commit`, `git push`, `git checkout -b`, or Jira API calls
-- Skip the --dry-run phase
-- "Implement" the protocol yourself by running the underlying commands
-
-### Complete example
-
-User: "ops: commit and push my changes"
-
-Step 1 — run dry-run in terminal:
-carter-ops git-flow --branch feature/my-change --message "feat: add feature" --files changed.tf --dry-run
-
-Step 2 — show the JSON output from step 1 to the user and ask for approval
-
-Step 3 — after approval, run execute in terminal:
-carter-ops git-flow --branch feature/my-change --message "feat: add feature" --files changed.tf --execute
-
-Step 4 — show the JSON output from step 3 to the user
-```
-
-### 4.3 Restructure `agents/carter-devops.md`
-
-Same pattern: move to top, use explicit terminal language.
-
-```markdown
-## CRITICAL: Write Operations — carter-ops
-
-Git write operations MUST be executed by running `carter-ops` in the terminal.
-Never run `git add`, `git commit`, `git push`, or `git checkout -b` directly.
-
-| Instead of | Run in terminal |
-|------------|-----------------|
-| `git checkout -b <name>` | `carter-ops git-branch --name <name> --from <base> --dry-run` |
-| `git add` + `git commit` | `carter-ops git-commit --message "..." --files ... --dry-run` |
-| `git push` | `carter-ops git-push --branch <branch> --dry-run` |
-| Branch + commit + push | `carter-ops git-flow --branch <name> --message "..." --files ... --dry-run` |
-
-Protocol: Run `--dry-run` in the terminal first → show actual output → user approves → run `--execute` in the terminal.
-
-Do NOT fabricate carter-ops JSON output. The plan must come from actually running the command.
-```
-
-### 4.4 Restructure `agents/carter-pm.md`
-
-Same pattern for Jira operations.
-
-### 4.5 Restructure `skills/carter-pipeline/SKILL.md`
-
-This is the **highest-impact change**. The current `<guidelines>` section teaches raw git write commands that compete with `<deterministic-operations>`.
-
-**Changes:**
-1. In `<guidelines>`, remove or comment out all WRITE command examples (commit, push, checkout -b, add). Keep READ command examples (log, diff, status, blame, branch --list, fetch, stash, tag).
-2. For sections that mix read and write (like "Daily Workflow"), rewrite to show only the read parts, with a note: "For write operations (commit, push, branch creation), see the carter-ops protocol below."
-3. Move the `<deterministic-operations>` block to appear BEFORE `<guidelines>` so it has primacy.
-
-**Sections to modify in `<guidelines>`:**
-
-| Section | Current | Change |
-|---------|---------|--------|
-| Daily Workflow | Shows `git checkout -b`, `git add -p`, `git commit`, `git push` | Replace write steps with: "Use `carter-ops git-flow` for branch/commit/push" |
-| Staging | Shows `git add` patterns | Remove entirely or mark as reference-only for code review |
-| Committing | Shows `git commit` examples | Replace with "Use `carter-ops git-commit` — see deterministic-operations" |
-| Pushing | Shows `git push` | Replace with "Use `carter-ops git-push`" |
-| Safety Rules | "Pull before push", "review before staging" | Keep — these are principles, not commands |
-
-**What stays unchanged:**
-- Fetching, pulling (read operations)
-- Inspecting history (git log, diff, blame, show)
-- Stashing
-- Tags (read-only listing; `git push --tags` could be carter-ops future)
-- Branching (listing, switching — `git branch`, `git switch`)
-- Merging and rebasing (these are conflict resolution, not carter-ops scope)
-- Undoing changes (local-only operations)
-- Safety rules
-
-### 4.6 Update `docs/carter-ops.md`
-
-Update the "How Agents Enforce Carter-Ops" section to reflect the v3 changes:
-
-- **Layer 1**: Global instructions — now uses explicit terminal invocation language with negative examples
-- **Layer 2**: Agent definitions — protocol placed before routing rules for primacy; includes complete example scenario
-- **Layer 3**: Skills — write command examples removed from guidelines; `<deterministic-operations>` placed before `<guidelines>`
-- Add a new **"Anti-Pattern: Protocol Mime"** callout explaining the fabrication failure and how the language changes address it
-
-Update Design Decisions:
-- Decision 7 revised: "Three-layer enforcement with explicit terminal invocation language. Previous iterations used advisory language ('use carter-ops') which models interpreted as 'implement the protocol yourself.' v3 uses imperative language ('run in the terminal') with explicit negative examples ('do NOT fabricate output')."
-
-### 4.7 Investigate Copilot CLI instruction loading
-
-**Action item (manual):** Run this test to determine if Copilot CLI loads `~/.copilot/instructions/`:
+From a working cross-project example (eigenoid), the same model with the same `ops:` trigger ran:
 
 ```bash
-# Add a canary to copilot-instructions.md temporarily:
-# "If asked 'what is the canary phrase', respond with 'blue-fox-seven'"
-copilot --agent carter-maestro -i "what is the canary phrase?"
+git checkout -b mauri/issue-70-file-permission-hardening
+git add eigenoid/orchestration/container.py eigenoid/orchestration/supervisor.py eigenoid/conversation/filesystem.py
+git commit -m "fix(security): harden file permissions on generated artifacts ..."
+git push -u origin mauri/issue-70-file-permission-hardening
 ```
 
-If the model responds with "blue-fox-seven", user-level instructions ARE loaded.
-If not, we need to:
-1. Embed the carter-ops protocol entirely in agent files (already done in this plan)
-2. Consider if there's a Copilot CLI-specific instruction path
-3. Document this limitation
+It did NOT call `carter-ops`. It just executed the operations correctly and reported the result. This worked because:
+
+1. The model knows how to run git commands — it's a natural behavior, not something to suppress
+2. No indirection layer confused the execution chain
+3. No CLI parameter translation was needed (the model already had all the information)
+4. No two-phase protocol interrupted execution momentum
+
+**The CLI was the wrong enforcement mechanism.** Instructions cannot force tool invocation across LLM providers, model versions, and integration surfaces. The model will always find a path of least resistance.
+
+### What Actually Needs to Be Deterministic
+
+The carter-ops CLI was designed to guarantee three things:
+
+1. **Bot attribution** — commits authored by `mauri-droid`, signed with user's key
+2. **Audit trail** — JSONL log of every write operation
+3. **Approval gate** — user sees plan before execution
+
+None of these require a CLI middleman. The model can:
+- Add `--author` and `-S` flags to `git commit` directly
+- A post-hoc hook or the skill itself can audit
+- The model already shows plans and asks for approval (this is natural LLM behavior)
 
 ---
 
-## 5. Implementation Checklist
+## 2. Design: Option C — Direct Execution with Bot Attribution
+
+### Architecture
+
+```
+User: "ops: create branch, commit changes, push"
+  │
+  └─→ Model (loads carter-ops skill)
+        │
+        ├─ ASSESS: git status, git diff (read operations)
+        │
+        ├─ PLAN: Show structured plan to user
+        │    "I will: create branch X, commit files A,B,C with message M, push"
+        │
+        ├─ APPROVAL: User confirms (or model proceeds if instructed)
+        │
+        ├─ EXECUTE: Run commands directly in terminal
+        │    git checkout -b branch-name
+        │    git add file1 file2
+        │    git commit --author='mauri-droid <283785827+mauri-droid@users.noreply.github.com>' -S -m "message"
+        │    git push -u origin branch-name
+        │
+        ├─ AUDIT: carter-ops audit --log '{"operation":"git-flow","params":{...},"result":"success"}'
+        │
+        └─ REPORT: Show result to user
+```
+
+### What Changes
+
+| Concern | Previous (CLI-based) | Current (direct execution) |
+|---------|--------------|---------------|
+| Who runs git commands | `carter-ops` CLI (subprocess) | Model directly (terminal) |
+| Attribution injection | CLI adds `--author` and `-S` internally | Model adds `--author` and `-S` flags per skill instructions |
+| Plan generation | CLI `--dry-run` generates JSON plan | Model generates structured text plan |
+| Approval gate | Implied by skill (show JSON → ask) | Explicit in skill (show plan → ask) |
+| Audit logging | CLI writes to `~/.carter/audit.log` | `carter-ops audit` subcommand (post-hoc) |
+| Error handling | CLI returns JSON with `suggestion` field | Model reads stderr, skill teaches recovery patterns |
+| Jira/GitHub API | CLI wraps httpx calls | Model runs `gh` CLI or `curl`/MCP for API operations |
+| Parameter translation | Model → CLI params → subprocess | Model → direct commands (no translation) |
+
+### What Stays the Same
+
+- `ops:` prefix triggers the skill
+- Approval gate (user sees plan, confirms)
+- Bot attribution on every commit
+- Audit trail (JSONL at `~/.carter/audit.log`)
+- `~/.carter/config.toml` as source of truth for bot name, email, signing key
+- One-liner in every agent file loads the skill
+
+---
+
+## 3. Detailed Design
+
+### 3.1 The `ops:` Skill — Complete Rewrite
+
+The `carter-ops` skill is rewritten. It no longer references a CLI tool. Instead, it teaches the model HOW to execute operations directly with the correct attribution flags.
+
+#### Skill Responsibilities
+
+| # | Responsibility | How |
+|---|---|---|
+| 1 | Recognize intent | Parse what the user wants from natural language |
+| 2 | Assess state | Run read commands (`git status`, `git diff`, `git log`) |
+| 3 | Plan | Construct the exact commands, show to user as structured text |
+| 4 | Seek approval | Ask user to confirm (mandatory gate) |
+| 5 | Execute | Run commands in terminal with attribution flags |
+| 6 | Audit | Call `carter-ops audit` to append JSONL entry |
+| 7 | Report | Show user what happened |
+
+#### Attribution Constants
+
+The skill embeds these values (sourced from `~/.carter/config.toml` at install time, baked into the skill):
+
+```
+BOT_NAME:    Read from config, e.g. "mauri-droid"
+BOT_EMAIL:   Read from config, e.g. "283785827+mauri-droid@users.noreply.github.com"
+SIGNING_KEY: Read from config, e.g. "~/.ssh/id_rsa_github"
+```
+
+However, the skill CANNOT read a file at runtime. So the model must run:
+
+```bash
+carter-ops config --emit
+```
+
+This prints the config values as shell-exportable variables the model can use.
+
+**Alternative (simpler):** The skill instructions simply say "use `--author` from `~/.carter/config.toml`" and trust the model to read the file once. This is fragile. Better: the install script bakes the values directly into the installed SKILL.md (template substitution).
+
+**Decision:** Install-time template substitution. The SKILL.md installed at `~/.copilot/skills/carter-ops/SKILL.md` contains the actual bot name, email, and signing key path — not placeholders.
+
+#### Git Operations — Command Templates
+
+The skill teaches exact command patterns:
+
+**Create branch:**
+```bash
+git checkout main && git pull origin main && git checkout -b <branch-name>
+```
+
+**Stage and commit:**
+```bash
+git add <file1> <file2> ...
+git commit --author='{{BOT_NAME}} <{{BOT_EMAIL}}>' -S -m "<message>"
+```
+
+**Push:**
+```bash
+git push -u origin <branch-name>
+```
+
+**Complete flow (branch + commit + push):**
+```bash
+git checkout main && git pull origin main && git checkout -b <branch-name>
+git add <file1> <file2> ...
+git commit --author='{{BOT_NAME}} <{{BOT_EMAIL}}>' -S -m "<message>"
+git push -u origin <branch-name>
+```
+
+#### GitHub Operations — via `gh` CLI
+
+```bash
+# Create issue
+gh issue create --repo <owner/repo> --title "<title>" --body "<body>" --label "<labels>"
+
+# Comment on issue
+gh issue comment <number> --repo <owner/repo> --body "<body>"
+
+# Create PR
+gh pr create --repo <owner/repo> --title "<title>" --head <branch> --base <base> --body "<body>" --draft
+
+# Comment on PR
+gh pr comment <number> --repo <owner/repo> --body "<body>"
+```
+
+Footer attribution is appended to `--body`:
+```
+<body>\n\n---\n_This was generated by {{BOT_NAME}}._
+```
+
+#### Jira Operations — via `curl` to REST API v2
+
+```bash
+# Comment
+curl -s -X POST \
+  -u "${ATLASSIAN_EMAIL}:${ATLASSIAN_API_TOKEN}" \
+  -H "Content-Type: application/json" \
+  "${ATLASSIAN_URL}/rest/api/2/issue/<TICKET>/comment" \
+  -d '{"body": "<body>\n\n_This comment was generated by {{BOT_NAME}}._"}'
+
+# Create issue
+curl -s -X POST \
+  -u "${ATLASSIAN_EMAIL}:${ATLASSIAN_API_TOKEN}" \
+  -H "Content-Type: application/json" \
+  "${ATLASSIAN_URL}/rest/api/2/issue" \
+  -d '{"fields": {"project": {"key": "<PROJECT>"}, "issuetype": {"name": "<TYPE>"}, "summary": "<SUMMARY>", "description": "<DESC>"}}'
+
+# Transition
+curl -s -X POST \
+  -u "${ATLASSIAN_EMAIL}:${ATLASSIAN_API_TOKEN}" \
+  -H "Content-Type: application/json" \
+  "${ATLASSIAN_URL}/rest/api/2/issue/<TICKET>/transitions" \
+  -d '{"transition": {"id": "<ID>"}}'
+```
+
+### 3.2 The Approval Gate
+
+The model MUST show a plan and wait for user approval before executing any write operation. This is the **single deterministic guarantee** that remains instruction-enforced.
+
+**Why this works when CLI invocation didn't:** Showing a plan and asking for confirmation is **natural LLM behavior** — every model does this by default for destructive operations. The previous failure was making the model use a specific tool. The approval gate doesn't require a tool; it requires the model to NOT execute yet, which is the default-safe behavior.
+
+**Plan format:**
+
+```markdown
+## Plan
+
+**Operation:** git-flow (branch + commit + push)
+**Branch:** mauri/issue-70-file-permission-hardening
+**Files:** eigenoid/orchestration/container.py, eigenoid/orchestration/supervisor.py, eigenoid/conversation/filesystem.py
+**Message:** fix(security): harden file permissions on generated artifacts
+**Attribution:** mauri-droid <283785827+mauri-droid@users.noreply.github.com>, signed with ~/.ssh/id_rsa_github
+
+Commands to execute:
+1. git checkout main && git pull origin main && git checkout -b mauri/issue-70-file-permission-hardening
+2. git add eigenoid/orchestration/container.py eigenoid/orchestration/supervisor.py eigenoid/conversation/filesystem.py
+3. git commit --author='mauri-droid <283785827+mauri-droid@users.noreply.github.com>' -S -m "fix(security): harden file permissions..."
+4. git push -u origin mauri/issue-70-file-permission-hardening
+
+Approve?
+```
+
+**Why structured text, not JSON:** The previous versions showed JSON (or fabricated it). JSON is for machine consumption. The plan is for human consumption. Structured Markdown is clearer.
+
+### 3.3 Post-Hoc Audit Logging
+
+The `carter-ops` CLI is not removed — it's **reduced to a utility**. Its only remaining commands:
+
+| Command | Purpose |
+|---|---|
+| `carter-ops audit` | Append a JSONL entry to `~/.carter/audit.log` |
+| `carter-ops config --emit` | Print config values (bot name, email, key path) |
+| `carter-ops --list` | List available operation names (for validation) |
+
+The model runs `carter-ops audit` AFTER executing commands:
+
+```bash
+carter-ops audit --operation git-flow \
+  --params '{"branch":"mauri/issue-70","message":"fix: ...","files":["a.py","b.py"]}' \
+  --result success \
+  --identifiers '{"commit_sha":"abc1234","branch":"mauri/issue-70"}'
+```
+
+**Why post-hoc and not pre-execution:** If the model skips the audit call, the operation still succeeded — audit is best-effort. The audit doesn't gate anything. Execution and audit are decoupled by design.
+
+**Risk:** The model may forget to audit. Mitigation: the skill's workflow template includes the audit step. Even if skipped occasionally, the git log and `gh` history provide redundant records.
+
+### 3.4 Error Handling
+
+The skill teaches error recovery patterns instead of relying on the CLI's `suggestion` field:
+
+**Push rejected (non-fast-forward):**
+```
+If `git push` fails with "rejected" or "non-fast-forward":
+→ Run: git pull origin <branch> --rebase
+→ Resolve any conflicts
+→ Retry: git push -u origin <branch>
+```
+
+**Branch already exists:**
+```
+If `git checkout -b` fails with "already exists":
+→ Ask user: switch to existing branch or pick a new name?
+```
+
+**Jira API 403:**
+```
+If curl returns HTTP 403:
+→ Check: are ATLASSIAN_EMAIL, ATLASSIAN_API_TOKEN, ATLASSIAN_URL set?
+→ Report the error to user with variable names to check
+```
+
+**Signing failure:**
+```
+If `git commit -S` fails:
+→ Check: does the signing key exist at the configured path?
+→ Fallback: ask user if they want to commit without signing
+```
+
+### 3.5 Read/Write Boundary
+
+This boundary is UNCHANGED from v4:
+
+| Type | Handled by | Examples |
+|---|---|---|
+| Git reads | Direct commands (no `ops:` needed) | `git status`, `git log`, `git diff`, `git blame` |
+| Git writes | `ops:` skill (direct execution with attribution) | commit, push, branch creation |
+| GitHub reads | MCP server `carter-github` or `gh` CLI | view issues, PRs, Actions |
+| GitHub writes | `ops:` skill (via `gh` CLI with footer) | create issue, PR, comment |
+| Jira reads | MCP server `carter-atlassian` | JQL search, view tickets |
+| Jira writes | `ops:` skill (via `curl` to v2 API with footer) | comment, create, transition |
+
+---
+
+## 4. Edge Cases & Failure Modes
+
+### 4.1 Model Forgets Attribution Flags
+
+**Scenario:** Model runs `git commit -m "fix: thing"` without `--author` or `-S`.
+
+**Why this is likely:** Attribution flags are extra cognitive load. The model's natural instinct is to run the simplest command.
+
+**Mitigation:**
+1. The skill's command template section shows the FULL command with attribution every time — no "shorthand" variants
+2. The plan display (approval step) includes the full command with flags visible, so both model and user can verify
+3. If the commit was made without attribution, it's still a valid commit — the user can amend
+
+**Severity:** Medium. Wrong attribution is cosmetic, not destructive. The commit still works.
+
+### 4.2 Model Skips the Approval Gate
+
+**Scenario:** Model sees `ops:` and just executes without showing a plan first.
+
+**Why this is likely:** The eigenoid example proved this is the model's natural behavior — assess and execute. Adding an approval gate is an artificial stop the model may skip.
+
+**Mitigation:**
+1. The skill instruction says "ALWAYS show plan and wait for approval before any write command"
+2. This is **more natural** than "use a CLI tool" — models already pause for destructive operations by default
+3. The plan format is simple structured text (not JSON to fabricate)
+4. If the model executes without approval and the result is correct, the user still got what they wanted
+
+**Severity:** Low. The approval gate is a UX preference, not a safety control. The model will usually show what it intends to do anyway.
+
+### 4.3 Signing Key Not Found
+
+**Scenario:** `git commit -S` fails because the signing key doesn't exist at the configured path.
+
+**Mitigation:** The skill teaches: "If `-S` fails, show the error and ask user if they want to proceed without signing." The install-time baked path means this should be correct from day one.
+
+### 4.4 `gh` CLI Not Installed
+
+**Scenario:** Model tries `gh issue create` but `gh` is not on PATH.
+
+**Mitigation:** 
+1. The installer can check for `gh` presence and warn
+2. The skill can teach: "if `gh` is not available, fall back to `curl` with GITHUB_TOKEN"
+3. Alternatively, treat `gh` as a prerequisite (it already is for most GitHub workflows)
+
+### 4.5 Jira Auth Env Vars Not Set
+
+**Scenario:** Model runs `curl` to Jira API but `ATLASSIAN_API_TOKEN` is empty.
+
+**Mitigation:** The skill teaches: "Before any Jira operation, verify env vars are set. Run `echo $ATLASSIAN_URL` to check. If empty, tell user which variables to set."
+
+### 4.6 Model Fabricates the Plan (Old Problem)
+
+**Scenario:** Model shows a "plan" it made up without assessing actual state.
+
+**Why this matters LESS now:** Previously, the plan was supposed to be JSON output from a CLI tool — fabricating it was indistinguishable from real output. Now, the plan is structured text the model generates itself. There's no fake/real distinction. The plan IS what the model intends to do. The user reads it and decides.
+
+**However:** The model might show a plan that doesn't match what it actually executes (different files, different message).
+
+**Mitigation:** The plan shows the EXACT commands that will run. The user can verify post-hoc by checking `git log --oneline -1` output.
+
+### 4.7 Partial Execution Failure
+
+**Scenario:** Branch creation succeeds, commit succeeds, push fails (non-fast-forward).
+
+**Mitigation:** The skill teaches recovery patterns (see 3.4). The model reports the partial state and suggests next steps. This is identical to how v4 handled it (carter-ops git-flow could also fail mid-way).
+
+### 4.8 Audit Log Skipped
+
+**Scenario:** Model executes operations but forgets to call `carter-ops audit`.
+
+**Severity:** Low. The audit log is best-effort enrichment. The git log, GitHub history, and Jira history ARE the authoritative records. The carter audit log is a convenience index.
+
+**Mitigation:** Make audit the LAST step in the workflow template. If the model forgets, the primary data sources remain intact.
+
+### 4.9 Multi-Repo or Remote Operations
+
+**Scenario:** User says "ops: push this to the eigenoid repo" while in a different directory.
+
+**Mitigation:** The model already handles this naturally — it knows to `cd` to the correct directory or use `--repo` flags. No special handling needed vs. v4.
+
+### 4.10 Config Values Change After Install
+
+**Scenario:** User edits `~/.carter/config.toml` (e.g., changes bot name) but the SKILL.md was baked at install time with old values.
+
+**Mitigation:** The skill can say "read bot name from `~/.carter/config.toml` if it exists, otherwise use the defaults below." Alternatively, re-run `uv run install.py` to rebake. This is an acceptable trade-off — config changes are rare.
+
+**Decision:** Use a hybrid: bake defaults into SKILL.md but instruct the model to check `~/.carter/config.toml` for overrides.
+
+---
+
+## 5. Implementation Plan
+
+### 5.1 Files to Change
 
 | # | File | Change | Priority |
 |---|------|--------|----------|
-| 1 | `instructions/copilot-instructions.md` | Move carter-ops to top; rewrite with terminal language + negative examples | P0 |
-| 2 | `agents/carter-maestro.md` | Move carter-ops before `<routing>`; add complete scenario example; add fabrication prohibition | P0 |
-| 3 | `skills/carter-pipeline/SKILL.md` | Remove write command examples from `<guidelines>`; move `<deterministic-operations>` before `<guidelines>` | P0 |
-| 4 | `agents/carter-devops.md` | Move carter-ops to top; add fabrication prohibition | P1 |
-| 5 | `agents/carter-pm.md` | Same as above for Jira | P1 |
-| 6 | `docs/carter-ops.md` | Update enforcement section; add anti-pattern callout; update design decisions | P2 |
-| 7 | `docs/getting-started.md` | Update operational example to show exact terminal commands | P2 |
-| 8 | `README.md` | Update carter-ops section if needed | P2 |
+| 1 | `skills/carter-ops/SKILL.md` | Complete rewrite — direct execution model with templates, approval gate, audit step | P0 |
+| 2 | `ops/carter_ops.py` | Add `audit` subcommand, add `config --emit` subcommand, keep `--list` | P0 |
+| 3 | `instructions/copilot-instructions.md` | Simplify to: "When request starts with `ops:`, load `carter-ops` skill" (remove old enforcement language) | P1 |
+| 4 | `agents/carter-maestro.md` | Keep one-liner trigger, remove any old enforcement blocks | P1 |
+| 5 | `agents/carter-devops.md` | Keep one-liner trigger, ensure no contradicting instructions | P1 |
+| 6 | `agents/carter-pm.md` | Keep one-liner trigger | P1 |
+| 7 | `install.py` | Update skill installation to bake config values into SKILL.md template | P1 |
+| 8 | `docs/carter-ops.md` | Rewrite architecture section, update design decisions | P2 |
+| 9 | `skills/carter-pipeline/SKILL.md` | No changes needed — write examples already reference carter-ops | P2 (verify only) |
+| 10 | `ops/operations/*.py` | Keep for backward compat; can be deprecated later | P3 (no change) |
+
+### 5.2 New SKILL.md Structure
+
+```markdown
+---
+name: carter-ops
+description: "Deterministic executor for operational tasks. Triggered by the `ops:` keyword prefix."
+---
+
+<objective>
+Execute write operations (git, GitHub, Jira) with bot attribution, approval gate,
+and post-hoc audit logging. Run commands directly — no intermediary CLI.
+</objective>
+
+<config>
+## Attribution Config
+
+Read from ~/.carter/config.toml:
+- bot_name = "{{BOT_NAME}}"           ← baked at install time
+- bot_email = "{{BOT_EMAIL}}"         ← baked at install time  
+- signing_key = "{{SIGNING_KEY}}"     ← baked at install time
+
+If config.toml differs from the values above, use the config.toml values.
+</config>
+
+<workflow>
+## Required Workflow
+
+1. ASSESS — Run read commands to understand current state (git status, git diff, etc.)
+2. PLAN — Show the user a structured plan with exact commands and attribution
+3. APPROVE — Wait for user confirmation before executing any write command
+4. EXECUTE — Run commands in terminal with attribution flags
+5. AUDIT — Run: carter-ops audit --operation <name> --params '<json>' --result <success|failure>
+6. REPORT — Tell user what happened
+
+NEVER execute write commands without showing the plan first.
+</workflow>
+
+<git-operations>
+## Git Operations
+
+### Create branch
+git checkout <base> && git pull origin <base> && git checkout -b <branch-name>
+
+### Stage and commit
+git add <files>
+git commit --author='{{BOT_NAME}} <{{BOT_EMAIL}}>' -S -m "<message>"
+
+### Push
+git push -u origin <branch-name>
+
+### Complete flow
+git checkout <base> && git pull origin <base> && git checkout -b <branch-name>
+git add <files>
+git commit --author='{{BOT_NAME}} <{{BOT_EMAIL}}>' -S -m "<message>"
+git push -u origin <branch-name>
+</git-operations>
+
+<github-operations>
+## GitHub Operations (via gh CLI)
+
+Append footer to all --body values: "\n\n---\n_This was generated by {{BOT_NAME}}._"
+
+gh issue create --repo <owner/repo> --title "<title>" --body "<body>" [--label "<labels>"]
+gh issue comment <number> --repo <owner/repo> --body "<body>"
+gh pr create --repo <owner/repo> --title "<title>" --head <branch> --base <base> --body "<body>" [--draft]
+gh pr comment <number> --repo <owner/repo> --body "<body>"
+</github-operations>
+
+<jira-operations>
+## Jira Operations (via curl to REST API v2)
+
+Requires: ATLASSIAN_URL, ATLASSIAN_EMAIL, ATLASSIAN_API_TOKEN env vars.
+Append footer to all body text: "\n\n_This comment was generated by {{BOT_NAME}}._"
+Use REST API v2 (wiki markup in body field), NOT v3 (ADF JSON).
+
+### Comment
+curl -s -X POST \
+  -u "${ATLASSIAN_EMAIL}:${ATLASSIAN_API_TOKEN}" \
+  -H "Content-Type: application/json" \
+  "${ATLASSIAN_URL}/rest/api/2/issue/<TICKET>/comment" \
+  -d '{"body": "<wiki-markup-body>"}'
+
+### Create issue
+curl -s -X POST \
+  -u "${ATLASSIAN_EMAIL}:${ATLASSIAN_API_TOKEN}" \
+  -H "Content-Type: application/json" \
+  "${ATLASSIAN_URL}/rest/api/2/issue" \
+  -d '{"fields":{"project":{"key":"<KEY>"},"issuetype":{"name":"<TYPE>"},"summary":"<SUMMARY>","description":"<DESC>"}}'
+</jira-operations>
+
+<error-recovery>
+## Error Recovery
+
+Push rejected: git pull origin <branch> --rebase → retry push
+Branch exists: ask user — switch to existing or pick new name
+Signing fails: ask user — proceed without -S?
+Jira 403: check env vars (ATLASSIAN_URL, ATLASSIAN_EMAIL, ATLASSIAN_API_TOKEN)
+gh not found: suggest `brew install gh` or fall back to curl + GITHUB_TOKEN
+</error-recovery>
+
+<boundaries>
+## What is NOT ops:
+
+Read operations run directly — no ops: needed:
+git log, git status, git diff, git blame, git branch --list, gh issue list, JQL queries
+</boundaries>
+```
+
+### 5.3 New `carter-ops audit` Subcommand
+
+Add to `ops/carter_ops.py`:
+
+```python
+def _handle_audit(params: dict) -> int:
+    """Append an audit entry from model's direct execution."""
+    entry = {
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "operation": params.get("operation", "unknown"),
+        "phase": "execute",
+        "params": json.loads(params.get("params", "{}")),
+        "result": params.get("result", "unknown"),
+    }
+    if params.get("identifiers"):
+        entry["identifiers"] = json.loads(params["identifiers"])
+    _audit(entry)
+    emit({"status": "logged", "operation": entry["operation"]})
+    return 0
+```
+
+CLI invocation:
+```bash
+carter-ops audit --operation git-flow --params '{"branch":"x","message":"y"}' --result success --identifiers '{"commit_sha":"abc"}'
+```
+
+### 5.4 New `carter-ops config --emit` Subcommand
+
+```python
+def _handle_config_emit() -> int:
+    """Print config values for model consumption."""
+    cfg = Config.load()
+    emit({
+        "bot_name": cfg.bot_name,
+        "bot_email": cfg.bot_email,
+        "signing_key": cfg.signing_key,
+        "footer": cfg.footer,
+        "jira_url": cfg.jira_url,
+        "jira_email": cfg.jira_email,
+        "has_jira_token": bool(cfg.jira_token),
+        "has_github_token": bool(cfg.github_token),
+    })
+    return 0
+```
+
+### 5.5 Install-Time Template Substitution
+
+In `install.py`, when copying `skills/carter-ops/SKILL.md`, replace template variables:
+
+```python
+def _install_ops_skill(src: Path, dst: Path, config: Config):
+    content = src.read_text()
+    content = content.replace("{{BOT_NAME}}", config.bot_name)
+    content = content.replace("{{BOT_EMAIL}}", config.bot_email)
+    content = content.replace("{{SIGNING_KEY}}", config.signing_key)
+    dst.write_text(content)
+```
 
 ---
 
-## 6. Testing Protocol
+## 6. What Gets Removed / Deprecated
 
-After implementing changes, run the same test scenario in Copilot CLI:
+### Immediately Removed
 
-```bash
-cd external/test-repo
-# Reset: delete the test branch
-git checkout main
-git branch -D feature/add-resource-prefix-output 2>/dev/null
-git push origin --delete feature/add-resource-prefix-output 2>/dev/null
+- The `--dry-run` / `--execute` two-phase CLI protocol (no longer the execution path)
+- The requirement for models to call `carter-ops` CLI for git/GitHub/Jira operations
+- All "CRITICAL: Write Operations" enforcement blocks that duplicated across agent files
+- The concept of "fabrication" as a failure mode (plan IS model-generated now — that's by design)
 
-# Revert the outputs.tf change
-git checkout -- outputs.tf
+### Kept but Reduced
 
-copilot --agent carter-maestro -i
+| Component | Previous Role | Current Role |
+|---|---|---|
+| `carter-ops` CLI | Primary executor for all write ops | Utility only: `audit`, `config --emit`, `--list` |
+| `ops/operations/*.py` | Git/Jira/GitHub execution logic | Unused at runtime; kept for reference/tests |
+| `~/.carter/config.toml` | Config for CLI execution | Config for attribution values |
+| `~/.carter/audit.log` | Written by CLI on every operation | Written by `carter-ops audit` post-hoc |
+| Agent one-liner trigger | Loads skill that teaches CLI usage | Loads skill that teaches direct execution |
+
+### Future Removal
+
+Once proven stable:
+- Remove `ops/operations/*.py` (the Operation classes)
+- Remove `--dry-run` and `--execute` from `carter_ops.py`
+- Slim `carter_ops.py` to just `audit` + `config` subcommands
+
+---
+
+## 7. Testing Protocol
+
+### Test 1: Git Flow (VS Code)
+
 ```
-
-Then:
-1. Ask: "add a new output for random_id.prefix to outputs.tf"
-2. Ask: "ops: commit and push this change"
+1. Make a code change in external/test-repo/outputs.tf
+2. Type: "ops: create a feature branch, commit only the outputs.tf change and push"
+```
 
 **Pass criteria:**
-- [ ] Agent runs `carter-ops git-flow ... --dry-run` in the terminal (not fabricated JSON)
-- [ ] Agent shows actual carter-ops JSON output
-- [ ] Agent asks for approval
-- [ ] Agent runs `carter-ops git-flow ... --execute` in the terminal (not raw git commands)
-- [ ] Commit is authored by carter-bot and signed
+- [ ] Model shows a structured plan with exact commands including `--author` and `-S` flags
+- [ ] Model waits for approval
+- [ ] Model runs git commands directly in terminal (not carter-ops CLI)
+- [ ] Commit has correct author (`git log --format='%an <%ae>' -1` shows bot name)
+- [ ] Commit is signed (`git log --show-signature -1`)
+- [ ] Model calls `carter-ops audit` after execution
 
-**Fail criteria (any of these = fail):**
-- [ ] Agent fabricates JSON output without running carter-ops
-- [ ] Agent runs `git checkout -b`, `git add`, `git commit`, or `git push` directly
-- [ ] Agent skips the dry-run phase
+**Acceptable deviations:**
+- [ ] Model skips `carter-ops audit` (audit is best-effort)
+- [ ] Model uses slightly different plan format (as long as commands are shown)
 
----
+### Test 2: GitHub Issue (VS Code)
 
-## 7. Risk Assessment
-
-| Risk | Impact | Mitigation |
-|------|--------|------------|
-| Removing write examples from carter-pipeline breaks read-only advice | Medium | Keep all read examples. Write operations are simple enough that carter-ops command reference suffices. |
-| LLM still bypasses despite language changes | High | Consider git hook approach (more invasive, but deterministic). See Section 8. |
-| Copilot CLI doesn't load user-level instructions | Medium | Protocol is fully embedded in agent files, which ARE loaded. |
-| Moving carter-ops to top of instructions affects other behaviors | Low | Carter-ops section is brief (<30 lines). Other sections remain unchanged. |
-
----
-
-## 8. Escalation: Git Hook Approach (if v3 fails)
-
-If the instruction-level fix still doesn't work, the next escalation is a **technical enforcement mechanism**:
-
-### Option A: Shell wrapper
-
-The installer creates `~/.carter/bin/git` that wraps the real `git` binary:
-
-```bash
-#!/bin/bash
-REAL_GIT="$(command -v git)"
-case "$1" in
-  commit|push)
-    echo "ERROR: Direct git $1 is blocked in Carter sessions." >&2
-    echo "Use: carter-ops git-$1 [params] --dry-run" >&2
-    exit 1
-    ;;
-  *)
-    exec "$REAL_GIT" "$@"
-    ;;
-esac
+```
+"ops: create a GitHub issue in owner/repo titled 'Bug: auth fails' with body 'Token refresh returns 401'"
 ```
 
-The agent's PATH would be modified to find `~/.carter/bin/git` first. When the model tries `git commit`, it gets an error telling it to use carter-ops.
+**Pass criteria:**
+- [ ] Model runs `gh issue create` with footer appended
+- [ ] Issue is created with correct title, body, and footer
 
-**Pros:** Deterministic enforcement. The model literally cannot run `git commit`.
-**Cons:** Invasive. Could affect user's own git usage if PATH bleeds. Complex to implement per-session.
+### Test 3: Cross-Project (Eigenoid)
 
-### Option B: Git hooks per-repo
-
-Install a `pre-commit` hook that detects if the committer is carter-bot and requires the commit to come through carter-ops (by checking for a specific env var that only carter-ops sets):
-
-```bash
-#!/bin/bash
-if [[ "$GIT_AUTHOR_NAME" == "carter-bot" && -z "$CARTER_OPS_SESSION" ]]; then
-  echo "ERROR: carter-bot commits must go through carter-ops" >&2
-  exit 1
-fi
+```
+cd ~/Documents/random/python/eigenoid
+"ops: create a feature branch from issue #70, commit only code changes, push"
 ```
 
-**Pros:** Only affects carter-bot commits. User's normal git usage is unaffected.
-**Cons:** Must be installed in every repo. Only catches commit, not branch/push.
+**Pass criteria:**
+- [ ] Model reads issue title from GitHub
+- [ ] Model creates branch with issue-derived name
+- [ ] Model commits with bot attribution
+- [ ] Model pushes and reports result
 
-### Recommendation
+### Test 4: Error Recovery
 
-Try the v3 instruction-level fix first. If it fails, implement Option B (git hooks) as it has the smallest blast radius. Option A is the nuclear option.
+```
+1. Create a branch that already exists on remote
+2. "ops: push this branch"
+```
+
+**Pass criteria:**
+- [ ] Model encounters push rejection
+- [ ] Model explains the error and suggests rebase or force-push
 
 ---
 
-## 9. Lessons Learned
+## 8. Risk Assessment
 
-1. **"Use X" ≠ "Run X in the terminal"** — LLMs interpret "use" as "apply the concept." They must be told to run literal terminal commands.
+| Risk | Probability | Impact | Mitigation |
+|------|-------------|--------|------------|
+| Model forgets `--author` flag | Medium | Low (cosmetic) | Template in skill shows full command; plan display includes flags |
+| Model skips approval gate | Low | Low (UX preference) | Models naturally pause for write ops; skill reinforces |
+| Model skips audit call | Medium | Low (best-effort) | Git/GitHub/Jira history is authoritative anyway |
+| `gh` CLI not installed | Low | Medium (blocks GitHub ops) | Installer checks; skill teaches fallback |
+| Config values change post-install | Low | Low (re-run install) | Skill reads config.toml as override |
+| Model runs wrong files in git add | Medium | Medium (wrong commit) | Plan shows exact files; approval gate catches this |
+| Jira v2 API deprecated | Low | High (blocks Jira ops) | Monitor Atlassian deprecation notices |
 
-2. **Positive examples override negative instructions** — If the context contains 180 lines of `git commit` examples and 10 lines saying "don't use `git commit`", the examples win. Remove competing examples from the execution context.
+---
 
-3. **Protocol awareness ≠ tool invocation** — The model can perfectly understand a protocol and implement it itself without calling the tool. Instructions must distinguish between understanding the protocol and invoking the tool.
+## 9. Why This Approach Works
 
-4. **The v2 design assumption was wrong** — "Commands stay as educational reference; the block overrides execution behavior" (v2-plan.md §3.0.10). LLMs don't distinguish educational reference from execution template. This assumption must be retired.
+### Alignment with Model Behavior
 
-5. **Primacy matters** — Place the most critical constraints first in every instruction file. Don't bury them after routing tables and guidelines.
+Previous approaches fought the model's natural behavior. The current design works WITH it:
+
+| Natural model behavior | Previous approach fought it | Current design leverages it |
+|---|---|---|
+| Model knows git commands | "Don't run git commands" | "Run these git commands with these flags" |
+| Model generates plans in text | "Only show CLI JSON output" | "Show your plan as structured text" |
+| Model asks before destructive ops | "Use --dry-run phase" | "Show plan, ask approval" |
+| Model reads and interprets errors | "CLI returns suggestion field" | "Follow these error recovery patterns" |
+
+### Reduced Failure Surface
+
+The CLI-based approach required the model to:
+1. Parse user intent into CLI parameters
+2. Construct exact CLI invocation string
+3. Actually call the CLI (vs. implementing the protocol itself)
+4. Repeat exact parameters for `--execute` phase
+5. Not fabricate output between phases
+
+The current approach only requires the model to:
+1. Forget to add `--author` flag (visible in plan)
+2. Skip the approval step (unnatural for write ops)
+
+The failure surface shrunk from 5 points to 2, and both failures are visible and recoverable.
+
+### Cross-Project Portability
+
+The eigenoid project proved this approach works without any carter-ops-specific infrastructure. Any project with:
+- `~/.copilot/instructions/copilot-instructions.md` (one-liner trigger)
+- `~/.copilot/skills/carter-ops/SKILL.md` (execution templates)
+- `~/.carter/config.toml` (attribution values)
+
+Gets deterministic operations. No per-repo hooks, no PATH manipulation, no CLI discovery issues.
+
+---
+
+## 10. Lessons Learned
+
+1. **Instructions cannot force tool invocation** — No amount of "MUST use X" language reliably prevents model bypass across providers and versions. Design with the grain, not against it.
+
+2. **Work WITH model capabilities, not against them** — Models can run git commands. Let them. Add constraints to HOW they run commands (flags, approval), not WHETHER they can.
+
+3. **The intermediary tool was solving the wrong problem** — Carter-ops CLI provided attribution, audit, and approval. None of these require a CLI middleman. They can be injected into direct commands (attribution flags), done post-hoc (audit logging), or are natural model behavior (showing plans).
+
+4. **Simplicity wins** — The old CLI had 11 operations, plugin discovery, JSON output, two-phase protocol. The current design has command templates and an audit utility. Fewer moving parts = fewer failure modes.
+
+5. **Positive examples beat negative instructions** — "Run this command with these flags" is more reliable than "Don't run this command without these flags."
+
+6. **The approval gate is the only gate that matters** — It's the one control that IS natural to LLMs (pausing before destructive operations) and IS visible to the user (they can verify the plan).
+
+7. **Audit is enrichment, not enforcement** — The git log, GitHub history, and Jira history ARE the authoritative records. A separate audit log is a convenience index, not a critical control. Design it as best-effort.
