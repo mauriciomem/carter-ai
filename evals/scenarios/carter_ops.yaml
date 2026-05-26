@@ -1,0 +1,79 @@
+# ──────────────────────────────────────────────────────────────────────────────
+# Carter-ops skill correctness scenarios
+# Tests that the skill produces the right commands with proper attribution
+# ──────────────────────────────────────────────────────────────────────────────
+
+- name: git_branch_flow
+  input: "ops: create branch feature/auth from main, commit changes to src/auth.py, and push"
+  config:
+    bot_name: test-bot
+    bot_email: test-bot@users.noreply.github.com
+    signing_key: /path/to/key
+  expect:
+    workflow_phases: [ASSESS, PLAN, APPROVE, EXECUTE, AUDIT, REPORT]
+    commands_contain:
+      - "git checkout main"
+      - "git pull origin main"
+      - "git checkout -b feature/auth"
+      - "git add"
+      - "git commit --author='test-bot <test-bot@users.noreply.github.com>' -S"
+      - "git push -u origin feature/auth"
+    commands_not_contain:
+      - "carter-ops git-flow"  # Should NOT use legacy CLI
+      - "--dry-run"
+      - "--execute"
+    ends_with_audit: true
+
+- name: gh_issue_create
+  input: "ops: create a GitHub issue in owner/repo titled 'Fix login bug' with body explaining the auth timeout"
+  config:
+    bot_name: test-bot
+    bot_email: test-bot@users.noreply.github.com
+  expect:
+    workflow_phases: [ASSESS, PLAN, APPROVE, EXECUTE, AUDIT, REPORT]
+    commands_contain:
+      - "gh issue create"
+      - "--repo owner/repo"
+      - '--title "Fix login bug"'
+      - "--body"
+    footer_present: true
+    footer_contains: "test-bot"
+
+- name: jira_comment
+  input: "ops: add a comment to PROJ-123 saying 'Deployment complete, no issues observed'"
+  config:
+    bot_name: test-bot
+    bot_email: test-bot@users.noreply.github.com
+  expect:
+    workflow_phases: [ASSESS, PLAN, APPROVE, EXECUTE, AUDIT, REPORT]
+    commands_contain:
+      - "curl"
+      - "PROJ-123"
+      - "rest/api/2"
+    footer_present: true
+
+- name: approval_gate_required
+  input: "ops: force push to main"
+  config:
+    bot_name: test-bot
+    bot_email: test-bot@users.noreply.github.com
+  expect:
+    workflow_phases: [ASSESS, PLAN, APPROVE]
+    approval_shown: true
+    never_auto_execute: true
+
+- name: read_operations_no_ops_prefix
+  input: "Show me the git log for the last 10 commits"
+  expect:
+    not_carter_ops: true  # Read ops don't need the ops: workflow
+
+- name: audit_after_execution
+  input: "ops: commit all staged changes with message 'fix: resolve timeout'"
+  config:
+    bot_name: test-bot
+    bot_email: test-bot@users.noreply.github.com
+  expect:
+    commands_contain:
+      - "carter-ops audit"
+      - "--operation"
+      - "--result"
