@@ -1,0 +1,23 @@
+[project]
+name = "carter-ai"
+version = "2.0.0a1"
+description = "AI assistant scaffolding and workspace management"
+requires-python = ">=3.11"
+dependencies = [
+    "jinja2>=3.1",
+    "pyyaml>=6.0",
+    "click>=8.0",
+]
+
+[project.scripts]
+carter = "carter.cli:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.hatch.build.targets.wheel]
+packages = ["carter"]

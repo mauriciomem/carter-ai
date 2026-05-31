@@ -1,0 +1,79 @@
+# ──────────────────────────────────────────────────────────────────────────────
+# Routing scenarios — verify carter-maestro dispatches to the right agent
+# ──────────────────────────────────────────────────────────────────────────────
+
+- name: ops_prefix_triggers_skill
+  input: "ops: create a branch feature/auth and push it"
+  expect:
+    skill: carter-ops
+    not_agent: true  # Should NOT delegate to an agent; handled directly
+
+- name: architecture_routes_to_architect
+  input: "Design a microservice architecture for user authentication"
+  expect:
+    agent: carter-architect
+    triggers: [design, architecture]
+
+- name: code_review_routes_to_engineer
+  input: "Review this Python function for bugs and code quality"
+  expect:
+    agent: carter-engineer
+    triggers: [review, code]
+
+- name: terraform_routes_to_devops
+  input: "Write a Terraform module for an S3 bucket with versioning"
+  expect:
+    agent: carter-devops
+    triggers: [terraform]
+
+- name: explain_routes_to_learner
+  input: "Explain how Raft consensus works"
+  expect:
+    agent: carter-learner
+    triggers: [explain]
+
+- name: project_plan_routes_to_pm
+  input: "Create a project plan for migrating to Kubernetes"
+  expect:
+    agent: carter-pm
+    triggers: [plan]
+
+- name: deploy_routes_to_devops
+  input: "Deploy this app to AWS using GitHub Actions"
+  expect:
+    agent: carter-devops
+    triggers: [deploy, AWS, CI/CD]
+
+- name: debug_routes_to_engineer
+  input: "Help me debug this segfault in my Go program"
+  expect:
+    agent: carter-engineer
+    triggers: [debug]
+
+- name: risk_assessment_routes_to_pm
+  input: "What are the risks of migrating our database from MySQL to Postgres?"
+  expect:
+    agent: carter-pm
+    triggers: [risk]
+
+- name: pipeline_routes_to_devops
+  input: "Set up a CI/CD pipeline with testing and deployment stages"
+  expect:
+    agent: carter-devops
+    triggers: [pipeline, CI/CD]
+
+- name: learning_routes_to_learner
+  input: "How does mTLS work? Teach me the concepts."
+  expect:
+    agent: carter-learner
+    triggers: [how does, teach]
+
+- name: trivial_handled_directly
+  input: "What is 2 + 2?"
+  expect:
+    direct_answer: true
+
+- name: ambiguous_should_clarify
+  input: "Help me with the thing from yesterday"
+  expect:
+    clarify: true

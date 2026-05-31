@@ -1,0 +1,100 @@
+# ──────────────────────────────────────────────────────────────────────────────
+# Skill correctness scenarios — verify skills teach the right patterns
+# ──────────────────────────────────────────────────────────────────────────────
+
+- name: terraform_follows_conventions
+  skill: carter-terraform
+  input: "Write a Terraform module for an AWS VPC with public and private subnets"
+  expect:
+    response_contains:
+      - "variable"
+      - "resource"
+      - "output"
+    response_not_contains:
+      - "terraform {"  # Should use versions.tf, not inline
+    follows_patterns:
+      - separate_variable_definitions
+      - snake_case_naming
+
+- name: python_follows_conventions
+  skill: carter-python
+  input: "Write a Python function to parse a CSV file and return a list of dicts"
+  expect:
+    response_contains:
+      - "def "
+      - "-> "  # type annotations
+    response_not_contains:
+      - "import os.path"  # Should use pathlib
+    follows_patterns:
+      - pathlib_over_os_path
+      - type_annotations
+
+- name: golang_follows_conventions
+  skill: carter-golang
+  input: "Write a Go HTTP handler that accepts JSON and returns a response"
+  expect:
+    response_contains:
+      - "func "
+      - "http.ResponseWriter"
+      - "error"
+    response_not_contains:
+      - "panic("  # Should return errors, not panic
+    follows_patterns:
+      - error_return_over_panic
+      - explicit_error_handling
+
+- name: pipeline_github_actions
+  skill: carter-pipeline
+  input: "Create a GitHub Actions workflow that runs tests on PRs"
+  expect:
+    response_contains:
+      - "on:"
+      - "pull_request"
+      - "jobs:"
+      - "runs-on:"
+      - "steps:"
+    response_not_contains:
+      - "secrets.GITHUB_TOKEN"  # Should not expose secrets unnecessarily
+
+- name: code_review_covers_dimensions
+  skill: carter-code-review
+  input: "Review this code:\n```python\ndef get_user(id):\n    query = f'SELECT * FROM users WHERE id = {id}'\n    return db.execute(query)\n```"
+  expect:
+    response_contains:
+      - "SQL injection"  # Must catch the security vulnerability
+      - "parameterized"  # Should suggest fix
+    severity: critical
+
+- name: packer_follows_hcl2
+  skill: carter-packer
+  input: "Write a Packer template for an Ubuntu AMI with Docker installed"
+  expect:
+    response_contains:
+      - "source"
+      - "build"
+      - "provisioner"
+    response_not_contains:
+      - '"builders"'  # JSON format is legacy
+      - '"provisioners"'
+
+- name: adr_has_structure
+  skill: carter-adr
+  input: "Write an ADR for choosing PostgreSQL over MySQL for our new service"
+  expect:
+    response_contains:
+      - "Status"
+      - "Context"
+      - "Decision"
+      - "Consequences"
+
+- name: explain_is_accessible
+  skill: carter-explain
+  input: "Explain the CAP theorem"
+  expect:
+    response_contains:
+      - "Consistency"
+      - "Availability"
+      - "Partition"
+    quality:
+      - accessible_to_non_expert
+      - uses_examples_or_analogies
