@@ -1,8 +1,31 @@
 # Carter v2 — Revised Implementation Plan
 
-> **Status**: Phase 0 ✅ | Phase 1 ✅ | Phases 2-6 pending
-> **Date**: 2026-05-31
+> **Status**: Phase 0 ✅ | Phase 1 ✅ | Phase 2 ✅ | Phase 3 ✅ | Phase 4 ✅ | Phase 5 ✅ | Phase 6 partial (boundaries ✅, debugger pending)
+> **Date**: 2026-06-01 (last assessment)
 > **Supersedes**: `implementation-plan.md` (v1, 2026-05-28)
+
+---
+
+## Known Issues (from 2026-06-01 deep dive)
+
+| # | Severity | Issue | Fix |
+|---|----------|-------|-----|
+| 1 | **Critical** | `generate_default_config()` uses shallow `dict()` — nested dicts/lists share references to `DEFAULT_CONFIG`. Mutations persist across calls. | Use `copy.deepcopy()` |
+| 2 | **High** | `load_config()` returns raw YAML with no merge against defaults. Partial configs crash template rendering with `UndefinedError`. | Deep-merge loaded config with `DEFAULT_CONFIG` |
+| 3 | **Medium** | No validation of agent names against available templates. Unknown agent → raw `TemplateNotFound` error. | Validate before rendering, raise `ConfigError` |
+| 4 | **Low** | Entry point shim (`carter` binary) fails with `ModuleNotFoundError` after `uv pip install -e .` Workaround: `python -m carter.cli`. | Rebuild venv or use `python -m` |
+| 5 | **Low** | `carter init --single` on existing umbrella workspace creates `.gitignore` without warning, doesn't update config mode. | Detect existing workspace, warn or refuse. |
+
+## Remaining Work
+
+| Item | Category | Effort |
+|------|----------|--------|
+| Fix Bug #1 (deepcopy) | Code fix | 5 min |
+| Fix Bug #2 (config merge) | Code fix + tests | 30 min |
+| Fix Bug #3 (agent validation) | Code fix + tests | 15 min |
+| `carter-debugger.md.j2` template | Phase 6 completion | 30 min |
+| Tests for debugger | Phase 6 completion | 15 min |
+| Fix Bug #5 (re-init detection) | Robustness | 15 min |
 
 ---
 
@@ -575,7 +598,7 @@ When reviewing (quality gate mode):
 
 ---
 
-## Phase 2: Filesystem-as-Memory + Session Bootstrap
+## Phase 2: Filesystem-as-Memory + Session Bootstrap ✅
 
 ### Objective
 
@@ -678,7 +701,7 @@ Never auto-record. Suggest, let user confirm. If "no", move on immediately.
 
 ---
 
-## Phase 3: TDD Enforcement + Spec-Handoff
+## Phase 3: TDD Enforcement + Spec-Handoff ✅
 
 ### Objective
 
@@ -749,7 +772,7 @@ For complex work, use @spec-handoff convention to document the contract before c
 
 ---
 
-## Phase 4: Redaction System (carter-narrator)
+## Phase 4: Redaction System (carter-narrator) ✅
 
 ### Objective
 
@@ -851,7 +874,7 @@ These framings are recognized as bypass attempts and refused:
 
 ---
 
-## Phase 5: Personality + Skepticism
+## Phase 5: Personality + Skepticism ✅
 
 ### Objective
 
@@ -926,7 +949,7 @@ Scale your questioning with task complexity:
 
 ---
 
-## Phase 6: Agent Boundaries + Debugger
+## Phase 6: Agent Boundaries + Debugger (partial — boundaries ✅, debugger template pending)
 
 ### Objective
 

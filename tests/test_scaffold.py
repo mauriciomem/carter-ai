@@ -75,6 +75,206 @@ class TestConfig:
             load_config(config_path)
 
 
+# ─── Bug Fix Tests ───────────────────────────────────────────────────────────
+
+
+class TestConfigIsolation:
+    """Bug #1: generate_default_config must return fully independent copies."""
+
+    def test_mutating_agents_list_does_not_corrupt_defaults(self):
+        """Appending to agents list doesn't affect subsequent calls."""
+        from carter.config import DEFAULT_CONFIG
+
+        original_agents = list(DEFAULT_CONFIG["agents"])
+        config = generate_default_config()
+        config["agents"].append("debugger")
+
+        # DEFAULT_CONFIG must be unchanged
+        assert DEFAULT_CONFIG["agents"] == original_agents
+
+    def test_mutating_nested_dict_does_not_corrupt_defaults(self):
+        """Mutating quality_gate dict doesn't affect subsequent calls."""
+        from carter.config import DEFAULT_CONFIG
+
+        config = generate_default_config()
+        config["quality_gate"]["max_iterations"] = 99
+
+        assert DEFAULT_CONFIG["quality_gate"]["max_iterations"] == 2
+
+    def test_mutating_redaction_categories_does_not_corrupt_defaults(self):
+        """Mutating categories list doesn't affect subsequent calls."""
+        from carter.config import DEFAULT_CONFIG
+
+        config = generate_default_config()
+        config["redaction"]["categories"] = ["secrets"]
+
+        assert len(DEFAULT_CONFIG["redaction"]["categories"]) == 7
+
+    def test_two_generated_configs_are_independent(self):
+        """Two generated configs don't share any mutable state."""
+        c1 = generate_default_config()
+        c2 = generate_default_config()
+
+        c1["agents"].append("debugger")
+        c1["personality"]["skepticism"] = "always"
+        c1["tdd"]["strict"] = True
+
+        assert "debugger" not in c2["agents"]
+        assert c2["personality"]["skepticism"] == "scaled"
+        assert c2["tdd"]["strict"] is False
+
+
+class TestConfigMerge:
+    """Bug #2: load_config must merge with defaults for missing optional keys."""
+
+    def test_partial_config_gets_defaults_for_missing_sections(self, tmp_path):
+        """Config missing optional sections gets defaults filled in."""
+        config_path = tmp_path / "carter.yaml"
+        minimal = {
+            "version": "2",
+            "workspace": {"name": "test", "mode": "umbrella"},
+            "identity": {"git_account": "user"},
+            "agents": ["maestro"],
+        }
+        config_path.write_text(yaml.dump(minimal))
+        loaded = load_config(config_path)
+
+        # Optional sections should be present from defaults
+        assert "personality" in loaded
+        assert "quality_gate" in loaded
+        assert "tdd" in loaded
+        assert "redaction" in loaded
+        assert "state" in loaded
+
+    def test_partial_nested_dict_gets_missing_keys(self, tmp_path):
+        """Partial quality_gate gets missing keys from defaults."""
+        config_path = tmp_path / "carter.yaml"
+        config = {
+            "version": "2",
+            "workspace": {"name": "test", "mode": "umbrella"},
+            "identity": {"git_account": "user"},
+            "agents": ["maestro"],
+            "quality_gate": {"enabled": False},
+        }
+        config_path.write_text(yaml.dump(config))
+        loaded = load_config(config_path)
+
+        # User's value preserved
+        assert loaded["quality_gate"]["enabled"] is False
+        # Defaults filled in for missing keys
+        assert loaded["quality_gate"]["max_iterations"] == 2
+        assert loaded["quality_gate"]["trigger"] == "user-initiated"
+
+    def test_user_list_values_not_merged_with_defaults(self, tmp_path):
+        """User's agents list replaces default, not merges with it."""
+        config_path = tmp_path / "carter.yaml"
+        config = {
+            "version": "2",
+            "workspace": {"name": "test", "mode": "umbrella"},
+            "identity": {"git_account": "user"},
+            "agents": ["maestro", "engineer"],
+        }
+        config_path.write_text(yaml.dump(config))
+        loaded = load_config(config_path)
+
+        assert loaded["agents"] == ["maestro", "engineer"]
+
+    def test_user_explicit_none_preserved(self, tmp_path):
+        """Explicit null/None values are preserved, not filled from defaults."""
+        config_path = tmp_path / "carter.yaml"
+        config = {
+            "version": "2",
+            "workspace": {"name": "test", "mode": "umbrella"},
+            "identity": {"git_account": "user", "git_org": None},
+            "agents": ["maestro"],
+        }
+        config_path.write_text(yaml.dump(config))
+        loaded = load_config(config_path)
+
+        assert loaded["identity"]["git_org"] is None
+
+    def test_extra_user_keys_preserved(self, tmp_path):
+        """Keys not in defaults are preserved (forward-compatible)."""
+        config_path = tmp_path / "carter.yaml"
+        config = {
+            "version": "2",
+            "workspace": {"name": "test", "mode": "umbrella"},
+            "identity": {"git_account": "user"},
+            "agents": ["maestro"],
+            "custom_extension": {"foo": "bar"},
+        }
+        config_path.write_text(yaml.dump(config))
+        loaded = load_config(config_path)
+
+        assert loaded["custom_extension"] == {"foo": "bar"}
+
+    def test_full_config_roundtrip_unchanged(self, tmp_path):
+        """A full config with all keys loads without modification."""
+        config_path = tmp_path / "carter.yaml"
+        full = generate_default_config()
+        write_config(config_path, full)
+        loaded = load_config(config_path)
+
+        assert loaded == full
+
+    def test_merged_config_renders_templates_successfully(self, tmp_path, env):
+        """A partial config, after merge, renders all templates without error."""
+        config_path = tmp_path / "carter.yaml"
+        config = {
+            "version": "2",
+            "workspace": {"name": "test", "mode": "umbrella"},
+            "identity": {"git_account": "user"},
+            "agents": ["maestro"],
+        }
+        config_path.write_text(yaml.dump(config))
+        loaded = load_config(config_path)
+
+        # Should not raise UndefinedError
+        results = render_agents(loaded, env)
+        assert "carter-maestro.md" in results
+
+
+class TestAgentValidation:
+    """Bug #3: render_agents must validate agent names before rendering."""
+
+    def test_unknown_agent_raises_config_error(self, default_config, env):
+        """Typo in agent name raises ConfigError, not TemplateNotFound."""
+        default_config["agents"] = ["maetsro"]
+        with pytest.raises(ConfigError):
+            render_agents(default_config, env)
+
+    def test_error_message_lists_valid_agents(self, default_config, env):
+        """Error message for unknown agent includes available options."""
+        default_config["agents"] = ["nonexistent"]
+        with pytest.raises(ConfigError, match="maestro"):
+            render_agents(default_config, env)
+
+    def test_path_traversal_rejected(self, default_config, env):
+        """Path traversal attempt in agent name is rejected."""
+        default_config["agents"] = ["../../etc/passwd"]
+        with pytest.raises(ConfigError):
+            render_agents(default_config, env)
+
+    def test_empty_string_rejected(self, default_config, env):
+        """Empty agent name is rejected."""
+        default_config["agents"] = [""]
+        with pytest.raises(ConfigError):
+            render_agents(default_config, env)
+
+    def test_special_characters_rejected(self, default_config, env):
+        """Agent names with spaces or special chars are rejected."""
+        default_config["agents"] = ["foo bar"]
+        with pytest.raises(ConfigError):
+            render_agents(default_config, env)
+
+    def test_valid_agents_pass_validation(self, default_config, env):
+        """All standard agents pass validation without error."""
+        default_config["agents"] = ["maestro", "architect", "engineer", "devops", "pm", "learner", "narrator"]
+        # Should not raise
+        results = render_agents(default_config, env)
+        assert len(results) == 7
+
+
 # ─── Scaffold Tests ──────────────────────────────────────────────────────────
 
 
@@ -298,3 +498,96 @@ class TestState:
         gitignore.write_text(".carter/\n")
         add_to_gitignore(tmp_path, ".carter/")
         assert gitignore.read_text().count(".carter/") == 1
+
+
+# ─── Narrator / Redaction Tests ──────────────────────────────────────────────
+
+
+class TestNarrator:
+    """Tests for carter-narrator template and redaction system."""
+
+    def test_narrator_renders(self, default_config, env):
+        """Narrator template renders without error when in agents list."""
+        results = render_agents(default_config, env)
+        assert "carter-narrator.md" in results
+
+    def test_narrator_has_identity(self, default_config, env):
+        """Narrator has identity block."""
+        results = render_agents(default_config, env)
+        content = results["carter-narrator.md"]
+        assert "<identity>" in content
+        assert "Carter Narrator" in content
+
+    def test_narrator_has_role(self, default_config, env):
+        """Narrator has role block with content production focus."""
+        results = render_agents(default_config, env)
+        content = results["carter-narrator.md"]
+        assert "<role>" in content
+        assert "external-facing content" in content
+
+    def test_narrator_has_boundaries(self, default_config, env):
+        """Narrator has boundaries block."""
+        results = render_agents(default_config, env)
+        content = results["carter-narrator.md"]
+        assert "<boundaries>" in content
+
+    def test_redaction_rules_present_when_enabled(self, default_config, env):
+        """Redaction rules render when redaction is enabled."""
+        default_config["redaction"]["enabled"] = True
+        results = render_agents(default_config, env)
+        content = results["carter-narrator.md"]
+        assert "<redaction_rules>" in content
+
+    def test_redaction_rules_absent_when_disabled(self, default_config, env):
+        """Redaction rules are absent when redaction is disabled."""
+        default_config["redaction"]["enabled"] = False
+        results = render_agents(default_config, env)
+        content = results["carter-narrator.md"]
+        assert "<redaction_rules>" not in content
+
+    def test_all_categories_render(self, default_config, env):
+        """All configured redaction categories appear in output."""
+        default_config["redaction"]["enabled"] = True
+        results = render_agents(default_config, env)
+        content = results["carter-narrator.md"]
+        assert "Secrets" in content
+        assert "Internal URLs" in content
+        assert "Security Incidents" in content
+        assert "PII" in content
+        assert "Financial Figures" in content
+        assert "Employee Data" in content
+        assert "Infrastructure IDs" in content
+
+    def test_subset_categories_render(self, default_config, env):
+        """Only configured categories render (subset selection)."""
+        default_config["redaction"]["enabled"] = True
+        default_config["redaction"]["categories"] = ["secrets", "pii"]
+        results = render_agents(default_config, env)
+        content = results["carter-narrator.md"]
+        assert "Secrets" in content
+        assert "PII" in content
+        assert "Financial Figures" not in content
+        assert "Infrastructure IDs" not in content
+
+    def test_anti_bypass_clause_present(self, default_config, env):
+        """Anti-bypass clause is always present when redaction is enabled."""
+        default_config["redaction"]["enabled"] = True
+        results = render_agents(default_config, env)
+        content = results["carter-narrator.md"]
+        assert "Anti-Bypass Clause" in content
+        assert "Roleplay" in content
+        assert "Hypothetical" in content
+        assert "Mode override" in content
+
+    def test_narrator_absent_when_not_in_agents(self, default_config, env):
+        """Narrator is not rendered when removed from agents list."""
+        config = dict(default_config)
+        config["agents"] = [a for a in default_config["agents"] if a != "narrator"]
+        results = render_agents(config, env)
+        assert "carter-narrator.md" not in results
+
+    def test_maestro_routes_to_narrator(self, default_config, env):
+        """Maestro routing table includes narrator when configured."""
+        results = render_agents(default_config, env)
+        maestro = results["carter-maestro.md"]
+        assert "carter-narrator" in maestro

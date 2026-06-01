@@ -1,6 +1,7 @@
 """Configuration loading and schema validation for carter.yaml."""
 from __future__ import annotations
 
+import copy
 from pathlib import Path
 from typing import Any
 
@@ -32,6 +33,7 @@ DEFAULT_CONFIG: dict[str, Any] = {
         "devops",
         "pm",
         "learner",
+        "narrator",
     ],
     "quality_gate": {
         "enabled": True,
@@ -66,7 +68,11 @@ class ConfigError(Exception):
 
 
 def load_config(config_path: Path) -> dict[str, Any]:
-    """Load and validate carter.yaml from the given path."""
+    """Load and validate carter.yaml from the given path.
+
+    Merges with DEFAULT_CONFIG so partial configs get sensible defaults
+    for optional sections. Lists use replace semantics (user's list wins).
+    """
     if not config_path.exists():
         raise ConfigError(f"Config file not found: {config_path}")
 
@@ -80,7 +86,36 @@ def load_config(config_path: Path) -> dict[str, Any]:
     if missing:
         raise ConfigError(f"Missing required keys: {', '.join(sorted(missing))}")
 
-    return config
+    return _merge_with_defaults(config)
+
+
+def _merge_with_defaults(user_config: dict[str, Any]) -> dict[str, Any]:
+    """Deep-merge user config with DEFAULT_CONFIG.
+
+    Rules:
+    - Missing top-level keys get defaults
+    - Missing nested dict keys get defaults (recursive for dicts)
+    - Lists use replace semantics (user's list wins entirely)
+    - Explicit None values are preserved
+    - Extra user keys are preserved (forward-compatible)
+    """
+    defaults = copy.deepcopy(DEFAULT_CONFIG)
+    return _deep_merge(defaults, user_config)
+
+
+def _deep_merge(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any]:
+    """Recursively merge override into base. Override wins for non-dict values."""
+    result = dict(base)
+    for key, value in override.items():
+        if (
+            key in result
+            and isinstance(result[key], dict)
+            and isinstance(value, dict)
+        ):
+            result[key] = _deep_merge(result[key], value)
+        else:
+            result[key] = value
+    return result
 
 
 def generate_default_config(
@@ -88,7 +123,7 @@ def generate_default_config(
     mode: str = "umbrella",
 ) -> dict[str, Any]:
     """Generate a default config dict for a new workspace."""
-    config = dict(DEFAULT_CONFIG)
+    config = copy.deepcopy(DEFAULT_CONFIG)
     config["workspace"] = {
         "name": workspace_name,
         "description": "",
