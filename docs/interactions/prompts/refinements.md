@@ -183,3 +183,25 @@ gpg.format=ssh
 commit.gpgsign=true
 
 
+
+
+## 
+
+You as carter-maestro, personal assistant, you need to improve yourself constantly. As a result, do a VERY DEEP analysis of another ai-assistant called yui, in the folder yui-soul. DO A VERY DETAILED ASSESMENT OF THIS AI ASSISTANT. REVIEW EVERYTING, EVERY CORNER, EDGE CASE, EVERY MINOR DETAIL to deeply understand how it works, how its structured, how the content and intent is layed out, and every important aspect of this ai-assistant. This should result in a very detailed documentation. Remember, you need to improve yourself by extracting the best properties, features, characteristic and anything that is worth leaning from this. The documentation then will be used to trigger other documents, such as implementation plans.
+
+
+### 
+
+Now, do a final pass. Repeat the extremelly detailed assessment of yui ai assisstant, now without taking into account any session record or conversation history. Read and review in detail the yui-soul-assessment.md, the implementation-plan.md. Question everything again, look for stronger points and impact. Consider what I consider the features I prefer:
+ - iteration with quality gates
+ - file system in memory
+ - template driven, configurable agent generation. Leverage jinja2 instead.
+ - umbrella workpace. Make it an optional argument to pass optinally to a project
+ - TDD development focused
+ - redaction system
+In terms of personality I'd like: a bit more sceptical, reviewer, question focused assisstance.
+As a result, overwrite and update the yui-soul-assessment.md and, if worth prepare question to update the implementation-plan.md
+
+
+I'd like:
+ - reviewer focused, quiestion focused

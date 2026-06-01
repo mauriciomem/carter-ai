@@ -4,31 +4,46 @@ This document covers the Carter test suite — what it tests, how to run it, how
 
 ## Overview
 
-The test suite validates the **installer** (`install.py`) and the **carter-ops CLI** (`ops/carter_ops.py`). Everything else — agents, skills, MCP configs, knowledge templates — are static Markdown or JSON files that the installer copies to the right locations on disk.
+The test suite validates three systems:
 
-The tests run in full isolation using temporary directories, so they never touch your real `~/.copilot/` or `~/.config/opencode/` paths.
+| System | Test File | What It Covers |
+|--------|-----------|----------------|
+| **Installer** | `tests/test_install.py` | File copying, MCP merging, manifest tracking, idempotency |
+| **Scaffold (CLI + Templates)** | `tests/test_scaffold.py` | Config loading, template rendering, quality gates, workspace init |
+| **Carter-Ops** | `tests/ops/test_operations.py` | CLI parsing, operations, attribution, output formatting |
+
+The tests run in full isolation using temporary directories — they never touch your real `~/.copilot/`, `~/.config/opencode/`, or any workspace paths.
 
 ## Prerequisites
 
-- Python 3.11+
-- [uv](https://docs.astral.sh/uv/) (used to run tests without managing virtual environments)
+There are two ways to run the tests, depending on which part you're testing:
 
-No explicit `pip install` is required. The `uv run --with pytest` command handles the pytest dependency automatically.
-
-## Running Tests
+### For installer and ops tests
 
 ```bash
-# Run all tests with verbose output
-uv run --with pytest pytest tests/ -v
+# Uses uv to manage pytest as a dependency — no venv required
+uv run --with pytest pytest tests/test_install.py -v
+uv run --with pytest pytest tests/ops/ -v
+```
 
-# Run a specific test class
-uv run --with pytest pytest tests/test_install.py::TestMCPMerging -v
+### For scaffold tests
 
-# Run a single test
-uv run --with pytest pytest tests/test_install.py::TestIdempotency::test_second_run_unchanged -v
+The scaffold tests require the `carter` package and its dependencies (Jinja2, Click, PyYAML):
 
-# Show print output (useful for debugging)
-uv run --with pytest pytest tests/ -v -s
+```bash
+# Create and activate a venv with the package installed
+uv venv && source .venv/bin/activate
+uv pip install -e ".[dev]"
+
+# Run scaffold tests
+python -m pytest tests/test_scaffold.py -v
+```
+
+### Run everything
+
+```bash
+# From the venv (covers all test files)
+python -m pytest tests/ -v
 ```
 
 ## Tools & Libraries
@@ -39,17 +54,20 @@ uv run --with pytest pytest tests/ -v -s
 | `tmp_path` (pytest built-in) | Provides a unique temporary directory per test, cleaned up automatically |
 | `pathlib.Path` | All file operations use `Path` objects (no `os.path`) |
 | `json` (stdlib) | Used to create and verify JSON settings files |
+| [Jinja2](https://jinja.palletsprojects.com/) | Template engine (scaffold tests exercise template rendering) |
+| [PyYAML](https://pyyaml.org/) | YAML config parsing (scaffold tests exercise config loading) |
 
-No external mocking libraries are used. The installer accepts a `base_dir` parameter that redirects all file operations to a temp directory, making mocks unnecessary.
+No external mocking libraries are used. Both the installer and the scaffold accept path parameters that redirect file operations to temp directories.
 
 ## Project Layout
 
 ```
 tests/
-├── conftest.py         # Shared fixtures (base_dir, settings, etc.)
-├── test_install.py     # Installer tests (57 tests, 17 classes)
+├── conftest.py             # Shared fixtures (base_dir, settings, etc.)
+├── test_install.py         # Installer tests (57 tests, 17 classes)
+├── test_scaffold.py        # Scaffold tests (33 tests, 4 classes)
 └── ops/
-    ├── conftest.py     # Ops path setup
+    ├── conftest.py         # Ops path setup
     └── test_operations.py  # Carter-ops tests (45 tests, 17 classes)
 ```
 
@@ -75,6 +93,79 @@ The installer's functions (e.g., `install_agents`, `install_skills`) accept a `b
 - Tests can run in parallel without conflicts
 
 ## Test Classes
+
+The following sections document each test class across all three test files, grouped by system.
+
+---
+
+## Scaffold Tests (`tests/test_scaffold.py`)
+
+These tests validate the `carter` CLI package — config loading, Jinja2 template rendering, quality gate logic, and workspace initialization. They use `tmp_path` for all filesystem operations.
+
+### TestConfig (6 tests)
+
+Validates `carter.yaml` loading, defaults, and error handling.
+
+| Test | What It Verifies |
+|------|------------------|
+| `test_generate_default_config` | Default config includes all required sections (workspace, identity, personality, agents, quality_gate, tdd, state, target) |
+| `test_load_config_from_file` | A valid `carter.yaml` is parsed and returned as a dict |
+| `test_load_config_missing_file` | Missing config file raises `ConfigError` |
+| `test_load_config_invalid_yaml` | Malformed YAML raises `ConfigError` |
+| `test_write_config` | `write_config()` produces a valid YAML file at the target path |
+| `test_config_merges_with_defaults` | User-provided partial config merges with defaults (no missing keys) |
+
+### TestScaffold (11 tests)
+
+Validates Jinja2 template rendering — that all agents, instructions, and quality gate content render correctly from config values.
+
+| Test | What It Verifies |
+|------|------------------|
+| `test_render_agents_creates_all_files` | All 6 agent `.md` files are rendered to the output directory |
+| `test_rendered_agent_contains_identity` | Agent files include the configured identity name and role |
+| `test_rendered_agent_contains_boundaries` | Agent files define clear operational boundaries |
+| `test_render_instructions` | `copilot-instructions.md` is rendered with global rules |
+| `test_instructions_contain_agents_list` | Instructions file lists all available agents |
+| `test_instructions_contain_quality_gate` | Instructions file references quality gate requirements |
+| `test_maestro_has_routing_table` | Maestro agent has the domain-to-agent routing table |
+| `test_engineer_has_tdd_workflow` | Engineer agent includes TDD workflow section |
+| `test_engineer_strict_tdd` | With `tdd.strict: true`, engineer requires tests before code |
+| `test_engineer_relaxed_tdd` | With `tdd.strict: false`, engineer suggests but doesn't require tests first |
+| `test_custom_personality` | Config personality values (tone, skepticism) appear in rendered output |
+
+### TestQualityGate (8 tests)
+
+Validates that quality gate configuration translates correctly into rendered agent behavior.
+
+| Test | What It Verifies |
+|------|------------------|
+| `test_must_haves_in_maestro` | Maestro agent validates all configured must_haves before completing |
+| `test_must_haves_in_engineer` | Engineer agent validates must_haves (tests passing, no lint errors) |
+| `test_output_format_structured` | Quality gate specifies structured output format |
+| `test_iteration_tracking` | Rendered agents include iteration tracking (attempt counting) |
+| `test_quality_gate_disabled` | With quality gate disabled, no validation blocks appear |
+| `test_reviewer_checklist_architect` | Architect has security and scalability review checklist |
+| `test_reviewer_checklist_engineer` | Engineer has code quality and test coverage checklist |
+| `test_scaled_skepticism` | Skepticism level from config controls review rigor |
+
+### TestState (8 tests)
+
+Validates workspace initialization — the `.carter/` directory structure, knowledge files, git setup, and gitignore behavior.
+
+| Test | What It Verifies |
+|------|------------------|
+| `test_init_creates_carter_dir` | `init_workspace()` creates `.carter/` with proper subdirectory structure |
+| `test_init_creates_knowledge_files` | All 5 knowledge files are created (lessons-learned, gotchas, tools, decisions, patterns) |
+| `test_knowledge_files_not_overwritten` | Existing knowledge content is preserved on re-init |
+| `test_init_creates_git_repo` | `.carter/.git/` is initialized by default |
+| `test_init_no_git_flag` | `--no-git-state` skips git initialization |
+| `test_gitignore_single_repo_mode` | In single-repo mode, `.carter/` is added to `.gitignore` |
+| `test_gitignore_not_modified_if_present` | If `.carter/` is already in `.gitignore`, no duplicate entry added |
+| `test_init_idempotent` | Running init twice doesn't error or duplicate files |
+
+---
+
+## Installer Tests (`tests/test_install.py`)
 
 ### TestInstallAgents (4 tests)
 
@@ -222,6 +313,8 @@ Validates the ops enforcement one-liner across agents and skills.
 | `test_no_deterministic_ops_in_skills` | Pipeline and atlassian skills have no `<deterministic-operations>` blocks |
 
 ### TestJSONCParsing (5 tests)
+
+---
 
 ## Carter-Ops Tests (`tests/ops/test_operations.py`)
 

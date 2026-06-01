@@ -4,21 +4,56 @@ An AI assistant with expert personalities for software architecture, engineering
 
 Carter runs on **VS Code**, **Copilot CLI**, and **OpenCode CLI**. The same agents, skills, and MCP integrations work across all three surfaces.
 
+## What Is Carter?
+
+Carter is a **multi-agent AI system**. Instead of one generic assistant, you get specialized agents, each with focused expertise, strict boundaries, and a defined role. A central orchestrator (Maestro) routes your requests to the right specialist.
+
+Think of it like a team: you don't ask the architect to write tests, and you don't ask the engineer to plan your roadmap.
+
+**Two installation modes:**
+
+| Mode | What It Does | When To Use |
+|------|-------------|-------------|
+| `install.py` | Copies agents/skills to `~/.copilot/` (system-level) | You want Carter available globally |
+| `carter init` | Scaffolds a workspace with generated agents from templates | You want per-workspace customization |
+
 ## Quick Start
 
 **Prerequisites:** [uv](https://docs.astral.sh/uv/) and Python 3.11+
 
+### Option A: System-Level Install (Global)
+
 ```bash
 # Clone
-git clone git@github.com:mauriciomem/carter-ai.git ~/carter-ai
+git clone https://github.com/mauriciomem/carter-ai.git ~/carter-ai
 cd ~/carter-ai
 
-# Install (all targets)
+# Install to ~/.copilot/ (all targets)
 uv run install.py
 
 # Or use the wrapper
 ./install.sh
 ```
+
+### Option B: Workspace-Level Scaffold (Per-Project)
+
+```bash
+cd ~/carter-ai
+
+# Create a virtual environment and install the carter CLI
+uv venv && source .venv/bin/activate
+uv pip install -e .
+
+# Initialize a workspace (creates .carter/ config + generates agents from templates)
+carter init ~/my-workspace --name "my-project"
+```
+
+This generates:
+- `.carter/carter.yaml` — configuration that drives all template rendering
+- `.carter/knowledge/` — knowledge files for capturing learnings
+- `.carter/state/` — plans, sessions, checkpoints
+- `agents/` — generated agent files (from Jinja2 templates)
+- `instructions/copilot-instructions.md` — generated global instructions
 
 ### Required Environment Variables
 
@@ -36,12 +71,11 @@ See [.env.example](.env.example) for the full list.
 
 ## Getting Started
 
-After installation, see the [Getting Started Walkthrough](docs/getting-started.md) for two end-to-end examples:
+After installation, see the [Getting Started Walkthrough](docs/getting-started.md) for:
 
-1. **Non-operational task** — Ask Maestro to design an API, watch it route to the right specialist and produce an architecture
-2. **Operational task** — Ask Maestro to commit and push code, watch it invoke carter-ops with dry-run approval
-
-Both examples use the Copilot CLI and show the full conversation flow.
+1. **Non-operational task** — Ask Maestro to design an API, watch it route to the right specialist
+2. **Operational task** — Ask Maestro to commit and push code with the `ops:` protocol
+3. **Workspace scaffolding** — Use `carter init` to create a customized workspace
 
 ## Usage
 
@@ -63,6 +97,16 @@ Maestro analyzes your request and routes to the right specialist or chains multi
 @carter-pm create a project plan with WBS for this initiative
 ```
 
+### Quality Gate (Review Before Push)
+
+When you're ready to push, ask for a review:
+
+```
+@carter-maestro review my changes before I push
+```
+
+Carter dispatches reviewers (engineer for code quality, architect for design) who report findings with severity levels (🚨 Blocking, ⚠️ Suggestion, 💡 Nitpick). Configurable via `carter.yaml`.
+
 ### Copilot CLI
 
 ```bash
@@ -76,25 +120,25 @@ copilot --agent carter-devops -p "Create a Terraform module for S3" --allow-all
 User
   │
   ├── @carter-maestro (orchestrator)
-  │     ├─→ @carter-architect
-  │     ├─→ @carter-engineer
-  │     ├─→ @carter-devops
-  │     ├─→ @carter-learner
-  │     └─→ @carter-pm
+  │     ├─→ @carter-architect   (design, trade-offs, ADRs)
+  │     ├─→ @carter-engineer    (code, tests, reviews)
+  │     ├─→ @carter-devops      (CI/CD, IaC, containers)
+  │     ├─→ @carter-learner     (research, explanation)
+  │     └─→ @carter-pm          (planning, risk, roadmaps)
   │
   └── Direct access to any agent
 ```
 
 ### Agents
 
-| Agent | Domain | Skills |
-|-------|--------|--------|
-| **Maestro** | Orchestration, routing | triage, distill |
-| **Architect** | System design, cloud, trade-offs | design-review, diagram, adr |
-| **Engineer** | Code quality, testing, patterns | code-review, test-first, python, golang |
-| **DevOps** | CI/CD, IaC, containers, git | pipeline, terraform, packer, python, golang |
-| **Learner** | Explanation, research, memory | explain, mistakes, research |
-| **PM** | Planning, risk, agile | plan, risk, atlassian |
+| Agent | Domain | Key Capabilities |
+|-------|--------|-----------------|
+| **Maestro** | Orchestration, routing, quality gates | Routes requests, triggers reviews, captures knowledge |
+| **Architect** | System design, cloud, trade-offs | ADRs, diagrams, API contracts, design review |
+| **Engineer** | Code quality, testing, patterns | TDD, code review, refactoring, security checks |
+| **DevOps** | CI/CD, IaC, containers, git | Pipelines, Terraform, Packer, deployment |
+| **Learner** | Explanation, research, memory | Documentation, mistake capture, topic research |
+| **PM** | Planning, risk, agile | WBS, roadmaps, sprint planning, risk assessment |
 
 ### MCP Servers
 
@@ -106,25 +150,48 @@ User
 
 ## Carter-Ops
 
-Carter-ops is a deterministic CLI executor for write operations (Git and Jira). It separates reads (handled by MCP servers and direct commands) from writes (handled by carter-ops with a two-phase approval flow).
+Carter-ops handles **write operations** (git, GitHub, Jira) with bot attribution and an approval gate. It separates reads (direct commands) from writes (plan → approve → execute → audit).
 
-The protocol is enforced by a single `carter-ops` skill that every agent loads when the user prefixes a request with `ops:`. A one-liner in each agent file triggers the skill, which contains the complete workflow, command reference, and anti-fabrication rules in one place.
+Trigger with the `ops:` prefix:
 
-```bash
-# Dry-run — shows what would happen
-carter-ops git-commit --message "feat: add auth" --files src/auth.py --dry-run
-
-# Execute — does it after approval
-carter-ops git-commit --message "feat: add auth" --files src/auth.py --execute
+```
+@carter-maestro ops: create a feature branch, commit my changes, and push
 ```
 
-All output is structured JSON. Git commits are attributed to `carter-bot` and signed with your SSH key. Jira comments include a bot footer.
-
-Operations: `git-branch`, `git-commit`, `git-push`, `git-flow` (composite), `jira-comment`, `jira-create`, `jira-update` (composite).
+The agent shows you the exact commands it will run, waits for your approval, executes with bot attribution, and logs the operation.
 
 See [docs/carter-ops.md](docs/carter-ops.md) for the full reference.
 
-## Installer
+## Template System (Carter v2)
+
+Carter v2 introduces a **template-driven generation system**. Instead of hand-editing agent Markdown files, you configure `carter.yaml` and regenerate:
+
+```bash
+# Edit configuration
+vim .carter/carter.yaml
+
+# Regenerate agent files from templates
+carter update .
+
+# Verify workspace integrity
+carter check .
+```
+
+### What's Configurable
+
+| Feature | Config Key | Effect |
+|---------|-----------|--------|
+| Skepticism level | `personality.skepticism` | How much Carter challenges your decisions |
+| Quality gates | `quality_gate.enabled` | Multi-agent review before push |
+| TDD strictness | `tdd.strict` | Force test-first workflow |
+| Redaction | `redaction.enabled` | Sanitize external-facing content |
+| Agent roster | `agents` | Which agents to generate |
+
+Templates use **Jinja2 inheritance** — a base template defines the structure (`<identity>`, `<role>`, `<boundaries>`), and each agent template fills in its specific content. Conditional blocks mean unused features don't appear in the rendered output.
+
+See `templates/` for the template source and `carter.yaml` for the full schema.
+
+## Installer (System-Level)
 
 ```bash
 # Install all targets (VS Code + Copilot CLI + OpenCode)
@@ -142,12 +209,6 @@ uv run install.py --bot-name "my-bot"
 
 # Uninstall
 uv run install.py --uninstall
-
-# Verbose output
-uv run install.py -v
-
-# Debug output
-uv run install.py -vv
 ```
 
 ### What the Installer Does
@@ -169,57 +230,69 @@ git pull
 uv run install.py
 ```
 
-The installer detects changes via file hashing. Only modified files are updated.
+The installer detects changes via SHA-256 file hashing. Only modified files are updated.
 
 ## Memory and Knowledge
 
-Carter learns from experience through a three-tier memory system:
+Carter learns from experience through a structured knowledge system:
 
-- **Visible memory** (`~/.carter/memories/`) — Browseable Markdown files: `user/` (cross-project), `session/` (per-conversation), `repo/<name>/` (per-project). Works on all surfaces.
-- **Platform memory** (`/memories/`) — VS Code's built-in memory tool. Auto-loads into context. Written alongside visible memory on supported surfaces.
-- **Curated knowledge** (`~/.copilot/knowledge/`) — Structured entries promoted via `@carter-maestro distill`
+- **Workspace knowledge** (`.carter/knowledge/`) — Per-workspace learnings: lessons, gotchas, tools, decisions, patterns
+- **System knowledge** (`~/.copilot/knowledge/`) — Global curated entries promoted via `@carter-maestro distill`
+- **Platform memory** (`/memories/`) — VS Code's built-in memory tool (auto-loaded into context)
 
-Three skills drive the lifecycle: `carter-mistakes` (capture) → `carter-distill` (promote to knowledge) → `carter-reflect` (propose agent/skill improvements from patterns).
-
-Knowledge files: `decisions.md`, `mistakes.md`, `patterns.md`, `debugging.md`, `infrastructure.md`, `project-history.md`
+Three skills drive the lifecycle: `carter-mistakes` (capture) → `carter-distill` (promote) → `carter-reflect` (improve agents from patterns).
 
 See [docs/memory-and-knowledge.md](docs/memory-and-knowledge.md) for the full reference.
 
 ## Testing
 
-The test suite has 97 tests across two test files — installer tests (`test_install.py`) and carter-ops tests (`tests/ops/test_operations.py`) — covering file installation, idempotency, JSON merging, manifest management, ops CLI parsing, operation dry-runs, and mocked execution.
-
 ```bash
-# Run all tests
-uv run --with pytest pytest tests/ -v
+# Run all tests (requires the venv)
+source .venv/bin/activate
+python -m pytest tests/ -v
 
-# Run a specific class
-uv run --with pytest pytest tests/test_install.py::TestMCPMerging -v
+# Or without a venv
+uv run --with pytest pytest tests/ -v
 ```
 
-See [docs/testing.md](docs/testing.md) for the full testing guide — test coverage details, fixture reference, and how to extend the suite.
+The test suite covers:
+- **Installer tests** — file installation, idempotency, JSON merging, manifest management
+- **Carter-ops tests** — CLI parsing, operation dry-runs, config loading
+- **Scaffold tests** — template rendering, config validation, workspace initialization, quality gates
+
+See [docs/testing.md](docs/testing.md) for the full testing guide.
 
 ## Project Structure
 
 ```
 carter-ai/
-├── install.py              # Installer (PEP 723, stdlib only)
+├── carter/                 # Carter v2 CLI package
+│   ├── cli.py              # Entry points: init, update, check
+│   ├── config.py           # carter.yaml loading + validation
+│   ├── scaffold.py         # Jinja2 rendering engine
+│   └── state.py            # .carter/ directory management
+├── templates/              # Jinja2 agent + instruction templates
+│   ├── base_agent.md.j2    # Base template (inheritance)
+│   ├── agents/             # Per-agent templates (extend base)
+│   └── instructions/       # Global instructions template
+├── install.py              # System-level installer (PEP 723)
 ├── install.sh              # Wrapper script
-├── agents/                 # Agent definitions (6 agents)
-├── skills/                 # Skill definitions (18 skills)
+├── agents/                 # Source-of-truth agent definitions
+├── skills/                 # Skill definitions (hand-maintained)
 ├── ops/                    # carter-ops CLI executor
 │   ├── carter_ops.py       # Entry point
 │   ├── operations/         # Plugin-based operations
-│   ├── config.py           # Config loader (TOML + env vars)
+│   ├── config.py           # Config loader
 │   ├── attribution.py      # Bot attribution helpers
 │   └── output.py           # Structured JSON output
 ├── knowledge/              # Knowledge base templates
 ├── mcp/                    # MCP server config templates
-│   ├── copilot/            # VS Code format
-│   └── opencode/           # OpenCode format
-├── instructions/           # Global instructions
-├── docs/                   # Documentation and design logs
-└── tests/                  # Installer + ops tests
+├── instructions/           # Global instructions source
+├── docs/                   # Documentation
+└── tests/                  # All test suites
+    ├── test_install.py     # Installer tests
+    ├── test_scaffold.py    # Template + scaffold tests
+    └── ops/                # Carter-ops tests
 ```
 
 ## Troubleshooting
@@ -232,6 +305,9 @@ If you have existing MCP servers (e.g., `github`), Carter installs alongside the
 
 ### Missing environment variables
 Run `uv run install.py -v` to see which variables are missing and how to set them.
+
+### `carter` command not found
+Make sure you've installed the package: `uv pip install -e .` from the carter-ai directory, with your venv activated.
 
 ## License
 

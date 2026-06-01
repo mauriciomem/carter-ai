@@ -1,48 +1,151 @@
 # Getting Started
 
-This walkthrough covers two real-world scenarios using Carter through the **Copilot CLI**. The same flows work in VS Code (`@carter-maestro`) and OpenCode.
+This guide walks you through setting up Carter and using it in real scenarios. It's written for someone new to multi-agent AI assistants — we'll explain concepts as we go.
 
 ## Prerequisites
 
-- Carter installed (`uv run install.py` — see [README](../README.md))
-- `carter-ops` on your PATH (`carter-ops --list` should output JSON)
-- Environment variables set (GitHub token, optionally Jira credentials)
-- Copilot CLI installed (`copilot --version`)
+- Python 3.11+ installed
+- [uv](https://docs.astral.sh/uv/) (Python package manager)
+- VS Code with GitHub Copilot, or Copilot CLI
+- Git installed and configured
 
-## Example 1: Non-Operational Task — Design an API
+## Concepts
 
-Non-operational tasks involve thinking, analyzing, and producing artifacts — no external state is modified. Maestro routes these to the right specialist agent.
+Before diving in, here's the mental model:
 
-### Start the conversation
+**Agents** are specialized AI assistants with focused expertise. Each one knows what it should and shouldn't do. Carter has 6 core agents (Maestro, Architect, Engineer, DevOps, Learner, PM).
+
+**Maestro** is the orchestrator — it receives your request and routes it to the right specialist. You can also talk to any agent directly.
+
+**Skills** are instruction sets that agents load for specific tasks. Think of them as playbooks. They're hand-maintained (not generated from templates).
+
+**Templates** are Jinja2 files that generate agent Markdown. You configure `carter.yaml`, and the templates produce consistent, customized agent instructions.
+
+**carter-ops** is the protocol for write operations (git commits, pushes, Jira comments). It ensures you always see a plan before anything is executed.
+
+---
+
+## Step 1: Install Carter
+
+You have two paths depending on how you want to use Carter:
+
+### Path A: Global Install (system-level)
+
+This copies agent files to `~/.copilot/` so they're available in every VS Code workspace.
 
 ```bash
-copilot --agent carter-maestro -i \
-  "I need to design a REST API for a task management app. \
-   It should support users, projects, and tasks with role-based access."
+git clone https://github.com/mauriciomem/carter-ai.git ~/carter-ai
+cd ~/carter-ai
+uv run install.py
 ```
 
-### What happens
+### Path B: Workspace Scaffold (per-project)
 
-1. **Maestro receives the request** and recognizes it as a system design task
-2. **Maestro routes to `carter-architect`**, which has the `design-review` and `diagram` skills
-3. **Architect produces the deliverable** — in this case, an API design with resource models, endpoint table, and an architecture diagram
+This generates customized agents from templates into a specific workspace directory.
 
-### Example conversation
+```bash
+cd ~/carter-ai
+uv venv && source .venv/bin/activate
+uv pip install -e .
+
+# Create a new workspace
+carter init ~/my-workspace --name "my-project"
+```
+
+**What `carter init` creates:**
 
 ```
-You: I need to design a REST API for a task management app. It should support
-     users, projects, and tasks with role-based access.
+my-workspace/
+├── .carter/
+│   ├── carter.yaml           ← Your configuration (drives everything)
+│   ├── knowledge/            ← Learnings captured during work
+│   │   ├── lessons-learned.md
+│   │   ├── gotchas.md
+│   │   ├── tools.md
+│   │   ├── decisions.md
+│   │   └── patterns.md
+│   └── state/                ← Plans and session checkpoints
+│       ├── plans/active/
+│       ├── plans/completed/
+│       └── sessions/
+├── agents/                   ← Generated from templates
+│   ├── carter-maestro.md
+│   ├── carter-architect.md
+│   ├── carter-engineer.md
+│   ├── carter-devops.md
+│   ├── carter-pm.md
+│   └── carter-learner.md
+└── instructions/
+    └── copilot-instructions.md  ← Generated global instructions
+```
 
+### Understanding carter.yaml
+
+This is the file that drives all template rendering. Key sections:
+
+```yaml
+# What personality should Carter have?
+personality:
+  skepticism: scaled    # off | scaled | always
+  style: reviewer       # helpful | reviewer | terse
+
+# Which agents to generate
+agents:
+  - maestro
+  - architect
+  - engineer
+  - devops
+  - pm
+  - learner
+
+# Should Carter review your code before you push?
+quality_gate:
+  enabled: true
+  max_iterations: 2     # How many review rounds max
+
+# Test-driven development enforcement
+tdd:
+  strict: false          # true = always write tests first
+  spec_handoff: true     # Document contracts before complex work
+```
+
+When you change `carter.yaml`, regenerate with:
+
+```bash
+carter update .
+```
+
+---
+
+## Step 2: Your First Interaction
+
+### Example 1: Non-Operational Task — Design an API
+
+Non-operational tasks involve thinking and producing artifacts — nothing external is modified.
+
+```
+@carter-maestro I need to design a REST API for a task management app.
+It should support users, projects, and tasks with role-based access.
+```
+
+**What happens behind the scenes:**
+
+1. Maestro receives your message
+2. It recognizes this as a system design task (keywords: "design", "API", "architecture")
+3. It routes to **carter-architect**
+4. Architect produces the deliverable using its domain expertise
+
+**Example response:**
+
+```
 Carter (Maestro → Architect):
-
-I'll design this API for you. Here's the resource model and endpoint structure.
 
 ## Resource Model
 
 | Resource | Key Fields | Relationships |
 |----------|-----------|---------------|
-| User     | id, email, name, role | has many Projects (as member) |
-| Project  | id, name, owner_id | has many Tasks, has many Members |
+| User     | id, email, name, role | has many Projects |
+| Project  | id, name, owner_id | has many Tasks |
 | Task     | id, title, status, assignee_id | belongs to Project |
 
 ## Core Endpoints
@@ -50,203 +153,144 @@ I'll design this API for you. Here's the resource model and endpoint structure.
 | Method | Path | Auth | Description |
 |--------|------|------|-------------|
 | POST   | /api/v1/auth/login | Public | Authenticate, return JWT |
-| GET    | /api/v1/projects | User | List projects for current user |
-| POST   | /api/v1/projects | Admin | Create project |
-| GET    | /api/v1/projects/:id/tasks | Member | List tasks in project |
+| GET    | /api/v1/projects | User | List user's projects |
 | POST   | /api/v1/projects/:id/tasks | Member | Create task |
-| PATCH  | /api/v1/tasks/:id | Assignee/Admin | Update task status |
 
-## Role-Based Access
-
-- **Admin**: Full access to all resources
-- **Member**: Read/write within assigned projects
-- **Viewer**: Read-only access to assigned projects
-
-Roles are enforced via middleware that checks JWT claims against project
-membership. I'd recommend storing roles per-project (not globally) to support
-users who are admins on one project but viewers on another.
-
-Want me to generate an architecture diagram or dive deeper into any endpoint?
+Roles are enforced via middleware that checks JWT claims against project membership.
 ```
 
-### Key takeaway
-
-No commands were run. No files were modified. Maestro identified this as a design question, routed to Architect, and the specialist used its domain knowledge to produce the answer. This is the read-only path — MCP servers and skills provide context, the agent provides expertise.
+**Key takeaway:** No commands ran. No files changed. Maestro identified the domain, routed to the specialist, and Architect used its knowledge to produce the design.
 
 ---
 
-## Example 2: Operational Task — Commit and Push Code
+### Example 2: Operational Task — Commit and Push Code
 
-Operational tasks modify external state — git commits, branch creation, Jira updates. These go through **carter-ops** with a mandatory dry-run approval step.
-
-### Start the conversation
-
-```bash
-copilot --agent carter-maestro -i \
-  "ops: Create a feature branch, commit src/auth.py, and push it. \
-   Use PROJ-42 as the ticket reference."
-```
-
-### What happens
-
-1. **Maestro sees the `ops:` prefix** and loads the `carter-ops` skill
-2. **The skill instructs the agent to run `carter-ops git-flow ... --dry-run` in the terminal** — the plan MUST come from actual carter-ops output, never fabricated
-3. **You see the JSON plan** (actual terminal output) and approve or reject
-4. **The agent runs `carter-ops git-flow ... --execute` in the terminal** and reports the result
-
-The same flow works across all surfaces — VS Code, Copilot CLI, and OpenCode. The agent never runs raw `git commit`, `git push`, or `git checkout -b` directly.
-
-### Example conversation
+Operational tasks modify external state. They use the `ops:` prefix and follow a strict plan → approve → execute flow.
 
 ```
-You: ops: Create a feature branch, commit src/auth.py, and push it.
-     Use PROJ-42 as the ticket reference.
-
-Carter (Maestro → DevOps):
-
-I'll use git-flow to create the branch, commit, and push in one operation.
-Let me generate the plan first.
-
-> Running: carter-ops git-flow \
->   --branch feature/PROJ-42-auth-module \
->   --message "feat(auth): add authentication module" \
->   --files src/auth.py \
->   --from main \
->   --dry-run
+@carter-maestro ops: create a feature branch, commit src/auth.py, and push.
+Use PROJ-42 as the ticket reference.
 ```
 
-Carter-ops returns the plan as JSON:
+**What happens:**
 
-```json
-{
-  "phase": "dry-run",
-  "operation": "git-flow",
-  "steps": [
-    "git checkout main",
-    "git pull origin main",
-    "git checkout -b feature/PROJ-42-auth-module",
-    "git add src/auth.py",
-    "git commit --author='carter-bot <carter-bot@users.noreply.github.com>' -S -m 'feat(auth): add authentication module'",
-    "git push origin feature/PROJ-42-auth-module"
-  ],
-  "attribution": "Author: carter-bot, Signed-by: user (~/.ssh/id_ed25519)",
-  "side_effects": [
-    "New branch 'feature/PROJ-42-auth-module' from 'main'",
-    "1 new commit as carter-bot",
-    "Branch pushed to origin"
-  ]
-}
-```
+1. Maestro sees the `ops:` prefix and enters operational mode
+2. It **assesses** current state (runs `git status`, `git log`)
+3. It **plans** — shows you the exact commands with bot attribution
+4. It **waits for your approval** before executing anything
+5. After approval, it **executes** the commands
+6. It **audits** — logs the operation
+7. It **reports** — tells you what happened (commit SHA, branch name)
+
+**Example plan shown to you:**
 
 ```
-Carter: Here's the plan:
+**Operation:** git-flow
+**Branch:** feature/PROJ-42-auth-module
+**Message:** feat(auth): add authentication module
+**Attribution:** mauri-droid <mauri-droid@users.noreply.github.com>, signed
 
-- Create branch `feature/PROJ-42-auth-module` from `main`
-- Commit `src/auth.py` as carter-bot (signed with your SSH key)
-- Push to origin
+Commands:
+1. git checkout main && git pull origin main
+2. git checkout -b feature/PROJ-42-auth-module
+3. git add src/auth.py
+4. git commit --author='mauri-droid <...>' -S -m "feat(auth): add authentication module"
+5. git push -u origin feature/PROJ-42-auth-module
 
-Shall I proceed?
-
-You: yes
-
-Carter:
-
-> Running: carter-ops git-flow \
->   --branch feature/PROJ-42-auth-module \
->   --message "feat(auth): add authentication module" \
->   --files src/auth.py \
->   --from main \
->   --execute
+Approve?
 ```
 
-Carter-ops executes and returns:
+You say "yes" and it executes. You say "no" or ask for changes, and it revises the plan.
 
-```json
-{
-  "phase": "execute",
-  "operation": "git-flow",
-  "success": true,
-  "result": {
-    "branch": "feature/PROJ-42-auth-module",
-    "from": "main",
-    "commit_sha": "a7f3c2d",
-    "pushed": true
-  },
-  "attribution": "Author: carter-bot, Signed-by: user (~/.ssh/id_ed25519)"
-}
-```
+**Key takeaway:** You always see exactly what will happen before it happens. The bot attribution means you can always tell which commits came from Carter vs. you.
+
+---
+
+### Example 3: Quality Gate — Review Before Push
+
+After making changes, ask Carter to review before you push:
 
 ```
-Carter: Done. Branch `feature/PROJ-42-auth-module` created, committed as
-        carter-bot (a7f3c2d), and pushed to origin.
-
-        Would you like me to add a comment on PROJ-42 with the progress update?
-
-You: yes, mention the branch name and that auth is ready for review
-
-Carter:
-
-> Running: carter-ops jira-comment \
->   --ticket PROJ-42 \
->   --body "Auth module implementation complete. Branch: feature/PROJ-42-auth-module — ready for review." \
->   --dry-run
+@carter-maestro review my changes before pushing
 ```
 
-```json
-{
-  "phase": "dry-run",
-  "operation": "jira-comment",
-  "steps": [
-    "POST /rest/api/3/issue/PROJ-42/comment",
-    "Body: Auth module implementation complete. Branch: feature/PROJ-42-auth-module — ready for review.\n\n_This comment was generated by carter-bot._"
-  ],
-  "attribution": "Footer: _This comment was generated by carter-bot._",
-  "side_effects": ["New comment on PROJ-42"]
-}
-```
+**What happens:**
+
+1. Maestro identifies the scope (which files changed, how many)
+2. It dispatches reviewers:
+   - **carter-engineer** reviews code quality, test coverage, security
+   - **carter-architect** reviews design (only if >5 files or structural changes)
+3. Reviewers report findings with severity:
+   - 🚨 **Blocking** — must fix before push
+   - ⚠️ **Suggestion** — should consider
+   - 💡 **Nitpick** — informational
+4. If blocking issues exist, it recommends fixes and offers to re-review
+
+**Example output:**
 
 ```
-Carter: I'll post this comment on PROJ-42:
+## Review: auth module (3 files)
 
-  "Auth module implementation complete. Branch:
-   feature/PROJ-42-auth-module — ready for review."
+### 🚨 Blocking (1)
+1. [src/auth.py:42] — No input validation on email parameter. SQL injection risk.
 
-  (with the carter-bot footer)
+### ⚠️ Suggestions (2)
+1. [src/auth.py:15] — Consider extracting JWT config to environment variables
+2. [tests/test_auth.py:8] — Missing test for expired token scenario
 
-  Proceed?
+### 💡 Nitpicks (1)
+1. [src/auth.py:3] — Unused import: `from datetime import date`
 
-You: go ahead
-
-Carter:
-
-> Running: carter-ops jira-comment \
->   --ticket PROJ-42 \
->   --body "Auth module implementation complete. Branch: feature/PROJ-42-auth-module — ready for review." \
->   --execute
+**Verdict**: Fix 1 blocking issue
 ```
 
-```json
-{
-  "phase": "execute",
-  "operation": "jira-comment",
-  "success": true,
-  "result": {
-    "ticket": "PROJ-42",
-    "comment_id": "10234",
-    "comment_url": "https://your-domain.atlassian.net/rest/api/3/issue/PROJ-42/comment/10234"
-  },
-  "attribution": "Footer: _This comment was generated by carter-bot._"
-}
-```
+---
 
-```
-Carter: Comment posted on PROJ-42. The auth module is branched, committed,
-        pushed, and tracked in Jira.
-```
+## Step 3: Understanding Agent Boundaries
 
-### Key takeaway
+Each agent has strict rules about what it will and won't do. This prevents confused output:
 
-Every write operation went through carter-ops with explicit approval. The agent prepared the parameters using its domain knowledge (branch naming conventions, commit message format), but the execution was deterministic — the same JSON plan, the same commands, regardless of which LLM model was running. The user saw exactly what would happen before it happened.
+| Agent | Does | Does NOT |
+|-------|------|----------|
+| Architect | Design systems, ADRs, API contracts | Write code, configure CI |
+| Engineer | Write code, tests, reviews | Design architecture, write pipelines |
+| DevOps | Pipelines, Terraform, Docker | Write application code |
+| PM | Plans, roadmaps, risk assessment | Write code, design systems |
+| Learner | Research, explain, document | Write production code |
+
+**Why this matters:** If you ask the engineer to "design the system architecture", it will recognize that's not its job and tell you to ask the architect instead. This keeps each agent focused and prevents hallucinated expertise.
+
+---
+
+## Step 4: Working With Knowledge
+
+Carter accumulates knowledge as you work. The knowledge system has two layers:
+
+### Workspace Knowledge (`.carter/knowledge/`)
+
+Created by `carter init`. These files capture learnings specific to your workspace:
+
+| File | Purpose | Example Entry |
+|------|---------|---------------|
+| `lessons-learned.md` | Universal truths (append-only) | "Always check for nil before accessing nested struct fields" |
+| `gotchas.md` | Known issues + workarounds | "Terraform 1.6 breaks X; pin to 1.5.7" |
+| `tools.md` | Available toolchain | "MCP servers: github, terraform, atlassian" |
+| `decisions.md` | Architecture decisions | "Chose PostgreSQL over DynamoDB because..." |
+| `patterns.md` | Recurring conventions | "All API responses use envelope format" |
+
+### How Knowledge Is Captured
+
+Carter doesn't auto-write to knowledge files. After certain events, Maestro asks:
+
+- After completing a plan → "Any learnings worth capturing?"
+- After debugging for >10 minutes → "Record this as a gotcha?"
+- After you correct Carter → "Record this correction?"
+
+You confirm or decline. If you decline, Carter moves on immediately.
+
+### Knowledge Is Never Overwritten
+
+Running `carter update` re-renders agent files but **never touches knowledge files**. Your accumulated learnings are safe — they're yours, not generated.
 
 ---
 
@@ -254,11 +298,17 @@ Every write operation went through carter-ops with explicit approval. The agent 
 
 | Task | How |
 |------|-----|
-| Design review | `copilot --agent carter-architect -i "Review this system design: [paste]"` |
-| Code review | `copilot --agent carter-engineer -i "Review src/auth.py for security"` |
-| Create a Jira ticket | `copilot --agent carter-pm -i "Create a story for adding OAuth2 support"` |
-| Explain a concept | `copilot --agent carter-learner -i "Explain Terraform state locking"` |
-| Build a pipeline | `copilot --agent carter-devops -i "Create a GitHub Actions workflow for Go"` |
-| Multi-domain task | `copilot --agent carter-maestro -i "Plan, implement, and deploy a new feature"` |
+| Design review | `@carter-architect review this system design: [paste]` |
+| Code review | `@carter-engineer review src/auth.py for security` |
+| Build a pipeline | `@carter-devops create a GitHub Actions workflow for Go` |
+| Explain a concept | `@carter-learner explain Terraform state locking` |
+| Create a plan | `@carter-pm create a project plan for adding OAuth2` |
+| Multi-domain task | `@carter-maestro plan, implement, and deploy a new feature` |
+| Review before push | `@carter-maestro review my changes` |
+| Git operations | `@carter-maestro ops: create branch, commit, push` |
 
-For the full carter-ops reference (all operations, params, output formats), see [carter-ops.md](carter-ops.md).
+## Next Steps
+
+- [carter-ops.md](carter-ops.md) — Full reference for write operations
+- [memory-and-knowledge.md](memory-and-knowledge.md) — Deep dive on the knowledge system
+- [testing.md](testing.md) — How to run and extend the test suite

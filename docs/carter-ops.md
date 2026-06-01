@@ -1,36 +1,30 @@
 # Carter-Ops
 
-Carter-ops provides **bot attribution**, **audit logging**, and **configuration** for write operations performed by Carter agents. The model executes commands directly in the terminal with the correct attribution flags; carter-ops provides the supporting utilities.
+Carter-ops handles **write operations** (git, GitHub, Jira) with bot attribution, approval gates, and audit logging.
 
-## Why
+## The Problem It Solves
 
-LLMs can reliably run git commands, `gh` CLI, and `curl`. Previous approaches tried to force models to call a CLI tool instead of running commands directly. This failed across every model provider. The current design works WITH model behavior: the model runs commands directly, carter-ops handles attribution config and audit logging.
+AI assistants can run terminal commands. That's powerful but dangerous — an unchecked `git push --force` or accidental Jira spam is hard to undo. Carter-ops solves this by enforcing a **plan → approve → execute** workflow for every write operation.
 
-## Architecture
+It also solves the **attribution problem**: when an AI makes a commit, who authored it? Carter-ops attributes commits to a bot identity (e.g., `mauri-droid`) while signing them with your SSH key. This makes it clear which commits are AI-assisted while keeping them cryptographically tied to you.
+
+## How It Works (Mental Model)
 
 ```
-User: "ops: create branch, commit changes, push"
-  │
-  └─→ Model (loads carter-ops skill)
-        │
-        ├─ ASSESS: git status, git diff (read operations — run directly)
-        │
-        ├─ PLAN: Show structured plan with exact commands + attribution flags
-        │
-        ├─ APPROVE: User confirms
-        │
-        ├─ EXECUTE: Run commands directly in terminal
-        │    git checkout -b <branch>
-        │    git add <files>
-        │    git commit --author='bot <email>' -S -m "message"
-        │    git push -u origin <branch>
-        │
-        ├─ AUDIT: carter-ops audit --operation ... --result success
-        │
-        └─ REPORT: Show result to user
+You: "ops: create branch, commit changes, push"
+      │
+      ▼
+Agent loads carter-ops skill
+      │
+      ├─ 1. ASSESS  → git status, git diff (reads — no approval needed)
+      ├─ 2. PLAN    → shows exact commands with attribution flags
+      ├─ 3. APPROVE → waits for your "yes" before doing anything
+      ├─ 4. EXECUTE → runs commands in terminal
+      ├─ 5. AUDIT   → carter-ops audit --operation ... --result success
+      └─ 6. REPORT  → tells you what happened (SHA, branch, URL)
 ```
 
-The model is the executor. Carter-ops is a **utility** — it provides config values and audit logging, not execution.
+**Key principle:** The model runs commands directly in the terminal (not through a CLI wrapper). Carter-ops provides the supporting utilities: config values, attribution flags, and audit logging.
 
 ## Getting Started
 
