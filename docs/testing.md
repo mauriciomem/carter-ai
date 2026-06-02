@@ -16,34 +16,29 @@ The tests run in full isolation using temporary directories — they never touch
 
 ## Prerequisites
 
-There are two ways to run the tests, depending on which part you're testing:
-
-### For installer and ops tests
-
-```bash
-# Uses uv to manage pytest as a dependency — no venv required
-uv run --with pytest pytest tests/test_install.py -v
-uv run --with pytest pytest tests/ops/ -v
-```
-
-### For scaffold tests
-
-The scaffold tests require the `carter` package and its dependencies (Jinja2, Click, PyYAML):
+All three suites import from the installed `carter` package (Click, Jinja2,
+PyYAML, httpx), so the simplest setup is a venv with the package installed in
+editable mode:
 
 ```bash
 # Create and activate a venv with the package installed
 uv venv && source .venv/bin/activate
 uv pip install -e ".[dev]"
-
-# Run scaffold tests
-python -m pytest tests/test_scaffold.py -v
 ```
 
 ### Run everything
 
 ```bash
-# From the venv (covers all test files)
+# From the venv (covers all three test files — 191 tests)
 python -m pytest tests/ -v
+```
+
+### Run a single suite
+
+```bash
+python -m pytest tests/test_install.py -v     # installer (59)
+python -m pytest tests/test_scaffold.py -v    # scaffold (61)
+python -m pytest tests/ops/ -v                # carter-ops (71)
 ```
 
 ## Tools & Libraries
@@ -64,12 +59,14 @@ No external mocking libraries are used. Both the installer and the scaffold acce
 ```
 tests/
 ├── conftest.py             # Shared fixtures (base_dir, settings, etc.)
-├── test_install.py         # Installer tests (57 tests, 17 classes)
-├── test_scaffold.py        # Scaffold tests (33 tests, 4 classes)
+├── test_install.py         # Installer tests (59 tests, 19 classes)
+├── test_scaffold.py        # Scaffold tests (61 tests, 8 classes)
 └── ops/
     ├── conftest.py         # Ops path setup
-    └── test_operations.py  # Carter-ops tests (45 tests, 17 classes)
+    └── test_operations.py  # Carter-ops tests (71 tests, 27 classes)
 ```
+
+The full suite is **191 tests** (`python -m pytest tests/ -v`).
 
 ## Fixtures (conftest.py)
 
@@ -108,12 +105,50 @@ Validates `carter.yaml` loading, defaults, and error handling.
 
 | Test | What It Verifies |
 |------|------------------|
-| `test_generate_default_config` | Default config includes all required sections (workspace, identity, personality, agents, quality_gate, tdd, state, target) |
+| `test_generate_default_config` | Default config includes all required sections (workspace, identity, personality, agents, quality_gate, redaction, tdd, state, target) |
 | `test_load_config_from_file` | A valid `carter.yaml` is parsed and returned as a dict |
 | `test_load_config_missing_file` | Missing config file raises `ConfigError` |
 | `test_load_config_invalid_yaml` | Malformed YAML raises `ConfigError` |
 | `test_write_config` | `write_config()` produces a valid YAML file at the target path |
 | `test_config_merges_with_defaults` | User-provided partial config merges with defaults (no missing keys) |
+
+### TestConfigIsolation (4 tests)
+
+Validates that `generate_default_config()` returns deep copies — mutating one config never corrupts the shared defaults.
+
+| Test | What It Verifies |
+|------|------------------|
+| `test_mutating_agents_list_does_not_corrupt_defaults` | Mutating a generated config's `agents` list leaves `DEFAULT_CONFIG` intact |
+| `test_mutating_nested_dict_does_not_corrupt_defaults` | Mutating a nested dict doesn't leak into defaults |
+| `test_mutating_redaction_categories_does_not_corrupt_defaults` | Mutating `redaction.categories` doesn't leak into defaults |
+| `test_two_generated_configs_are_independent` | Two generated configs share no mutable state |
+
+### TestConfigMerge (7 tests)
+
+Validates the merge-with-defaults semantics (partial configs, list replacement, key preservation).
+
+| Test | What It Verifies |
+|------|------------------|
+| `test_partial_config_gets_defaults_for_missing_sections` | Missing sections are filled from defaults |
+| `test_partial_nested_dict_gets_missing_keys` | Nested dicts get missing keys merged in |
+| `test_user_list_values_not_merged_with_defaults` | Lists use replace semantics (user's list wins) |
+| `test_user_explicit_none_preserved` | An explicit `None` from the user is preserved |
+| `test_extra_user_keys_preserved` | Unknown user keys survive the merge |
+| `test_full_config_roundtrip_unchanged` | A complete config round-trips unchanged |
+| `test_merged_config_renders_templates_successfully` | A merged config renders all templates without error |
+
+### TestAgentValidation (6 tests)
+
+Validates that the `agents` list is sanitized — only known agent names render, blocking path traversal and injection.
+
+| Test | What It Verifies |
+|------|------------------|
+| `test_unknown_agent_raises_config_error` | An unknown agent name raises `ConfigError` |
+| `test_error_message_lists_valid_agents` | The error message lists the valid agent names |
+| `test_path_traversal_rejected` | Path-traversal values (e.g., `../`) are rejected |
+| `test_empty_string_rejected` | Empty agent names are rejected |
+| `test_special_characters_rejected` | Names with special characters are rejected |
+| `test_valid_agents_pass_validation` | All known agent names pass validation |
 
 ### TestScaffold (11 tests)
 
@@ -121,7 +156,7 @@ Validates Jinja2 template rendering — that all agents, instructions, and quali
 
 | Test | What It Verifies |
 |------|------------------|
-| `test_render_agents_creates_all_files` | All 6 agent `.md` files are rendered to the output directory |
+| `test_render_agents_creates_all_files` | Every configured agent `.md` file is rendered to the output directory (7 by default, including `carter-narrator.md`) |
 | `test_rendered_agent_contains_identity` | Agent files include the configured identity name and role |
 | `test_rendered_agent_contains_boundaries` | Agent files define clear operational boundaries |
 | `test_render_instructions` | `copilot-instructions.md` is rendered with global rules |
@@ -163,6 +198,24 @@ Validates workspace initialization — the `.carter/` directory structure, knowl
 | `test_gitignore_not_modified_if_present` | If `.carter/` is already in `.gitignore`, no duplicate entry added |
 | `test_init_idempotent` | Running init twice doesn't error or duplicate files |
 
+### TestNarrator (11 tests)
+
+Validates the `carter-narrator` redaction agent template and the `redaction` config block.
+
+| Test | What It Verifies |
+|------|------------------|
+| `test_narrator_renders` | `carter-narrator.md` renders when `narrator` is in the agents list |
+| `test_narrator_has_identity` | Narrator file includes its identity |
+| `test_narrator_has_role` | Narrator file includes its role |
+| `test_narrator_has_boundaries` | Narrator file defines operational boundaries |
+| `test_redaction_rules_present_when_enabled` | Redaction rules appear when `redaction.enabled: true` |
+| `test_redaction_rules_absent_when_disabled` | Redaction rules disappear when disabled |
+| `test_all_categories_render` | All configured redaction categories render |
+| `test_subset_categories_render` | A subset of categories renders correctly |
+| `test_anti_bypass_clause_present` | The anti-bypass clause is present in the rendered agent |
+| `test_narrator_absent_when_not_in_agents` | Narrator is not rendered when removed from the agents list |
+| `test_maestro_routes_to_narrator` | Maestro's routing references the narrator agent |
+
 ---
 
 ## Installer Tests (`tests/test_install.py`)
@@ -184,8 +237,8 @@ Validates that skill directories and their `SKILL.md` files are created.
 
 | Test | What It Verifies |
 |------|-----------------|
-| `test_creates_copilot_skills` | 19 `carter-*` skill directories, each with a `SKILL.md`, sub-files for terraform/packer/pipeline |
-| `test_creates_opencode_skills` | Same 19 directories under OpenCode target |
+| `test_creates_copilot_skills` | All 20 `carter-*` skill directories are created, each with a `SKILL.md`, plus sub-files for terraform/packer |
+| `test_creates_opencode_skills` | Same 20 directories under the OpenCode target |
 
 ### TestInstallInstructions (1 test)
 
@@ -252,17 +305,17 @@ Validates the SHA-256 hashing utility used for change detection.
 |------|-----------------|
 | `test_sha256_consistent` | Same file produces the same hash on repeated calls; hash starts with `sha256:` |
 | `test_sha256_different_content` | Different content produces different hashes |
-### TestInstallOps (6 tests)
+### TestInstallOps (4 tests)
 
-Validates carter-ops installation: file copying, config generation, wrapper script, and idempotency.
+Validates carter-ops setup. The executor ships inside the installed `carter`
+package, so the installer only generates `~/.carter/config.toml` — it copies no
+source files and creates no wrapper script.
 
 | Test | What It Verifies |
 |------|------------------|
-| `test_copies_ops_files` | All ops files (carter_ops.py, config.py, attribution.py, output.py, operations/*) are copied to `base_dir/carter/ops/` |
 | `test_generates_config_toml` | `config.toml` is generated with `[attribution]`, `[git]`, and `[jira]` sections |
-| `test_does_not_overwrite_existing_config` | Custom config.toml content is preserved on re-install |
-| `test_creates_wrapper_script` | `carter-ops` wrapper is created at `base_dir/local/bin/` with `#!/bin/bash`, executable permission |
-| `test_manifest_tracks_ops_files` | All ops files are tracked in the manifest |
+| `test_does_not_overwrite_existing_config` | Custom `config.toml` content is preserved on re-install |
+| `test_manifest_tracks_config` | The generated `config.toml` is tracked in the manifest |
 | `test_idempotent` | Second install reports `unchanged` with 0 `created` |
 ### TestBotName (3 tests)
 
@@ -308,17 +361,60 @@ Validates the ops enforcement one-liner across agents and skills.
 
 | Test | What It Verifies |
 |------|-------------------|
-| `test_agents_have_ops_oneliner` | All 6 agent files contain `ops:` and `carter-ops` references |
+| `test_agents_have_ops_oneliner` | All 6 installed agent files contain `ops:` and `carter-ops` references |
 | `test_no_critical_section_in_agents` | No agent file contains the old `CRITICAL: Write Operations` section |
 | `test_no_deterministic_ops_in_skills` | Pipeline and atlassian skills have no `<deterministic-operations>` blocks |
 
-### TestJSONCParsing (5 tests)
+### TestInstallMemories (3 tests)
+
+Validates that `carter install` creates the visible memory directory structure under `~/.carter/memories/`.
+
+| Test | What It Verifies |
+|------|-------------------|
+| `test_creates_memory_directories` | `user/`, `session/`, and `repo/` scopes are created under `~/.carter/memories/` |
+| `test_idempotent` | Re-running leaves existing memory directories untouched |
+| `test_manifest_tracks_directories` | The memory directories are recorded in the manifest |
+
+### TestCarterReflectSkill (2 tests)
+
+Validates that the `carter-reflect` skill is installed alongside the other skills.
+
+| Test | What It Verifies |
+|------|-------------------|
+| `test_reflect_skill_installed` | `carter-reflect/SKILL.md` exists under the copilot skills directory |
+| `test_reflect_skill_opencode` | `carter-reflect/SKILL.md` exists under the OpenCode skills directory |
+
+### TestVisibleMemoryReferences (3 tests)
+
+Validates that installed instructions and rules reference the visible memory system and reflect skill.
+
+| Test | What It Verifies |
+|------|-------------------|
+| `test_instructions_reference_visible_memory` | `copilot-instructions.md` references `~/.carter/memories/` |
+| `test_opencode_rules_reference_visible_memory` | OpenCode `AGENTS.md` references visible memory scopes |
+| `test_maestro_has_reflect_skill` | The maestro agent references the `carter-reflect` skill |
+
+### TestJSONCParsing (8 tests)
+
+Validates the JSONC (JSON-with-comments) parser used to read VS Code `settings.json` safely.
+
+| Test | What It Verifies |
+|------|-------------------|
+| `test_strip_single_line_comments` | `//` line comments are stripped before parsing |
+| `test_strip_block_comments` | `/* ... */` block comments are stripped |
+| `test_strip_trailing_commas` | Trailing commas (legal in JSONC) are handled |
+| `test_preserves_comments_inside_strings` | `//`-like sequences inside string values are preserved |
+| `test_preserves_slashes_inside_strings` | Slashes inside strings (e.g., URLs) are preserved |
+| `test_load_jsonc_returns_none_on_garbage` | Unparseable content returns `None` (never corrupts the file) |
+| `test_load_jsonc_returns_none_on_missing_file` | A missing file returns `None` |
+| `test_realistic_vscode_settings` | A realistic VS Code `settings.json` round-trips correctly |
 
 ---
 
 ## Carter-Ops Tests (`tests/ops/test_operations.py`)
 
-The ops test file validates the carter-ops CLI and all operations. It uses `sys.path` manipulation to import from the `ops/` directory directly.
+The ops test file validates the carter-ops CLI and all 11 operations. Imports
+come from the installed `carter.ops` package.
 
 ### TestConfig (4 tests)
 
@@ -351,7 +447,7 @@ The ops test file validates the carter-ops CLI and all operations. It uses `sys.
 
 | Test | What It Verifies |
 |------|------------------|
-| `test_discover_operations` | All 7 operations are discovered and registered |
+| `test_discover_operations` | All 11 operations are discovered and registered |
 | `test_get_operation` | Looking up by name returns the correct instance |
 | `test_get_unknown_operation` | Unknown name returns `None` |
 
@@ -369,7 +465,7 @@ Every operation's `dry_run()` method is tested directly — these are always saf
 | `TestJiraCreateDryRun` | 2 | Plan includes project/type, validation (missing project) |
 | `TestJiraUpdateDryRun` | 2 | Composite plan has 2 side effects, validation (no action) |
 
-### CLI Parsing Tests (9 tests)
+### CLI Parsing Tests (10 tests)
 
 | Test | What It Verifies |
 |------|------------------|
@@ -393,6 +489,34 @@ Execution tests use `unittest.mock.patch` to mock `subprocess.run`, verifying th
 | `TestGitBranchExecute` | 2 | Success (3 subprocess calls), failure on CalledProcessError |
 | `TestGitCommitExecute` | 1 | Success with commit SHA extraction |
 | `TestGitPushExecute` | 2 | Success, rejection produces suggestion field |
+
+### GitHub Operations (8 classes, 16 tests)
+
+The GitHub operations use `httpx` against the REST API. Dry-run tests verify the
+plan and validation; execute tests mock the HTTP client.
+
+| Class | Tests | What It Verifies |
+|-------|-------|------------------|
+| `TestGitHubConfig` | 2 | `GITHUB_TOKEN` is loaded; `validate_github()` flags a missing token |
+| `TestGitHubAttribution` | 2 | The Markdown footer is appended to issue/PR bodies |
+| `TestGhIssueDryRun` | 4 | Plan includes repo/title/labels; validation (missing repo, missing title) |
+| `TestGhIssueExecute` | 2 | Success returns issue URL/number; API error surfaces a suggestion |
+| `TestGhIssueCommentDryRun` | 2 | Plan includes repo/issue; validation |
+| `TestGhIssueCommentExecute` | 1 | Success posts a comment with footer |
+| `TestGhPrDryRun` | 2 | Plan includes head/base; validation |
+| `TestGhPrExecute` | 2 | Success returns PR URL; draft flag honored |
+| `TestGhPrCommentDryRun` | 2 | Plan includes repo/pr; validation |
+| `TestGhPrCommentExecute` | 1 | Success posts a PR comment with footer |
+
+### Subcommand Tests (2 classes, 6 tests)
+
+Validate the utility subcommands the model calls directly.
+
+| Class | Tests | What It Verifies |
+|-------|-------|------------------|
+| `TestAuditSubcommand` | 4 | `carter ops audit` appends a JSONL entry; requires `--operation` and `--result`; parses `--params`/`--identifiers` JSON |
+| `TestConfigSubcommand` | 2 | `carter ops config --emit` prints config values as JSON; rejects bad usage |
+
 ## Extending the Test Suite
 
 ### When to Add Tests

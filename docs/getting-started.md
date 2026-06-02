@@ -13,7 +13,7 @@ This guide walks you through setting up Carter and using it in real scenarios. I
 
 Before diving in, here's the mental model:
 
-**Agents** are specialized AI assistants with focused expertise. Each one knows what it should and shouldn't do. Carter has 6 core agents (Maestro, Architect, Engineer, DevOps, Learner, PM).
+**Agents** are specialized AI assistants with focused expertise. Each one knows what it should and shouldn't do. Carter has 6 core conversational agents (Maestro, Architect, Engineer, DevOps, Learner, PM). Workspace scaffolds also generate a 7th utility agent, **Narrator**, which redacts sensitive content from external-facing output.
 
 **Maestro** is the orchestrator — it receives your request and routes it to the right specialist. You can also talk to any agent directly.
 
@@ -74,7 +74,8 @@ my-workspace/
 │   ├── carter-engineer.md
 │   ├── carter-devops.md
 │   ├── carter-pm.md
-│   └── carter-learner.md
+│   ├── carter-learner.md
+│   └── carter-narrator.md    ← Redaction utility agent
 └── instructions/
     └── copilot-instructions.md  ← Generated global instructions
 ```
@@ -97,6 +98,7 @@ agents:
   - devops
   - pm
   - learner
+  - narrator
 
 # Should Carter review your code before you push?
 quality_gate:
@@ -188,13 +190,13 @@ Use PROJ-42 as the ticket reference.
 **Operation:** git-flow
 **Branch:** feature/PROJ-42-auth-module
 **Message:** feat(auth): add authentication module
-**Attribution:** mauri-droid <mauri-droid@users.noreply.github.com>, signed
+**Attribution:** carter-bot <carter-bot@users.noreply.github.com>, signed
 
 Commands:
 1. git checkout main && git pull origin main
 2. git checkout -b feature/PROJ-42-auth-module
 3. git add src/auth.py
-4. git commit --author='mauri-droid <...>' -S -m "feat(auth): add authentication module"
+4. git commit --author='carter-bot <...>' -S -m "feat(auth): add authentication module"
 5. git push -u origin feature/PROJ-42-auth-module
 
 Approve?

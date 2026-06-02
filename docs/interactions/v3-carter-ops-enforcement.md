@@ -2,6 +2,12 @@
 
 > The model runs commands directly with bot attribution flags, approval gate, and post-hoc audit logging.
 
+> **As-built note:** `carter-ops` shipped as the **`carter ops`** subcommand of
+> the unified CLI (not a standalone `~/.local/bin/carter-ops` binary). Read every
+> `carter-ops <subcommand>` below as `carter ops <subcommand>`. The enforcement
+> design and operation set described here remain accurate; see [plan.md §13.1](plan.md)
+> for the current invocation model.
+
 ---
 
 ## 1. Problem Statement

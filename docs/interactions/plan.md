@@ -1,12 +1,16 @@
-# Carter — Implementation Plan
+# Carter — Implementation Plan (As-Built)
 
-> AI assistant with expert personalities for software architecture, engineering, DevOps, learning, and project management.
+> AI assistant with expert personalities for software architecture, engineering, DevOps, learning, project management, and output redaction.
+
+> **Status:** Shipped. This document reflects the system as built and installed today
+> via the unified `carter` CLI (`uv tool install`). Sections describe what exists in
+> the codebase, not deferred or abandoned ideas.
 
 ---
 
 ## 1. Overview
 
-Carter is a multi-personality AI assistant built on top of the VS Code Copilot agent system, Copilot CLI, and OpenCode CLI. It provides six specialized agents, each with domain-specific skills, backed by MCP servers for deterministic operations and a persistent knowledge base for learning from experience.
+Carter is a multi-personality AI assistant built on top of the VS Code Copilot agent system, Copilot CLI, and OpenCode CLI. It provides seven specialized agents, each with domain-specific skills, backed by MCP servers for reads, a deterministic `carter ops` executor for writes, and a persistent knowledge base for learning from experience. Everything ships as a single installable Python package (`carter-ai`) exposing one `carter` command.
 
 ### Surfaces
 
@@ -46,7 +50,8 @@ User
   ├── @carter-engineer  (direct access)
   ├── @carter-devops    (direct access)
   ├── @carter-learner   (direct access)
-  └── @carter-pm        (direct access)
+  ├── @carter-pm        (direct access)
+  └── @carter-narrator  (utility — output redaction)
 ```
 
 ### 2.3 File Placement
@@ -75,9 +80,14 @@ User
 | DevOps | `carter-devops` | `agent` | 0.1 | GitHub (full), Terraform (full) |
 | Learner | `carter-learner` | `agent` | 0.3 | Confluence (read) |
 | PM | `carter-pm` | `agent` | 0.2 | Jira (full), Confluence (full), GitHub (read) |
+| Narrator | `carter-narrator` | `agent` | 0.1 | None (redacts agent output before display) |
 
 - Model is not hardcoded — uses a `${CARTER_MODEL}` placeholder that resolves to the user's default or a configured value.
 - Per-agent tool restrictions enforce least-privilege access to MCP servers.
+- Agents are generated from Jinja2 templates (`templates/agents/*.md.j2`); the
+  default agent set and personality are driven by `.carter/carter.yaml`.
+- **Narrator** is a redaction utility agent (enabled via the `redaction` block in
+  `carter.yaml`); it is generated from a template and has no source `.md` of its own.
 
 ### 3.2 Maestro Routing
 
@@ -97,27 +107,33 @@ If a task spans multiple domains, Maestro chains agents sequentially, passing co
 
 ## 4. Skills
 
-### 4.1 Skill Map (v1)
+### 4.1 Skill Map
+
+Twenty skills ship in `skills/` (source of truth), bundled into the wheel and
+installed alongside the agents.
 
 | Agent | Skill | Description |
 |---|---|---|
 | **Maestro** | `carter-triage` | Classify request, route to specialist agent(s) |
 | | `carter-distill` | Promote `/memories/` notes to curated knowledge |
+| | `carter-reflect` | Analyze accumulated memory/knowledge to improve agents & skills |
 | **Architect** | `carter-design-review` | Analyze architecture for patterns, anti-patterns, security |
 | | `carter-diagram` | Generate Mermaid architecture diagrams |
 | | `carter-adr` | Create Architecture Decision Records |
 | **Engineer** | `carter-code-review` | Review code for quality, patterns, security, testability |
 | | `carter-test-first` | Generate tests before implementation (TDD workflow) |
-| **DevOps** | `carter-pipeline` | Create/modify GitHub Actions workflows |
+| **DevOps** | `carter-pipeline` | Create/modify GitHub Actions workflows, git/gh strategy |
 | | `carter-terraform` | Write/review Terraform configurations |
-| | `carter-git-strategy` | Advise on branching strategies, resolve merge conflicts |
+| | `carter-packer` | Build machine images with HashiCorp Packer |
 | **Learner** | `carter-explain` | Break down complex topics into understandable parts |
 | | `carter-mistakes` | Record mistakes and lessons learned to memory |
 | | `carter-research` | Fetch and summarize official documentation |
 | **PM** | `carter-plan` | Create project plans, WBS, task dictionaries |
 | | `carter-risk` | Risk identification and mitigation planning |
+| | `carter-atlassian` | Jira/Confluence best practices (stories, bugs, epics) |
 | **Shared** | `carter-python` | Python coding standards and enforcement |
 | | `carter-golang` | Go coding standards and enforcement |
+| **Cross-cutting** | `carter-ops` | Deterministic write-operation protocol (`carter ops`) |
 
 ### 4.2 Language Skills (Shared by Engineer & DevOps)
 
@@ -138,15 +154,6 @@ Both `carter-python` and `carter-golang` are reference skills + checklist enforc
 Sources: PEP 8, Effective Go, Google style guides (cited inline in each skill).
 
 Each skill includes a **checklist prompt** — when invoked, it reviews code against the standards and flags violations.
-
-### 4.3 Skills Deferred to v2
-
-| Agent | Skill | Description |
-|---|---|---|
-| Engineer | `carter-refactor` | Identify and apply refactoring patterns |
-| DevOps | `carter-container` | Dockerfile and Kubernetes manifest creation/review |
-| PM | `carter-roadmap` | Design milestone-based roadmaps |
-| PM | `carter-standup` | Summarize recent work from Git/Jira for standups |
 
 ---
 
@@ -450,7 +457,7 @@ Verbosity levels:
 | `--quiet` / `-q` | Errors only |
 | *(default)* | Key actions, prerequisites, summary |
 | `--verbose` / `-v` | Full paths, backup details, diffs |
-| `--debug` / `-vv` | Internal decision logic, OS detection, template rendering |
+| `--debug` | Internal decision logic, OS detection, template rendering |
 
 Example output (default):
 ```
@@ -482,14 +489,16 @@ Example output (default):
   ✓ ~/.copilot/agents/carter-devops.agent.md
   ✓ ~/.copilot/agents/carter-learner.agent.md
   ✓ ~/.copilot/agents/carter-pm.agent.md
+  ✓ ~/.copilot/agents/carter-narrator.agent.md
   ✓ ~/.config/opencode/agents/carter-maestro.md
   ✓ ~/.config/opencode/agents/carter-architect.md
   ✓ ~/.config/opencode/agents/carter-engineer.md
   ✓ ~/.config/opencode/agents/carter-devops.md
   ✓ ~/.config/opencode/agents/carter-learner.md
   ✓ ~/.config/opencode/agents/carter-pm.md
+  ✓ ~/.config/opencode/agents/carter-narrator.md
 
-→ Installing skills (17)...
+→ Installing skills (20)...
   ✓ carter-triage
   ✓ carter-distill
   ...
@@ -513,8 +522,8 @@ Example output (default):
   ✓ ~/.copilot/knowledge/ (6 topic files)
 
 ✓ Installation complete
-  Agents: 6 (copilot: 6, opencode: 6)
-  Skills: 17
+  Agents: 7 (copilot: 7, opencode: 7)
+  Skills: 20
   MCP servers: 3 (VS Code: 3, Copilot CLI: 3, OpenCode: 3)
   Ops config: ~/.carter/config.toml (11 operations via `carter ops`)
   Manifest: ~/.copilot/.carter-manifest.json
@@ -608,57 +617,43 @@ Key differences: OpenCode uses `type` field and `command` as an array (not split
 
 ## 10. Testing
 
-### 10.1 v1 — Unit + Snapshot Tests
+Two complementary suites ship in the repo.
 
-Run with: `uv run --with pytest pytest tests/`
+### 10.1 Unit Tests (`tests/`)
 
-**Test categories:**
+Run with: `python -m pytest -q` (191 tests).
 
-| Category | What's Tested |
+| File | Covers |
 |---|---|
-| File operations | Correct directory structure, file content, backup creation, manifest accuracy |
-| Idempotency | Running twice produces same result, `unchanged` detection works |
-| MCP merging | `carter-*` entries added/updated without touching other entries |
-| Uninstall | Only removes Carter-owned files, restores backups |
-| Cross-platform | Path handling on macOS and Linux |
-| Prerequisites | Correctly identifies installed/missing tools |
-| Credentials | Warns on missing env vars, doesn't leak values |
+| `tests/test_install.py` | `carter install` logic: file placement, backup, manifest, idempotency (`created`/`updated`/`unchanged`), MCP merge, uninstall, credential checks |
+| `tests/test_scaffold.py` | `carter init`/`update`: Jinja2 rendering, `.carter/` scaffolding, config loading/validation, gitignore handling |
+| `tests/ops/test_operations.py` | `carter ops`: every operation's dry-run plan + execute path, attribution, config validation |
+| `tests/conftest.py`, `tests/ops/conftest.py` | Shared fixtures: temp git repo, `tmp_path` install root, mock env |
 
-**Key technique:** The installer accepts a `--base-dir` argument. Tests use pytest's `tmp_path` fixture to redirect all writes to a temporary directory. No real `~/.copilot/` is touched.
+**Key technique:** the installer accepts a `--base-dir`/`base_dir` argument; tests
+redirect all writes to pytest's `tmp_path`, so no real `~/.copilot/` is touched.
+Operations are exercised through their plugin interface (dry-run plan vs execute)
+without performing real network or destructive git actions.
 
-**Snapshot tests:** Compare generated agent/skill file content against known-good golden files. Catches accidental content regressions.
+### 10.2 Eval Framework (`evals/`)
 
-### 10.2 v2 — Docker Integration Tests
+A separate harness evaluates agent/skill *behavior* (prompts and routing), in two modes:
 
-Full end-to-end testing in clean environments:
+| Mode | Tests | Speed | CI-safe |
+|---|---|---|---|
+| **Offline** | Structural correctness of prompts, routing tables, skill patterns | ~1s | Yes |
+| **Live** | Actual model behavior given agent/skill prompts (uses Copilot/Anthropic/OpenAI auth) | ~30s/scenario | Periodic only |
 
-| Test | Container Setup | Validates |
-|---|---|---|
-| Clean macOS-like install | Ubuntu + Python 3.11 + uv + mock tool binaries | Full install, file placement, manifest |
-| Clean install (no optional tools) | Minimal container, only Python + uv | Graceful degradation, correct warnings |
-| Upgrade from v1 to v2 | Pre-populated v1 files + new installer | Idempotent update, correct `updated`/`unchanged` |
-| Uninstall | Post-install state | Complete cleanup, no orphaned files |
-| Existing MCP servers | Pre-populated `settings.json` with non-Carter servers | Merge preserves existing, warns on conflicts |
-| OpenCode parity | Container with OpenCode installed | Agent/skill/MCP files match expected format |
-| Credential validation | Partial env vars set | Correct warnings, no secrets in output |
+```bash
+# Offline (fast, no auth)
+uv run --with pytest --with pyyaml pytest evals/ -m "not live" -v
 
-**CI integration:** GitHub Actions workflow runs Docker tests on every push to `main` and on PRs. Matrix: Python 3.11, 3.12, 3.13 × macOS paths, Linux paths.
-
-**Docker test structure:**
+# Live (uses existing Copilot auth)
+uv run --with pytest --with pyyaml --with httpx pytest evals/ -v
 ```
-tests/
-├── test_install.py          # Unit + snapshot tests (v1)
-├── golden/                  # Golden files for snapshot comparison
-│   ├── carter-maestro.agent.md
-│   ├── carter-maestro.opencode.md
-│   └── ...
-├── integration/             # Docker integration tests (v2)
-│   ├── Dockerfile.clean
-│   ├── Dockerfile.upgrade
-│   ├── docker-compose.test.yml
-│   └── test_integration.py
-└── conftest.py              # Shared fixtures
-```
+
+Scenarios live in `evals/scenarios/*.yaml` (`routing.yaml`, `skills.yaml`,
+`carter_ops.yaml`, `e2e.yaml`); `evals/judge.py` scores live responses.
 
 ---
 
@@ -699,16 +694,17 @@ carter/
 │       └── config.py                   # Config file + env var loading
 │
 ├── agents/                             # Agent definitions (source of truth → wheel _data)
-│   ├── carter-maestro.agent.md
-│   ├── carter-architect.agent.md
-│   ├── carter-engineer.agent.md
-│   ├── carter-devops.agent.md
-│   ├── carter-learner.agent.md
-│   └── carter-pm.agent.md
+│   ├── carter-maestro.md
+│   ├── carter-architect.md
+│   ├── carter-engineer.md
+│   ├── carter-devops.md
+│   ├── carter-learner.md
+│   └── carter-pm.md                    # (carter-narrator generated from template only)
 │
-├── skills/                             # Skill definitions (source of truth)
+├── skills/                             # Skill definitions (source of truth) — 20 skills
 │   ├── carter-triage/SKILL.md
 │   ├── carter-distill/SKILL.md
+│   ├── carter-reflect/SKILL.md
 │   ├── carter-design-review/SKILL.md
 │   ├── carter-diagram/SKILL.md
 │   ├── carter-adr/SKILL.md
@@ -716,12 +712,14 @@ carter/
 │   ├── carter-test-first/SKILL.md
 │   ├── carter-pipeline/SKILL.md
 │   ├── carter-terraform/SKILL.md
-│   ├── carter-git-strategy/SKILL.md
+│   ├── carter-packer/SKILL.md
 │   ├── carter-explain/SKILL.md
 │   ├── carter-mistakes/SKILL.md
 │   ├── carter-research/SKILL.md
 │   ├── carter-plan/SKILL.md
 │   ├── carter-risk/SKILL.md
+│   ├── carter-atlassian/SKILL.md
+│   ├── carter-ops/SKILL.md
 │   ├── carter-python/SKILL.md
 │   └── carter-golang/SKILL.md
 │
@@ -748,27 +746,35 @@ carter/
 │
 ├── templates/                          # Jinja2 agent + instruction templates (→ wheel _data)
 │   ├── base_agent.md.j2                # Base template (inheritance)
-│   ├── agents/                         # Per-agent templates (extend base)
+│   ├── agents/                         # Per-agent templates (7, incl carter-narrator.md.j2)
 │   └── instructions/                   # Global instructions template
 │
 ├── docs/                               # Project documentation
-│   ├── plan.md                         # This file
-│   ├── conversation-log-carter-ops.md  # carter-ops design session log
-│   └── conversation-log.md             # Design conversation log
+│   ├── interactions/
+│   │   ├── plan.md                     # This file (as-built)
+│   │   ├── v2-plan.md                  # Earlier draft (superseded)
+│   │   ├── v3-carter-ops-enforcement.md
+│   │   ├── conversation-log.md         # Design conversation log
+│   │   └── conversation-log-carter-ops.md
+│   ├── getting-started.md
+│   ├── carter-ops.md
+│   ├── memory-and-knowledge.md
+│   └── testing.md
 │
-└── tests/                              # Installer tests
-    ├── test_install.py                 # Unit + snapshot tests
-    ├── golden/                         # Golden files for snapshots
-    ├── integration/                    # Docker integration tests (v2)
-    ├── ops/                            # carter-ops tests
-    │   ├── conftest.py                 # Fixtures: temp git repo, mock Jira
-    │   ├── test_git_branch.py
-    │   ├── test_git_commit.py
-    │   ├── test_git_push.py
-    │   ├── test_git_flow.py
-    │   ├── test_jira_comment.py
-    │   ├── test_jira_create.py
-    │   └── test_jira_update.py
+├── evals/                              # Agent/skill behavior eval harness
+│   ├── judge.py                        # Scores live model responses
+│   ├── test_routing.py                 # Maestro routing scenarios
+│   ├── test_skills.py                  # Skill-invocation scenarios
+│   ├── test_live.py                    # End-to-end live scenarios
+│   ├── conftest.py
+│   └── scenarios/                      # routing.yaml, skills.yaml, carter_ops.yaml, e2e.yaml
+│
+└── tests/                              # Unit tests (191)
+    ├── test_install.py                 # `carter install` logic
+    ├── test_scaffold.py                # `carter init`/`update` scaffolding
+    ├── ops/                            # `carter ops` operation tests
+    │   ├── conftest.py                 # Fixtures: temp git repo, mock env
+    │   └── test_operations.py          # All 11 operations: plan + execute
     └── conftest.py                     # Shared fixtures
 ```
 
@@ -793,13 +799,13 @@ carter/
 |---|---|---|
 | 2.1 | Architect agent | `carter-architect.agent.md` + `carter-design-review`, `carter-diagram`, `carter-adr` |
 | 2.2 | Engineer agent | `carter-engineer.agent.md` + `carter-code-review`, `carter-test-first` |
-| 2.3 | DevOps agent | `carter-devops.agent.md` + `carter-pipeline`, `carter-terraform`, `carter-git-strategy` |
+| 2.3 | DevOps agent | `carter-devops.agent.md` + `carter-pipeline`, `carter-terraform`, `carter-packer` |
 | 2.4 | Learner agent | `carter-learner.agent.md` + `carter-explain`, `carter-mistakes`, `carter-research` |
-| 2.5 | PM agent | `carter-pm.agent.md` + `carter-plan`, `carter-risk` |
+| 2.5 | PM agent | `carter-pm.agent.md` + `carter-plan`, `carter-risk`, `carter-atlassian` |
 | 2.6 | Python skill | `carter-python/SKILL.md` — standards, checklist, enforcement |
 | 2.7 | Go skill | `carter-golang/SKILL.md` — standards, checklist, enforcement |
 
-**Exit criteria:** All 6 agents + 17 skills functional. Each agent responds with its personality and domain expertise. Maestro routes correctly.
+**Exit criteria:** All 7 agents + 20 skills functional. Each agent responds with its personality and domain expertise. Maestro routes correctly.
 
 ### Phase 3: Infrastructure
 
@@ -823,70 +829,27 @@ carter/
 
 ---
 
-## 13. v2 Roadmap
+## 13. Delivered Beyond v1 & Future Ideas
 
-Features deferred from v1, organized by priority:
+### 13.1 Delivered (shipped in the current build)
 
-### 13.0 Deterministic Operations — `carter-ops`
+| Capability | Notes |
+|---|---|
+| **`carter-ops`** deterministic executor | Now a first-class `carter ops` subcommand. Stateless two-phase (`--dry-run` → approve → `--execute`), plugin operations auto-discovered, attribution footers, append-only audit log. MCP for reads, `carter ops` for writes. |
+| **Unified `carter` CLI** | `carter install / init / update / check / ops` packaged via hatchling. `uvx carter ...` replaces `git clone && uv run install.py`. |
+| **Eval framework** (`evals/`) | Offline (structural) + live (model-behavior) scenarios for routing and skills. |
+| **carter-narrator** agent | Template-generated redaction utility agent (config `redaction` block). |
+| **Extra skills** | `carter-reflect`, `carter-packer`, `carter-atlassian` shipped beyond the original 17. |
 
-- Cross-cutting Python CLI executor for write operations (Git, Jira)
-- Stateless two-phase: `--dry-run` → approve → `--execute`
-- Attribution: `carter-bot` as git author (SSH-signed), footer in Jira comments
-- Plugin-based extension: new operation = new Python module in `operations/`
-- Append-only JSONL audit log at `~/.carter/audit.log`
-- `ops:` fast-path keyword at Maestro routing level
-- MCP for reads, `carter-ops` for writes
-- Full design: [v2-plan.md §3.0](v2-plan.md) and [conversation-log-carter-ops.md](conversation-log-carter-ops.md)
+### 13.2 Future Ideas (not yet built)
 
-### 13.1 Rich CLI Output
-
-- Upgrade installer to use `rich` via PEP 723 dependencies
-- Progress bars, tables, tree views, panels, spinners
-- Zero user friction — `uv run install.py` handles `rich` installation automatically
-
-### 13.2 Additional Skills
-
-| Skill | Agent | Description |
-|---|---|---|
-| `carter-refactor` | Engineer | Identify and apply refactoring patterns |
-| `carter-container` | DevOps | Dockerfile and Kubernetes manifest creation/review |
-| `carter-roadmap` | PM | Design milestone-based roadmaps |
-| `carter-standup` | PM | Summarize recent work from Git/Jira for standups |
-
-### 13.3 Additional MCP Servers
-
-| Server | Agent Access | Notes |
-|---|---|---|
-| AWS | DevOps (full), Architect (read) | Needs careful IAM guardrails |
-| Vault | DevOps (full) | Secrets management, security-sensitive |
-
-### 13.4 Docker Integration Tests
-
-- Full end-to-end tests in clean containers (see §10.2)
-- GitHub Actions CI matrix: Python 3.11/3.12/3.13 × macOS/Linux paths
-- Tests: clean install, upgrade, uninstall, MCP merge, credential validation
-
-### 13.5 Git-Backed Knowledge Sync
-
-- Initialize `~/.copilot/knowledge/` as a Git repository
-- Learner commits knowledge updates with structured commit messages
-- Enables syncing across machines via remote (private GitHub repo)
-- `carter-distill` auto-commits after promoting learnings
-
-### 13.6 Packaging
-
-- Distribute Carter as a `uv` tool: `uvx carter install`
-- Uses `uv build` / `uv publish` to package as a Python distributable
-- Published to PyPI or a private registry
-- `uvx carter install` replaces `git clone && uv run install.py`
-- `uvx carter update` replaces `git pull && uv run install.py`
-- `uvx carter uninstall` replaces `uv run install.py --uninstall`
-
-### 13.7 Vault Integration for Credentials
-
-- Pull MCP server credentials from HashiCorp Vault at runtime
-- Replace env var references with Vault paths
-- Requires Vault agent or auth method configuration during install
+| Idea | Description |
+|---|---|
+| Rich CLI output | Progress bars/tables/panels via `rich` |
+| Additional MCP servers | AWS (IAM-guarded), Vault (secrets) |
+| Git-backed knowledge sync | `~/.copilot/knowledge/` as a git repo; auto-commit on distill; cross-machine sync |
+| Vault credential integration | Pull MCP creds from Vault at runtime instead of env vars |
+| Docker integration tests | Clean-container end-to-end install matrix in CI |
 
 ---
 
@@ -895,11 +858,11 @@ Features deferred from v1, organized by priority:
 | Concern | Technology |
 |---|---|
 | Agent/skill framework | VS Code Copilot agents, Copilot CLI agents, OpenCode agents |
-| Installer | Python 3.11+, stdlib only (v1), `rich` (v2) |
-| Deterministic executor | `carter-ops` — Python CLI, PEP 723, `httpx` for Jira REST API |
+| CLI + installer | Python 3.11+, Click, Jinja2, hatchling build, distributed via `uv tool` (`uvx carter`) |
+| Deterministic executor | `carter ops` — plugin operations, `httpx` for Jira/GitHub REST APIs |
 | Python tooling | `uv` (run, build, publish) |
-| MCP servers | GitHub, Terraform/HCP, Atlassian (reads); `carter-ops` (writes) |
-| Testing | pytest, `tmp_path`, snapshot tests (v1); Docker (v2) |
+| MCP servers | GitHub, Terraform/HCP, Atlassian (reads); `carter ops` (writes) |
+| Testing | pytest + `tmp_path` (unit, 191 tests); `evals/` (offline + live behavior) |
 | Version control | Git, GitHub |
 | CI/CD | GitHub Actions |
 | Knowledge persistence | Markdown files in `~/.copilot/knowledge/` |

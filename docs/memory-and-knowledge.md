@@ -11,7 +11,7 @@ Carter has **two levels** of knowledge storage:
 | Level | Location | Scope | Managed By |
 |-------|----------|-------|-----------|
 | **Workspace** | `.carter/knowledge/` | Per-workspace (your project) | `carter init` + you |
-| **System** | `~/.copilot/knowledge/` | Global (all projects) | `install.py` + `carter-distill` |
+| **System** | `~/.copilot/knowledge/` | Global (all projects) | `carter install` + `carter-distill` |
 
 There's also a **memory layer** for raw, unprocessed notes that haven't been promoted to knowledge yet:
 
@@ -212,14 +212,15 @@ carter init ~/my-workspace
 
 Creates `.carter/knowledge/` with five template files. Never overwrites existing content.
 
-### System-level (via `install.py`)
+### System-level (via `carter install`)
 
 ```bash
-uv run install.py
+carter install
 ```
 
 Creates:
 - `~/.carter/memories/{user,session,repo}` directories
+- `~/.carter/config.toml` (carter-ops attribution settings)
 - `~/.copilot/knowledge/` with six template files
 - Records all paths in manifest for clean uninstall
 

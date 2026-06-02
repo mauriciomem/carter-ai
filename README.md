@@ -14,7 +14,7 @@ Think of it like a team: you don't ask the architect to write tests, and you don
 
 | Mode | What It Does | When To Use |
 |------|-------------|-------------|
-| `install.py` | Copies agents/skills to `~/.copilot/` (system-level) | You want Carter available globally |
+| `carter install` | Copies agents/skills to `~/.copilot/` (system-level) | You want Carter available globally |
 | `carter init` | Scaffolds a workspace with generated agents from templates | You want per-workspace customization |
 
 ## Quick Start
@@ -174,6 +174,10 @@ User
 | **Learner** | Explanation, research, memory | Documentation, mistake capture, topic research |
 | **PM** | Planning, risk, agile | WBS, roadmaps, sprint planning, risk assessment |
 
+> Workspace scaffolds (`carter init`) also generate a 7th utility agent,
+> **Narrator**, which redacts sensitive content from external-facing output
+> (controlled by the `redaction` block in `carter.yaml`).
+
 ### MCP Servers
 
 | Server | Purpose |
@@ -297,11 +301,11 @@ uv run --with pytest pytest tests/ -v
 ```
 
 The test suite covers:
-- **Installer tests** — file installation, idempotency, JSON merging, manifest management
-- **Carter-ops tests** — CLI parsing, operation dry-runs, config loading
-- **Scaffold tests** — template rendering, config validation, workspace initialization, quality gates
+- **Installer tests** (`tests/test_install.py`) — file installation, idempotency, JSON merging, manifest management, memory directories
+- **Scaffold tests** (`tests/test_scaffold.py`) — template rendering, config validation/merging, workspace initialization, quality gates, narrator redaction
+- **Carter-ops tests** (`tests/ops/test_operations.py`) — CLI parsing, operation dry-runs/execution, GitHub/Jira/git operations, config and audit subcommands
 
-See [docs/testing.md](docs/testing.md) for the full testing guide.
+191 tests in total. See [docs/testing.md](docs/testing.md) for the full testing guide.
 
 ## Project Structure
 

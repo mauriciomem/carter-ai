@@ -1,5 +1,11 @@
 # Carter v2 — Implementation Plan
 
+> **Superseded by** [plan.md](plan.md) (as-built). This document is an earlier
+> design draft kept for historical context. Several items it lists as "v2 work"
+> have since shipped — notably `carter-ops` (now the `carter ops` subcommand),
+> the unified `carter` CLI distributed via `uv tool`, and the `evals/` framework.
+> Where this draft and plan.md disagree, **plan.md is authoritative**.
+
 > Builds on the v1 foundation with enhanced CLI output, additional skills/MCP servers, Docker testing, packaging, and advanced memory features.
 
 ---
@@ -184,6 +190,12 @@ ai-assistant/
 ~/.local/bin/
 └── carter-ops                  # Shell wrapper (created by installer)
 ```
+
+> **As-built correction:** the shipped design has no `~/.local/bin/carter-ops`
+> shell wrapper. The executor is invoked as the `carter ops` subcommand of the
+> unified CLI; `carter ops <operation> --dry-run/--execute`. The installer's
+> `--uninstall` cleans up any *legacy* `~/.local/bin/carter-ops` and `~/.carter/ops/`
+> left over from this earlier design. See [plan.md §13.1](plan.md).
 
 **Shell wrapper (`~/.local/bin/carter-ops`):**
 ```bash
