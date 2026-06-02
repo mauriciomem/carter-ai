@@ -20,7 +20,7 @@ Agent loads carter-ops skill
       ├─ 2. PLAN    → shows exact commands with attribution flags
       ├─ 3. APPROVE → waits for your "yes" before doing anything
       ├─ 4. EXECUTE → runs commands in terminal
-      ├─ 5. AUDIT   → carter-ops audit --operation ... --result success
+      ├─ 5. AUDIT   → carter ops audit --operation ... --result success
       └─ 6. REPORT  → tells you what happened (SHA, branch, URL)
 ```
 
@@ -38,22 +38,24 @@ Agent loads carter-ops skill
 
 ### Installation
 
-Carter-ops is installed automatically by the Carter installer:
+Carter-ops ships as the `ops` subcommand of the unified `carter` CLI. Install the CLI once with `uv`:
 
 ```bash
-uv run install.py
+uv tool install git+https://github.com/mauriciomem/carter-ai.git
 ```
 
-This does three things:
+Then generate the global config (auto-detected settings and bot name):
 
-1. Copies `ops/` to `~/.carter/ops/`
-2. Generates `~/.carter/config.toml` with auto-detected settings and bot name
-3. Creates `~/.local/bin/carter-ops` wrapper script
+```bash
+carter install
+```
+
+This generates `~/.carter/config.toml` with auto-detected settings and bot name.
 
 To use a custom bot name:
 
 ```bash
-uv run install.py --bot-name "acme-bot"
+carter install --bot-name "acme-bot"
 ```
 
 This sets the git commit author to `acme-bot <acme-bot@users.noreply.github.com>` and updates the Jira footer accordingly.
@@ -61,7 +63,7 @@ This sets the git commit author to `acme-bot <acme-bot@users.noreply.github.com>
 ### Verify Installation
 
 ```bash
-carter-ops --list
+carter ops --list
 ```
 
 Expected output:
@@ -86,7 +88,7 @@ Expected output:
 
 ### PATH Setup
 
-If `carter-ops` is not found, add `~/.local/bin` to your PATH:
+If `carter` is not found, add `~/.local/bin` to your PATH:
 
 ```bash
 # Add to ~/.zshrc (macOS) or ~/.bashrc (Linux)
@@ -148,10 +150,10 @@ Every operation follows the same pattern:
 
 ```bash
 # Phase 1: Dry-run — see the plan
-carter-ops <operation> [params] --dry-run
+carter ops <operation> [params] --dry-run
 
 # Phase 2: Execute — do it
-carter-ops <operation> [params] --execute
+carter ops <operation> [params] --execute
 ```
 
 The same params are replayed in both phases. No state is stored between phases — carter-ops is stateless.
@@ -160,7 +162,7 @@ The same params are replayed in both phases. No state is stored between phases �
 
 ```bash
 # See the plan
-carter-ops git-flow \
+carter ops git-flow \
   --branch feature/PROJ-123-add-auth \
   --message "feat: add authentication module" \
   --files src/auth.py \
@@ -193,7 +195,7 @@ Output:
 
 ```bash
 # Execute after reviewing
-carter-ops git-flow \
+carter ops git-flow \
   --branch feature/PROJ-123-add-auth \
   --message "feat: add authentication module" \
   --files src/auth.py \
@@ -215,7 +217,7 @@ Create a new branch from a base branch.
 | `--from` | No | `main` | Base branch |
 
 ```bash
-carter-ops git-branch --name feature/PROJ-123 --from main --dry-run
+carter ops git-branch --name feature/PROJ-123 --from main --dry-run
 ```
 
 #### `git-commit`
@@ -228,7 +230,7 @@ Stage files and commit as carter-bot.
 | `--files` | No | `.` | Files to stage (comma-separated or repeated) |
 
 ```bash
-carter-ops git-commit --message "feat: add auth" --files src/auth.py,src/config.py --dry-run
+carter ops git-commit --message "feat: add auth" --files src/auth.py,src/config.py --dry-run
 ```
 
 Commits are signed with the configured SSH key (`-S`) and authored by carter-bot (`--author`). GitHub shows: *Signed by mmitolo, authored by carter-bot*.
@@ -242,7 +244,7 @@ Push a branch to origin.
 | `--branch` | No | current branch | Branch to push |
 
 ```bash
-carter-ops git-push --branch feature/PROJ-123 --dry-run
+carter ops git-push --branch feature/PROJ-123 --dry-run
 ```
 
 #### `git-flow` (Composite)
@@ -257,7 +259,7 @@ Branch → add → commit → push in one operation.
 | `--from` | No | `main` | Base branch |
 
 ```bash
-carter-ops git-flow \
+carter ops git-flow \
   --branch feature/PROJ-123 \
   --message "feat: add auth" \
   --files src/auth.py \
@@ -278,7 +280,7 @@ Add a comment to a Jira ticket. The carter-bot footer is automatically appended.
 | `--body` | Yes | Comment text |
 
 ```bash
-carter-ops jira-comment \
+carter ops jira-comment \
   --ticket PROJ-123 \
   --body "Completed the auth module implementation" \
   --dry-run
@@ -298,7 +300,7 @@ Create a new Jira ticket.
 | `--labels` | No | — | Comma-separated labels |
 
 ```bash
-carter-ops jira-create \
+carter ops jira-create \
   --project PROJ \
   --type Story \
   --summary "Add authentication module" \
@@ -321,7 +323,7 @@ Add a comment and/or transition a ticket's status.
 \* At least one of `--comment` or `--transition` is required.
 
 ```bash
-carter-ops jira-update \
+carter ops jira-update \
   --ticket PROJ-123 \
   --comment "Implementation complete, moving to review" \
   --transition "In Review" \
@@ -344,7 +346,7 @@ Create a new GitHub issue. The carter-bot footer is automatically appended to th
 | `--labels` | No | Comma-separated labels |
 
 ```bash
-carter-ops gh-issue \
+carter ops gh-issue \
   --repo owner/repo \
   --title "Bug: auth fails on refresh" \
   --body "Token refresh returns 401" \
@@ -363,7 +365,7 @@ Comment on an existing GitHub issue.
 | `--body` | Yes | Comment text (Markdown) |
 
 ```bash
-carter-ops gh-issue-comment \
+carter ops gh-issue-comment \
   --repo owner/repo \
   --issue 42 \
   --body "Fixed in commit abc1234" \
@@ -384,7 +386,7 @@ Create a new GitHub pull request.
 | `--draft` | No | Create as draft PR |
 
 ```bash
-carter-ops gh-pr \
+carter ops gh-pr \
   --repo owner/repo \
   --title "feat: add auth module" \
   --head feature/auth \
@@ -405,7 +407,7 @@ Comment on an existing GitHub pull request.
 | `--body` | Yes | Comment text (Markdown) |
 
 ```bash
-carter-ops gh-pr-comment \
+carter ops gh-pr-comment \
   --repo owner/repo \
   --pr 99 \
   --body "LGTM, approving" \
@@ -617,7 +619,7 @@ The current design works WITH model behavior:
 - **Models know git commands** — Let them run git commands with attribution flags, instead of prohibiting it
 - **Plans are model-generated** — No fake/real distinction. The plan IS what the model intends. The user verifies it.
 - **Approval gate is natural** — Models already pause before destructive operations. The skill formalizes this existing behavior.
-- **Audit is post-hoc utility** — `carter-ops audit` logs after the fact. If skipped, git/GitHub/Jira history remains authoritative.
+- **Audit is post-hoc utility** — `carter ops audit` logs after the fact. If skipped, git/GitHub/Jira history remains authoritative.
 - **Template substitution** — Attribution values are baked into SKILL.md at install time. The model reads them directly.
 
 ## Read/Write Boundary
@@ -637,9 +639,9 @@ The CLI is a **utility**, not an executor:
 
 | Command | Purpose |
 |---|---|
-| `carter-ops audit --operation <name> --params '<json>' --result <status> --identifiers '<json>'` | Append audit entry |
-| `carter-ops config --emit` | Print config values (bot name, email, signing key) |
-| `carter-ops --list` | List available operation names |
+| `carter ops audit --operation <name> --params '<json>' --result <status> --identifiers '<json>'` | Append audit entry |
+| `carter ops config --emit` | Print config values (bot name, email, signing key) |
+| `carter ops --list` | List available operation names |
 
 Legacy `--dry-run` / `--execute` commands still work for backward compatibility.
 

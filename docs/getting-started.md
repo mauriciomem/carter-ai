@@ -27,16 +27,20 @@ Before diving in, here's the mental model:
 
 ## Step 1: Install Carter
 
-You have two paths depending on how you want to use Carter:
+First, install the unified `carter` CLI once with [uv](https://docs.astral.sh/uv/):
+
+```bash
+uv tool install git+https://github.com/mauriciomem/carter-ai.git
+```
+
+This puts a single `carter` command on your PATH. From there you have two paths depending on how you want to use Carter:
 
 ### Path A: Global Install (system-level)
 
 This copies agent files to `~/.copilot/` so they're available in every VS Code workspace.
 
 ```bash
-git clone https://github.com/mauriciomem/carter-ai.git ~/carter-ai
-cd ~/carter-ai
-uv run install.py
+carter install
 ```
 
 ### Path B: Workspace Scaffold (per-project)
@@ -44,10 +48,6 @@ uv run install.py
 This generates customized agents from templates into a specific workspace directory.
 
 ```bash
-cd ~/carter-ai
-uv venv && source .venv/bin/activate
-uv pip install -e .
-
 # Create a new workspace
 carter init ~/my-workspace --name "my-project"
 ```
