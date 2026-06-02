@@ -5,7 +5,7 @@ from pathlib import Path
 
 import click
 
-from carter.config import ConfigError, generate_default_config, load_config, write_config
+from carter.config import ConfigError, generate_default_config, load_config
 from carter.scaffold import create_env, render_agents, render_instructions, write_rendered_files
 from carter.state import add_to_gitignore, init_workspace
 
@@ -14,6 +14,61 @@ from carter.state import add_to_gitignore, init_workspace
 @click.version_option(package_name="carter-ai")
 def main():
     """Carter AI — workspace scaffolding and management."""
+
+
+@main.command()
+@click.option(
+    "--target",
+    type=click.Choice(["copilot", "opencode", "all"]),
+    default="all",
+    help="Install target (default: all).",
+)
+@click.option("--mcp", is_flag=True, help="Install and configure MCP servers.")
+@click.option(
+    "--bot-name",
+    default="carter-bot",
+    help="Git commit author name for carter-ops attribution.",
+)
+@click.option("--uninstall", "uninstall_flag", is_flag=True, help="Remove Carter installation.")
+@click.option(
+    "--base-dir",
+    type=click.Path(file_okay=False, path_type=Path),
+    default=None,
+    help="Override install base directory (for testing).",
+)
+@click.option("-q", "--quiet", is_flag=True, help="Errors only.")
+@click.option("-v", "--verbose", is_flag=True, help="Detailed output.")
+@click.option("--debug", is_flag=True, help="Debug output.")
+def install(
+    target: str,
+    mcp: bool,
+    bot_name: str,
+    uninstall_flag: bool,
+    base_dir: Path | None,
+    quiet: bool,
+    verbose: bool,
+    debug: bool,
+):
+    """Install Carter agents, skills, and MCP servers system-wide (~/.copilot/)."""
+    from carter.installer import run as run_install
+
+    if quiet:
+        verbosity = 0
+    elif debug:
+        verbosity = 3
+    elif verbose:
+        verbosity = 2
+    else:
+        verbosity = 1
+
+    run_install(
+        target=target,
+        mcp=mcp,
+        bot_name=bot_name,
+        uninstall_flag=uninstall_flag,
+        base_dir=base_dir,
+        verbosity=verbosity,
+    )
 
 
 @main.command()
@@ -32,7 +87,7 @@ def init(target_dir: str, single: bool, no_git_state: bool, name: str | None):
     config["state"]["git_tracked"] = not no_git_state
 
     # Create .carter/ structure
-    carter_dir = init_workspace(
+    init_workspace(
         target_dir=target,
         config=config,
         git_state=not no_git_state,
@@ -134,3 +189,30 @@ def _render_and_write(target: Path, config: dict, env) -> None:
 
     instructions = render_instructions(config, env)
     write_rendered_files(instructions, target / "instructions")
+
+
+@main.command(
+    "ops",
+    context_settings={
+        "ignore_unknown_options": True,
+        "allow_extra_args": True,
+        "help_option_names": [],
+    },
+)
+@click.argument("args", nargs=-1, type=click.UNPROCESSED)
+def ops(args: tuple[str, ...]):
+    """Run a carter-ops operation (deterministic executor).
+
+    All arguments are passed through to the carter-ops CLI, e.g.:
+
+        carter ops --list
+        carter ops audit --operation git-flow --result success
+        carter ops git-flow --branch feature/x --message "feat: x" --dry-run
+    """
+    from carter.ops.carter_ops import main as ops_main
+
+    raise SystemExit(ops_main(list(args)))
+
+
+if __name__ == "__main__":
+    main()

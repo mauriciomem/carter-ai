@@ -7,17 +7,12 @@ Provides git author string construction and Jira comment footer injection.
 """
 from __future__ import annotations
 
-from config import Config
+from carter.ops.config import Config
 
 
 def git_author(cfg: Config) -> str:
     """Return the --author string for git commit."""
     return f"{cfg.bot_name} <{cfg.bot_email}>"
-
-
-def git_author_flag(cfg: Config) -> list[str]:
-    """Return the CLI flags for git commit author override."""
-    return [f"--author={git_author(cfg)}"]
 
 
 def jira_footer(cfg: Config) -> str:

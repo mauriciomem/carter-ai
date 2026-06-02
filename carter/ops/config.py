@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import os
 import re
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 
 
@@ -103,12 +103,6 @@ class Config:
 
         return cfg
 
-    def validate_git(self) -> list[str]:
-        errors = []
-        if not cfg_signing_key_exists(self.signing_key):
-            errors.append(f"Git signing key not found: {self.signing_key or '(not configured)'}")
-        return errors
-
     def validate_jira(self) -> list[str]:
         errors = []
         if not self.jira_url:
@@ -124,12 +118,6 @@ class Config:
         if not self.github_token:
             errors.append("GITHUB_TOKEN not set")
         return errors
-
-
-def cfg_signing_key_exists(key_path: str) -> bool:
-    if not key_path:
-        return False
-    return Path(key_path).exists()
 
 
 def _detect_signing_key() -> str:

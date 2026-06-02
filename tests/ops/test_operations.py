@@ -3,22 +3,10 @@ from __future__ import annotations
 
 import json
 import subprocess
-import sys
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
-
-# Add ops directory to path
-OPS_DIR = Path(__file__).resolve().parent.parent / "ops"
-sys.path.insert(0, str(OPS_DIR))
-
-
-@pytest.fixture(autouse=True)
-def _ops_path():
-    """Ensure ops dir is on sys.path for all tests."""
-    if str(OPS_DIR) not in sys.path:
-        sys.path.insert(0, str(OPS_DIR))
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -28,14 +16,14 @@ def _ops_path():
 
 class TestConfig:
     def test_load_defaults(self, tmp_path: Path) -> None:
-        from config import Config
+        from carter.ops.config import Config
 
         cfg = Config.load(tmp_path / "nonexistent.toml")
         assert cfg.bot_name == "carter-bot"
         assert cfg.bot_email == "carter-bot@users.noreply.github.com"
 
     def test_load_from_toml(self, tmp_path: Path) -> None:
-        from config import Config
+        from carter.ops.config import Config
 
         toml = tmp_path / "config.toml"
         toml.write_text(
@@ -54,7 +42,7 @@ class TestConfig:
         assert cfg.bot_email == "my-bot@example.com"
 
     def test_env_vars_override(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-        from config import Config
+        from carter.ops.config import Config
 
         monkeypatch.setenv("ATLASSIAN_URL", "https://test.atlassian.net")
         monkeypatch.setenv("ATLASSIAN_EMAIL", "test@test.com")
@@ -66,7 +54,7 @@ class TestConfig:
         assert cfg.jira_token == "secret123"
 
     def test_validate_jira_missing(self, tmp_path: Path) -> None:
-        from config import Config
+        from carter.ops.config import Config
 
         cfg = Config.load(tmp_path / "nonexistent.toml")
         errors = cfg.validate_jira()
@@ -80,15 +68,15 @@ class TestConfig:
 
 class TestAttribution:
     def test_git_author(self) -> None:
-        from attribution import git_author
-        from config import Config
+        from carter.ops.attribution import git_author
+        from carter.ops.config import Config
 
         cfg = Config()
         assert git_author(cfg) == "carter-bot <carter-bot@users.noreply.github.com>"
 
     def test_append_jira_footer(self) -> None:
-        from attribution import append_jira_footer
-        from config import Config
+        from carter.ops.attribution import append_jira_footer
+        from carter.ops.config import Config
 
         cfg = Config()
         result = append_jira_footer("Status update", cfg)
@@ -96,16 +84,16 @@ class TestAttribution:
         assert "carter-bot" in result
 
     def test_attribution_summary_git(self) -> None:
-        from attribution import attribution_summary
-        from config import Config
+        from carter.ops.attribution import attribution_summary
+        from carter.ops.config import Config
 
         cfg = Config()
         summary = attribution_summary(cfg, "git")
         assert "carter-bot" in summary
 
     def test_attribution_summary_jira(self) -> None:
-        from attribution import attribution_summary
-        from config import Config
+        from carter.ops.attribution import attribution_summary
+        from carter.ops.config import Config
 
         cfg = Config()
         summary = attribution_summary(cfg, "jira")
@@ -119,7 +107,7 @@ class TestAttribution:
 
 class TestOutput:
     def test_dry_run_output(self) -> None:
-        from output import dry_run_output
+        from carter.ops.output import dry_run_output
 
         result = dry_run_output(
             operation="git-branch",
@@ -132,7 +120,7 @@ class TestOutput:
         assert len(result["steps"]) == 2
 
     def test_execute_output(self) -> None:
-        from output import execute_output
+        from carter.ops.output import execute_output
 
         result = execute_output(
             operation="git-commit",
@@ -144,7 +132,7 @@ class TestOutput:
         assert result["success"] is True
 
     def test_error_output(self) -> None:
-        from output import error_output
+        from carter.ops.output import error_output
 
         result = error_output(
             operation="git-push",
@@ -157,7 +145,7 @@ class TestOutput:
         assert result["error"]["suggestion"] == "Run: git pull"
 
     def test_error_output_no_suggestion(self) -> None:
-        from output import error_output
+        from carter.ops.output import error_output
 
         result = error_output(
             operation="git-push",
@@ -174,7 +162,7 @@ class TestOutput:
 
 class TestOperationRegistry:
     def test_discover_operations(self) -> None:
-        from operations import discover_operations, list_operations
+        from carter.ops.operations import discover_operations, list_operations
 
         discover_operations()
         ops = list_operations()
@@ -187,7 +175,7 @@ class TestOperationRegistry:
         assert "jira-update" in ops
 
     def test_get_operation(self) -> None:
-        from operations import discover_operations, get_operation
+        from carter.ops.operations import discover_operations, get_operation
 
         discover_operations()
         op = get_operation("git-branch")
@@ -195,7 +183,7 @@ class TestOperationRegistry:
         assert op.name == "git-branch"
 
     def test_get_unknown_operation(self) -> None:
-        from operations import get_operation
+        from carter.ops.operations import get_operation
 
         assert get_operation("nonexistent") is None
 
@@ -207,8 +195,8 @@ class TestOperationRegistry:
 
 class TestGitBranchDryRun:
     def test_dry_run(self) -> None:
-        from config import Config
-        from operations import discover_operations, get_operation
+        from carter.ops.config import Config
+        from carter.ops.operations import discover_operations, get_operation
 
         discover_operations()
         op = get_operation("git-branch")
@@ -219,7 +207,7 @@ class TestGitBranchDryRun:
         assert "feature/test" in plan.side_effects[0]
 
     def test_validate_missing_name(self) -> None:
-        from operations import discover_operations, get_operation
+        from carter.ops.operations import discover_operations, get_operation
 
         discover_operations()
         op = get_operation("git-branch")
@@ -227,7 +215,7 @@ class TestGitBranchDryRun:
         assert any("--name" in e for e in errors)
 
     def test_validate_invalid_branch_name(self) -> None:
-        from operations import discover_operations, get_operation
+        from carter.ops.operations import discover_operations, get_operation
 
         discover_operations()
         op = get_operation("git-branch")
@@ -237,8 +225,8 @@ class TestGitBranchDryRun:
 
 class TestGitCommitDryRun:
     def test_dry_run(self) -> None:
-        from config import Config
-        from operations import discover_operations, get_operation
+        from carter.ops.config import Config
+        from carter.ops.operations import discover_operations, get_operation
 
         discover_operations()
         op = get_operation("git-commit")
@@ -249,7 +237,7 @@ class TestGitCommitDryRun:
         assert any("carter-bot" in s for s in plan.steps)
 
     def test_validate_missing_message(self) -> None:
-        from operations import discover_operations, get_operation
+        from carter.ops.operations import discover_operations, get_operation
 
         discover_operations()
         op = get_operation("git-commit")
@@ -259,8 +247,8 @@ class TestGitCommitDryRun:
 
 class TestGitPushDryRun:
     def test_dry_run_with_branch(self) -> None:
-        from config import Config
-        from operations import discover_operations, get_operation
+        from carter.ops.config import Config
+        from carter.ops.operations import discover_operations, get_operation
 
         discover_operations()
         op = get_operation("git-push")
@@ -271,8 +259,8 @@ class TestGitPushDryRun:
 
 class TestGitFlowDryRun:
     def test_dry_run(self) -> None:
-        from config import Config
-        from operations import discover_operations, get_operation
+        from carter.ops.config import Config
+        from carter.ops.operations import discover_operations, get_operation
 
         discover_operations()
         op = get_operation("git-flow")
@@ -285,7 +273,7 @@ class TestGitFlowDryRun:
         assert len(plan.side_effects) == 3
 
     def test_validate_missing_params(self) -> None:
-        from operations import discover_operations, get_operation
+        from carter.ops.operations import discover_operations, get_operation
 
         discover_operations()
         op = get_operation("git-flow")
@@ -301,8 +289,8 @@ class TestGitFlowDryRun:
 
 class TestJiraCommentDryRun:
     def test_dry_run(self) -> None:
-        from config import Config
-        from operations import discover_operations, get_operation
+        from carter.ops.config import Config
+        from carter.ops.operations import discover_operations, get_operation
 
         discover_operations()
         op = get_operation("jira-comment")
@@ -312,7 +300,7 @@ class TestJiraCommentDryRun:
         assert "PROJ-123" in plan.steps[0]
 
     def test_validate_missing_ticket(self) -> None:
-        from operations import discover_operations, get_operation
+        from carter.ops.operations import discover_operations, get_operation
 
         discover_operations()
         op = get_operation("jira-comment")
@@ -320,7 +308,7 @@ class TestJiraCommentDryRun:
         assert any("--ticket" in e for e in errors)
 
     def test_validate_bad_ticket_format(self) -> None:
-        from operations import discover_operations, get_operation
+        from carter.ops.operations import discover_operations, get_operation
 
         discover_operations()
         op = get_operation("jira-comment")
@@ -330,8 +318,8 @@ class TestJiraCommentDryRun:
 
 class TestJiraCreateDryRun:
     def test_dry_run(self) -> None:
-        from config import Config
-        from operations import discover_operations, get_operation
+        from carter.ops.config import Config
+        from carter.ops.operations import discover_operations, get_operation
 
         discover_operations()
         op = get_operation("jira-create")
@@ -344,7 +332,7 @@ class TestJiraCreateDryRun:
         assert any("Story" in s for s in plan.steps)
 
     def test_validate_missing_project(self) -> None:
-        from operations import discover_operations, get_operation
+        from carter.ops.operations import discover_operations, get_operation
 
         discover_operations()
         op = get_operation("jira-create")
@@ -354,8 +342,8 @@ class TestJiraCreateDryRun:
 
 class TestJiraUpdateDryRun:
     def test_dry_run_comment_and_transition(self) -> None:
-        from config import Config
-        from operations import discover_operations, get_operation
+        from carter.ops.config import Config
+        from carter.ops.operations import discover_operations, get_operation
 
         discover_operations()
         op = get_operation("jira-update")
@@ -367,7 +355,7 @@ class TestJiraUpdateDryRun:
         assert len(plan.side_effects) == 2
 
     def test_validate_no_action(self) -> None:
-        from operations import discover_operations, get_operation
+        from carter.ops.operations import discover_operations, get_operation
 
         discover_operations()
         op = get_operation("jira-update")
@@ -382,13 +370,13 @@ class TestJiraUpdateDryRun:
 
 class TestCLIParsing:
     def test_parse_list(self) -> None:
-        from carter_ops import _parse_argv
+        from carter.ops.carter_ops import _parse_argv
 
         op, params, phase = _parse_argv(["--list"])
         assert phase == "list"
 
     def test_parse_dry_run(self) -> None:
-        from carter_ops import _parse_argv
+        from carter.ops.carter_ops import _parse_argv
 
         op, params, phase = _parse_argv(
             ["git-branch", "--name", "feature/test", "--from", "main", "--dry-run"]
@@ -399,7 +387,7 @@ class TestCLIParsing:
         assert phase == "dry-run"
 
     def test_parse_execute(self) -> None:
-        from carter_ops import _parse_argv
+        from carter.ops.carter_ops import _parse_argv
 
         op, params, phase = _parse_argv(
             ["git-commit", "--message", "feat: x", "--files", "a.py,b.py", "--execute"]
@@ -410,13 +398,13 @@ class TestCLIParsing:
         assert phase == "execute"
 
     def test_parse_empty(self) -> None:
-        from carter_ops import _parse_argv
+        from carter.ops.carter_ops import _parse_argv
 
         op, params, phase = _parse_argv([])
         assert op == ""
 
     def test_list_operations(self, capsys: pytest.CaptureFixture[str]) -> None:
-        from carter_ops import main
+        from carter.ops.carter_ops import main
 
         exit_code = main(["--list"])
         assert exit_code == 0
@@ -425,25 +413,25 @@ class TestCLIParsing:
         assert "jira-comment" in output["operations"]
 
     def test_no_operation_shows_error(self, capsys: pytest.CaptureFixture[str]) -> None:
-        from carter_ops import main
+        from carter.ops.carter_ops import main
 
         exit_code = main([])
         assert exit_code == 1
 
     def test_no_phase_shows_error(self, capsys: pytest.CaptureFixture[str]) -> None:
-        from carter_ops import main
+        from carter.ops.carter_ops import main
 
         exit_code = main(["git-branch", "--name", "x"])
         assert exit_code == 1
 
     def test_unknown_operation(self, capsys: pytest.CaptureFixture[str]) -> None:
-        from carter_ops import main
+        from carter.ops.carter_ops import main
 
         exit_code = main(["nonexistent", "--dry-run"])
         assert exit_code == 1
 
     def test_validation_error(self, capsys: pytest.CaptureFixture[str]) -> None:
-        from carter_ops import main
+        from carter.ops.carter_ops import main
 
         exit_code = main(["git-branch", "--dry-run"])  # missing --name
         assert exit_code == 1
@@ -451,7 +439,7 @@ class TestCLIParsing:
         assert output["success"] is False
 
     def test_dry_run_success(self, capsys: pytest.CaptureFixture[str]) -> None:
-        from carter_ops import main
+        from carter.ops.carter_ops import main
 
         exit_code = main(["git-branch", "--name", "feature/test", "--dry-run"])
         assert exit_code == 0
@@ -466,10 +454,10 @@ class TestCLIParsing:
 
 
 class TestGitBranchExecute:
-    @patch("operations.git_branch.subprocess.run")
+    @patch("carter.ops.operations.git_branch.subprocess.run")
     def test_execute_success(self, mock_run: MagicMock) -> None:
-        from config import Config
-        from operations import discover_operations, get_operation
+        from carter.ops.config import Config
+        from carter.ops.operations import discover_operations, get_operation
 
         mock_run.return_value = MagicMock(returncode=0, stdout="", stderr="")
         discover_operations()
@@ -480,10 +468,10 @@ class TestGitBranchExecute:
         assert result.data["branch"] == "feature/test"
         assert mock_run.call_count == 3  # checkout, pull, checkout -b
 
-    @patch("operations.git_branch.subprocess.run")
+    @patch("carter.ops.operations.git_branch.subprocess.run")
     def test_execute_failure(self, mock_run: MagicMock) -> None:
-        from config import Config
-        from operations import discover_operations, get_operation
+        from carter.ops.config import Config
+        from carter.ops.operations import discover_operations, get_operation
 
         mock_run.side_effect = subprocess.CalledProcessError(
             1, "git", stderr="branch already exists"
@@ -496,10 +484,10 @@ class TestGitBranchExecute:
 
 
 class TestGitCommitExecute:
-    @patch("operations.git_commit.subprocess.run")
+    @patch("carter.ops.operations.git_commit.subprocess.run")
     def test_execute_success(self, mock_run: MagicMock) -> None:
-        from config import Config
-        from operations import discover_operations, get_operation
+        from carter.ops.config import Config
+        from carter.ops.operations import discover_operations, get_operation
 
         mock_run.return_value = MagicMock(
             returncode=0,
@@ -515,10 +503,10 @@ class TestGitCommitExecute:
 
 
 class TestGitPushExecute:
-    @patch("operations.git_push.subprocess.run")
+    @patch("carter.ops.operations.git_push.subprocess.run")
     def test_execute_success(self, mock_run: MagicMock) -> None:
-        from config import Config
-        from operations import discover_operations, get_operation
+        from carter.ops.config import Config
+        from carter.ops.operations import discover_operations, get_operation
 
         mock_run.return_value = MagicMock(returncode=0, stdout="", stderr="")
         discover_operations()
@@ -528,10 +516,10 @@ class TestGitPushExecute:
         assert result.success is True
         assert result.data["branch"] == "feature/test"
 
-    @patch("operations.git_push.subprocess.run")
+    @patch("carter.ops.operations.git_push.subprocess.run")
     def test_execute_rejected(self, mock_run: MagicMock) -> None:
-        from config import Config
-        from operations import discover_operations, get_operation
+        from carter.ops.config import Config
+        from carter.ops.operations import discover_operations, get_operation
 
         mock_run.side_effect = subprocess.CalledProcessError(
             1, "git", stderr="rejected non-fast-forward"
@@ -551,14 +539,14 @@ class TestGitPushExecute:
 
 class TestGitHubConfig:
     def test_validate_github_missing_token(self, tmp_path: Path) -> None:
-        from config import Config
+        from carter.ops.config import Config
 
         cfg = Config.load(tmp_path / "nonexistent.toml")
         errors = cfg.validate_github()
         assert any("GITHUB_TOKEN" in e for e in errors)
 
     def test_validate_github_with_token(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-        from config import Config
+        from carter.ops.config import Config
 
         monkeypatch.setenv("GITHUB_TOKEN", "ghp_testtoken123")
         cfg = Config.load(tmp_path / "nonexistent.toml")
@@ -568,8 +556,8 @@ class TestGitHubConfig:
 
 class TestGitHubAttribution:
     def test_append_github_footer(self) -> None:
-        from attribution import append_github_footer
-        from config import Config
+        from carter.ops.attribution import append_github_footer
+        from carter.ops.config import Config
 
         cfg = Config()
         result = append_github_footer("Status update", cfg)
@@ -578,8 +566,8 @@ class TestGitHubAttribution:
         assert "---" in result
 
     def test_attribution_summary_github(self) -> None:
-        from attribution import attribution_summary
-        from config import Config
+        from carter.ops.attribution import attribution_summary
+        from carter.ops.config import Config
 
         cfg = Config()
         summary = attribution_summary(cfg, "github")
@@ -593,8 +581,8 @@ class TestGitHubAttribution:
 
 class TestGhIssueDryRun:
     def test_dry_run(self) -> None:
-        from config import Config
-        from operations import discover_operations, get_operation
+        from carter.ops.config import Config
+        from carter.ops.operations import discover_operations, get_operation
 
         discover_operations()
         op = get_operation("gh-issue")
@@ -607,7 +595,7 @@ class TestGhIssueDryRun:
         assert any("owner/repo" in s for s in plan.steps)
 
     def test_validate_missing_repo(self) -> None:
-        from operations import discover_operations, get_operation
+        from carter.ops.operations import discover_operations, get_operation
 
         discover_operations()
         op = get_operation("gh-issue")
@@ -615,7 +603,7 @@ class TestGhIssueDryRun:
         assert any("--repo" in e for e in errors)
 
     def test_validate_bad_repo_format(self) -> None:
-        from operations import discover_operations, get_operation
+        from carter.ops.operations import discover_operations, get_operation
 
         discover_operations()
         op = get_operation("gh-issue")
@@ -623,7 +611,7 @@ class TestGhIssueDryRun:
         assert any("owner/repo" in e for e in errors)
 
     def test_validate_missing_title(self) -> None:
-        from operations import discover_operations, get_operation
+        from carter.ops.operations import discover_operations, get_operation
 
         discover_operations()
         op = get_operation("gh-issue")
@@ -634,8 +622,8 @@ class TestGhIssueDryRun:
 class TestGhIssueExecute:
     @patch("httpx.post")
     def test_execute_success(self, mock_post: MagicMock) -> None:
-        from config import Config
-        from operations import discover_operations, get_operation
+        from carter.ops.config import Config
+        from carter.ops.operations import discover_operations, get_operation
 
         mock_resp = MagicMock()
         mock_resp.json.return_value = {
@@ -660,8 +648,8 @@ class TestGhIssueExecute:
     def test_execute_http_error(self, mock_post: MagicMock) -> None:
         import httpx as _httpx
 
-        from config import Config
-        from operations import discover_operations, get_operation
+        from carter.ops.config import Config
+        from carter.ops.operations import discover_operations, get_operation
 
         mock_resp = MagicMock()
         mock_resp.status_code = 403
@@ -688,8 +676,8 @@ class TestGhIssueExecute:
 
 class TestGhIssueCommentDryRun:
     def test_dry_run(self) -> None:
-        from config import Config
-        from operations import discover_operations, get_operation
+        from carter.ops.config import Config
+        from carter.ops.operations import discover_operations, get_operation
 
         discover_operations()
         op = get_operation("gh-issue-comment")
@@ -702,7 +690,7 @@ class TestGhIssueCommentDryRun:
         assert any("42" in s for s in plan.steps)
 
     def test_validate_missing_fields(self) -> None:
-        from operations import discover_operations, get_operation
+        from carter.ops.operations import discover_operations, get_operation
 
         discover_operations()
         op = get_operation("gh-issue-comment")
@@ -713,8 +701,8 @@ class TestGhIssueCommentDryRun:
 class TestGhIssueCommentExecute:
     @patch("httpx.post")
     def test_execute_success(self, mock_post: MagicMock) -> None:
-        from config import Config
-        from operations import discover_operations, get_operation
+        from carter.ops.config import Config
+        from carter.ops.operations import discover_operations, get_operation
 
         mock_resp = MagicMock()
         mock_resp.json.return_value = {
@@ -742,8 +730,8 @@ class TestGhIssueCommentExecute:
 
 class TestGhPrDryRun:
     def test_dry_run(self) -> None:
-        from config import Config
-        from operations import discover_operations, get_operation
+        from carter.ops.config import Config
+        from carter.ops.operations import discover_operations, get_operation
 
         discover_operations()
         op = get_operation("gh-pr")
@@ -757,7 +745,7 @@ class TestGhPrDryRun:
         assert any("main" in s for s in plan.steps)
 
     def test_validate_missing_fields(self) -> None:
-        from operations import discover_operations, get_operation
+        from carter.ops.operations import discover_operations, get_operation
 
         discover_operations()
         op = get_operation("gh-pr")
@@ -768,8 +756,8 @@ class TestGhPrDryRun:
 class TestGhPrExecute:
     @patch("httpx.post")
     def test_execute_success(self, mock_post: MagicMock) -> None:
-        from config import Config
-        from operations import discover_operations, get_operation
+        from carter.ops.config import Config
+        from carter.ops.operations import discover_operations, get_operation
 
         mock_resp = MagicMock()
         mock_resp.json.return_value = {
@@ -793,8 +781,8 @@ class TestGhPrExecute:
 
     @patch("httpx.post")
     def test_execute_draft(self, mock_post: MagicMock) -> None:
-        from config import Config
-        from operations import discover_operations, get_operation
+        from carter.ops.config import Config
+        from carter.ops.operations import discover_operations, get_operation
 
         mock_resp = MagicMock()
         mock_resp.json.return_value = {
@@ -824,8 +812,8 @@ class TestGhPrExecute:
 
 class TestGhPrCommentDryRun:
     def test_dry_run(self) -> None:
-        from config import Config
-        from operations import discover_operations, get_operation
+        from carter.ops.config import Config
+        from carter.ops.operations import discover_operations, get_operation
 
         discover_operations()
         op = get_operation("gh-pr-comment")
@@ -838,7 +826,7 @@ class TestGhPrCommentDryRun:
         assert any("99" in s for s in plan.steps)
 
     def test_validate_missing_fields(self) -> None:
-        from operations import discover_operations, get_operation
+        from carter.ops.operations import discover_operations, get_operation
 
         discover_operations()
         op = get_operation("gh-pr-comment")
@@ -849,8 +837,8 @@ class TestGhPrCommentDryRun:
 class TestGhPrCommentExecute:
     @patch("httpx.post")
     def test_execute_success(self, mock_post: MagicMock) -> None:
-        from config import Config
-        from operations import discover_operations, get_operation
+        from carter.ops.config import Config
+        from carter.ops.operations import discover_operations, get_operation
 
         mock_resp = MagicMock()
         mock_resp.json.return_value = {
@@ -878,7 +866,7 @@ class TestGhPrCommentExecute:
 
 class TestAuditSubcommand:
     def test_audit_success(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-        import carter_ops
+        from carter.ops import carter_ops
 
         # Redirect audit log to tmp
         monkeypatch.setattr(carter_ops, "AUDIT_LOG", tmp_path / "audit.log")
@@ -902,19 +890,19 @@ class TestAuditSubcommand:
         assert entry["params"]["branch"] == "feature/x"
 
     def test_audit_missing_operation(self, capsys: pytest.CaptureFixture) -> None:
-        import carter_ops
+        from carter.ops import carter_ops
 
         rc = carter_ops.main(["audit", "--result", "success"])
         assert rc == 1
 
     def test_audit_missing_result(self, capsys: pytest.CaptureFixture) -> None:
-        import carter_ops
+        from carter.ops import carter_ops
 
         rc = carter_ops.main(["audit", "--operation", "git-flow"])
         assert rc == 1
 
     def test_audit_minimal(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-        import carter_ops
+        from carter.ops import carter_ops
 
         monkeypatch.setattr(carter_ops, "AUDIT_LOG", tmp_path / "audit.log")
 
@@ -933,7 +921,7 @@ class TestAuditSubcommand:
 
 class TestConfigSubcommand:
     def test_config_emit(self, capsys: pytest.CaptureFixture, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-        import carter_ops
+        from carter.ops import carter_ops
 
         # Create a test config file
         config_toml = tmp_path / "config.toml"
@@ -948,7 +936,7 @@ class TestConfigSubcommand:
         )
 
         # Monkey-patch Config.load to use our test config
-        from config import Config
+        from carter.ops.config import Config
         original_load = Config.load
 
         @classmethod
@@ -967,7 +955,7 @@ class TestConfigSubcommand:
         assert data["bot_email"] == "test-bot@example.com"
 
     def test_config_no_flag(self, capsys: pytest.CaptureFixture) -> None:
-        import carter_ops
+        from carter.ops import carter_ops
 
         rc = carter_ops.main(["config"])
         assert rc == 1

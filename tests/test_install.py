@@ -2,15 +2,11 @@
 from __future__ import annotations
 
 import json
-import sys
 from pathlib import Path
 
 import pytest
 
-# Add repo root to path so we can import install
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-
-import install
+from carter import installer as install
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -498,26 +494,6 @@ class TestHashing:
 
 
 class TestInstallOps:
-    def test_copies_ops_files(self, base_dir: Path) -> None:
-        manifest = {"files": [], "file_hashes": {}}
-        backup = base_dir / "backup"
-        install.install_ops(base_dir, manifest, backup)
-
-        ops_dir = base_dir / "carter" / "ops"
-        assert ops_dir.exists()
-        assert (ops_dir / "carter_ops.py").exists()
-        assert (ops_dir / "config.py").exists()
-        assert (ops_dir / "attribution.py").exists()
-        assert (ops_dir / "output.py").exists()
-        assert (ops_dir / "operations" / "__init__.py").exists()
-        assert (ops_dir / "operations" / "git_branch.py").exists()
-        assert (ops_dir / "operations" / "git_commit.py").exists()
-        assert (ops_dir / "operations" / "git_push.py").exists()
-        assert (ops_dir / "operations" / "git_flow.py").exists()
-        assert (ops_dir / "operations" / "jira_comment.py").exists()
-        assert (ops_dir / "operations" / "jira_create.py").exists()
-        assert (ops_dir / "operations" / "jira_update.py").exists()
-
     def test_generates_config_toml(self, base_dir: Path) -> None:
         manifest = {"files": [], "file_hashes": {}}
         backup = base_dir / "backup"
@@ -542,34 +518,18 @@ class TestInstallOps:
 
         assert "my-custom-bot" in config.read_text()
 
-    def test_creates_wrapper_script(self, base_dir: Path) -> None:
+    def test_manifest_tracks_config(self, base_dir: Path) -> None:
         manifest = {"files": [], "file_hashes": {}}
         backup = base_dir / "backup"
         install.install_ops(base_dir, manifest, backup)
 
-        wrapper = base_dir / "local" / "bin" / "carter-ops"
-        assert wrapper.exists()
-        content = wrapper.read_text()
-        assert "#!/bin/bash" in content
-        assert "uv run" in content
-        assert "carter_ops.py" in content
-        # Check executable permission
-        import stat
-        assert wrapper.stat().st_mode & stat.S_IXUSR
-
-    def test_manifest_tracks_ops_files(self, base_dir: Path) -> None:
-        manifest = {"files": [], "file_hashes": {}}
-        backup = base_dir / "backup"
-        install.install_ops(base_dir, manifest, backup)
-
-        # Should have ops files + config.toml + wrapper
-        ops_files = [f for f in manifest["files"] if "carter" in f.lower()]
-        assert len(ops_files) >= 10
+        config = base_dir / "carter" / "config.toml"
+        assert str(config) in manifest["files"]
 
     def test_idempotent(self, base_dir: Path) -> None:
         manifest = {"files": [], "file_hashes": {}}
         backup = base_dir / "backup"
-        stats1 = install.install_ops(base_dir, manifest, backup)
+        install.install_ops(base_dir, manifest, backup)
 
         manifest2 = {"files": [], "file_hashes": {}}
         stats2 = install.install_ops(base_dir, manifest2, backup)

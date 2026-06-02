@@ -36,12 +36,9 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-# Add ops directory to path so modules can be imported
-sys.path.insert(0, str(Path(__file__).parent))
-
-from config import Config
-from operations import discover_operations, get_operation, list_operations
-from output import (
+from carter.ops.config import Config
+from carter.ops.operations import discover_operations, get_operation, list_operations
+from carter.ops.output import (
     dry_run_output,
     emit,
     emit_error,

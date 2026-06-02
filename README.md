@@ -21,29 +21,49 @@ Think of it like a team: you don't ask the architect to write tests, and you don
 
 **Prerequisites:** [uv](https://docs.astral.sh/uv/) and Python 3.11+
 
-### Option A: System-Level Install (Global)
+### Recommended: Install the `carter` CLI (Global)
+
+Install directly from the repository — no clone required:
 
 ```bash
-# Clone
-git clone https://github.com/mauriciomem/carter-ai.git ~/carter-ai
-cd ~/carter-ai
+# Install the unified carter CLI as a global tool
+uv tool install git+https://github.com/mauriciomem/carter-ai.git
 
-# Install to ~/.copilot/ (all targets)
-uv run install.py
-
-# Or use the wrapper
-./install.sh
+# (later) upgrade in place
+uv tool upgrade carter-ai
 ```
 
-### Option B: Workspace-Level Scaffold (Per-Project)
+`pipx` works too:
 
 ```bash
-cd ~/carter-ai
+pipx install git+https://github.com/mauriciomem/carter-ai.git
+```
 
-# Create a virtual environment and install the carter CLI
-uv venv && source .venv/bin/activate
-uv pip install -e .
+This gives you a single `carter` command that provides everything:
 
+```bash
+carter install            # System-level install to ~/.copilot/ (all targets)
+carter install --mcp      # ...and configure MCP servers
+carter init ~/my-workspace --name "my-project"   # Per-project scaffold
+carter ops --list         # List carter-ops write operations
+```
+
+### System-Level Install (Global)
+
+Install Carter's agents, skills, instructions, knowledge base, and MCP
+configuration into `~/.copilot/` (and/or OpenCode):
+
+```bash
+carter install                    # all targets
+carter install --target copilot   # Copilot only
+carter install --mcp              # include MCP servers
+carter install --bot-name my-bot  # custom git attribution
+carter install --uninstall        # remove
+```
+
+### Workspace-Level Scaffold (Per-Project)
+
+```bash
 # Initialize a workspace (creates .carter/ config + generates agents from templates)
 carter init ~/my-workspace --name "my-project"
 ```
@@ -54,6 +74,20 @@ This generates:
 - `.carter/state/` — plans, sessions, checkpoints
 - `agents/` — generated agent files (from Jinja2 templates)
 - `instructions/copilot-instructions.md` — generated global instructions
+
+### From a Local Checkout (Development)
+
+```bash
+git clone https://github.com/mauriciomem/carter-ai.git ~/carter-ai
+cd ~/carter-ai
+
+# Editable install of the carter CLI
+uv venv && source .venv/bin/activate
+uv pip install -e .
+
+# Legacy bootstrap (delegates to `carter install`):
+uv run install.py      # or ./install.sh
+```
 
 ### Required Environment Variables
 
@@ -158,7 +192,13 @@ Trigger with the `ops:` prefix:
 @carter-maestro ops: create a feature branch, commit my changes, and push
 ```
 
-The agent shows you the exact commands it will run, waits for your approval, executes with bot attribution, and logs the operation.
+The agent shows you the exact commands it will run, waits for your approval, executes with bot attribution, and logs the operation. Under the hood it calls the `carter ops` subcommand:
+
+```bash
+carter ops --list                                   # available operations
+carter ops git-flow --branch feature/x \
+  --message "feat: x" --dry-run                     # preview
+```
 
 See [docs/carter-ops.md](docs/carter-ops.md) for the full reference.
 
@@ -192,42 +232,43 @@ Templates use **Jinja2 inheritance** — a base template defines the structure (
 See `templates/` for the template source and `carter.yaml` for the full schema.
 
 ## Installer (System-Level)
-
 ```bash
 # Install all targets (VS Code + Copilot CLI + OpenCode)
-uv run install.py
+carter install
 
 # Install specific target
-uv run install.py --target copilot
-uv run install.py --target opencode
+carter install --target copilot
+carter install --target opencode
 
 # Include MCP server configuration
-uv run install.py --mcp
+carter install --mcp
 
 # Custom bot name for git attribution
-uv run install.py --bot-name "my-bot"
+carter install --bot-name "my-bot"
 
 # Uninstall
-uv run install.py --uninstall
+carter install --uninstall
 ```
+
+> The legacy `uv run install.py` / `./install.sh` entry points still work —
+> they are thin shims that delegate to `carter install`.
 
 ### What the Installer Does
 
 1. Detects OS and checks prerequisites
 2. Backs up existing Carter files
 3. Copies agents and skills to `~/.copilot/` and `~/.config/opencode/`
-4. Installs carter-ops to `~/.carter/ops/` with a wrapper at `~/.local/bin/carter-ops`
-5. Generates `~/.carter/config.toml` with auto-detected signing key and bot name
-6. Configures MCP servers in VS Code, Copilot CLI, and OpenCode (only with `--mcp`)
-7. Initializes the knowledge base at `~/.copilot/knowledge/`
-8. Writes a manifest for idempotent updates and clean uninstall
+4. Generates `~/.carter/config.toml` with auto-detected signing key and bot name
+   (write operations run via the `carter ops` subcommand — no separate wrapper)
+5. Configures MCP servers in VS Code, Copilot CLI, and OpenCode (only with `--mcp`)
+6. Initializes the knowledge base at `~/.copilot/knowledge/`
+7. Writes a manifest for idempotent updates and clean uninstall
 
 ### Updating
 
 ```bash
-cd ~/carter-ai
-git pull
-uv run install.py
+uv tool upgrade carter-ai
+carter install
 ```
 
 The installer detects changes via SHA-256 file hashing. Only modified files are updated.
@@ -267,24 +308,26 @@ See [docs/testing.md](docs/testing.md) for the full testing guide.
 ```
 carter-ai/
 ├── carter/                 # Carter v2 CLI package
-│   ├── cli.py              # Entry points: init, update, check
+│   ├── cli.py              # Entry points: install, init, update, check, ops
+│   ├── installer.py        # System-level installer (used by `carter install`)
+│   ├── resources.py        # Resolves bundled data (wheel) vs checkout
 │   ├── config.py           # carter.yaml loading + validation
 │   ├── scaffold.py         # Jinja2 rendering engine
-│   └── state.py            # .carter/ directory management
+│   ├── state.py            # .carter/ directory management
+│   └── ops/                # carter-ops executor (`carter ops`)
+│       ├── carter_ops.py   # Subcommand entry point
+│       ├── operations/     # Plugin-based operations
+│       ├── config.py       # Config loader
+│       ├── attribution.py  # Bot attribution helpers
+│       └── output.py       # Structured JSON output
 ├── templates/              # Jinja2 agent + instruction templates
 │   ├── base_agent.md.j2    # Base template (inheritance)
 │   ├── agents/             # Per-agent templates (extend base)
 │   └── instructions/       # Global instructions template
-├── install.py              # System-level installer (PEP 723)
+├── install.py              # Legacy bootstrap shim → `carter install`
 ├── install.sh              # Wrapper script
 ├── agents/                 # Source-of-truth agent definitions
 ├── skills/                 # Skill definitions (hand-maintained)
-├── ops/                    # carter-ops CLI executor
-│   ├── carter_ops.py       # Entry point
-│   ├── operations/         # Plugin-based operations
-│   ├── config.py           # Config loader
-│   ├── attribution.py      # Bot attribution helpers
-│   └── output.py           # Structured JSON output
 ├── knowledge/              # Knowledge base templates
 ├── mcp/                    # MCP server config templates
 ├── instructions/           # Global instructions source

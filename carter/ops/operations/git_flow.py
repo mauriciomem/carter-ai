@@ -6,12 +6,12 @@ from __future__ import annotations
 
 from typing import Any
 
-from attribution import attribution_summary, git_author
-from config import Config
-from operations import Operation, Plan, Result, register
-from operations.git_branch import GitBranch
-from operations.git_commit import GitCommit
-from operations.git_push import GitPush
+from carter.ops.attribution import attribution_summary, git_author
+from carter.ops.config import Config
+from carter.ops.operations import Operation, Plan, Result, register
+from carter.ops.operations.git_branch import GitBranch
+from carter.ops.operations.git_commit import GitCommit
+from carter.ops.operations.git_push import GitPush
 
 
 @register

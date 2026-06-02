@@ -8,9 +8,9 @@ from __future__ import annotations
 import re
 from typing import Any
 
-from attribution import append_jira_footer, attribution_summary
-from config import Config
-from operations import Operation, Plan, Result, register
+from carter.ops.attribution import append_jira_footer, attribution_summary
+from carter.ops.config import Config
+from carter.ops.operations import Operation, Plan, Result, register
 
 
 def _jira_headers(cfg: Config) -> dict[str, str]:

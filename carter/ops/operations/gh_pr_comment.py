@@ -2,29 +2,20 @@
 # requires-python = ">=3.11"
 # dependencies = ["httpx"]
 # ///
-"""carter-ops: gh-issue — create a GitHub issue."""
+"""carter-ops: gh-pr-comment — comment on a GitHub pull request."""
 from __future__ import annotations
 
 from typing import Any
 
-from attribution import append_github_footer, attribution_summary
-from config import Config
-from operations import Operation, Plan, Result, register
-
-_GITHUB_API = "https://api.github.com"
-
-
-def _github_headers(cfg: Config) -> dict[str, str]:
-    return {
-        "Authorization": f"Bearer {cfg.github_token}",
-        "Accept": "application/vnd.github+json",
-        "X-GitHub-Api-Version": "2022-11-28",
-    }
+from carter.ops.attribution import append_github_footer, attribution_summary
+from carter.ops.config import Config
+from carter.ops.operations import Operation, Plan, Result, register
+from carter.ops.operations.gh_issue import _GITHUB_API, _github_headers
 
 
 @register
-class GhIssue(Operation):
-    name = "gh-issue"
+class GhPrComment(Operation):
+    name = "gh-pr-comment"
 
     def validate(self, params: dict[str, Any]) -> list[str]:
         errors = []
@@ -32,53 +23,40 @@ class GhIssue(Operation):
             errors.append("--repo is required (owner/repo)")
         elif "/" not in params["repo"]:
             errors.append("--repo must be in owner/repo format")
-        if not params.get("title"):
-            errors.append("--title is required")
+        if not params.get("pr"):
+            errors.append("--pr is required (PR number)")
+        if not params.get("body"):
+            errors.append("--body is required")
         return errors
 
     def dry_run(self, params: dict[str, Any], cfg: Config) -> Plan:
         repo = params["repo"]
-        title = params["title"]
-        body = params.get("body", "")
-        labels = params.get("labels", [])
-        if isinstance(labels, str):
-            labels = [l.strip() for l in labels.split(",")]
+        pr = params["pr"]
+        body = params["body"]
+        body_with_footer = append_github_footer(body, cfg)
 
         steps = [
-            f"POST /repos/{repo}/issues",
-            f"Title: {title}",
+            f"POST /repos/{repo}/issues/{pr}/comments",
+            f"Body: {body_with_footer[:200]}{'...' if len(body_with_footer) > 200 else ''}",
         ]
-        if body:
-            steps.append(f"Body: {body[:200]}{'...' if len(body) > 200 else ''}")
-        if labels:
-            steps.append(f"Labels: {', '.join(labels)}")
-
         return Plan(
             operation=self.name,
             steps=steps,
             attribution=attribution_summary(cfg, "github"),
-            side_effects=[f"New issue in {repo}"],
+            side_effects=[f"New comment on {repo}#{pr}"],
         )
 
     def execute(self, params: dict[str, Any], cfg: Config) -> Result:
         import httpx
 
         repo = params["repo"]
-        title = params["title"]
-        body = params.get("body", "")
-        labels = params.get("labels", [])
-        if isinstance(labels, str):
-            labels = [l.strip() for l in labels.split(",")]
+        pr = params["pr"]
+        body = params["body"]
+        body_with_footer = append_github_footer(body, cfg)
 
-        body_with_footer = append_github_footer(body, cfg) if body else ""
-
-        payload: dict[str, Any] = {"title": title}
-        if body_with_footer:
-            payload["body"] = body_with_footer
-        if labels:
-            payload["labels"] = labels
-
-        url = f"{_GITHUB_API}/repos/{repo}/issues"
+        # GitHub uses the issues API for PR comments (general comments)
+        url = f"{_GITHUB_API}/repos/{repo}/issues/{pr}/comments"
+        payload = {"body": body_with_footer}
 
         try:
             resp = httpx.post(
@@ -111,9 +89,8 @@ class GhIssue(Operation):
             operation=self.name,
             success=True,
             data={
-                "number": data.get("number", ""),
+                "comment_id": data.get("id", ""),
                 "url": data.get("html_url", ""),
-                "title": data.get("title", ""),
             },
             attribution=attribution_summary(cfg, "github"),
         )

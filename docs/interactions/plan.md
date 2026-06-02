@@ -284,45 +284,101 @@ Per-agent personality and MCP-specific instructions live in each `.agent.md`, **
 
 ---
 
-## 8. Installer
+## 8. Distribution & CLI
 
-### 8.1 Invocation
+Carter ships as a single installable Python package exposing one `carter`
+command. There is **no PyPI release** — distribution is direct from Git. All
+static assets (agents, skills, instructions, knowledge, mcp, templates) are
+bundled into the wheel so the command is fully self-contained once installed.
+
+### 8.1 Installing the CLI
 
 ```bash
-# Install (all targets)
-uv run install.py
+# Recommended: install the carter CLI as a global tool (no clone)
+uv tool install git+https://github.com/mauriciomem/carter-ai.git
 
-# Install specific target
-uv run install.py --target copilot
-uv run install.py --target opencode
-uv run install.py --target all
+# Upgrade in place
+uv tool upgrade carter-ai
 
-# Uninstall
-uv run install.py --uninstall
-uv run install.py --uninstall --target opencode
-
-# Convenience wrapper
-./install.sh
-./install.sh --uninstall
+# pipx works too
+pipx install git+https://github.com/mauriciomem/carter-ai.git
 ```
 
-### 8.2 PEP 723 Script Metadata
+For development, an editable install from a checkout:
 
-```python
-# /// script
-# requires-python = ">=3.11"
-# ///
+```bash
+git clone https://github.com/mauriciomem/carter-ai.git ~/carter-ai
+cd ~/carter-ai
+uv venv && source .venv/bin/activate
+uv pip install -e .
 ```
 
-v2 upgrade for rich output:
-```python
-# /// script
-# requires-python = ">=3.11"
-# dependencies = ["rich>=13.0"]
-# ///
+### 8.2 Unified `carter` Command
+
+One entry point (`carter = "carter.cli:main"`, a Click group) covers the full
+lifecycle. The two former "modes" (global system install vs per-workspace
+scaffold) and the former standalone `carter-ops` executable are all
+subcommands now.
+
+| Subcommand | Purpose |
+|---|---|
+| `carter install` | System-level install to `~/.copilot/` and/or OpenCode |
+| `carter init` | Scaffold a per-project workspace (`.carter/` + generated agents) |
+| `carter update` | Re-render workspace agents/instructions from templates |
+| `carter check` | Verify workspace integrity |
+| `carter ops` | Deterministic write-operation executor (formerly `carter-ops`) |
+
+```bash
+# System-level install
+carter install                    # all targets
+carter install --target copilot   # Copilot only
+carter install --target opencode  # OpenCode only
+carter install --mcp              # also configure MCP servers
+carter install --bot-name my-bot  # custom git attribution (default: carter-bot)
+carter install --uninstall        # clean removal via manifest
+carter install --base-dir PATH    # override install root (testing)
+
+# Verbosity: -q/--quiet (errors), default, -v/--verbose, --debug
+
+# Workspace scaffold
+carter init ~/my-workspace --name "my-project"
+
+# Write operations
+carter ops --list
+carter ops git-flow --branch feature/x --message "feat: x" --dry-run
 ```
 
-### 8.3 Installer Steps
+> `--mcp` is opt-in: no flag means no MCP servers are touched. `--bot-name`
+> sets the git/GitHub/Jira attribution identity (with a short footer
+> description) baked into `~/.carter/config.toml` and the `carter-ops` skill.
+
+### 8.3 Data Bundling (wheel)
+
+The build backend is **hatchling**. Static data directories are copied into the
+wheel under `carter/_data/` via force-include:
+
+```toml
+[tool.hatch.build.targets.wheel.force-include]
+"agents"       = "carter/_data/agents"
+"skills"       = "carter/_data/skills"
+"instructions" = "carter/_data/instructions"
+"knowledge"    = "carter/_data/knowledge"
+"mcp"          = "carter/_data/mcp"
+"templates"    = "carter/_data/templates"
+```
+
+`carter/resources.py` resolves the data root at runtime:
+
+- **Installed wheel** → `carter/_data/` (bundled assets)
+- **Dev checkout** → repository root (the source `agents/`, `skills/`, … dirs)
+
+Both layouts expose the same subdirectories, so `carter.installer` and
+`carter.scaffold` consume them identically with no environment-specific logic.
+
+### 8.4 Installer Steps (`carter install`)
+
+The logic lives in `carter/installer.py` and is shared by the legacy bootstrap
+shim.
 
 1. Detect OS (macOS vs Linux)
 2. Check prerequisites (VS Code, Copilot extension, `copilot` CLI, `opencode`, `gh`, `terraform`, `jq`)
@@ -331,20 +387,22 @@ v2 upgrade for rich output:
 5. Write agent files to target locations
 6. Write skill files to target locations
 7. Write global instructions
-8. Install carter-ops:
-   - Copy `ops/` → `~/.carter/ops/`
-   - Generate `~/.carter/config.toml` (defaults, auto-detect `signing_key` from `git config user.signingkey`)
-   - Create `~/.local/bin/carter-ops` wrapper
-   - OS-aware PATH check: warn if `~/.local/bin` not on `$PATH` (macOS → `~/.zshrc`, Linux → detect active shell)
-9. Configure MCP servers:
+8. Configure carter-ops:
+   - Generate `~/.carter/config.toml` (defaults + `--bot-name`, auto-detect `signing_key` from `git config user.signingkey`)
+   - **No file copy / no wrapper script** — write operations run via the bundled `carter ops` subcommand
+9. Configure MCP servers (only with `--mcp`):
    - VS Code: merge `carter-*` entries into `settings.json`
    - Copilot CLI: run `copilot mcp add carter-*` commands
    - OpenCode: merge `carter-*` entries into `opencode.json`
 10. Initialize knowledge base (only on first install)
-11. Write manifest (`~/.copilot/.carter-manifest.json`) — includes `~/.carter/` files
+11. Write manifest (`~/.copilot/.carter-manifest.json`)
 12. Print summary
 
-### 8.4 Manifest
+> **Migration:** `uninstall()` still removes any legacy
+> `~/.local/bin/carter-ops` wrapper and `~/.carter/ops/` tree left by older
+> installs, so upgrading from the pre-package layout cleans up automatically.
+
+### 8.5 Manifest
 
 `~/.copilot/.carter-manifest.json` tracks every file and config entry Carter owns:
 
@@ -366,16 +424,16 @@ v2 upgrade for rich output:
 }
 ```
 
-### 8.5 Idempotent Updates
+### 8.6 Idempotent Updates
 
-Re-running the installer (`git pull && uv run install.py`):
+Upgrading the CLI (`uv tool upgrade carter-ai`) then re-running `carter install`:
 
 1. Compares file hashes (repo vs installed) via manifest
 2. Only updates files that changed
 3. Reports per-file status: `created`, `updated`, `unchanged`, `backed up`
 4. Updates manifest with new hashes and timestamp
 
-### 8.6 Backup Strategy
+### 8.7 Backup Strategy
 
 Before overwriting any existing file:
 
@@ -383,7 +441,7 @@ Before overwriting any existing file:
 2. Log the backup in installer output
 3. Manifest records both current and backup paths
 
-### 8.7 CLI Output (v1 — ANSI/stdlib)
+### 8.8 CLI Output
 
 Verbosity levels:
 
@@ -447,12 +505,9 @@ Example output (default):
   ✓ carter-atlassian → copilot mcp add
   ✓ carter-atlassian → opencode.json
 
-→ Installing carter-ops...
-  ✓ ~/.carter/ops/ (7 operations)
+→ Configuring carter-ops...
   ✓ ~/.carter/config.toml
-  ✓ ~/.local/bin/carter-ops
-  ⚠ ~/.local/bin is not on PATH — add to ~/.zshrc:
-    export PATH="$HOME/.local/bin:$PATH"
+  (write operations run via `carter ops`)
 
 → Initializing knowledge base...
   ✓ ~/.copilot/knowledge/ (6 topic files)
@@ -461,7 +516,7 @@ Example output (default):
   Agents: 6 (copilot: 6, opencode: 6)
   Skills: 17
   MCP servers: 3 (VS Code: 3, Copilot CLI: 3, OpenCode: 3)
-  carter-ops: 7 operations (5 atomic, 2 composite)
+  Ops config: ~/.carter/config.toml (11 operations via `carter ops`)
   Manifest: ~/.copilot/.carter-manifest.json
 ```
 
@@ -476,24 +531,29 @@ Update output:
   · ~/.copilot/agents/carter-pm.agent.md ········· unchanged
 ```
 
-### 8.8 CLI Output (v2 — Rich)
+### 8.9 Legacy Bootstrap Shim
 
-Upgraded via PEP 723 `dependencies = ["rich>=13.0"]`:
-
-- Progress bars with animation during file writes
-- Tables for environment info and MCP server matrix
-- Tree rendering with box-drawing characters for file hierarchies
-- Panels for header/summary
-- Spinners per step
-- Dot leaders aligning status to right edge
-- "Next steps" section in summary
-
-### 8.9 `install.sh` Wrapper
+The historical entry points are retained for backward compatibility. Both are
+thin shims that delegate to `carter.installer.main()` (the same code as
+`carter install`):
 
 ```bash
+# install.sh
 #!/usr/bin/env bash
 set -euo pipefail
 exec uv run "$(dirname "$0")/install.py" "$@"
+```
+
+```python
+# install.py (PEP 723 shim)
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from carter.installer import main
+
+if __name__ == "__main__":
+    main()
 ```
 
 ---
@@ -606,12 +666,39 @@ tests/
 
 ```
 carter/
-├── install.py                          # Single-file installer (PEP 723, stdlib only)
+├── pyproject.toml                      # hatchling build; carter = carter.cli:main; force-include data
+├── install.py                          # Legacy bootstrap shim → carter.installer.main()
 ├── install.sh                          # Wrapper: uv run install.py "$@"
 ├── README.md                           # Quick start, one-liner install
 ├── .env.example                        # Required/optional env vars
 │
-├── agents/                             # Agent definitions (source of truth)
+├── carter/                             # Installable Python package (the `carter` CLI)
+│   ├── cli.py                          # Click group: install, init, update, check, ops
+│   ├── installer.py                    # System-level install logic (shared with shim)
+│   ├── resources.py                    # Resolves data root (wheel _data vs dev checkout)
+│   ├── scaffold.py                     # Jinja2 rendering engine
+│   ├── config.py                       # carter.yaml loading + validation
+│   ├── state.py                        # .carter/ directory management
+│   └── ops/                            # carter-ops executor (`carter ops`)
+│       ├── carter_ops.py               # Subcommand entry point (main(argv))
+│       ├── operations/                 # Operation plugins (auto-discovered)
+│       │   ├── __init__.py             # Auto-discovers Operation subclasses
+│       │   ├── git_branch.py
+│       │   ├── git_commit.py
+│       │   ├── git_push.py
+│       │   ├── git_flow.py             # Composite: branch → commit → push
+│       │   ├── gh_issue.py
+│       │   ├── gh_issue_comment.py
+│       │   ├── gh_pr.py
+│       │   ├── gh_pr_comment.py
+│       │   ├── jira_comment.py
+│       │   ├── jira_create.py
+│       │   └── jira_update.py          # Composite: comment + transition
+│       ├── attribution.py              # Footer templates, git author config
+│       ├── output.py                   # Structured JSON output formatting
+│       └── config.py                   # Config file + env var loading
+│
+├── agents/                             # Agent definitions (source of truth → wheel _data)
 │   ├── carter-maestro.agent.md
 │   ├── carter-architect.agent.md
 │   ├── carter-engineer.agent.md
@@ -659,20 +746,10 @@ carter/
 ├── instructions/                       # Shared instruction files
 │   └── copilot-instructions.md         # Global user-level instructions
 │
-├── ops/                                # carter-ops deterministic executor (source)
-│   ├── carter_ops.py                   # CLI entry point (PEP 723 inline deps)
-│   ├── operations/                     # Operation plugins (auto-discovered)
-│   │   ├── __init__.py                 # Auto-discovers Operation subclasses
-│   │   ├── git_branch.py
-│   │   ├── git_commit.py
-│   │   ├── git_push.py
-│   │   ├── git_flow.py                 # Composite: branch → commit → push
-│   │   ├── jira_comment.py
-│   │   ├── jira_create.py
-│   │   └── jira_update.py              # Composite: comment + transition
-│   ├── attribution.py                  # Footer templates, git author config
-│   ├── output.py                       # Structured JSON output formatting
-│   └── config.py                       # Config file + env var loading
+├── templates/                          # Jinja2 agent + instruction templates (→ wheel _data)
+│   ├── base_agent.md.j2                # Base template (inheritance)
+│   ├── agents/                         # Per-agent templates (extend base)
+│   └── instructions/                   # Global instructions template
 │
 ├── docs/                               # Project documentation
 │   ├── plan.md                         # This file
@@ -732,7 +809,7 @@ carter/
 | 3.2 | Installer v1 | Full: backup, manifest, MCP merging, credential validation, prerequisites, `--uninstall`, `--target`, verbosity, idempotent |
 | 3.3 | Knowledge base | Template files + `carter-distill/SKILL.md` |
 
-**Exit criteria:** `uv run install.py` produces a complete, working Carter installation. MCP servers connected. Knowledge base initialized.
+**Exit criteria:** `carter install` (or the legacy `uv run install.py` shim) produces a complete, working Carter installation. MCP servers connected. Knowledge base initialized.
 
 ### Phase 4: Polish
 

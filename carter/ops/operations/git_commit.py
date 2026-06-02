@@ -7,9 +7,9 @@ from __future__ import annotations
 import subprocess
 from typing import Any
 
-from attribution import attribution_summary, git_author
-from config import Config
-from operations import Operation, Plan, Result, register
+from carter.ops.attribution import attribution_summary, git_author
+from carter.ops.config import Config
+from carter.ops.operations import Operation, Plan, Result, register
 
 
 @register

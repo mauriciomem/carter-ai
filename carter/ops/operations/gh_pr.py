@@ -7,10 +7,10 @@ from __future__ import annotations
 
 from typing import Any
 
-from attribution import append_github_footer, attribution_summary
-from config import Config
-from operations import Operation, Plan, Result, register
-from operations.gh_issue import _GITHUB_API, _github_headers
+from carter.ops.attribution import append_github_footer, attribution_summary
+from carter.ops.config import Config
+from carter.ops.operations import Operation, Plan, Result, register
+from carter.ops.operations.gh_issue import _GITHUB_API, _github_headers
 
 
 @register

@@ -10,7 +10,7 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import Any
 
-from config import Config
+from carter.ops.config import Config
 
 
 @dataclass
@@ -72,9 +72,9 @@ def list_operations() -> list[str]:
 
 def discover_operations() -> None:
     """Import all modules in the operations package to trigger @register."""
-    import operations as ops_pkg
+    from carter.ops import operations as ops_pkg
 
     for _importer, modname, _ispkg in pkgutil.iter_modules(ops_pkg.__path__):
         if modname.startswith("_"):
             continue
-        importlib.import_module(f"operations.{modname}")
+        importlib.import_module(f"carter.ops.operations.{modname}")

@@ -7,6 +7,7 @@ dependencies = [
     "jinja2>=3.1",
     "pyyaml>=6.0",
     "click>=8.0",
+    "httpx>=0.27",
 ]
 
 [project.scripts]
@@ -21,3 +22,14 @@ testpaths = ["tests"]
 
 [tool.hatch.build.targets.wheel]
 packages = ["carter"]
+
+# Bundle static content into the wheel under carter/_data/ so the installed
+# `carter` CLI can locate agents, skills, templates, etc. without a repo
+# checkout. carter/resources.py resolves this layout at runtime.
+[tool.hatch.build.targets.wheel.force-include]
+"agents" = "carter/_data/agents"
+"skills" = "carter/_data/skills"
+"instructions" = "carter/_data/instructions"
+"knowledge" = "carter/_data/knowledge"
+"mcp" = "carter/_data/mcp"
+"templates" = "carter/_data/templates"

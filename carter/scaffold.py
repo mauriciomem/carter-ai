@@ -8,8 +8,9 @@ from typing import Any
 from jinja2 import Environment, FileSystemLoader
 
 from carter.config import ConfigError
+from carter.resources import templates_dir
 
-TEMPLATES_DIR = Path(__file__).resolve().parent.parent / "templates"
+TEMPLATES_DIR = templates_dir()
 
 # Valid agent names: lowercase letters, digits, hyphens only
 _AGENT_NAME_RE = re.compile(r"^[a-z][a-z0-9-]*$")
