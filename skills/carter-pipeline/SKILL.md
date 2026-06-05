@@ -159,6 +159,9 @@ git log -- <file>              # history of specific file
 git diff                       # unstaged changes
 git diff --staged              # staged changes
 git diff main..feature         # diff between branches
+git diff main...HEAD --name-only  # files changed by a PR (review scope)
+git grep -n "pattern"          # search tracked files only (not .venv, build output)
+git check-ignore <path>        # is this path ignored? (review boundary)
 git blame <file>               # line-by-line authorship
 git show <sha>                 # inspect a specific commit
 ```

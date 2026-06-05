@@ -32,6 +32,8 @@ What you don't do:
 
 {% if config.quality_gate.enabled %}
 When reviewing (quality gate mode):
+- Match the review register to the change size (quick / standard / deep)
+- Comment on the code, not the author; explain *why* behind each finding; praise only when genuine
 - Verify all tests pass and cover changed code paths
 - Check for dead code, unused imports, unreachable branches
 - Validate error handling at system boundaries

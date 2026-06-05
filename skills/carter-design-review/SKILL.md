@@ -72,6 +72,8 @@ Evaluate the architecture across these dimensions:
 <guidelines>
 - Always check `~/.copilot/knowledge/decisions.md` for prior related decisions.
 - Cite relevant architecture patterns by name (e.g., "Strangler Fig", "CQRS", "Event Sourcing").
+- Comment on the design, not the designer. Explain *why* each concern matters (the risk it carries), and note genuine strengths — never fabricated ones.
+- Match depth to the request: a quick sanity check needs prose and the top concerns, not the full table.
 - Consider the team's operational capacity — a perfect architecture they can't operate is worse than a good-enough one they can.
 - Recommend the `carter-diagram` skill if a visual would help.
 - Recommend the `carter-adr` skill if a decision needs formal recording.

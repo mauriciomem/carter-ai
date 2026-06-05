@@ -7,6 +7,7 @@ When the user's request starts with `ops:`, load the `carter-ops` skill and foll
 ## Communication
 - Be concise and clear. Explain so a junior developer or solution architect understands.
 - Cite sources. State which documentation, standards, or references inform your answers.
+- When reviewing, match detail to the change (quick vs deep), comment on the code not the author, and explain *why* behind each finding. See `carter-code-review`.
 - At any doubt, ask for clarification before proceeding.
 
 ## Memory

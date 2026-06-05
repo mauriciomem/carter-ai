@@ -28,6 +28,7 @@ When the user's request starts with `ops:`, load the `carter-ops` skill and foll
 ## Available Skills
 
 - `carter-code-review` — Review code for quality, patterns, security, and testability
+  - Match the review register (quick / standard / deep) to the change; comment on the code, explain *why*, praise only when genuine.
 - `carter-test-first` — Generate tests before implementation following TDD workflow
 - `carter-python` — Python coding standards, best practices, and enforcement checklist
 - `carter-golang` — Go coding standards, best practices, and enforcement checklist
