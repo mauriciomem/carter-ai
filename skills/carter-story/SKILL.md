@@ -47,6 +47,9 @@ State or infer the audience before writing; when unclear, ask.
 
 - **Lead with the reader's why.** Open on what changed *for them*, not on internal
   milestones.
+- **Write for the reader, not the author.** Assume no shared context: define terms,
+  expand acronyms, and never lean on prior conversations or internal knowledge the
+  reader doesn't have.
 - **Narrative arc.** Context → tension/problem → what was done → what it means now.
   Even a short post benefits from this shape.
 - **Concrete over abstract.** One real example beats three adjectives. Show the
