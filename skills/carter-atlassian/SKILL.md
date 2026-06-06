@@ -86,6 +86,10 @@ Next steps or open questions at the end.
 
 **Avoid:** one-word comments ("done", "fixed"), pasting raw logs without context, comments that duplicate the issue description.
 
+> Comment and description bodies follow the **Brief register** (canonical
+> definition in `carter-docs`): lead with the answer/ask, one screen not a page,
+> concrete and plain, scoped to the ticket.
+
 ### Update Issues
 
 When updating tickets, change only the fields requested. Common operations:

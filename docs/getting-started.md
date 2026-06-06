@@ -13,7 +13,7 @@ This guide walks you through setting up Carter and using it in real scenarios. I
 
 Before diving in, here's the mental model:
 
-**Agents** are specialized AI assistants with focused expertise. Each one knows what it should and shouldn't do. Carter has 6 core conversational agents (Maestro, Architect, Engineer, DevOps, Learner, PM). Workspace scaffolds also generate a 7th utility agent, **Narrator**, which redacts sensitive content from external-facing output.
+**Agents** are specialized AI assistants with focused expertise. Each one knows what it should and shouldn't do. Carter has 7 agents: 6 conversational specialists (Maestro, Architect, Engineer, DevOps, Learner, PM) plus **Narrator**, which reframes and redacts external-facing content. All 7 are installed by `carter install` and scaffolded by `carter init`.
 
 **Maestro** is the orchestrator — it receives your request and routes it to the right specialist. You can also talk to any agent directly.
 
@@ -75,7 +75,7 @@ my-workspace/
 │   ├── carter-devops.md
 │   ├── carter-pm.md
 │   ├── carter-learner.md
-│   └── carter-narrator.md    ← Redaction utility agent
+│   └── carter-narrator.md    ← External-facing content + redaction agent
 └── instructions/
     └── copilot-instructions.md  ← Generated global instructions
 ```

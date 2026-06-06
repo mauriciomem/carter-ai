@@ -29,14 +29,14 @@ uv pip install -e ".[dev]"
 ### Run everything
 
 ```bash
-# From the venv (covers all three test files — 191 tests)
+# From the venv (covers all three test files — 197 tests)
 python -m pytest tests/ -v
 ```
 
 ### Run a single suite
 
 ```bash
-python -m pytest tests/test_install.py -v     # installer (59)
+python -m pytest tests/test_install.py -v     # installer (65)
 python -m pytest tests/test_scaffold.py -v    # scaffold (61)
 python -m pytest tests/ops/ -v                # carter-ops (71)
 ```
@@ -59,14 +59,14 @@ No external mocking libraries are used. Both the installer and the scaffold acce
 ```
 tests/
 ├── conftest.py             # Shared fixtures (base_dir, settings, etc.)
-├── test_install.py         # Installer tests (59 tests, 19 classes)
+├── test_install.py         # Installer tests (65 tests, 21 classes)
 ├── test_scaffold.py        # Scaffold tests (61 tests, 8 classes)
 └── ops/
     ├── conftest.py         # Ops path setup
     └── test_operations.py  # Carter-ops tests (71 tests, 27 classes)
 ```
 
-The full suite is **191 tests** (`python -m pytest tests/ -v`).
+The full suite is **197 tests** (`python -m pytest tests/ -v`).
 
 ## Fixtures (conftest.py)
 
@@ -226,9 +226,9 @@ Validates that agent Markdown files are correctly copied to target directories.
 
 | Test | What It Verifies |
 |------|-----------------|
-| `test_creates_copilot_agents` | All 6 `carter-*.md` files are created under `base_dir/copilot/agents/` |
-| `test_creates_opencode_agents` | Same 6 files under `base_dir/opencode/agents/` |
-| `test_creates_both_targets` | Both targets installed simultaneously produce 6 files each |
+| `test_creates_copilot_agents` | All 7 `carter-*.md` files (incl. `carter-narrator.md`) are created under `base_dir/copilot/agents/` |
+| `test_creates_opencode_agents` | Same 7 files under `base_dir/opencode/agents/` |
+| `test_creates_both_targets` | Both targets installed simultaneously produce 7 files each |
 | `test_manifest_tracks_files` | Every installed file is recorded in the manifest with a `sha256:` hash |
 
 ### TestInstallSkills (2 tests)
@@ -237,8 +237,8 @@ Validates that skill directories and their `SKILL.md` files are created.
 
 | Test | What It Verifies |
 |------|-----------------|
-| `test_creates_copilot_skills` | All 20 `carter-*` skill directories are created, each with a `SKILL.md`, plus sub-files for terraform/packer |
-| `test_creates_opencode_skills` | Same 20 directories under the OpenCode target |
+| `test_creates_copilot_skills` | All 22 `carter-*` skill directories are created, each with a `SKILL.md`, plus sub-files for terraform/packer |
+| `test_creates_opencode_skills` | Same 22 directories under the OpenCode target |
 
 ### TestInstallInstructions (1 test)
 
@@ -261,7 +261,7 @@ Validates that running the installer multiple times is safe.
 
 | Test | What It Verifies |
 |------|-----------------|
-| `test_second_run_unchanged` | A second install reports all 6 agent files as `unchanged` (0 created, 0 updated) |
+| `test_second_run_unchanged` | A second install reports all 7 agent files as `unchanged` (0 created, 0 updated) |
 | `test_modified_file_detected_as_updated` | If a file is modified externally, the installer detects and reports it as `updated` |
 
 ### TestMCPMerging (8 tests)
@@ -361,9 +361,29 @@ Validates the ops enforcement one-liner across agents and skills.
 
 | Test | What It Verifies |
 |------|-------------------|
-| `test_agents_have_ops_oneliner` | All 6 installed agent files contain `ops:` and `carter-ops` references |
+| `test_agents_have_ops_oneliner` | All 7 installed agent files contain `ops:` and `carter-ops` references |
 | `test_no_critical_section_in_agents` | No agent file contains the old `CRITICAL: Write Operations` section |
 | `test_no_deterministic_ops_in_skills` | Pipeline and atlassian skills have no `<deterministic-operations>` blocks |
+
+### TestNarratorAgent (3 tests)
+
+Validates ADR-0001: the narrator is a first-class, always-installed agent.
+
+| Test | What It Verifies |
+|------|-------------------|
+| `test_narrator_installed` | `carter-narrator.md` is installed by `install_agents` (system-level, not scaffold-only) |
+| `test_narrator_has_all_redaction_categories` | The static source bakes in redaction ON with all 7 categories + the anti-bypass clause |
+| `test_narrator_references_content_skills` | The agent references `carter-docs` and `carter-story` |
+
+### TestContentSkills (3 tests)
+
+Validates ADR-0001: the `carter-docs` and `carter-story` skills and their anti-drift contracts.
+
+| Test | What It Verifies |
+|------|-------------------|
+| `test_content_skills_installed` | `carter-docs/SKILL.md` and `carter-story/SKILL.md` are installed |
+| `test_docs_skill_delegates` | `carter-docs` delegates to `carter-adr`/`carter-diagram`/`pptx` and cites Diátaxis + Keep a Changelog + Conventional Commits |
+| `test_brief_register_single_source` | The Brief register is defined once in `carter-docs`; `carter-atlassian`/`carter-ops` only reference it |
 
 ### TestInstallMemories (3 tests)
 

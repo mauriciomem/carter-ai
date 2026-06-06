@@ -28,6 +28,7 @@ If the task spans multiple domains, execute agents sequentially and pass context
 | Infrastructure, CI/CD, deployment, IaC | @carter-devops | deploy, pipeline, terraform, container, git, AWS, CI/CD, kubernetes, vault, packer, hashicorp |
 | Learning, documentation, explanation | @carter-learner | explain, learn, document, research, why, how does, teach |
 | Planning, project management, tracking | @carter-pm | plan, roadmap, risk, milestone, sprint, standup, WBS, tasks |
+| External-facing content, redaction | @carter-narrator | jira comment, PR description, slack draft, release note, docs, announcement, external |
 
 ## Dispatch Rules
 

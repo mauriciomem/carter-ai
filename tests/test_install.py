@@ -29,6 +29,7 @@ class TestInstallAgents:
             "carter-engineer.md",
             "carter-learner.md",
             "carter-maestro.md",
+            "carter-narrator.md",
             "carter-pm.md",
         ]
         actual = sorted(f.name for f in agents_dir.glob("carter-*.md"))
@@ -42,7 +43,7 @@ class TestInstallAgents:
         agents_dir = base_dir / "opencode" / "agents"
         assert agents_dir.exists()
         actual = sorted(f.name for f in agents_dir.glob("carter-*.md"))
-        assert len(actual) == 6
+        assert len(actual) == 7
 
     def test_creates_both_targets(self, base_dir: Path) -> None:
         manifest = {"files": [], "file_hashes": {}}
@@ -51,16 +52,16 @@ class TestInstallAgents:
 
         copilot_agents = list((base_dir / "copilot" / "agents").glob("carter-*.md"))
         opencode_agents = list((base_dir / "opencode" / "agents").glob("carter-*.md"))
-        assert len(copilot_agents) == 6
-        assert len(opencode_agents) == 6
+        assert len(copilot_agents) == 7
+        assert len(opencode_agents) == 7
 
     def test_manifest_tracks_files(self, base_dir: Path) -> None:
         manifest = {"files": [], "file_hashes": {}}
         backup = base_dir / "backup"
         install.install_agents(["copilot"], base_dir, manifest, backup)
 
-        assert len(manifest["files"]) == 6
-        assert len(manifest["file_hashes"]) == 6
+        assert len(manifest["files"]) == 7
+        assert len(manifest["file_hashes"]) == 7
         for h in manifest["file_hashes"].values():
             assert h.startswith("sha256:")
 
@@ -75,7 +76,7 @@ class TestInstallSkills:
         assert skills_dir.exists()
 
         skill_dirs = sorted(d.name for d in skills_dir.iterdir() if d.is_dir())
-        assert len(skill_dirs) == 20
+        assert len(skill_dirs) == 22
         for d in skill_dirs:
             assert d.startswith("carter-")
             assert (skills_dir / d / "SKILL.md").exists()
@@ -102,7 +103,7 @@ class TestInstallSkills:
 
         skills_dir = base_dir / "opencode" / "skills"
         skill_dirs = sorted(d.name for d in skills_dir.iterdir() if d.is_dir())
-        assert len(skill_dirs) == 20
+        assert len(skill_dirs) == 22
 
 
 class TestInstallInstructions:
@@ -168,7 +169,7 @@ class TestIdempotency:
         manifest2 = {"files": [], "file_hashes": {}}
         stats = install.install_agents(["copilot"], base_dir, manifest2, backup)
 
-        assert stats["unchanged"] == 6
+        assert stats["unchanged"] == 7
         assert stats["created"] == 0
         assert stats["updated"] == 0
 
@@ -439,7 +440,7 @@ class TestUninstall:
 
         # Verify files exist
         agents_dir = base_dir / "copilot" / "agents"
-        assert len(list(agents_dir.glob("carter-*.md"))) == 6
+        assert len(list(agents_dir.glob("carter-*.md"))) == 7
 
         # Uninstall
         install.uninstall(["copilot"], base_dir, {})
@@ -729,6 +730,89 @@ class TestOpsOneLiner:
             assert "<deterministic-operations>" not in content, (
                 f"{skill_name}/SKILL.md still has deterministic-operations block"
             )
+
+
+class TestNarratorAgent:
+    """ADR-0001: narrator is a first-class, always-installed agent."""
+
+    def test_narrator_installed(self, base_dir: Path) -> None:
+        manifest = {"files": [], "file_hashes": {}}
+        backup = base_dir / "backup"
+        install.install_agents(["copilot"], base_dir, manifest, backup)
+
+        narrator = base_dir / "copilot" / "agents" / "carter-narrator.md"
+        assert narrator.exists()
+
+    def test_narrator_has_all_redaction_categories(self, base_dir: Path) -> None:
+        """Static source bakes in redaction ON with all 7 categories (no carter.yaml)."""
+        manifest = {"files": [], "file_hashes": {}}
+        backup = base_dir / "backup"
+        install.install_agents(["copilot"], base_dir, manifest, backup)
+
+        content = (base_dir / "copilot" / "agents" / "carter-narrator.md").read_text()
+        assert "Redaction Rules — NON-NEGOTIABLE" in content
+        for category in (
+            "Secrets",
+            "Internal URLs",
+            "Security Incidents",
+            "PII",
+            "Financial Figures",
+            "Employee Data",
+            "Infrastructure IDs",
+        ):
+            assert category in content, f"narrator missing redaction category: {category}"
+        assert "Anti-Bypass Clause" in content
+
+    def test_narrator_references_content_skills(self, base_dir: Path) -> None:
+        manifest = {"files": [], "file_hashes": {}}
+        backup = base_dir / "backup"
+        install.install_agents(["copilot"], base_dir, manifest, backup)
+
+        content = (base_dir / "copilot" / "agents" / "carter-narrator.md").read_text()
+        assert "carter-docs" in content
+        assert "carter-story" in content
+
+
+class TestContentSkills:
+    """ADR-0001: carter-docs and carter-story skills with anti-drift delegation."""
+
+    def test_content_skills_installed(self, base_dir: Path) -> None:
+        manifest = {"files": [], "file_hashes": {}}
+        backup = base_dir / "backup"
+        install.install_skills(["copilot"], base_dir, manifest, backup)
+
+        skills_dir = base_dir / "copilot" / "skills"
+        assert (skills_dir / "carter-docs" / "SKILL.md").exists()
+        assert (skills_dir / "carter-story" / "SKILL.md").exists()
+
+    def test_docs_skill_delegates(self, base_dir: Path) -> None:
+        """carter-docs must delegate ADRs/diagrams/decks, not duplicate them."""
+        manifest = {"files": [], "file_hashes": {}}
+        backup = base_dir / "backup"
+        install.install_skills(["copilot"], base_dir, manifest, backup)
+
+        content = (base_dir / "copilot" / "skills" / "carter-docs" / "SKILL.md").read_text()
+        for delegate in ("carter-adr", "carter-diagram", "pptx"):
+            assert delegate in content, f"carter-docs missing delegation to {delegate}"
+        # Diátaxis + changelog conventions
+        assert "Diátaxis" in content
+        assert "Keep a Changelog" in content
+        assert "Conventional Commits" in content
+
+    def test_brief_register_single_source(self, base_dir: Path) -> None:
+        """Brief register is defined in carter-docs and only referenced elsewhere."""
+        manifest = {"files": [], "file_hashes": {}}
+        backup = base_dir / "backup"
+        install.install_skills(["copilot"], base_dir, manifest, backup)
+
+        skills_dir = base_dir / "copilot" / "skills"
+        docs = (skills_dir / "carter-docs" / "SKILL.md").read_text()
+        assert "Brief Register (canonical definition)" in docs
+        # Referencing skills point back to carter-docs rather than redefining it
+        for skill_name in ("carter-atlassian", "carter-ops"):
+            content = (skills_dir / skill_name / "SKILL.md").read_text()
+            assert "Brief register" in content
+            assert "carter-docs" in content
 
 
 class TestInstallMemories:

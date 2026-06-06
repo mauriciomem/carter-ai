@@ -91,7 +91,8 @@ Append this footer to ALL `--body` values:
 
 When the body is a code review, write it in the `carter-code-review` register
 (default Standard) — conversational, scoped to the diff, no full severity table
-unless a deep review was requested.
+unless a deep review was requested. For non-review PR/issue bodies, use the
+**Brief register** (defined in `carter-docs`): lead with the ask, concise, scoped.
 
 ### Commands
 

@@ -158,7 +158,8 @@ User
   │     ├─→ @carter-engineer    (code, tests, reviews)
   │     ├─→ @carter-devops      (CI/CD, IaC, containers)
   │     ├─→ @carter-learner     (research, explanation)
-  │     └─→ @carter-pm          (planning, risk, roadmaps)
+  │     ├─→ @carter-pm          (planning, risk, roadmaps)
+  │     └─→ @carter-narrator    (external content, redaction)
   │
   └── Direct access to any agent
 ```
@@ -174,9 +175,10 @@ User
 | **Learner** | Explanation, research, memory | Documentation, mistake capture, topic research |
 | **PM** | Planning, risk, agile | WBS, roadmaps, sprint planning, risk assessment |
 
-> Workspace scaffolds (`carter init`) also generate a 7th utility agent,
-> **Narrator**, which redacts sensitive content from external-facing output
-> (controlled by the `redaction` block in `carter.yaml`).
+> A 7th agent, **Narrator**, reframes and redacts external-facing content (PR
+> descriptions, Jira comments, docs, announcements). It is installed by both
+> `carter install` and `carter init`, and applies non-negotiable redaction rules
+> before anything leaves the workspace (see [ADR-0001](docs/adr/0001-narrator-content-suite.md)).
 
 ### MCP Servers
 
@@ -305,7 +307,7 @@ The test suite covers:
 - **Scaffold tests** (`tests/test_scaffold.py`) — template rendering, config validation/merging, workspace initialization, quality gates, narrator redaction
 - **Carter-ops tests** (`tests/ops/test_operations.py`) — CLI parsing, operation dry-runs/execution, GitHub/Jira/git operations, config and audit subcommands
 
-191 tests in total. See [docs/testing.md](docs/testing.md) for the full testing guide.
+197 tests in total. See [docs/testing.md](docs/testing.md) for the full testing guide.
 
 ## Project Structure
 
