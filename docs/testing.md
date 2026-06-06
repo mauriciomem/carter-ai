@@ -29,7 +29,7 @@ uv pip install -e ".[dev]"
 ### Run everything
 
 ```bash
-# From the venv (covers all three test files — 197 tests)
+# From the venv (covers all three test files — 202 tests)
 python -m pytest tests/ -v
 ```
 
@@ -38,8 +38,26 @@ python -m pytest tests/ -v
 ```bash
 python -m pytest tests/test_install.py -v     # installer (65)
 python -m pytest tests/test_scaffold.py -v    # scaffold (61)
+python -m pytest tests/test_parity.py -v      # agent source parity (5)
 python -m pytest tests/ops/ -v                # carter-ops (71)
 ```
+
+## Continuous Integration
+
+Every push to `main` and every pull request runs the suite via GitHub Actions
+([.github/workflows/ci.yml](../.github/workflows/ci.yml)) on Python 3.11 and 3.13:
+
+```bash
+uv pip install --system -e ".[dev]"
+python -m pytest tests/ -q                                  # 202 unit tests
+python -m pytest evals/test_skills.py evals/test_routing.py -q  # 28 offline evals
+```
+
+The live evals (`evals/test_live.py`, marked `live`) require an API key and are
+**not** run in CI. The agent-generation drift check described in
+[ADR-0002](adr/0002-single-source-agent-generation.md) is deferred until the
+static/template sources are reconciled; until then, `tests/test_parity.py` is the
+drift guardrail.
 
 ## Tools & Libraries
 
@@ -61,12 +79,13 @@ tests/
 ├── conftest.py             # Shared fixtures (base_dir, settings, etc.)
 ├── test_install.py         # Installer tests (65 tests, 21 classes)
 ├── test_scaffold.py        # Scaffold tests (61 tests, 8 classes)
+├── test_parity.py          # Agent source-parity tests (5 tests, 2 classes)
 └── ops/
     ├── conftest.py         # Ops path setup
     └── test_operations.py  # Carter-ops tests (71 tests, 27 classes)
 ```
 
-The full suite is **197 tests** (`python -m pytest tests/ -v`).
+The full suite is **202 tests** (`python -m pytest tests/ -v`).
 
 ## Fixtures (conftest.py)
 
@@ -536,6 +555,33 @@ Validate the utility subcommands the model calls directly.
 |-------|-------|------------------|
 | `TestAuditSubcommand` | 4 | `carter ops audit` appends a JSONL entry; requires `--operation` and `--result`; parses `--params`/`--identifiers` JSON |
 | `TestConfigSubcommand` | 2 | `carter ops config --emit` prints config values as JSON; rejects bad usage |
+
+---
+
+## Parity Tests (`tests/test_parity.py`)
+
+Carter defines each agent twice — a static `agents/carter-*.md` (copied by
+`carter install`) and a `templates/agents/carter-*.md.j2` (rendered by
+`carter init`/`update`). The two are hand-maintained and have diverged
+structurally (static files carry YAML frontmatter; templates do not), so these
+tests lock the *invariants* that must never drift rather than asserting
+byte-equality. This is the phase-1 guardrail from
+[ADR-0002](adr/0002-single-source-agent-generation.md).
+
+### TestAgentSourceParity (3 tests)
+
+| Test | What It Verifies |
+|------|------------------|
+| `test_static_and_template_agent_sets_match` | The set of agents in `agents/` equals the set in `templates/agents/` (guards the ADR-0001 drift where the narrator had a template but no static file) |
+| `test_static_agents_have_frontmatter` | Every static agent carries `---` frontmatter with `description:` and `mode:` |
+| `test_static_agents_have_ops_oneliner` | Every static agent contains the `ops:` / `carter-ops` one-liner |
+
+### TestNarratorParity (2 tests)
+
+| Test | What It Verifies |
+|------|------------------|
+| `test_redaction_invariants_in_both_sources` | Both narrator sources contain `NON-NEGOTIABLE`, the Anti-Bypass clause, and all 7 redaction categories |
+| `test_reader_principle_in_both_sources` | Both narrator sources contain the "write for the reader" principle |
 
 ## Extending the Test Suite
 

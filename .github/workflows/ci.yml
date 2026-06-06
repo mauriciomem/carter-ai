@@ -1,0 +1,34 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: test (py${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install project (with dev deps)
+        run: uv pip install --system -e ".[dev]"
+
+      - name: Run unit tests
+        run: python -m pytest tests/ -q
+
+      - name: Run offline evals
+        run: python -m pytest evals/test_skills.py evals/test_routing.py -q

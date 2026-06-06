@@ -1,5 +1,7 @@
 # Carter
 
+[![CI](https://github.com/mauriciomem/carter-ai/actions/workflows/ci.yml/badge.svg)](https://github.com/mauriciomem/carter-ai/actions/workflows/ci.yml)
+
 An AI assistant with expert personalities for software architecture, engineering, DevOps, learning, and project management.
 
 Carter runs on **VS Code**, **Copilot CLI**, and **OpenCode CLI**. The same agents, skills, and MCP integrations work across all three surfaces.
@@ -305,9 +307,10 @@ uv run --with pytest pytest tests/ -v
 The test suite covers:
 - **Installer tests** (`tests/test_install.py`) — file installation, idempotency, JSON merging, manifest management, memory directories
 - **Scaffold tests** (`tests/test_scaffold.py`) — template rendering, config validation/merging, workspace initialization, quality gates, narrator redaction
+- **Parity tests** (`tests/test_parity.py`) — invariants that must not drift between the static agent files and their templates
 - **Carter-ops tests** (`tests/ops/test_operations.py`) — CLI parsing, operation dry-runs/execution, GitHub/Jira/git operations, config and audit subcommands
 
-197 tests in total. See [docs/testing.md](docs/testing.md) for the full testing guide.
+202 tests in total, run on every push and PR via [GitHub Actions](.github/workflows/ci.yml). See [docs/testing.md](docs/testing.md) for the full testing guide.
 
 ## Project Structure
 
