@@ -7,6 +7,31 @@
 
 ---
 
+## Implementation Status (verified 2026-06-06)
+
+**Shipped** in commit `5d4a194` (+ `0c7f3d8` for the "write for the reader"
+principle). Audit confirms all four sub-decisions are live:
+
+| Sub-decision | Status | Evidence |
+|--------------|--------|----------|
+| D1 — narrator first-class (6→7 agents) | **DONE** | `agents/carter-narrator.md` exists, redaction ON + 7 categories; `mode: subagent` (per ADR-0002) |
+| D2 — `carter-docs` skill | **DONE** | Diátaxis + Keep a Changelog + git-aware doc-audit + delegation table present |
+| D3 — `carter-story` skill | **DONE** | audience matrix, delegates redaction to narrator + decks to pptx/docx |
+| D4 — Brief register | **DONE** | canonical in `carter-docs`; referenced (not duplicated) by `carter-atlassian` + `carter-ops` |
+
+Ground truth: 22 skills, 7 agents, anti-drift contracts honored in the actual
+skill files. Tests `TestNarratorAgent` + `TestContentSkills` guard it.
+
+**Known limitation (edge case).** The static narrator bakes redaction ON, but the
+*template* gates it on `{% if config.redaction.enabled %}`. A workspace that sets
+`redaction.enabled = false` while keeping `narrator` in `config.agents` scaffolds
+a narrator with **no redaction rules**, yet maestro still routes external content
+to it. The parity test reads the template as raw text, so it does **not** catch
+this. Not fixed (by-design config-gating per D1); recorded for a future guard
+(e.g. warn when narrator is enabled but redaction is off, or render-time assertion).
+
+---
+
 ## Context
 
 Carter produces "narrative" output — content written for humans rather than

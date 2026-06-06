@@ -8,6 +8,29 @@
 
 ---
 
+## Current Status (verified 2026-06-06)
+
+> This ADR accreted several follow-ups in one session. Read this block first; the
+> historical Context/sketch sections below are preserved as the decision record
+> and some of their "current state" claims are **superseded** (marked inline).
+
+| Item | Status | Where |
+|------|--------|-------|
+| Phase 1 — parity tests | **DONE** | `tests/test_parity.py` (8 tests), commit `ef0a1ad` |
+| Phase 1 — CI | **DONE & green** | `.github/workflows/ci.yml` (py3.11/3.13), commits `ef0a1ad`/`68c2c2b`/`f8ba618` |
+| Frontmatter divergence | **FIXED** | templates emit frontmatter byte-matching static; commit `7712f59` |
+| `mode` vocabulary | **RESOLVED** | maestro `primary`, six specialists `subagent`; commit `7712f59` |
+| Scaffold-agent discovery | **INVESTIGATED, fix deferred** | bug confirmed; design below; commit `121ba3f` |
+| Phase 2 — build-time generation + drift check | **NOT STARTED** | unblocked by the frontmatter fix; sketch below |
+
+**Ground truth at audit:** 7 static agents + 7 templates (frontmatter parity
+verified for all 7), 22 skills, 205 unit tests + 28 offline evals, CI green.
+
+**Next session starts here:** (1) implement the scaffold-discovery fix (open
+decisions in the discovery section), then (2) phase 2 generation.
+
+---
+
 ## Context
 
 Carter defines each agent in **two** places:
@@ -31,6 +54,10 @@ remaining candidate is **build-time generation**: keep one hand-edited source,
 render the static artifacts during packaging, and commit them as generated files.
 
 ### Blocking finding (verified) — the two sources have already diverged structurally
+
+> **⚠ Superseded (2026-06-06):** the divergence described here was the *pre-fix*
+> state. Templates now emit frontmatter that byte-matches the static files
+> (commit `7712f59`). Retained as the decision-time rationale; see Current Status.
 
 Build-time generation assumes the static file *is* the template rendered with a
 default config. **It is not.** Rendering `templates/agents/carter-engineer.md.j2`
@@ -61,6 +88,10 @@ artifact in two formats. This has three consequences:
    may be subtly under-specified today — independent of this ADR.
 
 ### Infrastructure reality
+
+> **⚠ Superseded (2026-06-06):** CI now exists
+> ([.github/workflows/ci.yml](../../.github/workflows/ci.yml)). The text below
+> describes the pre-CI state.
 
 This repo has **no CI workflow and no pre-commit config** of its own (only
 `yui-soul/` and `external/` carry workflows). Any "drift check" guardrail is

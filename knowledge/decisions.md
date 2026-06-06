@@ -11,7 +11,12 @@
 - **Tags:** ...
 -->
 
-## 2026-06-06 | Narrator first-class + docs/story skill suite (ADR-0001)
+## 2026-06-06 | Deep audit: ADR-0001/0002 status verified + edge case found
+- **Context:** Full audit of agents, skills, source, and tests against the ADRs to produce an updated status. Everything verified consistent: 7 agents (maestro primary, 6 subagent), 7 templates with frontmatter byte-matching static, 22 skills, 205 unit + 28 offline eval tests, CI green, anti-drift contracts honored in the real skill files.
+- **Decision:** Added a "Current Status" block to ADR-0002 (consolidating its scattered follow-ups) and marked its stale Blocking-finding/Infrastructure sections superseded; added an "Implementation Status" stamp to ADR-0001. No code changes — docs/status only.
+- **Edge case recorded (not fixed):** the narrator template gates redaction on `config.redaction.enabled`; a workspace with redaction off + narrator enabled scaffolds a narrator with NO redaction rules while maestro still routes external content to it. The parity test reads the template raw so it misses this. Future guard: warn/assert when narrator is enabled but redaction is off.
+- **Tags:** audit, adr-0001, adr-0002, status, edge-case, redaction
+
 - **Context:** The narrator was the only agent without a static source (template-only), so `carter install` shipped 6 agents and never the narrator. Narrative voice was fragmented with no developer-docs or public-storytelling skill.
 - **Decision:** (D1) Add `agents/carter-narrator.md` so the narrator is always installed (6→7 agents, redaction ON/7 categories baked in). (D2) New `carter-docs` skill (Diátaxis + Keep a Changelog/Conventional Commits + git-aware doc-audit). (D3) New `carter-story` skill (public-facing narrative). (D4) Terse ticket/PR/issue responses are a **Brief register**, not a skill. Skills 20→22.
 - **Rationale:** Completes the dual-source agent pattern; puts style in globally-installed skills while redaction stays at the narrator agent gate; reuses the register + Scope Gate patterns; delegation (carter-adr, carter-diagram, pptx/docx) prevents drift.
