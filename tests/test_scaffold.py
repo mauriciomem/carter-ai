@@ -591,3 +591,89 @@ class TestNarrator:
         results = render_agents(default_config, env)
         maestro = results["carter-maestro.md"]
         assert "carter-narrator" in maestro
+
+
+# ─── Discovery paths (carter init/update output locations) ───────────────────
+
+
+class TestRenderDiscovery:
+    """`carter init`/`update` must write agents and instructions to the paths the
+    tools actually discover (ADR-0002): copilot → .github/, opencode → .opencode/
+    + AGENTS.md. Carter-owned agents are (re)written; instruction files are
+    skip-if-exists.
+    """
+
+    def _agent_names(self, config: dict) -> list[str]:
+        return [f"carter-{a}.md" for a in config["agents"]]
+
+    def test_copilot_target_writes_github_paths(self, tmp_path, default_config, env):
+        from carter.cli import _render_and_write
+
+        default_config["target"] = "copilot"
+        _render_and_write(tmp_path, default_config, env)
+
+        agents_dir = tmp_path / ".github" / "agents"
+        for name in self._agent_names(default_config):
+            assert (agents_dir / name).exists()
+        assert (tmp_path / ".github" / "copilot-instructions.md").exists()
+        # Nothing written to the legacy non-discoverable path
+        assert not (tmp_path / "agents").exists()
+
+    def test_opencode_target_writes_opencode_paths(self, tmp_path, default_config, env):
+        from carter.cli import _render_and_write
+
+        default_config["target"] = "opencode"
+        _render_and_write(tmp_path, default_config, env)
+
+        agents_dir = tmp_path / ".opencode" / "agents"
+        for name in self._agent_names(default_config):
+            assert (agents_dir / name).exists()
+        assert (tmp_path / "AGENTS.md").exists()
+        assert not (tmp_path / ".github").exists()
+
+    def test_all_target_writes_both(self, tmp_path, default_config, env):
+        from carter.cli import _render_and_write
+
+        default_config["target"] = "all"
+        _render_and_write(tmp_path, default_config, env)
+
+        assert (tmp_path / ".github" / "agents" / "carter-maestro.md").exists()
+        assert (tmp_path / ".github" / "copilot-instructions.md").exists()
+        assert (tmp_path / ".opencode" / "agents" / "carter-maestro.md").exists()
+        assert (tmp_path / "AGENTS.md").exists()
+
+    def test_instructions_skip_if_exists(self, tmp_path, default_config, env):
+        from carter.cli import _render_and_write
+
+        default_config["target"] = "copilot"
+        instr = tmp_path / ".github" / "copilot-instructions.md"
+        instr.parent.mkdir(parents=True)
+        instr.write_text("USER CONTENT")
+
+        _render_and_write(tmp_path, default_config, env)
+
+        # User instruction file preserved, agents still written
+        assert instr.read_text() == "USER CONTENT"
+        assert (tmp_path / ".github" / "agents" / "carter-maestro.md").exists()
+
+    def test_agents_rewritten_on_update(self, tmp_path, default_config, env):
+        """Carter-owned agents are overwritten so `carter update` refreshes them."""
+        from carter.cli import _render_and_write
+
+        default_config["target"] = "copilot"
+        agent = tmp_path / ".github" / "agents" / "carter-maestro.md"
+        agent.parent.mkdir(parents=True)
+        agent.write_text("STALE")
+
+        _render_and_write(tmp_path, default_config, env)
+
+        assert agent.read_text() != "STALE"
+        assert "Carter Maestro" in agent.read_text()
+
+    def test_resolve_targets(self):
+        from carter.cli import _resolve_targets
+
+        assert _resolve_targets("copilot") == ["copilot"]
+        assert _resolve_targets("opencode") == ["opencode"]
+        assert _resolve_targets("all") == ["copilot", "opencode"]
+

@@ -123,12 +123,15 @@ def update(target_dir: str, dry_run: bool):
 
     if dry_run:
         agents = render_agents(config, env)
-        instructions = render_instructions(config, env)
+        tools = _resolve_targets(config.get("target", "copilot"))
         click.echo("Would render:")
-        for name in sorted(agents):
-            click.echo(f"  agents/{name}")
-        for name in sorted(instructions):
-            click.echo(f"  instructions/{name}")
+        for tool in tools:
+            agents_dir = _agents_dir(target, tool)
+            for name in sorted(agents):
+                click.echo(f"  {(agents_dir / name).relative_to(target)}")
+            instr = _instructions_path(target, tool)
+            note = " (skipped: exists)" if instr.exists() else ""
+            click.echo(f"  {instr.relative_to(target)}{note}")
         return
 
     _render_and_write(target, config, env)
@@ -154,18 +157,17 @@ def check(target_dir: str):
     except ConfigError as e:
         raise click.ClickException(str(e)) from e
 
-    # Check agent files exist
-    agents_dir = target / "agents"
-    for agent_name in config["agents"]:
-        agent_file = agents_dir / f"carter-{agent_name}.md"
-        if not agent_file.exists():
-            errors.append(f"Missing agent file: agents/carter-{agent_name}.md")
+    # Check agent and instruction files exist in each target's discovery path
+    for tool in _resolve_targets(config.get("target", "copilot")):
+        agents_dir = _agents_dir(target, tool)
+        for agent_name in config["agents"]:
+            agent_file = agents_dir / f"carter-{agent_name}.md"
+            if not agent_file.exists():
+                errors.append(f"Missing agent file: {agent_file.relative_to(target)}")
 
-    # Check instructions
-    instructions_dir = target / "instructions"
-    instructions_file = instructions_dir / "copilot-instructions.md"
-    if not instructions_file.exists():
-        errors.append("Missing: instructions/copilot-instructions.md")
+        instructions_file = _instructions_path(target, tool)
+        if not instructions_file.exists():
+            errors.append(f"Missing instructions: {instructions_file.relative_to(target)}")
 
     # Check knowledge files
     knowledge_dir = target / ".carter" / "knowledge"
@@ -182,13 +184,66 @@ def check(target_dir: str):
     click.echo("Workspace OK")
 
 
-def _render_and_write(target: Path, config: dict, env) -> None:
-    """Render all templates and write to disk."""
-    agents = render_agents(config, env)
-    write_rendered_files(agents, target / "agents")
+def _resolve_targets(target: str) -> list[str]:
+    """Resolve a config ``target`` value to concrete tool targets.
 
-    instructions = render_instructions(config, env)
-    write_rendered_files(instructions, target / "instructions")
+    Mirrors the installer: ``all`` expands to both, anything else is itself.
+    """
+    return ["copilot", "opencode"] if target == "all" else [target]
+
+
+# Per-target discovery paths (relative to the workspace root) where each tool
+# actually loads agents and instructions from.
+#   copilot/VS Code: .github/agents/*.md      + .github/copilot-instructions.md
+#   opencode:        .opencode/agents/*.md    + AGENTS.md (project root)
+_AGENT_DIRS = {
+    "copilot": (".github", "agents"),
+    "opencode": (".opencode", "agents"),
+}
+_INSTRUCTION_PATHS = {
+    "copilot": (".github", "copilot-instructions.md"),
+    "opencode": ("AGENTS.md",),
+}
+
+
+def _agents_dir(target_root: Path, tool: str) -> Path:
+    return target_root.joinpath(*_AGENT_DIRS[tool])
+
+
+def _instructions_path(target_root: Path, tool: str) -> Path:
+    return target_root.joinpath(*_INSTRUCTION_PATHS[tool])
+
+
+def _write_if_absent(path: Path, content: str) -> bool:
+    """Write ``content`` to ``path`` only if it does not already exist.
+
+    Returns True if written, False if skipped. Used for instruction files
+    (``AGENTS.md`` / ``copilot-instructions.md``) which may carry user content
+    and must never be clobbered.
+    """
+    if path.exists():
+        return False
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(content)
+    return True
+
+
+def _render_and_write(target: Path, config: dict, env) -> None:
+    """Render templates and write them to each target's discovery paths.
+
+    Carter-owned agent files (``carter-*``) are always (re)written so that
+    ``carter update`` refreshes them. Instruction files are written only when
+    absent (skip-if-exists), so user edits to ``AGENTS.md`` /
+    ``copilot-instructions.md`` are preserved.
+    """
+    tools = _resolve_targets(config.get("target", "copilot"))
+    agents = render_agents(config, env)
+    instructions_content = render_instructions(config, env)["copilot-instructions.md"]
+
+    for tool in tools:
+        write_rendered_files(agents, _agents_dir(target, tool))
+        _write_if_absent(_instructions_path(target, tool), instructions_content)
+
 
 
 @main.command(

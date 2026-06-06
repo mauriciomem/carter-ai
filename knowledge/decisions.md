@@ -46,6 +46,13 @@
 - **Open item still tracked:** scaffold-agent discovery (`<workspace>/agents/`) undocumented.
 - **Tags:** architecture, agents, mode, opencode, adr-0002
 
+## 2026-06-06 | Scaffold-discovery FIXED — render to per-target discovery paths (ADR-0002)
+- **Context:** `carter init`/`update` wrote agents to `<workspace>/agents/` + instructions to `<workspace>/instructions/` — paths no tool discovers, so scaffolded agents never loaded. (Supersedes the "confirmed bug, fix deferred" entry below.)
+- **Decision:** `_render_and_write` now honors `config["target"]` and writes discovery paths: copilot → `.github/agents/*.md` + `.github/copilot-instructions.md`; opencode → `.opencode/agents/*.md` + `AGENTS.md`; all → both. Carter-owned `carter-*` agents always (re)written (so `carter update` works); instruction files skip-if-exists (never clobber user content). `carter check` validates new paths; dry-run previews them.
+- **Rationale:** Decisions chosen by user: (a) honor target (the field existed for this), (b) skip-if-exists for instructions (mirrors installer's AGENTS.md behavior). 6 TestRenderDiscovery tests added; getting-started.md updated.
+- **Caveat:** Cannot live-verify VS Code/OpenCode actually load them (no runtime); output now lands in documented discovery paths — needs manual end-to-end confirmation.
+- **Tags:** scaffold, discovery, init, cli, adr-0002
+
 ## 2026-06-06 | Scaffold-agent discovery is a confirmed bug (ADR-0002, fix deferred)
 - **Context:** `carter init`/`_render_and_write` writes agents to `<workspace>/agents/` and instructions to `<workspace>/instructions/`, but no tool discovers those paths. `config["target"]` exists (default copilot) yet is ignored. yui-soul already renders to the correct paths.
 - **Decision:** Investigated and confirmed it's a bug; fix DESIGNED but DEFERRED (not implemented this session). Correct paths: Copilot → `.github/agents/*.md` + `.github/copilot-instructions.md`; OpenCode → `.opencode/agents/*.md` + `AGENTS.md`. Fix = make `_render_and_write` honor `config["target"]`.

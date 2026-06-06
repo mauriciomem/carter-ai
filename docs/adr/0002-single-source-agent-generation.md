@@ -20,14 +20,15 @@
 | Phase 1 — CI | **DONE & green** | `.github/workflows/ci.yml` (py3.11/3.13), commits `ef0a1ad`/`68c2c2b`/`f8ba618` |
 | Frontmatter divergence | **FIXED** | templates emit frontmatter byte-matching static; commit `7712f59` |
 | `mode` vocabulary | **RESOLVED** | maestro `primary`, six specialists `subagent`; commit `7712f59` |
-| Scaffold-agent discovery | **INVESTIGATED, fix deferred** | bug confirmed; design below; commit `121ba3f` |
+| Scaffold-agent discovery | **FIXED** | `_render_and_write` honors `config["target"]`, writes discovery paths; commit pending |
 | Phase 2 — build-time generation + drift check | **NOT STARTED** | unblocked by the frontmatter fix; sketch below |
 
 **Ground truth at audit:** 7 static agents + 7 templates (frontmatter parity
 verified for all 7), 22 skills, 205 unit tests + 28 offline evals, CI green.
 
-**Next session starts here:** (1) implement the scaffold-discovery fix (open
-decisions in the discovery section), then (2) phase 2 generation.
+**Next session starts here:** phase 2 — build-time agent generation + CI
+`git diff --exit-code agents/` drift check (sketch below; unblocked by the
+frontmatter fix).
 
 ---
 
@@ -391,6 +392,18 @@ because the static files are the live, working Copilot format:
   live-verified here (no VS Code/OpenCode runtime), but the target paths are
   authoritative and the current behavior is definitively broken, so the move is
   strictly an improvement.
+
+  **RESOLVED & IMPLEMENTED (2026-06-06).** Decisions: (a) **honor
+  `config["target"]`** (`copilot`/`opencode`/`all`); (b) **skip-if-exists** for
+  instruction files. `_render_and_write` now writes per-target discovery paths;
+  Carter-owned `carter-*` agents are always (re)written (so `carter update`
+  refreshes them) while `AGENTS.md` / `.github/copilot-instructions.md` are only
+  created when absent. `carter check` validates the new paths; `carter update
+  --dry-run` previews them. Six `TestRenderDiscovery` tests in
+  `tests/test_scaffold.py` cover all three targets, skip-if-exists, agent refresh,
+  and target resolution. getting-started.md tree updated. **Still requires manual
+  end-to-end confirmation** that VS Code/OpenCode load the scaffolded agents (no
+  runtime available here), but output now lands in the documented discovery paths.
 
 ---
 

@@ -29,7 +29,7 @@ uv pip install -e ".[dev]"
 ### Run everything
 
 ```bash
-# From the venv (covers all three test files — 205 tests)
+# From the venv (covers all three test files — 211 tests)
 python -m pytest tests/ -v
 ```
 
@@ -37,7 +37,7 @@ python -m pytest tests/ -v
 
 ```bash
 python -m pytest tests/test_install.py -v     # installer (65)
-python -m pytest tests/test_scaffold.py -v    # scaffold (61)
+python -m pytest tests/test_scaffold.py -v    # scaffold (67)
 python -m pytest tests/test_parity.py -v      # agent source parity (8)
 python -m pytest tests/ops/ -v                # carter-ops (71)
 ```
@@ -50,7 +50,7 @@ Every push to `main` and every pull request runs the suite via GitHub Actions
 ```bash
 uv venv --clear
 uv pip install -e ".[dev]"
-python -m pytest tests/ -q                                  # 205 unit tests
+python -m pytest tests/ -q                                  # 211 unit tests
 python -m pytest evals/test_skills.py evals/test_routing.py -q  # 28 offline evals
 ```
 
@@ -79,14 +79,14 @@ No external mocking libraries are used. Both the installer and the scaffold acce
 tests/
 ├── conftest.py             # Shared fixtures (base_dir, settings, etc.)
 ├── test_install.py         # Installer tests (65 tests, 21 classes)
-├── test_scaffold.py        # Scaffold tests (61 tests, 8 classes)
+├── test_scaffold.py        # Scaffold tests (67 tests, 9 classes)
 ├── test_parity.py          # Agent source-parity tests (8 tests, 3 classes)
 └── ops/
     ├── conftest.py         # Ops path setup
     └── test_operations.py  # Carter-ops tests (71 tests, 27 classes)
 ```
 
-The full suite is **205 tests** (`python -m pytest tests/ -v`).
+The full suite is **211 tests** (`python -m pytest tests/ -v`).
 
 ## Fixtures (conftest.py)
 
@@ -235,6 +235,20 @@ Validates the `carter-narrator` redaction agent template and the `redaction` con
 | `test_anti_bypass_clause_present` | The anti-bypass clause is present in the rendered agent |
 | `test_narrator_absent_when_not_in_agents` | Narrator is not rendered when removed from the agents list |
 | `test_maestro_routes_to_narrator` | Maestro's routing references the narrator agent |
+
+### TestRenderDiscovery (6 tests)
+
+Validates that `carter init`/`update` write agents and instructions to the paths
+each tool actually discovers (ADR-0002), honoring `config["target"]`.
+
+| Test | What It Verifies |
+|------|------------------|
+| `test_copilot_target_writes_github_paths` | `target: copilot` writes `.github/agents/*.md` + `.github/copilot-instructions.md` (and not the legacy `agents/`) |
+| `test_opencode_target_writes_opencode_paths` | `target: opencode` writes `.opencode/agents/*.md` + `AGENTS.md` |
+| `test_all_target_writes_both` | `target: all` writes both target trees |
+| `test_instructions_skip_if_exists` | A pre-existing instruction file is preserved; agents still written |
+| `test_agents_rewritten_on_update` | Carter-owned `carter-*` agents are overwritten so `carter update` refreshes them |
+| `test_resolve_targets` | `_resolve_targets` expands `all` to both; passes others through |
 
 ---
 

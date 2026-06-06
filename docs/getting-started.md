@@ -52,7 +52,8 @@ This generates customized agents from templates into a specific workspace direct
 carter init ~/my-workspace --name "my-project"
 ```
 
-**What `carter init` creates:**
+**What `carter init` creates** (agent/instruction locations depend on `target` in
+`carter.yaml`; the tree below shows the default `target: copilot`):
 
 ```
 my-workspace/
@@ -68,17 +69,24 @@ my-workspace/
 │       ├── plans/active/
 │       ├── plans/completed/
 │       └── sessions/
-├── agents/                   ← Generated from templates
-│   ├── carter-maestro.md
-│   ├── carter-architect.md
-│   ├── carter-engineer.md
-│   ├── carter-devops.md
-│   ├── carter-pm.md
-│   ├── carter-learner.md
-│   └── carter-narrator.md    ← External-facing content + redaction agent
-└── instructions/
-    └── copilot-instructions.md  ← Generated global instructions
+└── .github/                  ← Copilot/VS Code discovery paths
+    ├── agents/               ← Generated from templates
+    │   ├── carter-maestro.md
+    │   ├── carter-architect.md
+    │   ├── carter-engineer.md
+    │   ├── carter-devops.md
+    │   ├── carter-pm.md
+    │   ├── carter-learner.md
+    │   └── carter-narrator.md    ← External-facing content + redaction agent
+    └── copilot-instructions.md   ← Generated global instructions (skipped if it exists)
 ```
+
+> **Discovery paths by target.** Agents and instructions are written where each
+> tool loads them. With `target: opencode`, `carter init` instead writes
+> `.opencode/agents/*.md` and `AGENTS.md` (project root). With `target: all`, it
+> writes both sets. Carter-owned `carter-*` agents are refreshed by
+> `carter update`; instruction files are only created when absent, so your edits
+> are preserved.
 
 ### Understanding carter.yaml
 
