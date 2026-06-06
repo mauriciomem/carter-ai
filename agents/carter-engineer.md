@@ -1,6 +1,6 @@
 ---
 description: "Software Engineer — code quality, testing, design patterns, and implementation best practices."
-mode: agent
+mode: subagent
 temperature: 0.1
 ---
 

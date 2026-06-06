@@ -272,9 +272,70 @@ Rejected as a sole mechanism.
 
 ---
 
+## Follow-up — Frontmatter divergence investigated & fixed (2026-06-06)
+
+The frontmatter divergence flagged above was investigated against the official
+agent-format docs. Findings:
+
+1. **Templates emitted no frontmatter at all.** The base template started at the
+   `<!-- Generated -->` comment; no agent template carried `description`/`mode`/
+   `temperature`. So `carter init` produced agents missing fields the runtimes use.
+2. **The frontmatter is load-bearing.** Per OpenCode docs, markdown agents use
+   frontmatter and **`description` is required**; `temperature` and `mode` are
+   honored. VS Code surfaces `description` in the agents picker. The installer
+   itself treats the frontmatter files as the canonical format
+   ([carter/installer.py](../../carter/installer.py): "store canonical files and
+   copy to both locations as-is").
+3. **The data lived only in the static `.md` files** — `carter.yaml`/`DEFAULT_CONFIG`
+   carried no per-agent metadata.
+
+**Fix applied (this change):** added a `frontmatter` Jinja block to
+[templates/base_agent.md.j2](../../templates/base_agent.md.j2) and literal
+`description`/`mode`/`temperature` to all 7 agent templates, with values copied
+from the static files. Rendered output now begins with valid YAML frontmatter that
+**byte-matches the static files' frontmatter** (verified for all 7). Two parity
+tests in `tests/test_parity.py` lock this: rendered agents must have valid
+frontmatter, and it must equal the static file's. This also **unblocks phase 2** —
+`render_agents` now produces install-ready output.
+
+### Recorded open items (NOT changed here — deliberate)
+
+These were found during the investigation but are *not* safe to change blindly,
+because the static files are the live, working Copilot format:
+
+- **`mode` vocabulary mismatch.** The agents use `mode: agent` (specialists) /
+  `mode: primary` (maestro). OpenCode's documented values are
+  `primary | subagent | all` — so `mode: agent` is not a valid OpenCode value and
+  likely defaults to `all` there (specialists would also appear as primary). This
+  is a **pre-existing** cross-platform format issue in the static files, not
+  introduced by the template fix. Changing it requires live OpenCode/Copilot
+  testing and likely a **per-target format translation** at install time. Tracked
+  for a separate decision; the template fix faithfully preserves the current
+  values so nothing regresses.
+
+  **Resolved (2026-06-06):** adopted the pure-orchestrator model — `maestro` is
+  the sole `mode: primary`; the other six agents (architect, devops, engineer,
+  learner, pm, narrator) are `mode: subagent`. All values are now valid OpenCode
+  modes. In OpenCode the specialists leave the primary/Tab cycle and are reached
+  via Maestro routing or `@`-mention (still "direct access"); `mode` is not used
+  by the VS Code/Copilot format (which uses `user-invocable`/
+  `disable-model-invocation`), so Copilot behavior is unchanged. A parity test
+  (`test_mode_vocabulary_is_valid_and_orchestrator_only`) locks this. README
+  examples that selected a specialist as the top-level `--agent` were reconciled
+  to Maestro + `@`-mention.
+- **Scaffold-agent discovery is undocumented.** `carter init` writes agents to
+  `<workspace>/agents/`, but neither VS Code (`.github/agents`, `~/.copilot/agents`)
+  nor OpenCode (`~/.config/opencode/agents`, `.opencode/agents`) discovers a bare
+  `<workspace>/agents/` by default. How scaffolded agents are loaded needs to be
+  verified and documented (or wired up). Tracked separately.
+
+---
+
 ## References
 
 - ADR-0001 — narrator first-class + content suite ([0001-narrator-content-suite.md](0001-narrator-content-suite.md))
 - Hatchling build hooks — <https://hatch.pypa.io/latest/plugins/build-hook/reference/>
+- OpenCode agents (frontmatter, required `description`, `mode`, `temperature`) — <https://opencode.ai/docs/agents/>
+- VS Code custom agents (frontmatter fields) — <https://code.visualstudio.com/docs/copilot/customization/custom-agents>
 - Evidence: `render_agents(generate_default_config(...))` vs `agents/carter-engineer.md`
   (frontmatter + identity + footer divergence), gathered 2026-06-06.

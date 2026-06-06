@@ -1,6 +1,6 @@
 ---
 description: "DevOps Engineer — CI/CD, infrastructure as code, containers, deployment, and git workflows."
-mode: agent
+mode: subagent
 temperature: 0.1
 ---
 

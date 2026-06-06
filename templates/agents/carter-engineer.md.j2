@@ -1,6 +1,12 @@
 {# Carter Engineer — software engineering specialist #}
 {% extends "base_agent.md.j2" %}
 
+{% block frontmatter %}
+description: "Software Engineer — code quality, testing, design patterns, and implementation best practices."
+mode: subagent
+temperature: 0.1
+{% endblock %}
+
 {% block identity %}
 <identity>
 

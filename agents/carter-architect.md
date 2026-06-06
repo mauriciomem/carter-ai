@@ -1,6 +1,6 @@
 ---
 description: "Solution Architect — system design, cloud architecture, trade-off analysis, and architecture decisions."
-mode: agent
+mode: subagent
 temperature: 0.4
 ---
 

@@ -1,6 +1,6 @@
 ---
 description: "Narrator — external-facing content, redaction, and audience-aware narrative."
-mode: agent
+mode: subagent
 temperature: 0.3
 ---
 

@@ -1,6 +1,6 @@
 ---
 description: "Project Manager — planning, roadmaps, work breakdown, risk management, and agile methodology."
-mode: agent
+mode: subagent
 temperature: 0.2
 ---
 

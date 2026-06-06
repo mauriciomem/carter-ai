@@ -1,6 +1,6 @@
 ---
 description: "Learner — explains complex topics, researches documentation, and tracks mistakes to learn from them."
-mode: agent
+mode: subagent
 temperature: 0.3
 ---
 

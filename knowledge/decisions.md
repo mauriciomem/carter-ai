@@ -24,3 +24,21 @@
 - **Rationale:** Generating agents today would regress shipped content (strip frontmatter). Parity tests give the drift guardrail now at near-zero cost; install stays a dumb copy; the shipped artifact stays inspectable in git. Install-time rendering (A1) rejected: Jinja in the install path, synthetic config, conditional security content.
 - **Alternatives considered:** Templates-only render-at-install (rejected); status quo with no guardrail (rejected); static-as-canonical generate-templates (rejected — can't recover conditional logic from flat files).
 - **Tags:** architecture, agents, build, ci, testing, adr-0002
+
+## 2026-06-06 | Agent templates now emit frontmatter (ADR-0002 follow-up)
+- **Context:** Investigation confirmed `carter init` rendered agents with NO YAML frontmatter, while static `agents/*.md` carry `description`/`mode`/`temperature`. Per OpenCode docs `description` is required and `mode`/`temperature` are honored; VS Code surfaces `description`. So scaffolded agents were under-specified (a real bug) and templates couldn't be used to generate static files (phase-2 blocker).
+- **Decision:** Add a `frontmatter` Jinja block to `templates/base_agent.md.j2` and literal `description`/`mode`/`temperature` to all 7 agent templates, values copied from the static files. Rendered frontmatter now byte-matches the static files (verified); 2 new parity tests lock it.
+- **Rationale:** Fixes the scaffold bug and unblocks ADR-0002 phase-2 generation, while faithfully preserving the current working values (no regression).
+- **Alternatives considered:** Config-driven per-agent metadata (deferred — only needed if workspace-level overrides are wanted); leave templates frontmatter-less (rejected — the bug + the phase-2 blocker).
+- **Open items recorded (not changed):** `mode: agent` is not a valid OpenCode value (`primary|subagent|all`) — pre-existing cross-platform issue needing per-target translation; scaffold-agent discovery (`<workspace>/agents/`) is undocumented and may not be auto-loaded.
+- **Tags:** architecture, agents, templates, scaffold, frontmatter, adr-0002
+
+## 2026-06-06 | Pure-orchestrator agent modes (ADR-0002 follow-up)
+- **Context:** Agents used `mode: agent`, which is not a valid OpenCode mode (`primary|subagent|all`) and falls back to `all` (specialists wrongly appear as primary).
+- **Decision:** Adopt the pure-orchestrator model — `carter-maestro` is the sole `mode: primary`; the other six (architect, devops, engineer, learner, pm, narrator) are `mode: subagent`, in both static files and templates. Parity test `test_mode_vocabulary_is_valid_and_orchestrator_only` locks it.
+- **Rationale:** Matches Carter's architecture (maestro orchestrates, specialists are routed to / `@`-mentioned). In OpenCode specialists leave the primary cycle but stay reachable via routing + `@`-mention; `mode` is unused by the VS Code/Copilot format so Copilot is unchanged.
+- **Alternatives considered:** `mode: all` (keep specialists directly selectable as primary too) — rejected in favor of the cleaner one-front-door model; README `--agent <specialist>` examples reconciled to Maestro + `@`-mention.
+- **Open item still tracked:** scaffold-agent discovery (`<workspace>/agents/`) undocumented.
+- **Tags:** architecture, agents, mode, opencode, adr-0002
+
+

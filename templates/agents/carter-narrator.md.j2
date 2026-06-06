@@ -1,6 +1,12 @@
 {# Carter Narrator — redaction and external-facing content specialist #}
 {% extends "base_agent.md.j2" %}
 
+{% block frontmatter %}
+description: "Narrator — external-facing content, redaction, and audience-aware narrative."
+mode: subagent
+temperature: 0.3
+{% endblock %}
+
 {% block identity %}
 <identity>
 

@@ -125,6 +125,9 @@ Maestro analyzes your request and routes to the right specialist or chains multi
 
 ### Direct Agent Access
 
+Maestro is the primary orchestrator; the specialists are **subagents**. Invoke
+any of them directly by `@`-mention:
+
 ```
 @carter-architect review this architecture
 @carter-engineer review this code for security issues
@@ -145,9 +148,11 @@ Carter dispatches reviewers (engineer for code quality, architect for design) wh
 
 ### Copilot CLI
 
+Maestro is the primary agent you launch; reach specialists by `@`-mention:
+
 ```bash
 copilot --agent carter-maestro -i "Help me plan a new API"
-copilot --agent carter-devops -p "Create a Terraform module for S3" --allow-all
+copilot --agent carter-maestro -p "@carter-devops create a Terraform module for S3" --allow-all
 ```
 
 ## Architecture
@@ -163,7 +168,7 @@ User
   │     ├─→ @carter-pm          (planning, risk, roadmaps)
   │     └─→ @carter-narrator    (external content, redaction)
   │
-  └── Direct access to any agent
+  └── @-mention any specialist directly
 ```
 
 ### Agents
@@ -310,7 +315,7 @@ The test suite covers:
 - **Parity tests** (`tests/test_parity.py`) — invariants that must not drift between the static agent files and their templates
 - **Carter-ops tests** (`tests/ops/test_operations.py`) — CLI parsing, operation dry-runs/execution, GitHub/Jira/git operations, config and audit subcommands
 
-202 tests in total, run on every push and PR via [GitHub Actions](.github/workflows/ci.yml). See [docs/testing.md](docs/testing.md) for the full testing guide.
+205 tests in total, run on every push and PR via [GitHub Actions](.github/workflows/ci.yml). See [docs/testing.md](docs/testing.md) for the full testing guide.
 
 ## Project Structure
 

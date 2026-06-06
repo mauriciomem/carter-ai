@@ -2,20 +2,24 @@
 
 Carter defines each agent twice: a static ``agents/carter-*.md`` (copied verbatim
 by ``carter install``) and a ``templates/agents/carter-*.md.j2`` (rendered by
-``carter init`` / ``carter update``). The two are hand-maintained and have
-diverged structurally (the static files carry YAML frontmatter; the templates do
-not), so byte-equality is intentionally NOT asserted here.
+``carter init`` / ``carter update``). The two are hand-maintained, so byte-equality
+of the bodies is intentionally NOT asserted here.
 
 Instead these tests lock the *invariants* that must never drift between the two
-sources — the security- and structure-critical contracts. This is the phase-1
-guardrail from docs/adr/0002-single-source-agent-generation.md (build-time
-generation is deferred until the sources are reconciled).
+sources — the security- and structure-critical contracts, including the YAML
+frontmatter (``description``/``mode``/``temperature``) which both sources must now
+emit identically (ADR-0002). This is the phase-1 guardrail from
+docs/adr/0002-single-source-agent-generation.md.
 """
 from __future__ import annotations
 
 from pathlib import Path
 
 import pytest
+import yaml
+
+from carter.config import generate_default_config
+from carter.scaffold import create_env, render_agents
 
 # The seven redaction categories that must be present in BOTH narrator sources.
 REDACTION_CATEGORIES = (
@@ -27,6 +31,13 @@ REDACTION_CATEGORIES = (
     "Employee Data",
     "Infrastructure IDs",
 )
+
+
+def _parse_frontmatter(text: str) -> dict:
+    """Parse leading YAML frontmatter from an agent markdown file."""
+    assert text.startswith("---\n"), "file does not start with '---' frontmatter"
+    _, fm, _ = text.split("---", 2)
+    return yaml.safe_load(fm)
 
 
 @pytest.fixture
@@ -109,3 +120,54 @@ class TestNarratorParity:
             assert "Write for the reader" in content, (
                 f"narrator {source}: missing 'write for the reader' principle"
             )
+
+
+class TestRenderedFrontmatterParity:
+    """Templates must render install-ready frontmatter matching the static files.
+
+    This is the ADR-0002 scaffold-bug fix: ``carter init`` previously produced
+    agents with no frontmatter, dropping the ``description`` OpenCode requires and
+    the ``mode``/``temperature`` the runtimes honor.
+    """
+
+    def test_rendered_agents_have_valid_frontmatter(self) -> None:
+        cfg = generate_default_config(workspace_name="parity", mode="single")
+        rendered = render_agents(cfg, create_env())
+        assert rendered, "no agents rendered"
+        for name, content in rendered.items():
+            fm = _parse_frontmatter(content)
+            assert fm.get("description"), f"{name}: rendered without a description"
+            assert fm.get("mode"), f"{name}: rendered without a mode"
+            assert isinstance(
+                fm.get("temperature"), (int, float)
+            ), f"{name}: rendered without a numeric temperature"
+
+    def test_rendered_frontmatter_matches_static(
+        self, static_agents_dir: Path
+    ) -> None:
+        cfg = generate_default_config(workspace_name="parity", mode="single")
+        rendered = render_agents(cfg, create_env())
+        for name, content in rendered.items():
+            static = static_agents_dir / name
+            assert static.exists(), f"no static counterpart for rendered {name}"
+            assert _parse_frontmatter(content) == _parse_frontmatter(
+                static.read_text()
+            ), f"{name}: rendered frontmatter diverges from the static file"
+
+    def test_mode_vocabulary_is_valid_and_orchestrator_only(
+        self, static_agents_dir: Path
+    ) -> None:
+        """Pure-orchestrator model: maestro is the sole `primary`; every other
+        agent is a `subagent`. All values must be valid OpenCode modes.
+        """
+        valid = {"primary", "subagent", "all"}
+        for agent in sorted(static_agents_dir.glob("carter-*.md")):
+            mode = _parse_frontmatter(agent.read_text())["mode"]
+            assert mode in valid, f"{agent.name}: invalid mode '{mode}'"
+            if agent.stem == "carter-maestro":
+                assert mode == "primary", "maestro must be the primary orchestrator"
+            else:
+                assert mode == "subagent", (
+                    f"{agent.name}: specialists must be 'subagent', got '{mode}'"
+                )
+
