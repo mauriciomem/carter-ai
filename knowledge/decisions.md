@@ -41,4 +41,13 @@
 - **Open item still tracked:** scaffold-agent discovery (`<workspace>/agents/`) undocumented.
 - **Tags:** architecture, agents, mode, opencode, adr-0002
 
+## 2026-06-06 | Scaffold-agent discovery is a confirmed bug (ADR-0002, fix deferred)
+- **Context:** `carter init`/`_render_and_write` writes agents to `<workspace>/agents/` and instructions to `<workspace>/instructions/`, but no tool discovers those paths. `config["target"]` exists (default copilot) yet is ignored. yui-soul already renders to the correct paths.
+- **Decision:** Investigated and confirmed it's a bug; fix DESIGNED but DEFERRED (not implemented this session). Correct paths: Copilot → `.github/agents/*.md` + `.github/copilot-instructions.md`; OpenCode → `.opencode/agents/*.md` + `AGENTS.md`. Fix = make `_render_and_write` honor `config["target"]`.
+- **Rationale:** It's a scaffold-contract change with blast radius (also `carter check` validates `<workspace>/agents/`, `carter update` shares the render path, getting-started.md tree, new test, existence-guards) and cannot be live-verified here — so recorded for deliberate implementation rather than rushed before a pause.
+- **Alternatives considered:** Implement blind now (rejected — unverifiable contract change before pause); document-as-limitation only (rejected — current behavior is broken, not just undocumented).
+- **Open decisions for the fix:** honor single `config["target"]` vs always-both; overwrite vs skip pre-existing `AGENTS.md`.
+- **Tags:** architecture, scaffold, discovery, init, adr-0002
+
+
 

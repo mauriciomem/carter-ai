@@ -329,6 +329,38 @@ because the static files are the live, working Copilot format:
   `<workspace>/agents/` by default. How scaffolded agents are loaded needs to be
   verified and documented (or wired up). Tracked separately.
 
+  **Investigated (2026-06-06) — confirmed bug.** `_render_and_write`
+  ([carter/cli.py](../../carter/cli.py)) writes agents to `<workspace>/agents/`
+  and instructions to `<workspace>/instructions/copilot-instructions.md` — **no
+  tool discovers either path**. The `config["target"]` field exists (default
+  `copilot`) but is ignored. The sibling project yui-soul already renders to the
+  correct paths ([docs/analysis/yui-soul-assessment.md](../analysis/yui-soul-assessment.md)).
+
+  **Correct per-project discovery paths:**
+
+  | Target | Agents | Instructions/rules |
+  |--------|--------|--------------------|
+  | Copilot / VS Code | `.github/agents/*.md` | `.github/copilot-instructions.md` |
+  | OpenCode | `.opencode/agents/*.md` | `AGENTS.md` (project root) |
+
+  **Fix design (deferred — contract change, not yet implemented):** make
+  `_render_and_write` honor `config["target"]` (`copilot` / `opencode` / `all`)
+  and render to the table above. **Blast radius beyond `_render_and_write`:**
+  - `carter check` validates `<workspace>/agents/carter-{name}.md` — must follow
+    the same path change or it breaks.
+  - `carter update` shares `_render_and_write` — inherits the change.
+  - [docs/getting-started.md](../getting-started.md) documents the
+    `agents/` + `instructions/` tree — must be updated.
+  - New scaffold test asserting agents land in the discovery path(s).
+  - Existence-guard `AGENTS.md` / `.github/copilot-instructions.md` to avoid
+    clobbering user files (mirror the installer's "exists → skip" pattern).
+
+  **Open decisions for the fix:** (a) honor the single `config["target"]` vs.
+  always write both; (b) overwrite vs. skip pre-existing `AGENTS.md`. Cannot be
+  live-verified here (no VS Code/OpenCode runtime), but the target paths are
+  authoritative and the current behavior is definitively broken, so the move is
+  strictly an improvement.
+
 ---
 
 ## References
