@@ -6,7 +6,13 @@ from pathlib import Path
 import click
 
 from carter.config import ConfigError, generate_default_config, load_config
-from carter.scaffold import create_env, render_agents, render_instructions, write_rendered_files
+from carter.scaffold import (
+    agent_filename,
+    create_env,
+    render_agents,
+    render_instructions,
+    write_rendered_files,
+)
 from carter.state import add_to_gitignore, init_workspace
 
 
@@ -161,7 +167,7 @@ def check(target_dir: str):
     for tool in _resolve_targets(config.get("target", "copilot")):
         agents_dir = _agents_dir(target, tool)
         for agent_name in config["agents"]:
-            agent_file = agents_dir / f"carter-{agent_name}.md"
+            agent_file = agents_dir / agent_filename(agent_name, config)
             if not agent_file.exists():
                 errors.append(f"Missing agent file: {agent_file.relative_to(target)}")
 

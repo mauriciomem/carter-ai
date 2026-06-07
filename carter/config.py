@@ -2,12 +2,17 @@
 from __future__ import annotations
 
 import copy
+import re
 from pathlib import Path
 from typing import Any
 
 import yaml
 
 REQUIRED_KEYS = {"version", "workspace", "identity", "agents"}
+
+# agent_suffix becomes part of scaffolded agent filenames/names
+# (e.g. carter-engineer-local). Lowercase alphanumeric + hyphen, or empty.
+_AGENT_SUFFIX_RE = re.compile(r"^[a-z0-9-]*$")
 
 DEFAULT_CONFIG: dict[str, Any] = {
     "version": "2",
@@ -35,6 +40,9 @@ DEFAULT_CONFIG: dict[str, Any] = {
         "learner",
         "narrator",
     ],
+    # Suffix distinguishing workspace-scaffolded agents from globally installed
+    # ones (e.g. carter-engineer-local). Empty string = same names as global.
+    "agent_suffix": "local",
     "quality_gate": {
         "enabled": True,
         "max_iterations": 2,
@@ -67,6 +75,15 @@ class ConfigError(Exception):
     """Raised when carter.yaml is invalid or missing required fields."""
 
 
+def _validate_agent_suffix(suffix: Any) -> None:
+    """Validate ``agent_suffix``: a lowercase alphanumeric/hyphen string or empty."""
+    if not isinstance(suffix, str) or not _AGENT_SUFFIX_RE.match(suffix):
+        raise ConfigError(
+            f"Invalid agent_suffix: {suffix!r}. "
+            "Must be a lowercase alphanumeric/hyphen string (or empty)."
+        )
+
+
 def load_config(config_path: Path) -> dict[str, Any]:
     """Load and validate carter.yaml from the given path.
 
@@ -86,7 +103,9 @@ def load_config(config_path: Path) -> dict[str, Any]:
     if missing:
         raise ConfigError(f"Missing required keys: {', '.join(sorted(missing))}")
 
-    return _merge_with_defaults(config)
+    merged = _merge_with_defaults(config)
+    _validate_agent_suffix(merged.get("agent_suffix", ""))
+    return merged
 
 
 def _merge_with_defaults(user_config: dict[str, Any]) -> dict[str, Any]:

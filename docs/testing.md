@@ -29,7 +29,7 @@ uv pip install -e ".[dev]"
 ### Run everything
 
 ```bash
-# From the venv (covers all three test files — 211 tests)
+# From the venv (covers all three test files — 221 tests)
 python -m pytest tests/ -v
 ```
 
@@ -37,7 +37,7 @@ python -m pytest tests/ -v
 
 ```bash
 python -m pytest tests/test_install.py -v     # installer (65)
-python -m pytest tests/test_scaffold.py -v    # scaffold (67)
+python -m pytest tests/test_scaffold.py -v    # scaffold (77)
 python -m pytest tests/test_parity.py -v      # agent source parity (8)
 python -m pytest tests/ops/ -v                # carter-ops (71)
 ```
@@ -50,7 +50,7 @@ Every push to `main` and every pull request runs the suite via GitHub Actions
 ```bash
 uv venv --clear
 uv pip install -e ".[dev]"
-python -m pytest tests/ -q                                  # 211 unit tests
+python -m pytest tests/ -q                                  # 221 unit tests
 python -m pytest evals/test_skills.py evals/test_routing.py -q  # 28 offline evals
 ```
 
@@ -79,14 +79,14 @@ No external mocking libraries are used. Both the installer and the scaffold acce
 tests/
 ├── conftest.py             # Shared fixtures (base_dir, settings, etc.)
 ├── test_install.py         # Installer tests (65 tests, 21 classes)
-├── test_scaffold.py        # Scaffold tests (67 tests, 9 classes)
+├── test_scaffold.py        # Scaffold tests (77 tests, 10 classes)
 ├── test_parity.py          # Agent source-parity tests (8 tests, 3 classes)
 └── ops/
     ├── conftest.py         # Ops path setup
     └── test_operations.py  # Carter-ops tests (71 tests, 27 classes)
 ```
 
-The full suite is **211 tests** (`python -m pytest tests/ -v`).
+The full suite is **221 tests** (`python -m pytest tests/ -v`).
 
 ## Fixtures (conftest.py)
 
@@ -249,6 +249,27 @@ each tool actually discovers (ADR-0002), honoring `config["target"]`.
 | `test_instructions_skip_if_exists` | A pre-existing instruction file is preserved; agents still written |
 | `test_agents_rewritten_on_update` | Carter-owned `carter-*` agents are overwritten so `carter update` refreshes them |
 | `test_resolve_targets` | `_resolve_targets` expands `all` to both; passes others through |
+
+### TestAgentSuffix (10 tests)
+
+Validates `agent_suffix` (ADR-0002), which distinguishes workspace-scaffolded
+agents from globally installed ones (e.g. `carter-engineer-local`). The
+`default_config` fixture pins `agent_suffix=""` so other scaffold tests stay
+naming-agnostic; these tests exercise the suffix directly.
+
+| Test | What It Verifies |
+|------|------------------|
+| `test_default_suffix_is_local` | The default config's `agent_suffix` is `local` |
+| `test_default_renders_local_suffixed_filenames` | Default render produces `carter-*-local.md` filenames |
+| `test_empty_suffix_renders_plain_names` | `agent_suffix=""` produces canonical `carter-*.md` names |
+| `test_custom_suffix` | A custom suffix (`demo`) is applied to filenames and routing |
+| `test_suffix_applied_to_routing_footer_and_crossrefs` | Suffix reaches the routing table, agents footer, and subagent cross-references; no bare role refs leak |
+| `test_skill_names_never_suffixed` | Skill names (`carter-ops`, `carter-docs`, …) are never rewritten |
+| `test_instructions_references_suffixed` | Agent references inside `copilot-instructions.md` are suffixed |
+| `test_default_suffix_end_to_end` | A real default `carter init` lands `carter-*-local.md` in `.github/agents/` |
+| `test_invalid_suffix_rejected` | `load_config` raises `ConfigError` on a malformed `agent_suffix` |
+| `test_agent_filename_helper` | `agent_filename` (used by `carter check`) honors the suffix |
+
 
 ---
 

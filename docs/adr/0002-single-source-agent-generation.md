@@ -20,11 +20,12 @@
 | Phase 1 — CI | **DONE & green** | `.github/workflows/ci.yml` (py3.11/3.13), commits `ef0a1ad`/`68c2c2b`/`f8ba618` |
 | Frontmatter divergence | **FIXED** | templates emit frontmatter byte-matching static; commit `7712f59` |
 | `mode` vocabulary | **RESOLVED** | maestro `primary`, six specialists `subagent`; commit `7712f59` |
-| Scaffold-agent discovery | **FIXED** | `_render_and_write` honors `config["target"]`, writes discovery paths; commit pending |
+| Scaffold-agent discovery | **FIXED** | `_render_and_write` honors `config["target"]`, writes discovery paths; commit `74311a6` |
+| Agent name collision → `agent_suffix` | **FIXED** | workspace agents suffixed (default `local`) to stay distinct from global; commit pending |
 | Phase 2 — build-time generation + drift check | **NOT STARTED** | unblocked by the frontmatter fix; sketch below |
 
 **Ground truth at audit:** 7 static agents + 7 templates (frontmatter parity
-verified for all 7), 22 skills, 205 unit tests + 28 offline evals, CI green.
+verified for all 7), 22 skills, 221 unit tests + 28 offline evals, CI green.
 
 **Next session starts here:** phase 2 — build-time agent generation + CI
 `git diff --exit-code agents/` drift check (sketch below; unblocked by the
@@ -404,6 +405,20 @@ because the static files are the live, working Copilot format:
   and target resolution. getting-started.md tree updated. **Still requires manual
   end-to-end confirmation** that VS Code/OpenCode load the scaffolded agents (no
   runtime available here), but output now lands in the documented discovery paths.
+
+  **Follow-up — agent name collision → `agent_suffix` (2026-06-07).** Manual
+  testing surfaced a consequence: with discovery fixed, a workspace that *also*
+  has Carter globally installed shows **two** `carter-engineer` agents (global
+  `~/.copilot/agents/` + workspace `.github/agents/`), indistinguishable in the
+  picker. **Decision:** add a configurable `agent_suffix` (default `local`,
+  empty = no suffix) to `carter.yaml`. Workspace renders suffix the filename AND
+  every `carter-<role>` reference (routing table, agents footer, cross-refs,
+  instructions) via a centralized transform in `carter.scaffold` scoped to the
+  configured roles — so skill names (`carter-ops`, `carter-docs`, …) are never
+  touched. Global `carter install` is unaffected (it copies the static plain-named
+  files). `carter check`/`update` honor the suffix. Covered by `TestAgentSuffix`
+  (10 tests). Verified end-to-end: `carter init` →
+  `.github/agents/carter-engineer-local.md` with `-local` routing throughout.
 
 ---
 

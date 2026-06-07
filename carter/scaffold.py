@@ -56,33 +56,71 @@ def _validate_agents(agent_names: list[str], templates_dir: Path) -> None:
             )
 
 
+def _suffix_token(config: dict[str, Any]) -> str:
+    """Return the agent-name suffix token, e.g. ``-local`` or ``""`` (none).
+
+    Driven by ``config["agent_suffix"]`` (validated by ``carter.config``).
+    """
+    raw = (config.get("agent_suffix") or "").strip()
+    return f"-{raw}" if raw else ""
+
+
+def agent_filename(role: str, config: dict[str, Any]) -> str:
+    """Return the rendered agent filename for a role, honoring ``agent_suffix``."""
+    return f"carter-{role}{_suffix_token(config)}.md"
+
+
+def _apply_agent_suffix(content: str, roles: list[str], suffix: str) -> str:
+    """Append ``suffix`` to every ``carter-<role>`` reference in rendered output.
+
+    Scoped strictly to the configured agent ``roles`` so skill names
+    (e.g. ``carter-ops``, ``carter-docs``, ``carter-pipeline``) are never
+    rewritten. Idempotent: a negative lookahead avoids double-suffixing.
+    """
+    if not suffix:
+        return content
+    for role in roles:
+        content = re.sub(
+            rf"\bcarter-{re.escape(role)}\b(?!{re.escape(suffix)})",
+            f"carter-{role}{suffix}",
+            content,
+        )
+    return content
+
+
 def render_agents(config: dict[str, Any], env: Environment) -> dict[str, str]:
     """Render all configured agent templates.
 
-    Returns a dict of {filename: rendered_content}.
+    Returns a dict of {filename: rendered_content}. Filenames and internal
+    ``carter-<role>`` references honor ``config["agent_suffix"]`` so workspace
+    agents stay distinct from globally installed ones.
     Raises ConfigError if any agent name is invalid or has no template.
     """
     templates_dir = Path(env.loader.searchpath[0])
     _validate_agents(config["agents"], templates_dir)
 
+    suffix = _suffix_token(config)
+    roles = config["agents"]
     results = {}
     for agent_name in config["agents"]:
         template_path = f"agents/carter-{agent_name}.md.j2"
         template = env.get_template(template_path)
         content = template.render(config=config, agent=agent_name)
-        results[f"carter-{agent_name}.md"] = content
+        content = _apply_agent_suffix(content, roles, suffix)
+        results[f"carter-{agent_name}{suffix}.md"] = content
     return results
 
 
 def render_instructions(config: dict[str, Any], env: Environment) -> dict[str, str]:
     """Render global instruction templates.
 
-    Returns a dict of {filename: rendered_content}.
+    Returns a dict of {filename: rendered_content}. Agent references inside the
+    instructions honor ``agent_suffix`` (the filename itself is not suffixed).
     """
-    results = {}
     template = env.get_template("instructions/copilot-instructions.md.j2")
-    results["copilot-instructions.md"] = template.render(config=config)
-    return results
+    content = template.render(config=config)
+    content = _apply_agent_suffix(content, config["agents"], _suffix_token(config))
+    return {"copilot-instructions.md": content}
 
 
 def write_rendered_files(

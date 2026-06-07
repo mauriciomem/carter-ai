@@ -146,6 +146,7 @@ class TestRenderedFrontmatterParity:
         self, static_agents_dir: Path
     ) -> None:
         cfg = generate_default_config(workspace_name="parity", mode="single")
+        cfg["agent_suffix"] = ""  # match canonical static filenames
         rendered = render_agents(cfg, create_env())
         for name, content in rendered.items():
             static = static_agents_dir / name

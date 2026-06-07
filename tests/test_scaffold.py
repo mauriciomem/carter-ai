@@ -16,8 +16,15 @@ from carter.state import KNOWLEDGE_FILES, add_to_gitignore, init_workspace
 
 @pytest.fixture
 def default_config() -> dict:
-    """A complete default configuration."""
-    return generate_default_config(workspace_name="test-workspace", mode="umbrella")
+    """A complete default configuration for content/structure tests.
+
+    ``agent_suffix`` is pinned to "" so rendered files use canonical
+    ``carter-<role>.md`` names these tests reference directly. The suffix
+    feature (real default "local") is covered by ``TestAgentSuffix``.
+    """
+    config = generate_default_config(workspace_name="test-workspace", mode="umbrella")
+    config["agent_suffix"] = ""
+    return config
 
 
 @pytest.fixture
@@ -229,9 +236,10 @@ class TestConfigMerge:
         config_path.write_text(yaml.dump(config))
         loaded = load_config(config_path)
 
-        # Should not raise UndefinedError
+        # Should not raise UndefinedError. Merge supplies the default
+        # agent_suffix ("local"), so the rendered file is suffixed.
         results = render_agents(loaded, env)
-        assert "carter-maestro.md" in results
+        assert "carter-maestro-local.md" in results
 
 
 class TestAgentValidation:
@@ -676,4 +684,106 @@ class TestRenderDiscovery:
         assert _resolve_targets("copilot") == ["copilot"]
         assert _resolve_targets("opencode") == ["opencode"]
         assert _resolve_targets("all") == ["copilot", "opencode"]
+
+
+# ─── Agent name suffix (workspace vs global distinction) ─────────────────────
+
+
+class TestAgentSuffix:
+    """`agent_suffix` distinguishes workspace-scaffolded agents from globally
+    installed ones (e.g. `carter-engineer-local`). Default is "local"; empty
+    means "same names as global". Applies to filenames AND every `carter-<role>`
+    reference (routing, footer, cross-refs, instructions) — never to skill names.
+    """
+
+    SKILLS = (
+        "carter-ops",
+        "carter-docs",
+        "carter-story",
+        "carter-pipeline",
+        "carter-plan",
+        "carter-python",
+        "carter-adr",
+        "carter-design-review",
+    )
+
+    def test_default_suffix_is_local(self):
+        assert generate_default_config()["agent_suffix"] == "local"
+
+    def test_default_renders_local_suffixed_filenames(self, env):
+        cfg = generate_default_config()
+        rendered = render_agents(cfg, env)
+        assert "carter-maestro-local.md" in rendered
+        assert all(name.endswith("-local.md") for name in rendered)
+
+    def test_empty_suffix_renders_plain_names(self, env):
+        cfg = generate_default_config()
+        cfg["agent_suffix"] = ""
+        rendered = render_agents(cfg, env)
+        assert "carter-maestro.md" in rendered
+        assert not any("-local" in name for name in rendered)
+
+    def test_custom_suffix(self, env):
+        cfg = generate_default_config()
+        cfg["agent_suffix"] = "demo"
+        rendered = render_agents(cfg, env)
+        assert "carter-engineer-demo.md" in rendered
+        assert "carter-engineer-demo" in rendered["carter-maestro-demo.md"]
+
+    def test_suffix_applied_to_routing_footer_and_crossrefs(self, env):
+        cfg = generate_default_config()  # default "local"
+        rendered = render_agents(cfg, env)
+        maestro = rendered["carter-maestro-local.md"]
+        # Routing table + Available Agents footer use suffixed names
+        assert "carter-engineer-local" in maestro
+        assert "carter-narrator-local" in maestro
+        # Cross-reference inside a subagent is suffixed too
+        engineer = rendered["carter-engineer-local.md"]
+        assert "carter-architect-local" in engineer
+        # No bare role reference leaks through
+        import re
+
+        assert not re.search(r"carter-engineer(?!-local)", maestro)
+
+    def test_skill_names_never_suffixed(self, env):
+        cfg = generate_default_config()
+        rendered = render_agents(cfg, env)
+        rendered.update(render_instructions(cfg, env))
+        for content in rendered.values():
+            for skill in self.SKILLS:
+                assert f"{skill}-local" not in content, f"{skill} was wrongly suffixed"
+
+    def test_instructions_references_suffixed(self, env):
+        cfg = generate_default_config()
+        instr = render_instructions(cfg, env)["copilot-instructions.md"]
+        assert "carter-maestro-local" in instr
+
+    def test_default_suffix_end_to_end(self, tmp_path, env):
+        """A real default `carter init` lands suffixed files in the discovery path."""
+        from carter.cli import _render_and_write
+
+        cfg = generate_default_config()  # target copilot, suffix local
+        _render_and_write(tmp_path, cfg, env)
+        assert (tmp_path / ".github" / "agents" / "carter-maestro-local.md").exists()
+        assert (tmp_path / ".github" / "agents" / "carter-engineer-local.md").exists()
+
+    def test_invalid_suffix_rejected(self, tmp_path):
+        cfg = generate_default_config()
+        cfg["agent_suffix"] = "Bad Suffix!"
+        config_path = tmp_path / "carter.yaml"
+        write_config(config_path, cfg)
+        with pytest.raises(ConfigError, match="agent_suffix"):
+            load_config(config_path)
+
+    def test_agent_filename_helper(self):
+        """`agent_filename` (used by `carter check`) honors the suffix."""
+        from carter.scaffold import agent_filename
+
+        cfg = generate_default_config()
+        assert agent_filename("maestro", cfg) == "carter-maestro-local.md"
+        cfg["agent_suffix"] = ""
+        assert agent_filename("maestro", cfg) == "carter-maestro.md"
+        cfg["agent_suffix"] = "demo"
+        assert agent_filename("engineer", cfg) == "carter-engineer-demo.md"
+
 

@@ -315,7 +315,7 @@ The test suite covers:
 - **Parity tests** (`tests/test_parity.py`) — invariants that must not drift between the static agent files and their templates
 - **Carter-ops tests** (`tests/ops/test_operations.py`) — CLI parsing, operation dry-runs/execution, GitHub/Jira/git operations, config and audit subcommands
 
-211 tests in total, run on every push and PR via [GitHub Actions](.github/workflows/ci.yml). See [docs/testing.md](docs/testing.md) for the full testing guide.
+221 tests in total, run on every push and PR via [GitHub Actions](.github/workflows/ci.yml). See [docs/testing.md](docs/testing.md) for the full testing guide.
 
 ## Project Structure
 

@@ -71,15 +71,22 @@ my-workspace/
 │       └── sessions/
 └── .github/                  ← Copilot/VS Code discovery paths
     ├── agents/               ← Generated from templates
-    │   ├── carter-maestro.md
-    │   ├── carter-architect.md
-    │   ├── carter-engineer.md
-    │   ├── carter-devops.md
-    │   ├── carter-pm.md
-    │   ├── carter-learner.md
-    │   └── carter-narrator.md    ← External-facing content + redaction agent
+    │   ├── carter-maestro-local.md
+    │   ├── carter-architect-local.md
+    │   ├── carter-engineer-local.md
+    │   ├── carter-devops-local.md
+    │   ├── carter-pm-local.md
+    │   ├── carter-learner-local.md
+    │   └── carter-narrator-local.md   ← External-facing content + redaction agent
     └── copilot-instructions.md   ← Generated global instructions (skipped if it exists)
 ```
+
+> **Why the `-local` suffix?** Workspace agents carry a suffix (default `local`)
+> so they're distinct from any globally-installed Carter agents (`carter install`
+> writes `carter-engineer`; `carter init` writes `carter-engineer-local`). Set
+> `agent_suffix` in `carter.yaml` to change it, or `agent_suffix: ""` to use the
+> same names as global. The suffix is applied to filenames, Maestro's routing,
+> and cross-references — so invocation stays consistent.
 
 > **Discovery paths by target.** Agents and instructions are written where each
 > tool loads them. With `target: opencode`, `carter init` instead writes
@@ -107,6 +114,13 @@ agents:
   - pm
   - learner
   - narrator
+
+# Suffix that distinguishes these workspace agents from globally-installed ones
+# (carter-engineer-local). Use "" for no suffix (same names as global).
+agent_suffix: local
+
+# Where to write agents/instructions: copilot | opencode | all
+target: copilot
 
 # Should Carter review your code before you push?
 quality_gate:
