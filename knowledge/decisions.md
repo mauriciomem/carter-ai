@@ -16,8 +16,8 @@
 - **Decision:** (1) Docs: correct the PATH claim, add `uv tool update-shell` + reload step, a "command not found" troubleshooting note, and the `./install.sh` PATH-free fallback (getting-started + README). (2) Drop `jq`/`terraform` from `check_prerequisites` — the installer uses neither (json via Python; terraform unrelated). (3) Harden `_vscode_settings_path`: detect VSCodium/Insiders/Flatpak variants, prefer an existing variant dir, and add `_vscode_detected` so `--mcp` SKIPS writing settings.json when no VS Code config dir exists (no phantom file).
 - **Rationale:** The actual failure was a doc/UX gap, fixed first. Prereq/VS Code changes remove misleading warnings and silent no-ops on Linux (esp. Fedora Flatpak). Core installer was already platform-neutral (~/.copilot, ~/.config/opencode, ~/.carter) with one correct Darwin branch.
 - **Alternatives considered:** Auto-add ~/.local/bin to PATH from the installer (rejected — too invasive, uv owns that via update-shell); keep jq/terraform as "optional" (rejected — they're not install-related at all).
-- **Verified:** +8 tests (TestCrossPlatform 7, MCP-skip 1); suite 231→239. No behavior change under base_dir (tests green).
-- **Tags:** install, cross-platform, linux, fedora, path, vscode, mcp
+- **Verified:** +8 tests (TestCrossPlatform 7, MCP-skip 1); suite 231→239. No behavior change under base_dir (tests green). **Confirmed in-situ on Fedora 44 (2026-06-07):** all three checks passed live — PATH fix (#1), no jq/terraform in prereqs (#2), and the VS Code variant/settings detection (#3, previously logic-tested only). Install via `uv tool install --force` (plain `upgrade` is a no-op while version stays 2.0.0a1).
+- **Tags:** install, cross-platform, linux, fedora, path, vscode, mcp, verified
 
 ## 2026-06-07 | Phase 2 build-time agent generation ABANDONED (ADR-0002, Won't Do)
 - **Context:** Phase 2 aimed to dedup the dual agent sources by generating static `agents/*.md` from the templates at build time, guarded by a CI `git diff --exit-code agents/` drift check.
