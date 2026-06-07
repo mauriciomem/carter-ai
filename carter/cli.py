@@ -5,9 +5,10 @@ from pathlib import Path
 
 import click
 
-from carter.config import ConfigError, generate_default_config, load_config
+from carter.config import ConfigError, _validate_agent_suffix, generate_default_config, load_config
 from carter.scaffold import (
     agent_filename,
+    config_warnings,
     create_env,
     render_agents,
     render_instructions,
@@ -82,15 +83,43 @@ def install(
 @click.option("--single", is_flag=True, help="Single-repo mode (default: umbrella)")
 @click.option("--no-git-state", is_flag=True, help="Skip git init for state dirs")
 @click.option("--name", default=None, help="Workspace name (default: directory name)")
-def init(target_dir: str, single: bool, no_git_state: bool, name: str | None):
+@click.option(
+    "--target",
+    "target_tool",
+    type=click.Choice(["copilot", "opencode", "all"]),
+    default=None,
+    help="Where to write agents/instructions (default: copilot).",
+)
+@click.option(
+    "--agent-suffix",
+    default=None,
+    help="Suffix for scaffolded agent names (default: local; '' for none).",
+)
+def init(
+    target_dir: str,
+    single: bool,
+    no_git_state: bool,
+    name: str | None,
+    target_tool: str | None,
+    agent_suffix: str | None,
+):
     """Initialize a Carter workspace."""
     target = Path(target_dir).resolve()
     workspace_name = name or target.name
     mode = "single" if single else "umbrella"
 
-    # Generate default config
+    # Generate default config, applying CLI overrides before it is persisted so
+    # carter.yaml matches what was scaffolded.
     config = generate_default_config(workspace_name=workspace_name, mode=mode)
     config["state"]["git_tracked"] = not no_git_state
+    if target_tool is not None:
+        config["target"] = target_tool
+    if agent_suffix is not None:
+        try:
+            _validate_agent_suffix(agent_suffix)
+        except ConfigError as e:
+            raise click.BadParameter(str(e), param_hint="--agent-suffix") from e
+        config["agent_suffix"] = agent_suffix
 
     # Create .carter/ structure
     init_workspace(
@@ -108,6 +137,9 @@ def init(target_dir: str, single: bool, no_git_state: bool, name: str | None):
     # Render templates
     env = create_env()
     _render_and_write(target, config, env)
+
+    for warning in config_warnings(config):
+        click.echo(f"⚠  {warning}", err=True)
 
     click.echo(f"Workspace '{workspace_name}' initialized ({mode} mode)")
 
@@ -141,6 +173,8 @@ def update(target_dir: str, dry_run: bool):
         return
 
     _render_and_write(target, config, env)
+    for warning in config_warnings(config):
+        click.echo(f"⚠  {warning}", err=True)
     click.echo("Templates re-rendered from carter.yaml")
 
 
@@ -186,6 +220,9 @@ def check(target_dir: str):
         for error in errors:
             click.echo(f"  ✗ {error}", err=True)
         raise SystemExit(1)
+
+    for warning in config_warnings(config):
+        click.echo(f"⚠  {warning}", err=True)
 
     click.echo("Workspace OK")
 

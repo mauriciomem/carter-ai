@@ -50,7 +50,16 @@ This generates customized agents from templates into a specific workspace direct
 ```bash
 # Create a new workspace
 carter init ~/my-workspace --name "my-project"
+
+# Choose where agents are written, and the agent-name suffix
+carter init ~/my-workspace --target all --agent-suffix local
+#   --target copilot|opencode|all   (default copilot)
+#   --agent-suffix <suffix>         (default local; "" for none)
 ```
+
+> If you enable the `narrator` agent but turn `redaction.enabled` off, `carter
+> init`/`update`/`check` print a warning: the narrator would ship with no
+> redaction rules even though Maestro routes external content to it.
 
 **What `carter init` creates** (agent/instruction locations depend on `target` in
 `carter.yaml`; the tree below shows the default `target: copilot`):

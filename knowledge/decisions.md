@@ -11,6 +11,14 @@
 - **Tags:** ...
 -->
 
+## 2026-06-07 | carter init --target/--agent-suffix flags + narrator redaction guard (ADR-0002)
+- **Context:** `carter init` had no way to set target/suffix without hand-editing carter.yaml (the `sed` workaround). And the recorded edge case (narrator enabled + redaction off → narrator with no redaction rules) had no guard.
+- **Decision:** (1) Add `--target {copilot,opencode,all}` and `--agent-suffix` flags to `carter init`; they override config before it's persisted (so carter.yaml matches what was scaffolded), with eager validation (bad suffix/target exits non-zero). (2) Add `carter.scaffold.config_warnings(config)` — a pure function flagging the narrator/redaction gap — emitted by `carter init`, `update`, and `check` (non-fatal `⚠`).
+- **Rationale:** Flags remove the YAML-edit friction for the common case; the warning surfaces the security-relevant gap at the three natural touchpoints without blocking (config-gating redaction is by design per ADR-0001).
+- **Alternatives considered:** Make the redaction gap a hard error (rejected — redaction-off is a legitimate choice); only warn in check (rejected — init/update are where it's first introduced).
+- **Verified:** end-to-end `carter init --target all --agent-suffix demo`; warning fires in update + check with redaction off; 10 new tests (TestConfigWarnings 3, TestInitFlags 7). Suite 221→231.
+- **Tags:** cli, scaffold, init, redaction, warning, adr-0002
+
 ## 2026-06-07 | Configurable agent_suffix to distinguish workspace vs global agents (ADR-0002)
 - **Context:** Manual `carter init` testing showed that with discovery fixed, a workspace with Carter ALSO installed globally shows two `carter-engineer` agents (global `~/.copilot/agents/` + workspace `.github/agents/`), indistinguishable in the picker.
 - **Decision:** Add `agent_suffix` to carter.yaml (default `local`, empty = no suffix). Workspace renders suffix the filename AND every `carter-<role>` reference (routing table, agents footer, cross-refs, instructions) via a centralized transform in `carter.scaffold._apply_agent_suffix`, scoped to configured roles so skill names (carter-ops, carter-docs) are untouched. Global `carter install` unaffected (copies static plain-named files). `carter check`/`update` honor it.

@@ -21,11 +21,15 @@
 | Frontmatter divergence | **FIXED** | templates emit frontmatter byte-matching static; commit `7712f59` |
 | `mode` vocabulary | **RESOLVED** | maestro `primary`, six specialists `subagent`; commit `7712f59` |
 | Scaffold-agent discovery | **FIXED** | `_render_and_write` honors `config["target"]`, writes discovery paths; commit `74311a6` |
-| Agent name collision → `agent_suffix` | **FIXED** | workspace agents suffixed (default `local`) to stay distinct from global; commit pending |
+| Agent name collision → `agent_suffix` | **FIXED** | workspace agents suffixed (default `local`) to stay distinct from global; commit `9512cbe` |
+| `carter init` `--target`/`--agent-suffix` flags | **DONE** | scaffold target/suffix without editing YAML; commit pending |
+| Narrator/redaction edge-case guard | **DONE** | `config_warnings` warns on init/update/check when narrator on + redaction off; commit pending |
 | Phase 2 — build-time generation + drift check | **NOT STARTED** | unblocked by the frontmatter fix; sketch below |
 
 **Ground truth at audit:** 7 static agents + 7 templates (frontmatter parity
-verified for all 7), 22 skills, 221 unit tests + 28 offline evals, CI green.
+verified for all 7), 22 skills, 231 unit tests + 28 offline evals, CI green.
+Discovery + naming **confirmed end-to-end** in VS Code (workspace
+`carter-engineer-local` loads and is distinct from the global agent).
 
 **Next session starts here:** phase 2 — build-time agent generation + CI
 `git diff --exit-code agents/` drift check (sketch below; unblocked by the

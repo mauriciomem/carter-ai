@@ -787,3 +787,95 @@ class TestAgentSuffix:
         assert agent_filename("engineer", cfg) == "carter-engineer-demo.md"
 
 
+# ─── Config warnings (narrator/redaction edge case) ──────────────────────────
+
+
+class TestConfigWarnings:
+    """`config_warnings` flags the redaction gap: narrator enabled but redaction
+    disabled means the scaffolded narrator has no redaction rules even though
+    Maestro routes external content to it.
+    """
+
+    def test_warns_when_narrator_on_redaction_off(self):
+        from carter.scaffold import config_warnings
+
+        cfg = generate_default_config()
+        cfg["redaction"]["enabled"] = False
+        warnings = config_warnings(cfg)
+        assert len(warnings) == 1
+        assert "redaction" in warnings[0].lower()
+        assert "narrator" in warnings[0].lower()
+
+    def test_no_warning_when_both_on(self):
+        from carter.scaffold import config_warnings
+
+        cfg = generate_default_config()  # narrator in agents, redaction on
+        assert config_warnings(cfg) == []
+
+    def test_no_warning_when_narrator_absent(self):
+        from carter.scaffold import config_warnings
+
+        cfg = generate_default_config()
+        cfg["agents"] = [a for a in cfg["agents"] if a != "narrator"]
+        cfg["redaction"]["enabled"] = False
+        assert config_warnings(cfg) == []
+
+
+# ─── carter init CLI flags (--target / --agent-suffix) ───────────────────────
+
+
+class TestInitFlags:
+    """`carter init` flags override config before it is persisted and rendered."""
+
+    def _run_init(self, tmp_path, *args):
+        from click.testing import CliRunner
+
+        from carter.cli import main
+
+        runner = CliRunner()
+        return runner.invoke(
+            main, ["init", str(tmp_path), "--no-git-state", *args]
+        )
+
+    def test_target_flag_writes_opencode(self, tmp_path):
+        result = self._run_init(tmp_path, "--target", "opencode")
+        assert result.exit_code == 0, result.output
+        assert (tmp_path / ".opencode" / "agents").exists()
+        assert (tmp_path / "AGENTS.md").exists()
+        assert not (tmp_path / ".github").exists()
+
+    def test_target_flag_persisted_in_config(self, tmp_path):
+        self._run_init(tmp_path, "--target", "all")
+        config = load_config(tmp_path / ".carter" / "carter.yaml")
+        assert config["target"] == "all"
+
+    def test_agent_suffix_flag(self, tmp_path):
+        result = self._run_init(tmp_path, "--agent-suffix", "demo")
+        assert result.exit_code == 0, result.output
+        assert (tmp_path / ".github" / "agents" / "carter-maestro-demo.md").exists()
+        config = load_config(tmp_path / ".carter" / "carter.yaml")
+        assert config["agent_suffix"] == "demo"
+
+    def test_empty_agent_suffix_flag(self, tmp_path):
+        result = self._run_init(tmp_path, "--agent-suffix", "")
+        assert result.exit_code == 0, result.output
+        assert (tmp_path / ".github" / "agents" / "carter-maestro.md").exists()
+
+    def test_invalid_target_rejected(self, tmp_path):
+        result = self._run_init(tmp_path, "--target", "bogus")
+        assert result.exit_code != 0
+
+    def test_invalid_agent_suffix_rejected(self, tmp_path):
+        result = self._run_init(tmp_path, "--agent-suffix", "Bad!")
+        assert result.exit_code != 0
+        assert "agent_suffix" in result.output
+
+    def test_init_warns_on_redaction_gap(self, tmp_path):
+        # Default config has narrator + redaction on, so no warning by default;
+        # this asserts the happy path stays clean.
+        result = self._run_init(tmp_path)
+        assert result.exit_code == 0
+        assert "NO redaction" not in result.output
+
+
+

@@ -29,7 +29,7 @@ uv pip install -e ".[dev]"
 ### Run everything
 
 ```bash
-# From the venv (covers all three test files — 221 tests)
+# From the venv (covers all three test files — 231 tests)
 python -m pytest tests/ -v
 ```
 
@@ -37,7 +37,7 @@ python -m pytest tests/ -v
 
 ```bash
 python -m pytest tests/test_install.py -v     # installer (65)
-python -m pytest tests/test_scaffold.py -v    # scaffold (77)
+python -m pytest tests/test_scaffold.py -v    # scaffold (87)
 python -m pytest tests/test_parity.py -v      # agent source parity (8)
 python -m pytest tests/ops/ -v                # carter-ops (71)
 ```
@@ -50,7 +50,7 @@ Every push to `main` and every pull request runs the suite via GitHub Actions
 ```bash
 uv venv --clear
 uv pip install -e ".[dev]"
-python -m pytest tests/ -q                                  # 221 unit tests
+python -m pytest tests/ -q                                  # 231 unit tests
 python -m pytest evals/test_skills.py evals/test_routing.py -q  # 28 offline evals
 ```
 
@@ -79,14 +79,14 @@ No external mocking libraries are used. Both the installer and the scaffold acce
 tests/
 ├── conftest.py             # Shared fixtures (base_dir, settings, etc.)
 ├── test_install.py         # Installer tests (65 tests, 21 classes)
-├── test_scaffold.py        # Scaffold tests (77 tests, 10 classes)
+├── test_scaffold.py        # Scaffold tests (87 tests, 12 classes)
 ├── test_parity.py          # Agent source-parity tests (8 tests, 3 classes)
 └── ops/
     ├── conftest.py         # Ops path setup
     └── test_operations.py  # Carter-ops tests (71 tests, 27 classes)
 ```
 
-The full suite is **221 tests** (`python -m pytest tests/ -v`).
+The full suite is **231 tests** (`python -m pytest tests/ -v`).
 
 ## Fixtures (conftest.py)
 
@@ -269,6 +269,33 @@ naming-agnostic; these tests exercise the suffix directly.
 | `test_default_suffix_end_to_end` | A real default `carter init` lands `carter-*-local.md` in `.github/agents/` |
 | `test_invalid_suffix_rejected` | `load_config` raises `ConfigError` on a malformed `agent_suffix` |
 | `test_agent_filename_helper` | `agent_filename` (used by `carter check`) honors the suffix |
+
+### TestConfigWarnings (3 tests)
+
+Validates `config_warnings`, which flags the narrator/redaction edge case
+(narrator enabled but `redaction.enabled` false → narrator ships with no
+redaction rules while Maestro still routes external content to it).
+
+| Test | What It Verifies |
+|------|------------------|
+| `test_warns_when_narrator_on_redaction_off` | One warning mentioning narrator + redaction |
+| `test_no_warning_when_both_on` | No warning when redaction is enabled (default) |
+| `test_no_warning_when_narrator_absent` | No warning when narrator is not in `agents` |
+
+### TestInitFlags (7 tests)
+
+Validates the `carter init` CLI flags `--target` and `--agent-suffix` (overrides
+applied before the config is persisted and rendered).
+
+| Test | What It Verifies |
+|------|------------------|
+| `test_target_flag_writes_opencode` | `--target opencode` writes `.opencode/` + `AGENTS.md`, not `.github/` |
+| `test_target_flag_persisted_in_config` | `--target all` is saved into `carter.yaml` |
+| `test_agent_suffix_flag` | `--agent-suffix demo` renames files and persists to config |
+| `test_empty_agent_suffix_flag` | `--agent-suffix ""` produces canonical names |
+| `test_invalid_target_rejected` | An invalid `--target` value exits non-zero |
+| `test_invalid_agent_suffix_rejected` | A malformed `--agent-suffix` exits non-zero with a clear error |
+| `test_init_warns_on_redaction_gap` | The default (redaction on) init prints no redaction warning |
 
 
 ---

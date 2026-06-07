@@ -70,6 +70,26 @@ def agent_filename(role: str, config: dict[str, Any]) -> str:
     return f"carter-{role}{_suffix_token(config)}.md"
 
 
+def config_warnings(config: dict[str, Any]) -> list[str]:
+    """Return non-fatal configuration warnings for a workspace config.
+
+    Currently flags the redaction gap: if the narrator agent is enabled but
+    ``redaction.enabled`` is false, the scaffolded narrator carries no redaction
+    rules even though it is the agent Maestro routes external-facing content to.
+    """
+    warnings: list[str] = []
+    narrator_on = "narrator" in config.get("agents", [])
+    redaction_on = bool(config.get("redaction", {}).get("enabled", False))
+    if narrator_on and not redaction_on:
+        warnings.append(
+            "narrator is enabled but redaction.enabled is false — the scaffolded "
+            "narrator will have NO redaction rules, yet Maestro still routes "
+            "external-facing content to it. Enable redaction or remove narrator "
+            "from agents."
+        )
+    return warnings
+
+
 def _apply_agent_suffix(content: str, roles: list[str], suffix: str) -> str:
     """Append ``suffix`` to every ``carter-<role>`` reference in rendered output.
 
