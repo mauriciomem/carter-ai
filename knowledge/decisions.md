@@ -11,6 +11,14 @@
 - **Tags:** ...
 -->
 
+## 2026-06-07 | Cross-platform install hardening (macOS + Linux)
+- **Context:** A Fedora user hit `bash: carter: command not found` after `uv tool install`. Root cause was PATH (uv installs to ~/.local/bin, not always on PATH) — not Carter — but the docs wrongly claimed install "puts carter on your PATH". Audit also found vestigial prereqs and a fragile VS Code settings path.
+- **Decision:** (1) Docs: correct the PATH claim, add `uv tool update-shell` + reload step, a "command not found" troubleshooting note, and the `./install.sh` PATH-free fallback (getting-started + README). (2) Drop `jq`/`terraform` from `check_prerequisites` — the installer uses neither (json via Python; terraform unrelated). (3) Harden `_vscode_settings_path`: detect VSCodium/Insiders/Flatpak variants, prefer an existing variant dir, and add `_vscode_detected` so `--mcp` SKIPS writing settings.json when no VS Code config dir exists (no phantom file).
+- **Rationale:** The actual failure was a doc/UX gap, fixed first. Prereq/VS Code changes remove misleading warnings and silent no-ops on Linux (esp. Fedora Flatpak). Core installer was already platform-neutral (~/.copilot, ~/.config/opencode, ~/.carter) with one correct Darwin branch.
+- **Alternatives considered:** Auto-add ~/.local/bin to PATH from the installer (rejected — too invasive, uv owns that via update-shell); keep jq/terraform as "optional" (rejected — they're not install-related at all).
+- **Verified:** +8 tests (TestCrossPlatform 7, MCP-skip 1); suite 231→239. No behavior change under base_dir (tests green).
+- **Tags:** install, cross-platform, linux, fedora, path, vscode, mcp
+
 ## 2026-06-07 | Phase 2 build-time agent generation ABANDONED (ADR-0002, Won't Do)
 - **Context:** Phase 2 aimed to dedup the dual agent sources by generating static `agents/*.md` from the templates at build time, guarded by a CI `git diff --exit-code agents/` drift check.
 - **Decision:** WON'T DO. The prerequisite check (render default config with agent_suffix='' vs current static files) showed all 7 agents differ by 79–178 BODY lines — not frontmatter (already reconciled), but two different agent *designs*: static has `<role>` expert-prose + explicit `<skills>`/`<mcp>` blocks (incl. this session's review-register voice); templates have `<identity>` + What you do/don't bullets + `<boundaries>` + Available Agents footer.

@@ -41,6 +41,12 @@ uv tool upgrade carter-ai
 pipx install git+https://github.com/mauriciomem/carter-ai.git
 ```
 
+> **PATH note (macOS & Linux):** the `carter` executable installs into
+> `~/.local/bin`, which may not be on your `PATH`. If `carter` is "command not
+> found" after install, run `uv tool update-shell` and reload your shell (or
+> `export PATH="$HOME/.local/bin:$PATH"`). See
+> [docs/getting-started.md](docs/getting-started.md#step-1-install-carter).
+
 This gives you a single `carter` command that provides everything:
 
 ```bash
@@ -315,7 +321,7 @@ The test suite covers:
 - **Parity tests** (`tests/test_parity.py`) — invariants that must not drift between the static agent files and their templates
 - **Carter-ops tests** (`tests/ops/test_operations.py`) — CLI parsing, operation dry-runs/execution, GitHub/Jira/git operations, config and audit subcommands
 
-231 tests in total, run on every push and PR via [GitHub Actions](.github/workflows/ci.yml). See [docs/testing.md](docs/testing.md) for the full testing guide.
+239 tests in total, run on every push and PR via [GitHub Actions](.github/workflows/ci.yml). See [docs/testing.md](docs/testing.md) for the full testing guide.
 
 ## Project Structure
 

@@ -29,14 +29,14 @@ uv pip install -e ".[dev]"
 ### Run everything
 
 ```bash
-# From the venv (covers all three test files — 231 tests)
+# From the venv (covers all three test files — 239 tests)
 python -m pytest tests/ -v
 ```
 
 ### Run a single suite
 
 ```bash
-python -m pytest tests/test_install.py -v     # installer (65)
+python -m pytest tests/test_install.py -v     # installer (73)
 python -m pytest tests/test_scaffold.py -v    # scaffold (87)
 python -m pytest tests/test_parity.py -v      # agent source parity (8)
 python -m pytest tests/ops/ -v                # carter-ops (71)
@@ -50,7 +50,7 @@ Every push to `main` and every pull request runs the suite via GitHub Actions
 ```bash
 uv venv --clear
 uv pip install -e ".[dev]"
-python -m pytest tests/ -q                                  # 231 unit tests
+python -m pytest tests/ -q                                  # 239 unit tests
 python -m pytest evals/test_skills.py evals/test_routing.py -q  # 28 offline evals
 ```
 
@@ -78,7 +78,7 @@ No external mocking libraries are used. Both the installer and the scaffold acce
 ```
 tests/
 ├── conftest.py             # Shared fixtures (base_dir, settings, etc.)
-├── test_install.py         # Installer tests (65 tests, 21 classes)
+├── test_install.py         # Installer tests (73 tests, 22 classes)
 ├── test_scaffold.py        # Scaffold tests (87 tests, 12 classes)
 ├── test_parity.py          # Agent source-parity tests (8 tests, 3 classes)
 └── ops/
@@ -86,7 +86,7 @@ tests/
     └── test_operations.py  # Carter-ops tests (71 tests, 27 classes)
 ```
 
-The full suite is **231 tests** (`python -m pytest tests/ -v`).
+The full suite is **239 tests** (`python -m pytest tests/ -v`).
 
 ## Fixtures (conftest.py)
 
@@ -409,7 +409,7 @@ Validates the `--bot-name` CLI flag for custom git attribution.
 | `test_custom_bot_name` | `--bot-name "acme-bot"` produces `acme-bot` name and `acme-bot@users.noreply.github.com` email |
 | `test_custom_bot_name_footer` | Footer text uses the custom bot name |
 
-### TestMCPFlag (2 tests)
+### TestMCPFlag (3 tests)
 
 Validates the `--mcp` flag for opt-in MCP server installation.
 
@@ -417,6 +417,21 @@ Validates the `--mcp` flag for opt-in MCP server installation.
 |------|-------------------|
 | `test_no_mcp_flag_skips_servers` | Without `--mcp`, no MCP server entries are written to settings files |
 | `test_mcp_flag_installs_servers` | With `--mcp`, MCP server entries are written to VS Code settings |
+| `test_mcp_skipped_when_vscode_absent` | When no VS Code config dir exists, `settings.json` is **not** created (no phantom file) |
+
+### TestCrossPlatform (7 tests)
+
+Validates macOS/Linux path resolution and the pruned prerequisite list.
+
+| Test | What It Verifies |
+|------|-------------------|
+| `test_vscode_settings_path_macos` | macOS resolves to `~/Library/Application Support/Code/User/settings.json` |
+| `test_vscode_settings_path_linux` | Linux resolves to `~/.config/Code/User/settings.json` |
+| `test_vscode_user_dirs_linux_includes_variants` | Candidate dirs include VSCodium, Insiders, and Flatpak |
+| `test_vscode_settings_prefers_existing_variant` | An existing non-stable variant dir is preferred over the default |
+| `test_vscode_detected_false_when_no_dirs` | `_vscode_detected` is False when no VS Code dir exists |
+| `test_vscode_detected_true_under_base_dir` | `_vscode_detected` is True in test (`base_dir`) mode |
+| `test_prerequisites_drop_jq_and_terraform` | `jq`/`terraform` are no longer probed as install prereqs; `code`/`gh` still are |
 
 ### TestCarterOpsSkill (2 tests)
 

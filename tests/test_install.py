@@ -615,6 +615,81 @@ class TestMCPFlag:
         assert "carter-terraform" in servers
         assert "carter-atlassian" in servers
 
+    def test_mcp_skipped_when_vscode_absent(self, base_dir: Path, monkeypatch) -> None:
+        """No VS Code config dir → settings.json is not created (no phantom file)."""
+        manifest = {"files": [], "file_hashes": {}, "mcp_servers": []}
+        backup = base_dir / "backup"
+
+        # Force "VS Code not detected" even though base_dir normally forces True.
+        monkeypatch.setattr(install, "_vscode_detected", lambda _base: False)
+
+        install.configure_mcp_servers(["copilot"], base_dir, manifest, {}, backup)
+
+        assert not (base_dir / "vscode" / "settings.json").exists()
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Cross-platform path + prerequisite resolution (macOS / Linux)
+# ──────────────────────────────────────────────────────────────────────────────
+
+
+class TestCrossPlatform:
+    def test_vscode_settings_path_macos(self, monkeypatch) -> None:
+        monkeypatch.setattr(install.platform, "system", lambda: "Darwin")
+        path = install._vscode_settings_path(None)
+        assert "Library/Application Support/Code/User/settings.json" in str(path)
+
+    def test_vscode_settings_path_linux(self, monkeypatch) -> None:
+        monkeypatch.setattr(install.platform, "system", lambda: "Linux")
+        path = install._vscode_settings_path(None)
+        assert str(path).endswith(".config/Code/User/settings.json")
+
+    def test_vscode_user_dirs_linux_includes_variants(self, monkeypatch) -> None:
+        monkeypatch.setattr(install.platform, "system", lambda: "Linux")
+        dirs = [str(p) for p in install._vscode_user_dirs(None)]
+        joined = "\n".join(dirs)
+        assert "VSCodium" in joined
+        assert "Code - Insiders" in joined
+        assert "com.visualstudio.code" in joined  # Flatpak
+
+    def test_vscode_settings_prefers_existing_variant(self, base_dir, monkeypatch) -> None:
+        """When a non-stable variant dir exists, it is preferred over the default."""
+        monkeypatch.setattr(install.platform, "system", lambda: "Linux")
+        codium = base_dir / ".config" / "VSCodium" / "User"
+        codium.mkdir(parents=True)
+        monkeypatch.setattr(
+            install,
+            "_vscode_user_dirs",
+            lambda _base: [base_dir / ".config" / "Code" / "User", codium],
+        )
+        assert install._vscode_settings_path(None) == codium / "settings.json"
+
+    def test_vscode_detected_false_when_no_dirs(self, monkeypatch) -> None:
+        monkeypatch.setattr(install, "_vscode_user_dirs", lambda _base: [])
+        assert install._vscode_detected(None) is False
+
+    def test_vscode_detected_true_under_base_dir(self, base_dir: Path) -> None:
+        assert install._vscode_detected(base_dir) is True
+
+    def test_prerequisites_drop_jq_and_terraform(self, monkeypatch) -> None:
+        """jq/terraform are not install prereqs and must not be probed."""
+        probed: list[str] = []
+
+        def fake_which(cmd):
+            probed.append(cmd)
+            return None
+
+        monkeypatch.setattr(install, "_which", fake_which)
+        checks = install.check_prerequisites(["copilot", "opencode"])
+
+        assert "jq" not in probed
+        assert "terraform" not in probed
+        assert "jq" not in checks
+        assert "terraform" not in checks
+        # Still probes the tools the install actually integrates with
+        assert "code" in probed
+        assert "gh" in probed
+
 
 class TestCarterOpsSkill:
     def test_carter_ops_skill_installed(self, base_dir: Path) -> None:

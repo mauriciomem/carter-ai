@@ -117,12 +117,59 @@ def _opencode_base(base_dir: Path | None) -> Path:
     return _home() / ".config" / "opencode"
 
 
-def _vscode_settings_path(base_dir: Path | None) -> Path:
+def _vscode_user_dirs(base_dir: Path | None) -> list[Path]:
+    """Return candidate VS Code ``User/`` config directories, most-preferred first.
+
+    Covers the common variants on macOS and Linux: stable VS Code, Insiders,
+    VSCodium, and (Linux) the Flatpak sandbox location. The ``base_dir`` test
+    override yields a single deterministic path.
+    """
     if base_dir:
-        return base_dir / "vscode" / "settings.json"
+        return [base_dir / "vscode"]
+
+    home = _home()
     if platform.system() == "Darwin":
-        return _home() / "Library" / "Application Support" / "Code" / "User" / "settings.json"
-    return _home() / ".config" / "Code" / "User" / "settings.json"
+        app_support = home / "Library" / "Application Support"
+        return [
+            app_support / "Code" / "User",
+            app_support / "Code - Insiders" / "User",
+            app_support / "VSCodium" / "User",
+        ]
+    # Linux / other POSIX
+    config = home / ".config"
+    return [
+        config / "Code" / "User",
+        config / "Code - Insiders" / "User",
+        config / "VSCodium" / "User",
+        # Flatpak-sandboxed VS Code
+        home / ".var" / "app" / "com.visualstudio.code" / "config" / "Code" / "User",
+    ]
+
+
+def _vscode_settings_path(base_dir: Path | None) -> Path:
+    """Return the VS Code ``settings.json`` to read/write.
+
+    Prefers the first candidate whose ``User/`` directory already exists (so an
+    Insiders/VSCodium/Flatpak install is targeted correctly); otherwise falls
+    back to the first candidate (the stable default), preserving prior behavior.
+    """
+    candidates = _vscode_user_dirs(base_dir)
+    for user_dir in candidates:
+        if user_dir.is_dir():
+            return user_dir / "settings.json"
+    return candidates[0] / "settings.json"
+
+
+def _vscode_detected(base_dir: Path | None) -> bool:
+    """Whether a VS Code user config directory exists (so writing settings is safe).
+
+    Always True under ``base_dir`` (test mode). Otherwise True only if one of the
+    known variant ``User/`` directories is present — avoids creating a phantom
+    ``settings.json`` VS Code will never read when it isn't installed.
+    """
+    if base_dir:
+        return True
+    return any(user_dir.is_dir() for user_dir in _vscode_user_dirs(base_dir))
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -261,11 +308,13 @@ def check_prerequisites(targets: list[str]) -> dict[str, bool]:
     log_step("Checking prerequisites...")
     checks: dict[str, bool] = {}
 
+    # Tools the install integrates with. None are required for a successful
+    # install — they enable optional features (VS Code MCP, the Copilot/OpenCode
+    # CLIs, and `gh`-based carter-ops). `jq`/`terraform` are NOT install prereqs
+    # (the installer uses Python's json; terraform is unrelated to installing).
     tools = [
         ("VS Code", "code", False),
         ("gh CLI", "gh", True),
-        ("terraform", "terraform", True),
-        ("jq", "jq", True),
     ]
 
     if "copilot" in targets:
@@ -742,17 +791,21 @@ def configure_mcp_servers(
     servers = ["github", "terraform", "atlassian"]
 
     if "copilot" in targets:
-        # VS Code settings.json
-        vscode_settings = _vscode_settings_path(base_dir)
-        copilot_entries = {}
-        for server in servers:
-            src = REPO_ROOT / "mcp" / "copilot" / f"{server}.json"
-            copilot_entries.update(json.loads(src.read_text()))
+        # VS Code settings.json — only when a VS Code config dir actually exists,
+        # so we never create a phantom settings.json that VS Code won't read.
+        if _vscode_detected(base_dir):
+            vscode_settings = _vscode_settings_path(base_dir)
+            copilot_entries = {}
+            for server in servers:
+                src = REPO_ROOT / "mcp" / "copilot" / f"{server}.json"
+                copilot_entries.update(json.loads(src.read_text()))
 
-        _merge_json_key(vscode_settings, "mcp.servers", copilot_entries, backup_root)
-        for server in servers:
-            log_ok(f"carter-{server} → VS Code settings.json")
-            count += 1
+            _merge_json_key(vscode_settings, "mcp.servers", copilot_entries, backup_root)
+            for server in servers:
+                log_ok(f"carter-{server} → VS Code settings.json")
+                count += 1
+        else:
+            log_skip("VS Code not detected — skipping settings.json (use the CLI targets)")
 
         # Copilot CLI via `copilot mcp add`
         if prereqs.get("copilot", False) and not base_dir:

@@ -33,7 +33,23 @@ First, install the unified `carter` CLI once with [uv](https://docs.astral.sh/uv
 uv tool install git+https://github.com/mauriciomem/carter-ai.git
 ```
 
-This puts a single `carter` command on your PATH. From there you have two paths depending on how you want to use Carter:
+This installs a single `carter` executable into uv's tool bin directory
+(`~/.local/bin` on macOS and Linux). **That directory may not be on your `PATH`
+yet** — `uv` prints a warning if so. Put it on your PATH once:
+
+```bash
+uv tool update-shell      # adds the tool bin dir to your shell startup file
+exec $SHELL               # reload the shell (or just open a new terminal)
+carter --version          # verify: carter, version 2.0.0a1
+```
+
+> **`bash: carter: command not found`?** The install succeeded but `~/.local/bin`
+> isn't on your `PATH`. Run `uv tool update-shell` and reload your shell (above),
+> or for the current shell only: `export PATH="$HOME/.local/bin:$PATH"`.
+> Alternatively, run the bundled installer straight from a repo checkout without
+> touching your PATH: `./install.sh` (equivalent to `carter install`).
+
+From there you have two paths depending on how you want to use Carter:
 
 ### Path A: Global Install (system-level)
 
