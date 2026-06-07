@@ -11,6 +11,14 @@
 - **Tags:** ...
 -->
 
+## 2026-06-07 | Phase 2 build-time agent generation ABANDONED (ADR-0002, Won't Do)
+- **Context:** Phase 2 aimed to dedup the dual agent sources by generating static `agents/*.md` from the templates at build time, guarded by a CI `git diff --exit-code agents/` drift check.
+- **Decision:** WON'T DO. The prerequisite check (render default config with agent_suffix='' vs current static files) showed all 7 agents differ by 79–178 BODY lines — not frontmatter (already reconciled), but two different agent *designs*: static has `<role>` expert-prose + explicit `<skills>`/`<mcp>` blocks (incl. this session's review-register voice); templates have `<identity>` + What you do/don't bullets + `<boundaries>` + Available Agents footer.
+- **Rationale:** Static and template are two independently-authored designs sharing a name, NOT one artifact duplicated. Generating would overwrite all 7 shipped agents with the template design — a product change to every `carter install`, not a refactor. The drift risk phase 2 targeted is ALREADY covered by tests/test_parity.py (frontmatter, redaction categories, ops one-liner, modes, agent-set parity).
+- **Alternatives considered:** Reconcile designs then generate (rejected now — a deliberate content project choosing/merging one canonical agent body for all 7, not currently justified); generate anyway (rejected — silently rewrites shipped content). 
+- **Outcome:** ADR-0002 effectively complete. Dual-source kept; parity tests are the guardrail. No agent files changed.
+- **Tags:** architecture, agents, build, generation, wont-do, adr-0002
+
 ## 2026-06-07 | carter init --target/--agent-suffix flags + narrator redaction guard (ADR-0002)
 - **Context:** `carter init` had no way to set target/suffix without hand-editing carter.yaml (the `sed` workaround). And the recorded edge case (narrator enabled + redaction off → narrator with no redaction rules) had no guard.
 - **Decision:** (1) Add `--target {copilot,opencode,all}` and `--agent-suffix` flags to `carter init`; they override config before it's persisted (so carter.yaml matches what was scaffolded), with eager validation (bad suffix/target exits non-zero). (2) Add `carter.scaffold.config_warnings(config)` — a pure function flagging the narrator/redaction gap — emitted by `carter init`, `update`, and `check` (non-fatal `⚠`).

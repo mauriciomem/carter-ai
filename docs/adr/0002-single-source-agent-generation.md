@@ -1,7 +1,7 @@
 # ADR-0002: Single-source agent definitions via build-time generation
 
-**Status:** Accepted (phase 1); phase 2 deferred
-**Date:** 2026-06-06
+**Status:** Accepted (phase 1 + follow-ups shipped); phase 2 (build-time generation) Won't Do — see Current Status
+**Date:** 2026-06-06 (phase 2 abandoned 2026-06-07)
 **Deciders:** Carter maintainer (mauriciomem), Carter Maestro
 **Reference format:** Michael Nygard ADR (<https://cognitect.com/blog/2011/11/15/documenting-architecture-decisions>)
 **Related:** ADR-0001 (added the narrator's static source; surfaced the dual-source sync burden)
@@ -22,18 +22,21 @@
 | `mode` vocabulary | **RESOLVED** | maestro `primary`, six specialists `subagent`; commit `7712f59` |
 | Scaffold-agent discovery | **FIXED** | `_render_and_write` honors `config["target"]`, writes discovery paths; commit `74311a6` |
 | Agent name collision → `agent_suffix` | **FIXED** | workspace agents suffixed (default `local`) to stay distinct from global; commit `9512cbe` |
-| `carter init` `--target`/`--agent-suffix` flags | **DONE** | scaffold target/suffix without editing YAML; commit pending |
-| Narrator/redaction edge-case guard | **DONE** | `config_warnings` warns on init/update/check when narrator on + redaction off; commit pending |
-| Phase 2 — build-time generation + drift check | **NOT STARTED** | unblocked by the frontmatter fix; sketch below |
+| `carter init` `--target`/`--agent-suffix` flags | **DONE** | scaffold target/suffix without editing YAML; commit `c7c6c75` |
+| Narrator/redaction edge-case guard | **DONE** | `config_warnings` warns on init/update/check when narrator on + redaction off; commit `c7c6c75` |
+| Phase 2 — build-time generation + drift check | **WON'T DO** | premise falsified — static and template are different agent *designs*, not the same content; see “Phase 2 abandoned” below |
 
 **Ground truth at audit:** 7 static agents + 7 templates (frontmatter parity
 verified for all 7), 22 skills, 231 unit tests + 28 offline evals, CI green.
 Discovery + naming **confirmed end-to-end** in VS Code (workspace
 `carter-engineer-local` loads and is distinct from the global agent).
 
-**Next session starts here:** phase 2 — build-time agent generation + CI
-`git diff --exit-code agents/` drift check (sketch below; unblocked by the
-frontmatter fix).
+**Where this ADR landed:** phases 1 + follow-ups (parity tests, CI, frontmatter,
+modes, discovery, `agent_suffix`, init flags, redaction guard) are all shipped.
+**Phase 2 (build-time generation) is abandoned** — the dual sources are not
+duplicates but two distinct agent designs, so generation would rewrite shipped
+content rather than dedup it. The drift risk it targeted is already covered by
+`tests/test_parity.py`. This ADR is effectively complete.
 
 ---
 
@@ -126,7 +129,54 @@ gated behind step 1.
 
 ---
 
-## Sketch — build-time generation + drift check (the requested design)
+## Phase 2 abandoned — verified 2026-06-07
+
+When phase 2 was finally attempted, the prerequisite check killed it. Rendering
+the templates with the default config (`agent_suffix=""`) and diffing against the
+current static `agents/*.md`:
+
+```
+carter-architect.md   92 diff lines
+carter-devops.md      88
+carter-engineer.md   111
+carter-learner.md     79
+carter-maestro.md    178
+carter-narrator.md   106
+carter-pm.md          86
+files differing: 7/7
+```
+
+This is **not** frontmatter drift (that was reconciled in commit `7712f59`). The
+**bodies are two different agent designs**:
+
+| Aspect | Static `agents/*.md` (shipped by `carter install`) | Template-rendered |
+|--------|----------------------------------------------------|-------------------|
+| Identity | `<role>` "You are … an expert in: …" prose | `<identity>` "Pragmatic, disciplined, quality-focused" |
+| Role | prose paragraphs | `What you do:` / `What you don't do:` bullets |
+| Skills | explicit `<skills>` block (+ this session's review-register voice) | none |
+| Tool access | explicit `<mcp>` block | none |
+| Extras | — | `<boundaries>`, `## Available Agents` footer, config-gated blocks |
+
+**Conclusion:** the static and template agents are **two independently authored
+designs that share a name**, not one artifact duplicated. Build-time generation
+would therefore *overwrite all 7 shipped agents with the template design* —
+discarding the richer static content. That is a product change to every
+`carter install`, not the mechanical dedup phase 2 was framed as.
+
+**Decision: do not generate (Won't Do).** The drift risk phase 2 targeted is
+already covered by `tests/test_parity.py`, which locks the invariants that must
+not diverge (frontmatter, redaction categories, ops one-liner, mode vocabulary,
+agent-set parity). Keeping the two designs is acceptable — they may both be
+intentional. Reviving generation would first require a deliberate *content*
+project to choose/merge a single canonical agent design for all seven; that is
+out of scope here and not currently justified.
+
+> The sketch below is retained for historical context only. **Do not implement
+> it** without first resolving the design-reconciliation question above.
+
+---
+
+## Sketch — build-time generation + drift check (the requested design, NOT pursued)
 
 ### A. One generator
 
