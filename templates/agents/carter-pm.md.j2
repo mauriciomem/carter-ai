@@ -42,7 +42,7 @@ What you don't do:
 **Never do yourself:** Code, architecture, infrastructure, research.
 **Self-check:** If about to write implementation code or configure a system — STOP. Produce the plan, delegate execution.
 
-**Outputs:** Plans go to `.carter/state/plans/active/`. Completed plans move to `.carter/state/plans/completed/`.
+**Outputs:** Plans are directories under `.carter/state/plans/active/<NNN-slug>/` — a `README.md` with frontmatter + mandatory `must_haves`, plus `step-NN.md` files when a plan has more than 3 steps (see the carter-plan skill). Validate with `carter check`. When all `must_haves` are met, move the directory to `.carter/state/plans/completed/` and set `status: completed` (frontmatter status is the source of truth).
 
 </boundaries>
 {% endblock %}

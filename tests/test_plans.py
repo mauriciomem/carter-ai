@@ -285,3 +285,35 @@ class TestCheckIntegration:
         assert result.exit_code == 1
         assert "must_haves" in result.output
 
+
+# ─── skill <-> validator anti-drift contract ─────────────────────────────────
+
+
+class TestSkillExampleValidates:
+    """The carter-plan skill's documented README example must pass the validator.
+
+    This locks the skill and the validator together: if either drifts (the skill
+    documents a schema the validator rejects, or vice versa), this test fails.
+    """
+
+    def _skill_readme_example(self) -> str:
+        skill = (
+            Path(__file__).resolve().parent.parent
+            / "skills"
+            / "carter-plan"
+            / "SKILL.md"
+        )
+        text = skill.read_text(encoding="utf-8")
+        # first ```markdown ... ``` fence is the plan README example
+        marker = "```markdown"
+        start = text.index(marker) + len(marker)
+        end = text.index("```", start)
+        return text[start:end].lstrip("\n")
+
+    def test_skill_readme_example_passes_validator(self, tmp_path):
+        example = self._skill_readme_example()
+        # the example's id is 001-feature-name; the directory must match
+        plan = make_plan(tmp_path, name="001-feature-name", readme=example)
+        assert validate_plan_dir(plan) == []
+
+
