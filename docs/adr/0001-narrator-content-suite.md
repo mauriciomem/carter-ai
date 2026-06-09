@@ -1,3 +1,13 @@
+---
+id: ADR-0001
+status: accepted
+created: 2026-06-06
+decided: 2026-06-06
+supersedes: []
+superseded_by: null
+tags: [narrator, skills, documentation]
+---
+
 # ADR-0001: Narrator as a first-class agent with a documentation & storytelling skill suite
 
 **Status:** Accepted

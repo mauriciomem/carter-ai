@@ -1,0 +1,123 @@
+# Frontmatter reference
+
+> Canonical schema source for Carter's durable artifacts (ADR-0003 §D6).
+> The `carter-adr` and `carter-plan` skills link here rather than restating
+> schemas, so there is **one** source of truth (anti-drift discipline).
+
+All durable, lifecycle-bearing artifacts carry a YAML frontmatter block. Machines
+read the frontmatter; humans read the body. Where a Python validator exists
+(ADR-0003 §O3, Phase 2), it enforces these schemas before a plan is `active`.
+
+---
+
+## Plan `README.md`
+
+```yaml
+---
+id: 001-feature-name          # NNN-kebab; MUST match the directory name
+status: active                # proposed | active | blocked | completed | abandoned
+created: 2026-06-09
+updated: 2026-06-09
+adr: null                     # ADR-NNNN if this plan executes an accepted ADR
+push_policy: manual           # manual | auto  (manual = never push without approval)
+tags: []
+repos: []                     # repos this plan touches (multi-repo work)
+must_haves:                   # MANDATORY: >= 1 entry total (ADR-0003 O6)
+  truths: []                  #   observable behaviors/states that must be true
+  artifacts: []               #   files/resources that must exist
+  key_links: []               #   canonical references (PRs, dashboards)
+---
+```
+
+`must_haves` is the objective, verifiable definition of done. The quality gate
+checks against it; a plan with an empty `must_haves` is a checklist, not a plan,
+and the validator rejects it while `status: active`.
+
+## Plan `step-NN.md`
+
+Present only when a plan has **> 3 steps** (see thresholds below). 1–3 steps stay
+inline in the README steps table.
+
+```yaml
+---
+step: 1
+status: pending               # pending | in-progress | done | blocked
+depends_on: []                # step numbers this step waits on
+files_modified: []            # filled after completion
+---
+```
+
+## ADR frontmatter
+
+In **addition** to the human "Status / Date / Deciders" block (kept for readers
+landing on a long ADR), every ADR carries:
+
+```yaml
+---
+id: ADR-0003
+status: accepted              # proposed | accepted | rejected | superseded | deprecated
+created: 2026-06-07
+decided: 2026-06-09           # null until accepted
+supersedes: []                # ADR ids or "ADR-NNNN§D3"
+superseded_by: null
+tags: [storage, metadata, plans, adr]
+---
+```
+
+A change or reversal is a **new** ADR with `supersedes: ADR-NNNN§Dn` — never an
+edit to an accepted ADR. Backfilling frontmatter is a metadata addition, not a
+decision change, and is permitted.
+
+## Session `checkpoint.md`
+
+A **thin cursor** the maestro writes suggest-and-confirm at natural pauses. It
+points *into* the active plan's frontmatter (the source of truth) and never
+duplicates plan content.
+
+```yaml
+---
+updated: 2026-06-09T18:00:00Z
+active_plan: 001-feature-name # plan id, or null
+next_step: 4                  # step number, or null
+---
+```
+
+Followed by a one-line human summary ("where we left off").
+
+## Knowledge entries (optional, light touch)
+
+The 5 hardcoded workspace knowledge files keep their current shape. Individual
+entries that need portability MAY carry:
+
+```yaml
+scope: workspace              # universal | workspace
+tags: [security, terraform]
+```
+
+This is genuinely optional — not half-mandatory.
+
+---
+
+## Configurable thresholds
+
+Numeric splitting thresholds are **defaults in `carter.yaml`** (the `plans:`
+block), tunable per workspace. The *structural* rules (every plan is a directory,
+status lives in frontmatter, one step = one independently-statusable unit) are
+invariant and not configurable.
+
+```yaml
+plans:
+  step_file_threshold: 3     # > N steps -> per-step files
+  readme_max_lines: 150      # README split budget
+  step_max_lines: 80         # step-file split budget
+  git_regime: private        # private | workspace (umbrella mode only)
+```
+
+The **ADR ≤ 400-line budget is NOT workspace config** — ADRs live in the main
+repo, outside any `.carter/`, so `carter.yaml` cannot govern them. It is a
+`carter-adr` skill constant.
+
+## See also
+
+- [ADR-0003](../adr/0003-knowledge-adr-rfc-plan-storage.md) — the decision of record
+- [ADR-0003 implementation plan](../adr/0003-implementation.md) — execution checklist

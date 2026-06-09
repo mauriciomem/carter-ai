@@ -12,7 +12,21 @@ Create a structured Architecture Decision Record (ADR) that captures the context
 
 ## ADR Template
 
+Every ADR carries **both** a YAML frontmatter block (machine-readable) and the
+human Status block (for readers). Schema source:
+[docs/reference/frontmatter.md](../../docs/reference/frontmatter.md).
+
 ```markdown
+---
+id: ADR-[NUMBER]
+status: proposed              # proposed | accepted | rejected | superseded | deprecated
+created: YYYY-MM-DD
+decided: null                 # date once accepted
+supersedes: []                # ADR ids or "ADR-NNNN§Dn"
+superseded_by: null
+tags: []
+---
+
 # ADR-[NUMBER]: [TITLE]
 
 **Status:** Proposed | Accepted | Deprecated | Superseded by ADR-[N]
@@ -70,5 +84,9 @@ Create a structured Architecture Decision Record (ADR) that captures the context
 - Number ADRs sequentially within the project.
 - Keep the Context section factual — save opinions for the Rationale.
 - List at least 2 options considered, even if the choice seems obvious.
+- **One ADR = one coherent decision.** It MAY bundle labeled sub-decisions `D1..Dn` ONLY if they are interdependent (share one rationale/boundary). Independent decisions go in separate ADRs.
+- **A change or reversal is a NEW ADR, never an edit.** An Accepted ADR is immutable; a later decision creates a new ADR with `supersedes: ADR-NNNN§Dn`. Backfilling frontmatter is a metadata addition (permitted), not a decision change.
+- **Size budget: an ADR > 400 lines MUST be split** (extract a sub-area into its own ADR). This budget is a skill constant — ADRs live in the main repo, outside any `.carter/`, so `carter.yaml` does not govern them.
+- Frontmatter + the human Status block are both required; keep them in sync. Schema: [docs/reference/frontmatter.md](../../docs/reference/frontmatter.md).
 - Reference: Michael Nygard's ADR format (https://cognitect.com/blog/2011/11/15/documenting-architecture-decisions).
 </guidelines>

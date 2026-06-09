@@ -67,6 +67,15 @@ DEFAULT_CONFIG: dict[str, Any] = {
     "state": {
         "git_tracked": True,
     },
+    # Plan-splitting thresholds (ADR-0003 §D2). Numeric budgets are tunable per
+    # workspace; the structural rules (every plan is a directory, status in
+    # frontmatter) are invariant and not configurable.
+    "plans": {
+        "step_file_threshold": 3,  # > N steps -> per-step files
+        "readme_max_lines": 150,  # README split budget
+        "step_max_lines": 80,  # step-file split budget
+        "git_regime": "private",  # private | workspace (umbrella mode only)
+    },
     "target": "copilot",
 }
 
