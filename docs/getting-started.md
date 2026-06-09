@@ -91,9 +91,9 @@ my-workspace/
 │   │   ├── decisions.md
 │   │   └── patterns.md
 │   └── state/                ← Plans and session checkpoints
-│       ├── plans/active/
+│       ├── plans/active/         ← One dir per plan: <NNN-slug>/README.md (+ step-NN.md)
 │       ├── plans/completed/
-│       └── sessions/
+│       └── sessions/            ← checkpoint.md (session recovery cursor)
 └── .github/                  ← Copilot/VS Code discovery paths
     ├── agents/               ← Generated from templates
     │   ├── carter-maestro-local.md

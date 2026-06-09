@@ -58,6 +58,19 @@ You confirm or decline. If you decline, Carter moves on immediately — no naggi
 
 By default, `carter init` runs `git init` inside `.carter/`. This gives you history on knowledge changes without requiring you to track them in your main repo. Disable with `--no-git-state`.
 
+Run `carter save` at natural stopping points to commit a recovery snapshot of `.carter/` (plans, sessions, knowledge) — so a deleted plan or session is restorable from `.carter/.git`.
+
+### Optional Entry Metadata (`scope` / `tags`)
+
+The five workspace knowledge files keep their plain-Markdown shape. Individual entries **may** optionally carry lightweight YAML metadata when portability or filtering matters (per ADR-0003 D1):
+
+```yaml
+scope: workspace     # universal | workspace — does this apply everywhere, or just here?
+tags: [terraform, auth]
+```
+
+This is genuinely optional — not half-mandatory. Use it on an entry you might later promote to system knowledge (`scope: universal`) or want to find by tag; skip it otherwise. The canonical schema is in [reference/frontmatter.md](reference/frontmatter.md).
+
 ---
 
 ## System Knowledge (`~/.copilot/knowledge/`)

@@ -138,6 +138,16 @@ promoted into knowledge. Lifecycle skills: `carter-mistakes` (capture) →
 
 → Reference: **[docs/memory-and-knowledge.md](docs/memory-and-knowledge.md)**
 
+## Plans & state
+
+Plans are directories under `.carter/state/plans/` with machine-readable
+frontmatter and verifiable `must_haves`; a session `checkpoint.md` cursor enables
+"where were we?" recovery. `carter check` validates the frontmatter contract;
+`carter save` commits a recovery snapshot of `.carter/`. Architecture decisions
+live as ADRs in `docs/adr/`.
+
+→ Reference: **[docs/plans-and-state.md](docs/plans-and-state.md)**
+
 ## MCP servers
 
 Configured by `carter install --mcp` into VS Code, Copilot CLI, and OpenCode:
