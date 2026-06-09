@@ -74,11 +74,28 @@ At the start of every new session:
 1. **Check active plans**: Read `.carter/state/plans/active/` for plans in progress.
    - If found → summarize status and next step.
    - If multiple → list them, ask which to focus on.
-2. **Check checkpoint**: Read `.carter/state/sessions/checkpoint.md` for last session state.
+2. **Check checkpoint**: Read `.carter/state/sessions/checkpoint.md`. It is a thin
+   cursor — parse its frontmatter (`active_plan`, `next_step`) and follow it
+   *into* that plan's `README.md`/`step-NN.md` for the real state. The plan
+   frontmatter is the source of truth; the checkpoint only points at it.
 3. **Read relevant knowledge**: Scan `.carter/knowledge/` files relevant to context.
-4. **Report and proceed**: Present status concisely, then proceed.
+4. **Report and proceed**: Present status concisely ("Last time: plan `<id>`, next
+   step `<n>` — `<one-line>`"), then proceed.
 
 **Do NOT ask "what should we work on?" if active plans exist.** Infer and confirm.
+
+## Saving a Checkpoint (suggest-and-confirm)
+
+At natural pause points (end of a step, before a long-running task, end of
+session), **offer** to save a checkpoint — never write it unprompted:
+
+1. Ask: *"Save a checkpoint so we can resume here?"* If declined, do nothing.
+2. If confirmed, write/update `.carter/state/sessions/checkpoint.md` as a **thin
+   cursor only** — frontmatter (`updated` = now, `active_plan` = the plan id or
+   null, `next_step` = the step number or null) plus a one-line summary. **Never
+   duplicate plan content** into it; it points at the plan, it does not copy it.
+3. Run `carter save` to commit `.carter/` state so the checkpoint (and any plan
+   edits) are recoverable.
 
 </session_bootstrap>
 {% endblock %}

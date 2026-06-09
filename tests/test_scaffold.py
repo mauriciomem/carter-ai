@@ -433,6 +433,20 @@ class TestQualityGate:
         assert "must_haves" in engineer
         assert "must_haves" in architect
 
+    def test_maestro_checkpoint_protocol(self, default_config, env):
+        """Maestro carries the checkpoint write protocol referencing `carter save`.
+
+        Anti-drift: the prompt instructs the agent to run `carter save`, which
+        must exist as a real CLI command (it does — see carter.cli.save).
+        """
+        maestro = render_agents(default_config, env)["carter-maestro.md"]
+        assert "Saving a Checkpoint" in maestro
+        assert "carter save" in maestro
+        assert "suggest-and-confirm" in maestro
+        # the checkpoint is a thin cursor, not a content duplicate
+        assert "source of truth" in maestro
+
+
 
 # ─── State Tests ─────────────────────────────────────────────────────────────
 
