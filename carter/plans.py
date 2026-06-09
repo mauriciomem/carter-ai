@@ -39,6 +39,19 @@ DEFAULT_THRESHOLDS: dict[str, Any] = {
 }
 
 
+def _safe_read(path: Path, label: str) -> tuple[str | None, str | None]:
+    """Read ``path`` as UTF-8, returning ``(text, None)`` or ``(None, error)``.
+
+    Validation must never raise on a malformed file (binary, non-UTF-8, a path
+    that is a directory, or unreadable) — it converts the failure into a
+    validation error string so ``carter check`` reports it cleanly.
+    """
+    try:
+        return path.read_text(encoding="utf-8"), None
+    except (OSError, UnicodeDecodeError) as exc:
+        return None, f"{label}: unreadable file ({type(exc).__name__})"
+
+
 def parse_frontmatter(text: str) -> dict[str, Any] | None:
     """Extract and parse the leading YAML frontmatter block.
 
@@ -88,7 +101,9 @@ def _count_step_rows(text: str) -> int | None:
 def _validate_step_file(step_file: Path, plan_name: str, thresholds: dict[str, Any]) -> list[str]:
     """Validate a single ``step-NN.md`` file's frontmatter and size."""
     rel = f"{plan_name}/{step_file.name}"
-    text = step_file.read_text(encoding="utf-8")
+    text, read_err = _safe_read(step_file, rel)
+    if read_err:
+        return [read_err]
     fm = parse_frontmatter(text)
     if fm is None:
         return [f"{rel}: missing or malformed YAML frontmatter"]
@@ -125,7 +140,9 @@ def validate_plan_dir(plan_dir: Path, thresholds: dict[str, Any] | None = None) 
     if not readme.exists():
         return [f"{name}: missing README.md"]
 
-    text = readme.read_text(encoding="utf-8")
+    text, read_err = _safe_read(readme, f"{name}/README.md")
+    if read_err:
+        return [read_err]
     fm = parse_frontmatter(text)
     if fm is None:
         return [f"{name}/README.md: missing or malformed YAML frontmatter"]
@@ -226,8 +243,11 @@ def validate_checkpoint(checkpoint_file: Path) -> list[str]:
     if not checkpoint_file.exists():
         return []
 
-    fm = parse_frontmatter(checkpoint_file.read_text(encoding="utf-8"))
     rel = "sessions/checkpoint.md"
+    text, read_err = _safe_read(checkpoint_file, rel)
+    if read_err:
+        return [read_err]
+    fm = parse_frontmatter(text)
     if fm is None:
         return [f"{rel}: missing or malformed YAML frontmatter"]
 
@@ -240,7 +260,10 @@ def validate_checkpoint(checkpoint_file: Path) -> list[str]:
         errors.append(f"{rel}: active_plan must be a string or null")
 
     next_step = fm.get("next_step")
-    if next_step is not None and not isinstance(next_step, int):
+    # bool is a subclass of int, but `next_step: true` is not a step index.
+    if next_step is not None and (
+        not isinstance(next_step, int) or isinstance(next_step, bool)
+    ):
         errors.append(f"{rel}: next_step must be an integer or null")
 
     return errors

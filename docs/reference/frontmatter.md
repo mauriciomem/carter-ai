@@ -1,8 +1,10 @@
 # Frontmatter reference
 
 > Canonical schema source for Carter's durable artifacts (ADR-0003 §D6).
-> The `carter-adr` and `carter-plan` skills link here rather than restating
-> schemas, so there is **one** source of truth (anti-drift discipline).
+> This is the **authoritative** definition. The `carter-adr` and `carter-plan`
+> skills carry a minimal emittable template for the agent to write from, but this
+> page governs — on any discrepancy, this wins, and the Python validator
+> (`carter check`) enforces the load-bearing keys/enums against it.
 
 All durable, lifecycle-bearing artifacts carry a YAML frontmatter block. Machines
 read the frontmatter; humans read the body. Where a Python validator exists

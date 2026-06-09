@@ -127,6 +127,29 @@ class TestStructuralErrors:
         errors = validate_plan_dir(plan)
         assert any(key in e and "required" in e.lower() for e in errors)
 
+    def test_unreadable_readme_returns_error_not_raises(self, tmp_path):
+        """A non-UTF-8/binary README yields a validation error, never a traceback."""
+        plan_dir = tmp_path / "active" / "001-binary"
+        plan_dir.mkdir(parents=True)
+        (plan_dir / "README.md").write_bytes(b"\xff\xfe\x00\x01 not utf-8")
+        errors = validate_plan_dir(plan_dir)  # must not raise
+        assert errors
+        assert any("README" in e for e in errors)
+
+    def test_readme_is_a_directory_returns_error(self, tmp_path):
+        """A README.md that is a directory yields an error, never a traceback."""
+        plan_dir = tmp_path / "active" / "001-dir"
+        (plan_dir / "README.md").mkdir(parents=True)
+        errors = validate_plan_dir(plan_dir)  # must not raise
+        assert errors
+        assert any("README" in e for e in errors)
+
+    def test_unreadable_step_file_returns_error(self, tmp_path):
+        plan = make_plan(tmp_path)
+        (plan / "step-01.md").write_bytes(b"\xff\xfe\x00 binary")
+        errors = validate_plan_dir(plan)  # must not raise
+        assert any("step-01.md" in e for e in errors)
+
 
 # ─── validate_plan_dir — id rules ────────────────────────────────────────────
 
@@ -370,5 +393,16 @@ class TestValidateCheckpoint:
         f = tmp_path / "checkpoint.md"
         f.write_text("---\nupdated: x\nnext_step: four\n---\n", encoding="utf-8")
         assert any("next_step" in e for e in validate_checkpoint(f))
+
+    def test_next_step_bool_rejected(self, tmp_path):
+        """bool is a subclass of int, but `next_step: true` is not a step index."""
+        f = tmp_path / "checkpoint.md"
+        f.write_text("---\nupdated: x\nnext_step: true\n---\n", encoding="utf-8")
+        assert any("next_step" in e for e in validate_checkpoint(f))
+
+    def test_unreadable_checkpoint_returns_error(self, tmp_path):
+        f = tmp_path / "checkpoint.md"
+        f.write_bytes(b"\xff\xfe\x00 binary")
+        assert any("checkpoint" in e for e in validate_checkpoint(f))  # must not raise
 
 
