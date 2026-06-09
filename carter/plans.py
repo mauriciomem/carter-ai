@@ -1,0 +1,215 @@
+"""Plan validation — the ADR-0003 frontmatter contract, enforced in Python.
+
+This is the deterministic gate behind ADR-0003 (O3): plans are only useful as a
+recovery/quality-gate substrate if their metadata is machine-checkable. The
+canonical schema lives in ``docs/reference/frontmatter.md`` (D6); this module is
+its executable form. ``carter check`` runs ``validate_plans_dir`` over a
+workspace's ``.carter/state/plans/``.
+
+Design: pure functions returning lists of human-readable error strings (empty =
+valid), mirroring the existing ``carter check`` error-collection style. No I/O
+beyond reading the plan files passed in.
+"""
+from __future__ import annotations
+
+import re
+from pathlib import Path
+from typing import Any
+
+import yaml
+
+# Plan id: NNN-kebab (three digits, then lowercase alphanumeric kebab segments),
+# and it MUST equal the plan's directory name.
+PLAN_ID_RE = re.compile(r"^\d{3}-[a-z0-9]+(?:-[a-z0-9]+)*$")
+
+VALID_PLAN_STATUS = {"proposed", "active", "blocked", "completed", "abandoned"}
+VALID_STEP_STATUS = {"pending", "in-progress", "done", "blocked"}
+VALID_PUSH_POLICY = {"manual", "auto"}
+
+# Keys a plan README frontmatter MUST carry. adr/tags/repos are optional.
+REQUIRED_PLAN_KEYS = ("id", "status", "created", "updated", "push_policy", "must_haves")
+MUST_HAVES_KEYS = ("truths", "artifacts", "key_links")
+
+# Defaults mirror carter.config DEFAULT_CONFIG["plans"]; a workspace may override.
+DEFAULT_THRESHOLDS: dict[str, Any] = {
+    "step_file_threshold": 3,
+    "readme_max_lines": 150,
+    "step_max_lines": 80,
+    "git_regime": "private",
+}
+
+
+def parse_frontmatter(text: str) -> dict[str, Any] | None:
+    """Extract and parse the leading YAML frontmatter block.
+
+    Returns the parsed mapping, or ``None`` if there is no well-formed block
+    (no opening/closing ``---`` delimiters, invalid YAML, or a non-mapping body).
+    Tolerates a leading UTF-8 BOM.
+    """
+    if text.startswith("\ufeff"):
+        text = text[1:]
+    lines = text.split("\n")
+    if not lines or lines[0].strip() != "---":
+        return None
+    for i in range(1, len(lines)):
+        if lines[i].strip() == "---":
+            block = "\n".join(lines[1:i])
+            try:
+                data = yaml.safe_load(block)
+            except yaml.YAMLError:
+                return None
+            return data if isinstance(data, dict) else None
+    return None
+
+
+def _count_step_rows(text: str) -> int | None:
+    """Count data rows in the README's ``## Steps`` table.
+
+    Returns the number of table rows minus the header + separator, or ``None``
+    if no Steps table is present. Deterministic for the table shape the
+    ``carter-plan`` skill emits (header row + ``|---|`` separator + data rows).
+    """
+    in_steps = False
+    table_lines = 0
+    found = False
+    for line in text.split("\n"):
+        s = line.strip()
+        if s.startswith("## "):
+            in_steps = s[3:].strip().lower().startswith("steps")
+            continue
+        if in_steps and s.startswith("|") and s.endswith("|"):
+            found = True
+            table_lines += 1
+    if not found:
+        return None
+    return max(0, table_lines - 2)  # drop header + separator
+
+
+def _validate_step_file(step_file: Path, plan_name: str, thresholds: dict[str, Any]) -> list[str]:
+    """Validate a single ``step-NN.md`` file's frontmatter and size."""
+    rel = f"{plan_name}/{step_file.name}"
+    text = step_file.read_text(encoding="utf-8")
+    fm = parse_frontmatter(text)
+    if fm is None:
+        return [f"{rel}: missing or malformed YAML frontmatter"]
+
+    errors: list[str] = []
+    if "step" not in fm:
+        errors.append(f"{rel}: missing required key 'step'")
+
+    status = fm.get("status")
+    if "status" in fm and status not in VALID_STEP_STATUS:
+        errors.append(f"{rel}: status {status!r} not in {sorted(VALID_STEP_STATUS)}")
+
+    depends_on = fm.get("depends_on")
+    if depends_on is not None and not isinstance(depends_on, list):
+        errors.append(f"{rel}: depends_on must be a list")
+
+    n_lines = len(text.split("\n"))
+    budget = thresholds["step_max_lines"]
+    if n_lines > budget:
+        errors.append(f"{rel}: {n_lines} lines exceeds budget {budget}")
+
+    return errors
+
+
+def validate_plan_dir(plan_dir: Path, thresholds: dict[str, Any] | None = None) -> list[str]:
+    """Validate one plan directory against the ADR-0003 contract.
+
+    Returns a list of human-readable error strings (empty = valid).
+    """
+    th = {**DEFAULT_THRESHOLDS, **(thresholds or {})}
+    name = plan_dir.name
+
+    readme = plan_dir / "README.md"
+    if not readme.exists():
+        return [f"{name}: missing README.md"]
+
+    text = readme.read_text(encoding="utf-8")
+    fm = parse_frontmatter(text)
+    if fm is None:
+        return [f"{name}/README.md: missing or malformed YAML frontmatter"]
+
+    errors: list[str] = []
+
+    for key in REQUIRED_PLAN_KEYS:
+        if key not in fm:
+            errors.append(f"{name}/README.md: missing required key {key!r}")
+
+    # id: NNN-kebab and equal to the directory name
+    plan_id = fm.get("id")
+    if "id" in fm:
+        if not isinstance(plan_id, str) or not PLAN_ID_RE.match(plan_id):
+            errors.append(f"{name}/README.md: id {plan_id!r} must be NNN-kebab (e.g. 001-feature-name)")
+        elif plan_id != name:
+            errors.append(f"{name}/README.md: id {plan_id!r} must match the directory name {name!r}")
+
+    status = fm.get("status")
+    if "status" in fm and status not in VALID_PLAN_STATUS:
+        errors.append(f"{name}/README.md: status {status!r} not in {sorted(VALID_PLAN_STATUS)}")
+
+    push_policy = fm.get("push_policy")
+    if "push_policy" in fm and push_policy not in VALID_PUSH_POLICY:
+        errors.append(f"{name}/README.md: push_policy {push_policy!r} not in {sorted(VALID_PUSH_POLICY)}")
+
+    # must_haves shape + count
+    must_haves = fm.get("must_haves")
+    mh_count = 0
+    if "must_haves" in fm:
+        if not isinstance(must_haves, dict):
+            errors.append(
+                f"{name}/README.md: must_haves must be a mapping with "
+                f"{'/'.join(MUST_HAVES_KEYS)}"
+            )
+        else:
+            for sub in MUST_HAVES_KEYS:
+                val = must_haves.get(sub)
+                if val is None:
+                    continue
+                if not isinstance(val, list):
+                    errors.append(f"{name}/README.md: must_haves.{sub} must be a list")
+                else:
+                    mh_count += len(val)
+
+    # O6: an active plan must declare at least one must_haves entry
+    if status == "active" and mh_count == 0:
+        errors.append(
+            f"{name}/README.md: an 'active' plan must declare at least one "
+            f"must_haves entry (truths/artifacts/key_links)"
+        )
+
+    # README size budget
+    readme_lines = len(text.split("\n"))
+    if readme_lines > th["readme_max_lines"]:
+        errors.append(
+            f"{name}/README.md: {readme_lines} lines exceeds budget {th['readme_max_lines']}"
+        )
+
+    # Step files: required when steps > threshold; validate any present
+    step_files = sorted(plan_dir.glob("step-*.md"))
+    step_count = _count_step_rows(text)
+    if step_count is not None and step_count > th["step_file_threshold"] and not step_files:
+        errors.append(
+            f"{name}: {step_count} steps (> {th['step_file_threshold']}) require "
+            f"per-step step-NN.md files"
+        )
+    for step_file in step_files:
+        errors.extend(_validate_step_file(step_file, name, th))
+
+    return errors
+
+
+def validate_plans_dir(plans_root: Path, thresholds: dict[str, Any] | None = None) -> list[str]:
+    """Validate every plan under ``plans_root/{active,completed}/``.
+
+    Missing directories are treated as clean (a fresh workspace has no plans).
+    Errors from all plans are aggregated, sorted for stable output.
+    """
+    errors: list[str] = []
+    for state in ("active", "completed"):
+        state_dir = plans_root / state
+        if not state_dir.is_dir():
+            continue
+        for plan_dir in sorted(p for p in state_dir.iterdir() if p.is_dir()):
+            errors.extend(validate_plan_dir(plan_dir, thresholds))
+    return errors

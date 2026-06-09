@@ -6,8 +6,8 @@ from pathlib import Path
 import click
 
 from carter.config import ConfigError, _validate_agent_suffix, generate_default_config, load_config
-from carter.scaffold import (
-    agent_filename,
+from carter.plans import validate_plans_dir
+from carter.scaffold import (    agent_filename,
     config_warnings,
     create_env,
     render_agents,
@@ -214,6 +214,10 @@ def check(target_dir: str):
     for filename in ["lessons-learned.md", "gotchas.md", "tools.md", "decisions.md", "patterns.md"]:
         if not (knowledge_dir / filename).exists():
             errors.append(f"Missing knowledge file: .carter/knowledge/{filename}")
+
+    # Validate plan frontmatter contract (ADR-0003); thresholds from config
+    plans_root = target / ".carter" / "state" / "plans"
+    errors.extend(validate_plans_dir(plans_root, config.get("plans")))
 
     if errors:
         click.echo("Workspace issues found:", err=True)
