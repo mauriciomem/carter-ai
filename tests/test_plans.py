@@ -14,6 +14,7 @@ import pytest
 
 from carter.plans import (
     parse_frontmatter,
+    validate_checkpoint,
     validate_plan_dir,
     validate_plans_dir,
 )
@@ -285,6 +286,14 @@ class TestCheckIntegration:
         assert result.exit_code == 1
         assert "must_haves" in result.output
 
+    def test_check_fails_on_bad_checkpoint(self, tmp_path):
+        runner, main = self._init(tmp_path)
+        cp = tmp_path / ".carter" / "state" / "sessions" / "checkpoint.md"
+        cp.write_text("---\nactive_plan: null\n---\n", encoding="utf-8")  # missing 'updated'
+        result = runner.invoke(main, ["check", str(tmp_path)])
+        assert result.exit_code == 1
+        assert "checkpoint" in result.output
+
 
 # ─── skill <-> validator anti-drift contract ─────────────────────────────────
 
@@ -315,5 +324,51 @@ class TestSkillExampleValidates:
         # the example's id is 001-feature-name; the directory must match
         plan = make_plan(tmp_path, name="001-feature-name", readme=example)
         assert validate_plan_dir(plan) == []
+
+
+# ─── validate_checkpoint ───────────────────────────────────────────────
+
+
+class TestValidateCheckpoint:
+    """checkpoint.md is optional; absence is clean, but a present file must be valid."""
+
+    def test_absent_is_clean(self, tmp_path):
+        assert validate_checkpoint(tmp_path / "checkpoint.md") == []
+
+    def test_valid(self, tmp_path):
+        f = tmp_path / "checkpoint.md"
+        f.write_text(
+            "---\nupdated: 2026-06-09T18:00:00Z\nactive_plan: 001-x\nnext_step: 4\n---\nwhere we left off\n",
+            encoding="utf-8",
+        )
+        assert validate_checkpoint(f) == []
+
+    def test_valid_with_nulls(self, tmp_path):
+        f = tmp_path / "checkpoint.md"
+        f.write_text(
+            "---\nupdated: 2026-06-09\nactive_plan: null\nnext_step: null\n---\n",
+            encoding="utf-8",
+        )
+        assert validate_checkpoint(f) == []
+
+    def test_missing_frontmatter(self, tmp_path):
+        f = tmp_path / "checkpoint.md"
+        f.write_text("no frontmatter here\n", encoding="utf-8")
+        assert any("frontmatter" in e for e in validate_checkpoint(f))
+
+    def test_missing_updated(self, tmp_path):
+        f = tmp_path / "checkpoint.md"
+        f.write_text("---\nactive_plan: null\n---\n", encoding="utf-8")
+        assert any("updated" in e for e in validate_checkpoint(f))
+
+    def test_bad_active_plan_type(self, tmp_path):
+        f = tmp_path / "checkpoint.md"
+        f.write_text("---\nupdated: x\nactive_plan: 123\n---\n", encoding="utf-8")
+        assert any("active_plan" in e for e in validate_checkpoint(f))
+
+    def test_bad_next_step_type(self, tmp_path):
+        f = tmp_path / "checkpoint.md"
+        f.write_text("---\nupdated: x\nnext_step: four\n---\n", encoding="utf-8")
+        assert any("next_step" in e for e in validate_checkpoint(f))
 
 

@@ -213,3 +213,35 @@ def validate_plans_dir(plans_root: Path, thresholds: dict[str, Any] | None = Non
         for plan_dir in sorted(p for p in state_dir.iterdir() if p.is_dir()):
             errors.extend(validate_plan_dir(plan_dir, thresholds))
     return errors
+
+
+def validate_checkpoint(checkpoint_file: Path) -> list[str]:
+    """Validate the session ``checkpoint.md`` recovery cursor (ADR-0003 D7.2).
+
+    The checkpoint is optional: its absence is clean. If present, it must carry
+    valid frontmatter with ``updated`` and, when set, an ``active_plan`` string
+    and an integer ``next_step`` (both may be null). It is a thin cursor that
+    points into a plan's frontmatter — not a place to duplicate plan content.
+    """
+    if not checkpoint_file.exists():
+        return []
+
+    fm = parse_frontmatter(checkpoint_file.read_text(encoding="utf-8"))
+    rel = "sessions/checkpoint.md"
+    if fm is None:
+        return [f"{rel}: missing or malformed YAML frontmatter"]
+
+    errors: list[str] = []
+    if "updated" not in fm:
+        errors.append(f"{rel}: missing required key 'updated'")
+
+    active_plan = fm.get("active_plan")
+    if active_plan is not None and not isinstance(active_plan, str):
+        errors.append(f"{rel}: active_plan must be a string or null")
+
+    next_step = fm.get("next_step")
+    if next_step is not None and not isinstance(next_step, int):
+        errors.append(f"{rel}: next_step must be an integer or null")
+
+    return errors
+

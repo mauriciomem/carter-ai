@@ -6,7 +6,7 @@ from pathlib import Path
 import click
 
 from carter.config import ConfigError, _validate_agent_suffix, generate_default_config, load_config
-from carter.plans import validate_plans_dir
+from carter.plans import validate_checkpoint, validate_plans_dir
 from carter.scaffold import (    agent_filename,
     config_warnings,
     create_env,
@@ -14,7 +14,7 @@ from carter.scaffold import (    agent_filename,
     render_instructions,
     write_rendered_files,
 )
-from carter.state import add_to_gitignore, init_workspace
+from carter.state import add_to_gitignore, commit_state, init_workspace
 
 
 @click.group()
@@ -219,6 +219,10 @@ def check(target_dir: str):
     plans_root = target / ".carter" / "state" / "plans"
     errors.extend(validate_plans_dir(plans_root, config.get("plans")))
 
+    # Validate the session checkpoint cursor (absent is fine)
+    checkpoint = target / ".carter" / "state" / "sessions" / "checkpoint.md"
+    errors.extend(validate_checkpoint(checkpoint))
+
     if errors:
         click.echo("Workspace issues found:", err=True)
         for error in errors:
@@ -229,6 +233,34 @@ def check(target_dir: str):
         click.echo(f"⚠  {warning}", err=True)
 
     click.echo("Workspace OK")
+
+
+@main.command()
+@click.argument("target_dir", default=".", type=click.Path(exists=True, file_okay=False))
+@click.option("--message", "-m", default=None, help="Commit message for the state snapshot.")
+def save(target_dir: str, message: str | None):
+    """Commit the .carter/ workspace state (recovery checkpoint).
+
+    Snapshots plans, sessions, and knowledge into the nested .carter/.git so a
+    deleted plan or session is recoverable. No-op if there is nothing to commit
+    or the workspace was initialized with --no-git-state.
+    """
+    from datetime import datetime, timezone
+
+    target = Path(target_dir).resolve()
+    carter_dir = target / ".carter"
+    if not carter_dir.exists():
+        raise click.ClickException(
+            f"Not a Carter workspace: {carter_dir} not found. Run 'carter init' first."
+        )
+
+    stamp = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    msg = message or f"chore: checkpoint state ({stamp})"
+    if commit_state(carter_dir, msg):
+        click.echo("Saved .carter/ state")
+    else:
+        click.echo("Nothing to save (no changes or git state disabled)")
+
 
 
 def _resolve_targets(target: str) -> list[str]:

@@ -95,24 +95,55 @@ def _git_init(directory: Path) -> None:
     if git_dir.exists():
         return
 
-    subprocess.run(
-        ["git", "init"],
-        cwd=directory,
-        capture_output=True,
-        check=False,
+    _run_git(["init"], directory)
+    commit_state(directory, "chore: init carter state", allow_empty=True)
+
+
+# Identity for automated state commits — these are local recovery snapshots, not
+# authored work, so they carry a stable bot identity (and avoid failing on a
+# machine/CI with no global git user configured).
+_STATE_COMMIT_NAME = "carter"
+_STATE_COMMIT_EMAIL = "carter-bot@users.noreply.github.com"
+
+
+def _run_git(args: list[str], cwd: Path) -> subprocess.CompletedProcess[str]:
+    """Run a git command in ``cwd``, capturing output and never raising."""
+    return subprocess.run(
+        ["git", *args], cwd=cwd, capture_output=True, text=True, check=False
     )
-    subprocess.run(
-        ["git", "add", "-A"],
-        cwd=directory,
-        capture_output=True,
-        check=False,
-    )
-    subprocess.run(
-        ["git", "commit", "-m", "chore: init carter state", "--allow-empty"],
-        cwd=directory,
-        capture_output=True,
-        check=False,
-    )
+
+
+def commit_state(carter_dir: Path, message: str, *, allow_empty: bool = False) -> bool:
+    """Commit the ``.carter/`` state repo — the ADR-0003 recovery primitive.
+
+    Stages everything and commits to the nested ``.carter/.git`` so deleted
+    plans/sessions are recoverable from history. Returns ``True`` if a commit was
+    made, ``False`` if there is no nested repo (e.g. ``--no-git-state``) or there
+    is nothing to commit (and ``allow_empty`` is False).
+    """
+    if not (carter_dir / ".git").exists():
+        return False
+
+    _run_git(["add", "-A"], carter_dir)
+
+    if not allow_empty:
+        # `diff --cached --quiet` exits 0 when nothing is staged.
+        if _run_git(["diff", "--cached", "--quiet"], carter_dir).returncode == 0:
+            return False
+
+    commit_args = [
+        "-c",
+        f"user.name={_STATE_COMMIT_NAME}",
+        "-c",
+        f"user.email={_STATE_COMMIT_EMAIL}",
+        "commit",
+        "-m",
+        message,
+    ]
+    if allow_empty:
+        commit_args.append("--allow-empty")
+    return _run_git(commit_args, carter_dir).returncode == 0
+
 
 
 def add_to_gitignore(target_dir: Path, entry: str = ".carter/") -> None:
