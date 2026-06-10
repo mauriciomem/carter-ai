@@ -28,6 +28,7 @@ When the user's request starts with `ops:`, load the `carter-ops` skill and foll
 - `carter-design-review` — Analyze a proposed architecture for patterns, anti-patterns, scalability, and security concerns
 - `carter-diagram` — Generate architecture diagrams using Mermaid notation from descriptions or existing code
 - `carter-adr` — Create Architecture Decision Records documenting design choices, context, and rationale
+- `carter-rfc` — Propose and review a design before building it (RFC), with multi-expert reviews
 
 </skills>
 

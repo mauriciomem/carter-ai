@@ -87,6 +87,16 @@
       - "Decision"
       - "Consequences"
 
+- name: rfc_has_structure
+  skill: carter-rfc
+  input: "Write an RFC proposing a plugin system for our CLI"
+  expect:
+    response_contains:
+      - "Summary"
+      - "Problem"
+      - "Proposal"
+      - "Alternatives"
+
 - name: explain_is_accessible
   skill: carter-explain
   input: "Explain the CAP theorem"

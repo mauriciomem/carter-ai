@@ -76,7 +76,7 @@ class TestInstallSkills:
         assert skills_dir.exists()
 
         skill_dirs = sorted(d.name for d in skills_dir.iterdir() if d.is_dir())
-        assert len(skill_dirs) == 22
+        assert len(skill_dirs) == 23
         for d in skill_dirs:
             assert d.startswith("carter-")
             assert (skills_dir / d / "SKILL.md").exists()
@@ -103,7 +103,7 @@ class TestInstallSkills:
 
         skills_dir = base_dir / "opencode" / "skills"
         skill_dirs = sorted(d.name for d in skills_dir.iterdir() if d.is_dir())
-        assert len(skill_dirs) == 22
+        assert len(skill_dirs) == 23
 
 
 class TestInstallInstructions:

@@ -21,6 +21,7 @@ status: active                # proposed | active | blocked | completed | abando
 created: 2026-06-09           # date (YYYY-MM-DD) — validated
 updated: 2026-06-09           # date (YYYY-MM-DD) — validated
 adr: null                     # ADR-NNNN if this plan executes an accepted ADR
+rfc: null                     # RFC-NNNN this plan traces back to (optional)
 push_policy: manual           # manual | auto  (manual = never push without approval)
 tags: []
 repos: []                     # repos this plan touches (multi-repo work)
@@ -73,6 +74,7 @@ created: 2026-06-07
 decided: 2026-06-09           # null until accepted
 supersedes: []                # ADR ids or "ADR-NNNN§D3"
 superseded_by: null
+rfc: null                     # RFC-NNNN this ADR records the decision for (optional)
 tags: [storage, metadata, plans, adr]
 ---
 ```
@@ -80,6 +82,33 @@ tags: [storage, metadata, plans, adr]
 A change or reversal is a **new** ADR with `supersedes: ADR-NNNN§Dn` — never an
 edit to an accepted ADR. Backfilling frontmatter is a metadata addition, not a
 decision change, and is permitted.
+
+## RFC frontmatter
+
+An RFC (design proposal, [ADR-0004](../adr/0004-rfc-system.md)) is a **directory**
+under `docs/rfcs/NNNN-name/`; its `README.md` carries frontmatter + a human header
+block. Status lives in frontmatter; the directory never moves.
+
+```yaml
+---
+id: RFC-0001
+status: draft                 # draft | review | accepted | rejected | withdrawn
+revision: 1                   # bump only on a material change to the proposal
+created: 2026-06-10
+decided: null                 # date when accepted/rejected/withdrawn
+author: mauriciomem
+adr: null                     # ADR-NNNN produced by this RFC, when accepted
+plan: null                    # NNN-slug plan that executes it, when created
+supersedes: []                # RFC ids this replaces
+tags: []
+---
+```
+
+Terminal statuses (`accepted`, `rejected`, `withdrawn`) freeze the RFC — supersede
+with a new RFC, never edit. Re-reviews append newest-first `## Round N — reviewed
+revision M` sections in per-agent `review-{agent}.md` files; a review is current
+iff its latest round's reviewed revision equals the RFC's `revision`. Authored via
+the [`carter-rfc`](../../skills/carter-rfc/SKILL.md) skill.
 
 ## Session `checkpoint.md`
 

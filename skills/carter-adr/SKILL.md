@@ -24,6 +24,7 @@ created: YYYY-MM-DD
 decided: null                 # date once accepted
 supersedes: []                # ADR ids or "ADR-NNNN§Dn"
 superseded_by: null
+rfc: null                     # RFC-NNNN this ADR records (optional)
 tags: []
 ---
 
