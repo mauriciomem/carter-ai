@@ -1,8 +1,8 @@
 ---
 id: 001-adr-0003-validator-hardening
-status: proposed
+status: completed
 created: 2026-06-09
-updated: 2026-06-09
+updated: 2026-06-10
 adr: ADR-0003
 push_policy: manual
 tags: [validator, plans, recovery, hardening]
@@ -44,10 +44,10 @@ pass. Tracked now; implemented later.
 ## Steps
 | # | Step | Status | File |
 |---|------|--------|------|
-| 1 | Recovery integrity (Tier 1: #1 #2) | pending | step-01.md |
-| 2 | Validator strict mode (Tier 2: #3 #4 #5 #6) | pending | step-02.md |
-| 3 | Correctness nits (Tier 3: #7 #8 #9) | pending | step-03.md |
-| 4 | Honesty note + test gaps (A B) | pending | step-04.md |
+| 1 | Recovery integrity (Tier 1: #1 #2) | done | step-01.md |
+| 2 | Validator strict mode (Tier 2: #3 #4 #5 #6) | done | step-02.md |
+| 3 | Correctness nits (Tier 3: #7 #8 #9) | done | step-03.md |
+| 4 | Honesty note + test gaps (A B) | done | step-04.md |
 
 ## Risks
 - #1/#2 need the validators to see plans-root context they currently lack — a

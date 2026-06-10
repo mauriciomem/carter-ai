@@ -1,8 +1,8 @@
 ---
 step: 4
-status: pending
+status: done
 depends_on: [1, 2, 3]
-files_modified: []
+files_modified: [docs/plans-and-state.md, tests/test_state.py, tests/test_plans.py]
 ---
 
 ## Step 4 — Design honesty + test coverage

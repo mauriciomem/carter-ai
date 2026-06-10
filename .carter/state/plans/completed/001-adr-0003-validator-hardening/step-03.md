@@ -1,8 +1,8 @@
 ---
 step: 3
-status: pending
+status: done
 depends_on: []
-files_modified: []
+files_modified: [carter/state.py, carter/cli.py, carter/plans.py, tests/test_state.py, tests/test_plans.py]
 ---
 
 ## Step 3 — Correctness nits (Tier 3)

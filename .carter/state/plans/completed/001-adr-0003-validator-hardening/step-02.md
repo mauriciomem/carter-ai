@@ -1,8 +1,8 @@
 ---
 step: 2
-status: pending
+status: done
 depends_on: []
-files_modified: []
+files_modified: [carter/plans.py, tests/test_plans.py]
 ---
 
 ## Step 2 — Validator strict mode (Tier 2)

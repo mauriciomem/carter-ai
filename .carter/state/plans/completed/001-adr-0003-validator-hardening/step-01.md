@@ -1,8 +1,8 @@
 ---
 step: 1
-status: pending
+status: done
 depends_on: []
-files_modified: []
+files_modified: [carter/plans.py, carter/cli.py, tests/test_plans.py]
 ---
 
 ## Step 1 — Recovery integrity (Tier 1)
