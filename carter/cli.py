@@ -14,7 +14,7 @@ from carter.scaffold import (    agent_filename,
     render_instructions,
     write_rendered_files,
 )
-from carter.state import add_to_gitignore, commit_state, init_workspace
+from carter.state import StateError, add_to_gitignore, commit_state, init_workspace
 
 
 @click.group()
@@ -219,9 +219,10 @@ def check(target_dir: str):
     plans_root = target / ".carter" / "state" / "plans"
     errors.extend(validate_plans_dir(plans_root, config.get("plans")))
 
-    # Validate the session checkpoint cursor (absent is fine)
+    # Validate the session checkpoint cursor (absent is fine); cross-check that
+    # its active_plan resolves to a real plan under active/.
     checkpoint = target / ".carter" / "state" / "sessions" / "checkpoint.md"
-    errors.extend(validate_checkpoint(checkpoint))
+    errors.extend(validate_checkpoint(checkpoint, plans_root))
 
     if errors:
         click.echo("Workspace issues found:", err=True)
@@ -256,7 +257,11 @@ def save(target_dir: str, message: str | None):
 
     stamp = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
     msg = message or f"chore: checkpoint state ({stamp})"
-    if commit_state(carter_dir, msg):
+    try:
+        saved = commit_state(carter_dir, msg)
+    except StateError as e:
+        raise click.ClickException(str(e)) from e
+    if saved:
         click.echo("Saved .carter/ state")
     else:
         click.echo("Nothing to save (no changes or git state disabled)")

@@ -69,6 +69,32 @@ class TestCommitState:
         _git(carter_dir, "checkout", "HEAD", "--", "state/plans/active/001-x/README.md")
         assert (plan / "README.md").exists()
 
+    def test_failed_git_add_raises_not_masked(self, tmp_path):
+        """A broken repo (.git is a file, not a dir) makes `git add` fail; that
+        must surface as StateError, not a silent 'nothing to commit'."""
+        from carter.state import StateError
+
+        carter_dir = tmp_path / ".carter"
+        carter_dir.mkdir()
+        (carter_dir / ".git").write_text("not a repo", encoding="utf-8")  # exists() True
+        with pytest.raises(StateError):
+            commit_state(carter_dir, "test: broken repo")
+
+    def test_default_message_used_when_omitted(self, tmp_path):
+        """commit_state succeeds with a generated message via `carter save` (no -m)."""
+        from click.testing import CliRunner
+
+        from carter.cli import main
+
+        runner = CliRunner()
+        runner.invoke(main, ["init", str(tmp_path)])
+        (tmp_path / ".carter" / "state" / "sessions" / "checkpoint.md").write_text(
+            "---\nupdated: 2026-06-10\n---\n", encoding="utf-8"
+        )
+        result = runner.invoke(main, ["save", str(tmp_path)])  # no -m
+        assert result.exit_code == 0, result.output
+        assert "Saved" in result.output
+
 
 class TestSaveCommand:
     def _runner(self):
@@ -98,3 +124,44 @@ class TestSaveCommand:
         runner, main = self._runner()
         result = runner.invoke(main, ["save", str(tmp_path)])
         assert result.exit_code != 0
+
+
+class TestStateExtras:
+    """Coverage for init idempotency, allow_empty, and end-to-end recovery."""
+
+    def test_git_init_idempotent(self, tmp_path, config):
+        carter_dir = init_workspace(tmp_path, config, git_state=True)
+        head1 = _git(carter_dir, "rev-parse", "HEAD").stdout.strip()
+        # Re-running init must not re-init or add a commit (early-return on .git)
+        init_workspace(tmp_path, config, git_state=True)
+        head2 = _git(carter_dir, "rev-parse", "HEAD").stdout.strip()
+        assert head1 == head2
+
+    def test_commit_state_allow_empty_makes_commit(self, tmp_path, config):
+        carter_dir = init_workspace(tmp_path, config, git_state=True)
+        before = len(_git(carter_dir, "log", "--oneline").stdout.strip().splitlines())
+        assert commit_state(carter_dir, "test: empty snapshot", allow_empty=True) is True
+        after = len(_git(carter_dir, "log", "--oneline").stdout.strip().splitlines())
+        assert after == before + 1
+
+    def test_recovery_end_to_end_via_save_cli(self, tmp_path):
+        """Delete a plan, recover it from the snapshot `carter save` committed."""
+        from click.testing import CliRunner
+
+        from carter.cli import main
+
+        runner = CliRunner()
+        runner.invoke(main, ["init", str(tmp_path)])
+        carter_dir = tmp_path / ".carter"
+        plan = carter_dir / "state" / "plans" / "active" / "001-x"
+        plan.mkdir(parents=True)
+        (plan / "README.md").write_text("---\nid: 001-x\n---\n", encoding="utf-8")
+
+        result = runner.invoke(main, ["save", str(tmp_path), "-m", "test: snapshot plan"])
+        assert result.exit_code == 0, result.output
+
+        shutil.rmtree(plan)
+        assert not plan.exists()
+        _git(carter_dir, "checkout", "HEAD", "--", "state/plans/active/001-x/README.md")
+        assert (plan / "README.md").exists()
+

@@ -18,6 +18,7 @@ from carter.plans import (
     validate_plan_dir,
     validate_plans_dir,
 )
+from carter.plans import _count_step_rows
 
 
 # ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -276,6 +277,22 @@ class TestValidatePlansDir:
     def test_missing_plans_dir_is_clean(self, tmp_path):
         assert validate_plans_dir(tmp_path / "does-not-exist") == []
 
+    def test_duplicate_numeric_id_flagged(self, tmp_path):
+        """001-foo and 001-bar share the NNN prefix within one bucket."""
+        make_plan(tmp_path, name="001-foo", state="active",
+                  readme=VALID_README.replace("id: 001-sample-plan", "id: 001-foo"))
+        make_plan(tmp_path, name="001-bar", state="active",
+                  readme=VALID_README.replace("id: 001-sample-plan", "id: 001-bar"))
+        errors = validate_plans_dir(tmp_path)
+        assert any("001" in e and "duplicate" in e.lower() for e in errors)
+
+    def test_distinct_numeric_ids_clean(self, tmp_path):
+        make_plan(tmp_path, name="001-foo", state="active",
+                  readme=VALID_README.replace("id: 001-sample-plan", "id: 001-foo"))
+        make_plan(tmp_path, name="002-bar", state="active",
+                  readme=VALID_README.replace("id: 001-sample-plan", "id: 002-bar"))
+        assert not any("duplicate" in e.lower() for e in validate_plans_dir(tmp_path))
+
 
 # ─── carter check CLI integration ────────────────────────────────────────────
 
@@ -404,5 +421,186 @@ class TestValidateCheckpoint:
         f = tmp_path / "checkpoint.md"
         f.write_bytes(b"\xff\xfe\x00 binary")
         assert any("checkpoint" in e for e in validate_checkpoint(f))  # must not raise
+
+
+# ─── step-01 #1: checkpoint <-> plan cross-reference ──────────────────────────
+
+
+class TestCheckpointCrossRef:
+    """When given the plans root, the checkpoint's active_plan must resolve to a
+    real plan under active/ — a dangling pointer misdirects session recovery."""
+
+    def _checkpoint(self, tmp_path, active_plan: str) -> Path:
+        f = tmp_path / "checkpoint.md"
+        f.write_text(
+            f"---\nupdated: 2026-06-10\nactive_plan: {active_plan}\nnext_step: 1\n---\n",
+            encoding="utf-8",
+        )
+        return f
+
+    def test_dangling_pointer_flagged(self, tmp_path):
+        plans_root = tmp_path / "plans"
+        (plans_root / "active").mkdir(parents=True)
+        cp = self._checkpoint(tmp_path, "001-missing")
+        errors = validate_checkpoint(cp, plans_root)
+        assert any("001-missing" in e and "active_plan" in e for e in errors)
+
+    def test_valid_pointer_clean(self, tmp_path):
+        plans_root = tmp_path / "plans"
+        make_plan(plans_root, name="001-real", state="active",
+                  readme=VALID_README.replace("id: 001-sample-plan", "id: 001-real"))
+        cp = self._checkpoint(tmp_path, "001-real")
+        assert validate_checkpoint(cp, plans_root) == []
+
+    def test_null_active_plan_clean(self, tmp_path):
+        plans_root = tmp_path / "plans"
+        (plans_root / "active").mkdir(parents=True)
+        f = tmp_path / "checkpoint.md"
+        f.write_text("---\nupdated: 2026-06-10\nactive_plan: null\n---\n", encoding="utf-8")
+        assert validate_checkpoint(f, plans_root) == []
+
+    def test_without_plans_root_skips_crossref(self, tmp_path):
+        # backward-compatible: no plans_root => no cross-check, still valid
+        cp = self._checkpoint(tmp_path, "001-missing")
+        assert validate_checkpoint(cp) == []
+
+
+# ─── step-01 #2: folder <-> status coherence ──────────────────────────────────
+
+
+class TestFolderStatusCoherence:
+    """A terminal-status plan in active/ (or in-progress plan in completed/) is a
+    bucket/status mismatch the maestro would misread."""
+
+    def _plan_with_status(self, plans_root, name, state, status):
+        readme = VALID_README.replace("id: 001-sample-plan", f"id: {name}").replace(
+            "status: active", f"status: {status}"
+        )
+        return make_plan(plans_root, name=name, state=state, readme=readme)
+
+    def test_completed_status_in_active_flagged(self, tmp_path):
+        self._plan_with_status(tmp_path, "001-done", "active", "completed")
+        errors = validate_plans_dir(tmp_path)
+        assert any("001-done" in e and "active" in e.lower() for e in errors)
+
+    def test_abandoned_status_in_active_flagged(self, tmp_path):
+        self._plan_with_status(tmp_path, "001-gone", "active", "abandoned")
+        errors = validate_plans_dir(tmp_path)
+        assert any("001-gone" in e for e in errors)
+
+    def test_active_status_in_completed_flagged(self, tmp_path):
+        self._plan_with_status(tmp_path, "001-wip", "completed", "active")
+        errors = validate_plans_dir(tmp_path)
+        assert any("001-wip" in e and "completed" in e.lower() for e in errors)
+
+    def test_proposed_in_active_is_clean(self, tmp_path):
+        self._plan_with_status(tmp_path, "001-draft", "active", "proposed")
+        errors = validate_plans_dir(tmp_path)
+        assert not any("001-draft" in e for e in errors)
+
+    def test_blocked_in_active_is_clean(self, tmp_path):
+        self._plan_with_status(tmp_path, "001-stuck", "active", "blocked")
+        errors = validate_plans_dir(tmp_path)
+        assert not any("001-stuck" in e for e in errors)
+
+    def test_completed_in_completed_is_clean(self, tmp_path):
+        self._plan_with_status(tmp_path, "001-fin", "completed", "completed")
+        errors = validate_plans_dir(tmp_path)
+        assert not any("001-fin" in e for e in errors)
+
+
+# ─── step-02: validator strict mode (#3 #4 #5 #6) ─────────────────────────────
+
+
+class TestStrictMode:
+    # #3 — unknown must_haves sub-key
+    def test_unknown_must_haves_key_reported(self, tmp_path):
+        readme = VALID_README.replace("  truths:", "  truth:")  # singular typo
+        plan = make_plan(tmp_path, readme=readme)
+        errors = validate_plan_dir(plan)
+        assert any("must_haves" in e and "unknown" in e.lower() for e in errors)
+
+    def test_known_must_haves_keys_no_unknown_error(self, tmp_path):
+        plan = make_plan(tmp_path)  # VALID_README uses the three known keys
+        errors = validate_plan_dir(plan)
+        assert not any("unknown" in e.lower() for e in errors)
+
+    # #4 — created / updated must be dates
+    @pytest.mark.parametrize("key", ["created", "updated"])
+    def test_non_date_created_updated_flagged(self, tmp_path, key):
+        readme = VALID_README.replace(f"{key}: 2026-06-09", f"{key}: not-a-date")
+        plan = make_plan(tmp_path, readme=readme)
+        errors = validate_plan_dir(plan)
+        assert any(key in e and "date" in e.lower() for e in errors)
+
+    def test_iso_dates_accepted(self, tmp_path):
+        plan = make_plan(tmp_path)  # 2026-06-09 unquoted -> date object
+        assert not any("date" in e.lower() for e in validate_plan_dir(plan))
+
+    # #5 — step file: integer step matched to filename; depends_on are ints
+    def test_step_value_not_integer(self, tmp_path):
+        plan = make_plan(tmp_path)
+        (plan / "step-01.md").write_text(
+            "---\nstep: two\nstatus: pending\ndepends_on: []\n---\n", encoding="utf-8"
+        )
+        errors = validate_plan_dir(plan)
+        assert any("step-01.md" in e and "integer" in e.lower() for e in errors)
+
+    def test_step_value_mismatches_filename(self, tmp_path):
+        plan = make_plan(tmp_path)
+        (plan / "step-01.md").write_text(
+            "---\nstep: 9\nstatus: pending\ndepends_on: []\n---\n", encoding="utf-8"
+        )
+        errors = validate_plan_dir(plan)
+        assert any("step-01.md" in e and "filename" in e.lower() for e in errors)
+
+    def test_depends_on_non_int_elements(self, tmp_path):
+        plan = make_plan(tmp_path)
+        (plan / "step-01.md").write_text(
+            "---\nstep: 1\nstatus: pending\ndepends_on: [one]\n---\n", encoding="utf-8"
+        )
+        errors = validate_plan_dir(plan)
+        assert any("step-01.md" in e and "depends_on" in e for e in errors)
+
+    def test_step_matched_filename_is_clean(self, tmp_path):
+        plan = make_plan(tmp_path)
+        (plan / "step-01.md").write_text(
+            "---\nstep: 1\nstatus: pending\ndepends_on: [2]\n---\n", encoding="utf-8"
+        )
+        assert not any("step-01.md" in e for e in validate_plan_dir(plan))
+
+    # #6 — a prose (numbered-list) step list does not silently bypass the split rule
+    def test_prose_step_list_over_threshold_flagged(self, tmp_path):
+        prose = "\n".join(f"{i}. Step {i}" for i in range(1, 6))
+        readme = VALID_README.replace("| 1 | Do it | pending |", prose)
+        # drop the table header/separator so only the prose list remains
+        readme = readme.replace("| # | Step | Status |\n|---|------|--------|\n", "")
+        plan = make_plan(tmp_path, readme=readme)
+        errors = validate_plan_dir(plan, {"step_file_threshold": 3})
+        assert any("step" in e.lower() for e in errors)
+
+
+class TestCountStepRowsHeuristic:
+    """Document the _count_step_rows heuristic's known shapes and limits."""
+
+    def test_table_counts_data_rows(self):
+        text = "## Steps\n| # | Step | Status |\n|---|---|---|\n| 1 | a | x |\n| 2 | b | y |\n"
+        assert _count_step_rows(text) == 2
+
+    def test_prose_numbered_list_counts(self):
+        text = "## Steps\n1. first\n2. second\n3. third\n"
+        assert _count_step_rows(text) == 3
+
+    def test_no_steps_section_returns_none(self):
+        assert _count_step_rows("# Plan\n\nNo steps here.\n") is None
+
+    def test_table_preferred_over_prose(self):
+        text = "## Steps\n| # | S |\n|---|---|\n| 1 | a |\n\n1. stray line\n"
+        # table present -> table count wins (1 data row), prose ignored
+        assert _count_step_rows(text) == 1
+
+    def test_only_counts_steps_section(self):
+        text = "## Other\n1. not a step\n2. also not\n\n## Steps\n1. real step\n"
+        assert _count_step_rows(text) == 1
 
 

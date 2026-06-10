@@ -55,6 +55,12 @@ carter save .      # commit a recovery snapshot of .carter/ (plans, sessions, kn
 schema violation. `carter save` is what makes deletion recoverable — run it at
 stopping points; a deleted plan is then restorable from `.carter/.git`.
 
+> **Validation is opt-in.** Nothing runs `carter check` automatically — not
+> `carter init`, no git hook. The deterministic guarantees (frontmatter contract,
+> `must_haves`, checkpoint↔plan integrity) only bite when you run `carter check`.
+> Run it after writing or editing a plan, and wire it into CI if you track plans
+> in a repo.
+
 ## Decisions (ADRs)
 
 Architecture Decision Records are written by the `carter-adr` skill into
