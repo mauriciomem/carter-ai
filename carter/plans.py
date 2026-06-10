@@ -111,7 +111,9 @@ def _count_step_rows(text: str) -> int | None:
     for line in text.split("\n"):
         s = line.strip()
         if s.startswith("## "):
-            in_steps = s[3:].strip().lower().startswith("step")
+            # Only the canonical "## Steps" section; avoid matching prose headers
+            # like "## Step-by-step" (which would inflate the count).
+            in_steps = s[3:].strip().lower().startswith("steps")
             continue
         if not in_steps:
             continue
@@ -358,15 +360,17 @@ def validate_checkpoint(
     active_plan = fm.get("active_plan")
     if active_plan is not None and not isinstance(active_plan, str):
         errors.append(f"{rel}: active_plan must be a string or null")
-    elif (
-        isinstance(active_plan, str)
-        and plans_root is not None
-        and not (plans_root / "active" / active_plan).is_dir()
-    ):
-        errors.append(
-            f"{rel}: active_plan {active_plan!r} does not resolve to a plan under "
-            f"active/ (dangling pointer)"
-        )
+    elif isinstance(active_plan, str) and plans_root is not None:
+        active_dir = (plans_root / "active").resolve()
+        candidate = (active_dir / active_plan).resolve()
+        # Must resolve to a real plan directory *inside* active/ — reject both
+        # missing pointers and ".."-traversal that escapes the bucket.
+        is_contained = candidate == active_dir or active_dir in candidate.parents
+        if not (candidate.is_dir() and is_contained):
+            errors.append(
+                f"{rel}: active_plan {active_plan!r} does not resolve to a plan under "
+                f"active/ (dangling pointer)"
+            )
 
     next_step = fm.get("next_step")
     # bool is a subclass of int, but `next_step: true` is not a step index.

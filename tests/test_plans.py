@@ -445,6 +445,15 @@ class TestCheckpointCrossRef:
         errors = validate_checkpoint(cp, plans_root)
         assert any("001-missing" in e and "active_plan" in e for e in errors)
 
+    def test_traversal_active_plan_flagged(self, tmp_path):
+        # a '..'-traversal pointer must be flagged, never accepted by escaping active/
+        plans_root = tmp_path / "plans"
+        (plans_root / "active").mkdir(parents=True)
+        (tmp_path / "elsewhere").mkdir()
+        cp = self._checkpoint(tmp_path, "../../elsewhere")
+        errors = validate_checkpoint(cp, plans_root)
+        assert any("active_plan" in e for e in errors)
+
     def test_valid_pointer_clean(self, tmp_path):
         plans_root = tmp_path / "plans"
         make_plan(plans_root, name="001-real", state="active",
@@ -602,5 +611,10 @@ class TestCountStepRowsHeuristic:
     def test_only_counts_steps_section(self):
         text = "## Other\n1. not a step\n2. also not\n\n## Steps\n1. real step\n"
         assert _count_step_rows(text) == 1
+
+    def test_ignores_non_steps_step_prefixed_section(self):
+        # '## Step-by-step' is prose, not the Steps table — must not be counted
+        text = "## Step-by-step guide\n1. do a\n2. do b\n3. do c\n4. do d\n"
+        assert _count_step_rows(text) is None
 
 

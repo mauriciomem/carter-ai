@@ -18,8 +18,8 @@ read the frontmatter; humans read the body. Where a Python validator exists
 ---
 id: 001-feature-name          # NNN-kebab; MUST match the directory name
 status: active                # proposed | active | blocked | completed | abandoned
-created: 2026-06-09
-updated: 2026-06-09
+created: 2026-06-09           # date (YYYY-MM-DD) — validated
+updated: 2026-06-09           # date (YYYY-MM-DD) — validated
 adr: null                     # ADR-NNNN if this plan executes an accepted ADR
 push_policy: manual           # manual | auto  (manual = never push without approval)
 tags: []
@@ -34,6 +34,17 @@ must_haves:                   # MANDATORY: >= 1 entry total (ADR-0003 O6)
 `must_haves` is the objective, verifiable definition of done. The quality gate
 checks against it; a plan with an empty `must_haves` is a checklist, not a plan,
 and the validator rejects it while `status: active`.
+
+**Validated rules** (enforced by `carter check`):
+
+- `created` / `updated` must be **dates** (`YYYY-MM-DD`, optionally with a time).
+- `must_haves` is a **closed key set** — only `truths`, `artifacts`, `key_links`;
+  an unrecognized sub-key is an error (catches typos like `truth:`).
+- **Bucket ↔ status coherence:** a plan's frontmatter `status` must agree with its
+  folder — terminal statuses (`completed`, `abandoned`) live in `completed/`;
+  non-terminal ones (`proposed`, `active`, `blocked`) live in `active/`. The folder
+  is a coarse index *and* a validated invariant; the frontmatter `status` remains
+  the source of truth, but the two may not contradict each other.
 
 ## Plan `step-NN.md`
 

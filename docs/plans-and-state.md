@@ -34,8 +34,11 @@ verifiable definition of done (`truths` / `artifacts` / `key_links`). The qualit
 gate validates against it; a plan with none is a checklist, not a plan.
 
 **Lifecycle:** `active/<id>/` → `completed/<id>/` when all `must_haves` are met.
-The folder is a coarse index; the frontmatter `status` is the source of truth.
-Never delete a plan — abandon it (`status: abandoned`) so the history survives.
+The frontmatter `status` is the source of truth, but it must stay **coherent with
+the folder**: terminal statuses (`completed`, `abandoned`) belong in `completed/`,
+non-terminal ones (`proposed`, `active`, `blocked`) in `active/` — `carter check`
+flags a mismatch. Never delete a plan — abandon it (`status: abandoned`) so the
+history survives.
 
 ## Session checkpoint
 
