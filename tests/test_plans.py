@@ -293,6 +293,17 @@ class TestValidatePlansDir:
                   readme=VALID_README.replace("id: 001-sample-plan", "id: 002-bar"))
         assert not any("duplicate" in e.lower() for e in validate_plans_dir(tmp_path))
 
+    def test_duplicate_numeric_id_across_buckets_flagged(self, tmp_path):
+        """NNN must be unique globally, not just within a bucket (001 in active/ + completed/)."""
+        make_plan(tmp_path, name="001-foo", state="active",
+                  readme=VALID_README.replace("id: 001-sample-plan", "id: 001-foo"))
+        # 001-done is completed-status, correctly in completed/, but shares NNN 001
+        done = VALID_README.replace("id: 001-sample-plan", "id: 001-done").replace(
+            "status: active", "status: completed")
+        make_plan(tmp_path, name="001-done", state="completed", readme=done)
+        errors = validate_plans_dir(tmp_path)
+        assert any("001" in e and "duplicate" in e.lower() for e in errors)
+
 
 # ─── carter check CLI integration ────────────────────────────────────────────
 
@@ -545,6 +556,23 @@ class TestStrictMode:
     def test_iso_dates_accepted(self, tmp_path):
         plan = make_plan(tmp_path)  # 2026-06-09 unquoted -> date object
         assert not any("date" in e.lower() for e in validate_plan_dir(plan))
+
+    @pytest.mark.parametrize("bad", ["2026-13-45", "2026-00-10", "2026-02-30"])
+    def test_quoted_impossible_dates_rejected(self, tmp_path, bad):
+        # quoted -> YAML keeps a string; calendar validation must reject it
+        readme = VALID_README.replace("created: 2026-06-09", f'created: "{bad}"')
+        plan = make_plan(tmp_path, readme=readme)
+        errors = validate_plan_dir(plan)
+        assert any("created" in e and "date" in e.lower() for e in errors)
+
+    @pytest.mark.parametrize("bad", ["2026-13-45", "2026-02-30"])
+    def test_unquoted_impossible_dates_do_not_crash(self, tmp_path, bad):
+        # unquoted -> YAML raises ValueError during construction; must be caught,
+        # never propagate as a traceback, and yield a validation error.
+        readme = VALID_README.replace("created: 2026-06-09", f"created: {bad}")
+        plan = make_plan(tmp_path, readme=readme)
+        errors = validate_plan_dir(plan)  # must not raise
+        assert errors
 
     # #5 — step file: integer step matched to filename; depends_on are ints
     def test_step_value_not_integer(self, tmp_path):

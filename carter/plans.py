@@ -81,7 +81,8 @@ def parse_frontmatter(text: str) -> dict[str, Any] | None:
             block = "\n".join(lines[1:i])
             try:
                 data = yaml.safe_load(block)
-            except yaml.YAMLError:
+            except (yaml.YAMLError, ValueError):
+                # ValueError: YAML constructs an impossible date (e.g. 2026-02-30)
                 return None
             return data if isinstance(data, dict) else None
     return None
@@ -89,10 +90,17 @@ def parse_frontmatter(text: str) -> dict[str, Any] | None:
 
 def _is_date_like(value: Any) -> bool:
     """True if ``value`` is a date Carter accepts: a parsed date/datetime (YAML
-    parses unquoted ``2026-06-09`` to ``datetime.date``) or an ISO date string."""
+    parses unquoted ``2026-06-09`` to ``datetime.date``) or a string that is a real
+    ISO calendar date (a quoted ``"2026-02-30"`` is regex-shaped but rejected)."""
     if isinstance(value, (datetime.date, datetime.datetime)):
         return True
-    return isinstance(value, str) and bool(_DATE_STR_RE.match(value))
+    if not isinstance(value, str) or not _DATE_STR_RE.match(value):
+        return False
+    try:
+        datetime.date.fromisoformat(value[:10])
+    except ValueError:
+        return False
+    return True
 
 
 def _count_step_rows(text: str) -> int | None:
@@ -177,19 +185,27 @@ def validate_plan_dir(plan_dir: Path, thresholds: dict[str, Any] | None = None) 
 
     Returns a list of human-readable error strings (empty = valid).
     """
+    return _validate_plan_dir(plan_dir, thresholds)[0]
+
+
+def _validate_plan_dir(
+    plan_dir: Path, thresholds: dict[str, Any] | None = None
+) -> tuple[list[str], dict[str, Any] | None]:
+    """Internal: returns ``(errors, parsed_frontmatter_or_None)`` so callers that
+    also need the frontmatter (e.g. the bucket-status check) don't re-read it."""
     th = {**DEFAULT_THRESHOLDS, **(thresholds or {})}
     name = plan_dir.name
 
     readme = plan_dir / "README.md"
     if not readme.exists():
-        return [f"{name}: missing README.md"]
+        return [f"{name}: missing README.md"], None
 
     text, read_err = _safe_read(readme, f"{name}/README.md")
     if read_err:
-        return [read_err]
+        return [read_err], None
     fm = parse_frontmatter(text)
     if fm is None:
-        return [f"{name}/README.md: missing or malformed YAML frontmatter"]
+        return [f"{name}/README.md: missing or malformed YAML frontmatter"], None
 
     errors: list[str] = []
 
@@ -270,52 +286,45 @@ def validate_plan_dir(plan_dir: Path, thresholds: dict[str, Any] | None = None) 
     for step_file in step_files:
         errors.extend(_validate_step_file(step_file, name, th))
 
-    return errors
+    return errors, fm
 
 
 def validate_plans_dir(plans_root: Path, thresholds: dict[str, Any] | None = None) -> list[str]:
     """Validate every plan under ``plans_root/{active,completed}/``.
 
     Missing directories are treated as clean (a fresh workspace has no plans).
-    In addition to each plan's intrinsic validity, the plan's frontmatter status
-    must be coherent with its bucket: ``completed/`` holds only terminal statuses
-    (completed/abandoned); ``active/`` holds only non-terminal ones.
+    In addition to each plan's intrinsic validity: the frontmatter status must be
+    coherent with its bucket (``completed/`` holds only terminal statuses), and a
+    plan number (NNN) must be unique **globally**, not just within one bucket.
     """
     errors: list[str] = []
+    seen: dict[str, list[str]] = {}  # NNN -> ["<bucket>/<name>", ...], global
     for state in ("active", "completed"):
         state_dir = plans_root / state
         if not state_dir.is_dir():
             continue
-        seen: dict[str, list[str]] = {}
         for plan_dir in sorted(p for p in state_dir.iterdir() if p.is_dir()):
-            errors.extend(validate_plan_dir(plan_dir, thresholds))
-            errors.extend(_check_bucket_status(plan_dir, state))
+            errs, fm = _validate_plan_dir(plan_dir, thresholds)
+            errors.extend(errs)
+            status = fm.get("status") if fm else None
+            errors.extend(_check_bucket_status(plan_dir.name, status, state))
             m = re.match(r"^(\d{3})-", plan_dir.name)
             if m:
-                seen.setdefault(m.group(1), []).append(plan_dir.name)
-        for nnn, names in sorted(seen.items()):
-            if len(names) > 1:
-                errors.append(
-                    f"{state}/: duplicate plan number {nnn} ({', '.join(sorted(names))})"
-                )
+                seen.setdefault(m.group(1), []).append(f"{state}/{plan_dir.name}")
+    for nnn, names in sorted(seen.items()):
+        if len(names) > 1:
+            errors.append(
+                f"duplicate plan number {nnn} ({', '.join(sorted(names))})"
+            )
     return errors
 
 
-def _check_bucket_status(plan_dir: Path, bucket: str) -> list[str]:
-    """Flag a plan whose frontmatter status contradicts its ``active``/``completed`` bucket."""
-    readme = plan_dir / "README.md"
-    if not readme.exists():
-        return []  # missing-README already reported by validate_plan_dir
-    text, read_err = _safe_read(readme, f"{plan_dir.name}/README.md")
-    if read_err:
-        return []  # read error already reported by validate_plan_dir
-    fm = parse_frontmatter(text)
-    if fm is None:
-        return []
-    status = fm.get("status")
+def _check_bucket_status(name: str, status: Any, bucket: str) -> list[str]:
+    """Flag a plan whose frontmatter status contradicts its ``active``/``completed``
+    bucket. Takes the already-parsed status (no I/O); conditions already reported
+    by ``_validate_plan_dir`` (missing/invalid status) are skipped here."""
     if status not in VALID_PLAN_STATUS:
-        return []  # invalid-status already reported by validate_plan_dir
-    name = plan_dir.name
+        return []  # missing/invalid status already reported by validate_plan_dir
     if bucket == "active" and status in TERMINAL_STATUS:
         return [
             f"{name}/README.md: status {status!r} is terminal but the plan is in "
