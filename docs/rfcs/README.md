@@ -9,5 +9,6 @@ lives in frontmatter (the directory never moves). An accepted RFC yields an ADR
 | Status | RFC | Tags |
 |--------|-----|------|
 | ✅ accepted | [0001-rfc-system](0001-rfc-system/) | rfc, process |
+| 📝 review | [0002-risk-based-strictness-policy](0002-risk-based-strictness-policy/) | strictness, enforcement, security, agents, mcp, policy |
 
 Status icons: ⬜ draft · 📝 review · ✅ accepted · ❌ rejected · 🚫 withdrawn.
