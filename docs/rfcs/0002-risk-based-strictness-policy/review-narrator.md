@@ -1,5 +1,69 @@
 # Review: RFC-0002 — narrator
 
+## Round 2 — 2026-06-12 — reviewed revision 2 — verdict: request-changes
+
+**Scope unchanged:** R6 / redaction seam only (external-publish + Q16). Advisory —
+maestro synthesizes, user decides.
+
+**Delta summary.** Strong progress: the two structural highs are fully resolved —
+R2↔R6 is now a content **overlay** (most-restrictive-wins), killing the
+"exactly one category" collision, and the D3 two-lane split lands. But the Q16 fix
+stopped at `strict`, leaving the **default `guarded` level** with a hollow
+`gate(narrator)` and no WARN when `redaction.enabled: false`; and the new short-form
+lane is a **bare `ask`** with zero redaction logic. Two leakage paths remain on the
+*default* config — hence request-changes, narrowly scoped to those.
+
+### Round 1 findings — disposition
+
+| R1 finding | Sev | Status | Evidence in rev 2 |
+|---|---|---|---|
+| §1 R2↔R6 collision (exactly-one-category) | high | **RESOLVED** | overlay [README.md:100-101](README.md#L100-L101); precedence [README.md:107-110](README.md#L107-L110); D1 trail [README.md:330](README.md#L330) |
+| §1 commit messages ship outward, no R6 pass | high | **PARTIAL** | honesty note [README.md:128-131](README.md#L128-L131) — labeled, but advisory with no firing trigger |
+| §2 sole-publisher handoff fatigue | medium | **RESOLVED** (lane exists; see new B2) | two-lane [README.md:124-127](README.md#L124-L127) |
+| §3 Q16 "else ask" leak | high | **PARTIAL** | strict override + WARN [README.md:221-226](README.md#L221-L226), [README.md:207](README.md#L207) — **guarded still leaks** |
+| §4 "gate(narrator)" under-specified | low | **RESOLVED** | "redaction pass" language [README.md:124-127](README.md#L124-L127), §6 [README.md:221-226](README.md#L221-L226) |
+| §5 R6-degradation honesty WARN | medium | **UNRESOLVED** | only generic Q15 ack [README.md:204-206](README.md#L204-L206) + Q16 WARN; no dedicated R6-advisory label |
+
+### Remaining blockers (request-changes)
+
+**B1 [high, leakage] — Q16 override stops at `strict`; the default `guarded` still leaks.**
+- §6 forces the pass "**At `strict`**" only ([README.md:221-226](README.md#L221-L226)); the WARN fires only on "**`strict`** + `redaction.enabled: false`" ([README.md:207](README.md#L207)).
+- At `guarded` — the **recommended default for new installs** ([README.md:89](README.md#L89)) — substantive R6 = `gate(narrator)`, but the narrator's entire `<redaction_rules>` block is compiled out by `{% if config.redaction.enabled %}` ([carter-narrator.md.j2:67-111](templates/agents/carter-narrator.md.j2#L67-L111), the RFC's own anchor at [README.md:221-224](README.md#L221-L224)). So `guarded` + `redaction.enabled: false` = handoff to a **rules-less narrator** = generic confirm, **zero redaction logic, no WARN**. My R1 §3 ask was explicitly "strict (**and ideally guarded**) … WARN on level ∈ {guarded,strict}" — rev 2 took only the strict half.
+- **Fix:** extend the forced pass **and** the `carter check` WARN to `guarded`; `gate(narrator)` must never route to a narrator whose rules are compiled out (decouple rules-loading from `redaction.enabled` whenever any R6 gate is active). Template-guard change is engineer's call — I flag the requirement, not the implementation.
+
+**B2 [medium-high, leakage] — short-form R6 lane is a bare `ask`, even with redaction enabled.**
+- Two-lane sets short-form = `ask` ([README.md:124-125](README.md#L124-L125)). A bare `ask` carries **no redaction logic**: risk is content-borne, but the lane is classified by *form* (one-liner), so a one-line PR comment with a secret gets a generic "yes" and ships. Same zero-logic hole as old Q16, reintroduced by the split.
+- My R1 §2 rec was "`ask` **+ inline redaction-rule check** (no full handoff)"; rev 2 adopted the lane but **dropped the inline check**.
+- **Fix:** short-form R6 = `ask` **+ inline redaction-rule check**, not bare `ask`.
+
+### Carry-over gap (re-raised, non-blocking)
+
+**G1 [medium, UNRESOLVED] — no dedicated R6-degradation honesty WARN.** Where a target
+can't natively enforce the R6 gate (VS Code: no declarative gate, hooks Preview —
+[README.md:164](README.md#L164)), "outward content is NOT guaranteed redaction-checked"
+still folds into the generic Q15 level ack ([README.md:204-206](README.md#L204-L206)).
+Rev 2 added the Q16 (redaction-*disabled*) WARN but not the degraded-on-*target* label.
+Recommend a dedicated R6 honesty line so the highest-consequence seam doesn't hide
+inside the general notice.
+
+### DECIDE (human calls)
+- **DECIDE-1 (B1):** does `guarded` (the default) get the same forced-pass + WARN as
+  `strict`, or is a hollow `gate(narrator)` on the default level an acceptable opt-out?
+  My advice: **extend to guarded** — leakage parity must not depend on level.
+- **DECIDE-2 (B2):** short-form R6 = bare `ask` (max speed) vs `ask + inline redaction
+  check` (leak-safe)? My advice: **inline check** — fatigue relief shouldn't cost the
+  redaction guarantee.
+- **DECIDE-3 (commit msgs):** accept the advisory/"offered" R6 overlay on commit
+  messages (no firing trigger; Carter can't gate the server-side squash) as
+  labeled-and-sufficient, or add an R6-overlay nudge on the commit path so it actually
+  fires? My advice: **accept as labeled** for now — the honesty note clears my R1 blocker.
+
+### New issues introduced by rev 2
+- Only B2 (short-form bare `ask`) is genuinely *new* — the two-lane split created a
+  low-redaction lane that didn't exist in rev 1. No other new external-content gaps.
+
+---
+
 ## Round 1 — 2026-06-11 — reviewed revision 1 — verdict: request-changes
 
 **Scope:** strictly the external-publish / redaction seam (R6 + Q16). I do not

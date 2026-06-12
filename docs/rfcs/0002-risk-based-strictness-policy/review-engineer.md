@@ -1,5 +1,55 @@
 # Review: RFC-0002 — engineer
 
+## Round 2 — 2026-06-12 — reviewed revision 2 — verdict: approve
+
+*Advisory delta review (ADR-0004): informs the maestro; does not vote or bind. Focus: feasibility + security delta vs. my Round 1 request-changes.*
+
+**Summary.** All four Round 1 blockers are resolved at the design level: the dict-shaped map decision is genuinely sufficient to defeat the merge footgun (no custom `policy` merge needed), "drop read-only" is now a P1 MUST in three places, bash gating is in the enforcement model with correct vectors, and §6 cleanly separates the override-per-tier from the audit ledger. The residual token risk is honestly labeled with an explicit RFC-0003 deferral. Remaining items are should-fix/nit — chief among them an **incomplete read-only enumeration** (the MUST names 2 of 4 leaking files) — none of which block acceptance.
+
+---
+
+### Round 1 blocker disposition
+
+**1. Config list-replace footgun → RESOLVED (mechanism verified sufficient).**
+Rev 2 pins dict shapes: the merge-footgun callout mandates `{tool: risk}` and `{agent: {cat: bool}}` ([README.md](docs/rfcs/0002-risk-based-strictness-policy/README.md#L96-L101)); Q9 says "**dict-shaped**" ([README.md](docs/rfcs/0002-risk-based-strictness-policy/README.md#L313)); P1 says "dict-shaped maps" ([README.md](docs/rfcs/0002-risk-based-strictness-policy/README.md#L228)). **I verified this is actually sufficient and a custom merge is NOT needed:** `_deep_merge` ([carter/config.py](carter/config.py#L134-L147)) recurses *every* nested dict. A user override `policy.allowlist.engineer: {R2: true}` recurses `allowlist`→`engineer` and merges into `{R0:true,R1:true}` → appends `R2` without wiping shipped categories; `policy.tool_map: {kubectl: infra-mutate}` adds a key while preserving the shipped map; a leaf scalar (`{git push: read}`) replaces only that one entry, which is the intended override. So dict-of-dicts (allowlist) + dict-of-`{tool: scalar}` (map) rides the existing recursion safely. **Residual nit:** the §1 config fence ([README.md](docs/rfcs/0002-risk-based-strictness-policy/README.md#L82-L89)) still shows only scalars + `overrides: {}` and never shows the `allowlist`/`tool_map` keys — the normative shape lives only in prose. Add both keys to the fence so the shape is copy-pasteable. (nit — presentation)
+
+**2. "Drop read-only" P1 MUST → RESOLVED (status), but enumeration INCOMPLETE.**
+Now an explicit P1 MUST in three places (§4 MCP bullet [README.md](docs/rfcs/0002-risk-based-strictness-policy/README.md#L178-L185), P1 phasing [README.md](docs/rfcs/0002-risk-based-strictness-policy/README.md#L227-L231), Q3 [README.md](docs/rfcs/0002-risk-based-strictness-policy/README.md#L289)). **NEW finding:** the MUST names only [agents/carter-architect.md](agents/carter-architect.md#L39) + [agents/carter-engineer.md](agents/carter-engineer.md#L43), but read-only MCP wording **also** survives at [agents/carter-learner.md](agents/carter-learner.md#L40) ("carter-atlassian: Read-only") and [agents/carter-pm.md](agents/carter-pm.md#L42) ("carter-github: Read-only") — both verified present. My Round 1 §2 already flagged "and similar in pm/learner"; rev 2 promoted the fix to MUST but under-scoped the file list, so two false guarantees would survive a literal implementation. **Tighten the MUST to "all static `agents/*.md`" (or enumerate all four).** (should-fix — honesty-adjacent)
+
+**3. Bash bypass → RESOLVED.**
+Now explicit in the enforcement model: the §4 bash bypass bullet ([README.md](docs/rfcs/0002-risk-based-strictness-policy/README.md#L172-L174)) names OpenCode `permission.bash` globs + Copilot CLI `hooks` and marks VS Code unable; the matrix row carries "bash command globs" for OpenCode; the network-egress rejection routes bash egress onto "the R2/R3/R5 bash-glob path" ([README.md](docs/rfcs/0002-risk-based-strictness-policy/README.md#L117-L122)). Correct vectors, gap honestly named. ✓
+
+**4. Override ≠ ledger → RESOLVED.**
+§6 ([README.md](docs/rfcs/0002-risk-based-strictness-policy/README.md#L200-L206)) now states "Override ≠ authorization … the `carter ops` audit path is a post-hoc ledger … cannot lift a platform `deny`" and defines the override per tier — native-deny (edit/re-run with gate relaxed, logged), native-ask (confirm the prompt), prose backstop (proceed on trust, logged only). This maps exactly onto my Round 1 two-tier ask and is correct: the log records, the human action at the config/prompt layer is the only real override. ✓
+
+---
+
+### Security delta
+
+- **HIGH (read-only honesty) → resolved in principle, scoping incomplete.** The credential-guarantee word is now MUST-dropped, which removes the theater — *but only at the 2 enumerated files*. Until the MUST covers learner:40 + pm:42, the same false "read-only" guarantee persists for two agents. Fix the enumeration (blocker 2 above) and this is fully closed.
+- **MEDIUM (full-scope shared token) → honestly labeled.** Trade-offs ([README.md](docs/rfcs/0002-risk-based-strictness-policy/README.md#L253-L256)) state the shared token is not fixed here, defer the root fix to RFC-0003, and record "Accepted residual: medium." Verified the risk is real and unchanged (`REQUIRED_ENV_VARS` is one full-scope token per service). Labeling + deferral are correct. ✓
+- **MEDIUM (bash path) → in the model.** See blocker 3. ✓
+
+### New issues introduced by revision 2
+
+- **Q16 redaction override — FEASIBLE, with one nuance.** I verified implementability end-to-end: the narrator's entire `<redaction_rules>` block is gated `{% if config.redaction.enabled %}` ([carter-narrator.md.j2](templates/agents/carter-narrator.md.j2#L67-L111)); `render_agents` passes the **full** `config` ([scaffold.py](carter/scaffold.py#L130)); so the strict override is literally `{% if config.redaction.enabled or config.policy.level == 'strict' %}` once `policy` is in `DEFAULT_CONFIG`. Defaults cooperate — `redaction.categories` is a sibling of `enabled` ([config.py](carter/config.py#L51-L53)), so `{enabled: false}` alone keeps the default category list and the forced block renders meaningfully. **Nuance to note in §6:** (a) a user who *also* sets `redaction.categories: []` would get the header + anti-bypass clause but no category bodies — still better than nothing, but worth a one-line caveat; (b) this override re-enables a **prose** block in one agent — it is advisory, not a hard runtime redaction, consistent with the rest of the honesty framing. Not blocking. (clarity)
+- **HARD ACK needs a non-interactive escape (Q15).** §5 makes `strict`-on-non-enforcing-target a HARD ACK at **install** time ([README.md](docs/rfcs/0002-risk-based-strictness-policy/README.md#L195-L197)). An interactive ack blocks CI/non-interactive `carter install` unless there's a `--accept-degraded` flag (or env var). Specify the non-interactive path or strict installs break in automation. (should-fix — feasibility)
+- **Schema validation still unspecified (carried from R1).** P1 adds the `policy` block but still doesn't mention rejecting `level: guared` / bad gate values; `load_config` validates only `agent_suffix` today. Mirror `_validate_agent_suffix` to raise `ConfigError`. (should-fix — carried)
+
+### `carter check` offline testability (Q13/Q17)
+
+Unchanged and still sound: emitted-frontmatter↔allowlist diff, category↔gate pure function, and config↔installed drift all slot into the existing `config_warnings` seam and unit-test offline; runtime denial is correctly out of scope. The Q16 WARN is a trivial addition to the same seam. ✓
+
+### DECIDE items (human call)
+
+- **DECIDE — read-only enumeration scope:** confirm the P1 MUST covers *all* static agents (engineer, architect, learner, pm), not just the two named. Recommend "all static `agents/*.md`." (resolves the residual HIGH-honesty finding)
+- **DECIDE — HARD ACK non-interactive path:** approve a `--accept-degraded` install flag (or equivalent) so strict installs don't deadlock CI.
+- **DECIDE — Q3 residual (unchanged from R1):** ship `guarded`-default with the wording-drop; RFC-0003 for scoped tokens; residual = MEDIUM, acceptable for a scaffolder. Now consistent with rev 2's labeling.
+
+**Net:** the design is feasible and the security posture is honest. My Round 1 blockers are cleared; the open items are implementation-time corrections, not design defects. Advisory verdict: **approve**.
+
+---
+
 ## Round 1 — 2026-06-11 — reviewed revision 1 — verdict: request-changes
 
 *Advisory review (ADR-0004): informs the maestro; does not vote or bind. Focus: code/test feasibility + security.*

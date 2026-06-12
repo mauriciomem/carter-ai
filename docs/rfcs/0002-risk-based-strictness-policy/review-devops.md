@@ -1,5 +1,36 @@
 # Review: RFC-0002 — devops
 
+## Round 2 — 2026-06-12 — reviewed revision 2 — verdict: approve
+
+**Summary.** All four Round 1 blockers (B1–B4) are resolved with correct `file:line` grounding, and the emission seam is now right end-to-end: per-agent MCP scope lives in agent frontmatter, `configure_mcp_servers` is explicitly left global-only, and `copilot mcp add` is acknowledged as inherently global ([README#L191-L194](docs/rfcs/0002-risk-based-strictness-policy/README.md#L191-L194)). A fresh-session implementer is now pointed at the correct code (agent emission, not the server registry). Remaining items are non-blocking polish — no infra change here is wrong as written.
+
+### Blocker resolution (delta)
+
+- **B1 — Q14 "bake at build time" → RESOLVED.** Rev 2 reframes exactly as requested: build-time generation is called **WON'T-DO per ADR-0002:37** (verified: WON'T-DO row), statics **raw-copied at `installer.py:498`** (verified: `install_agents` → `_install_file` → `shutil.copy2`), defaults now **hand-edited into static `agents/*.md`** kept honest by a **`test_parity.py` extension (dual-source hand-edit, *not* generation)** ([README#L269-L272](docs/rfcs/0002-risk-based-strictness-policy/README.md#L269-L272), [README#L312-L316](docs/rfcs/0002-risk-based-strictness-policy/README.md#L312-L316)). Implementable — `test_parity.py` already guards frontmatter byte-parity (ADR-0002 Current Status), so extending it to the new keys is a known pattern, not a new mechanism.
+
+- **B2 — MCP scoping seam → RESOLVED.** §4 now states per-agent MCP scope is emitted "in **agent frontmatter**, *not* the global `configure_mcp_servers` @ `installer.py:782`" and that "`copilot mcp add` is inherently global" ([README#L191-L194](docs/rfcs/0002-risk-based-strictness-policy/README.md#L191-L194)). P2 relocated the work to "per-agent MCP scope in frontmatter" ([README#L235-L238](docs/rfcs/0002-risk-based-strictness-policy/README.md#L235-L238)). The wrong-seam instruction from rev 1 is gone.
+
+- **B3 — Deprecated OpenCode mechanism → RESOLVED.** Matrix marks `tools` boolean **DEPRECATED ≥v1.1.1** ([README#L163](docs/rfcs/0002-risk-based-strictness-policy/README.md#L163)); emission rule says "emit **`permission`** (not the deprecated `tools` boolean)" ([README#L176](docs/rfcs/0002-risk-based-strictness-policy/README.md#L176)). Correct.
+
+- **B4 — "read-only" relabel in scope → RESOLVED.** Relabel is now a **P1 MUST** — "drop the 'read-only' prose (Q3 P1 MUST)" ([README#L233-L234](docs/rfcs/0002-risk-based-strictness-policy/README.md#L233-L234)) — anchored to the false guarantee at `installer.py:271` (verified: shared full-scope `REQUIRED_ENV_VARS`), with tool-name denial riding the P2 frontmatter emission ([README#L191-L195](docs/rfcs/0002-risk-based-strictness-policy/README.md#L191-L195)). The P1(relabel)/P2(denial) split is sound: dropping false prose is a no-behavior docs change (fits P1); emitting `permission: deny` is enforcement (fits P2). The security-lie is no longer shipped or deferred.
+
+### Round 1 DECIDE items
+
+- **D2 (Q15 hard ack) → LANDED.** §5 and Q15 both require an explicit acknowledgement at install **and** `carter check`, "not a soft WARN" ([README#L204-L206](docs/rfcs/0002-risk-based-strictness-policy/README.md#L204-L206), [README#L317-L318](docs/rfcs/0002-risk-based-strictness-policy/README.md#L317-L318)). Resolved as recommended.
+- **D3 (Q20 `max`) → LANDED.** Effective gate = `max(workspace level, plan push_policy)`, `manual` only *tightens* R2 ([README#L274-L276](docs/rfcs/0002-risk-based-strictness-policy/README.md#L274-L276), [README#L327-L329](docs/rfcs/0002-risk-based-strictness-policy/README.md#L327-L329)). Correct one-directional override.
+- **D4 (Q2 table) → LANDED.** Matrix now reflects the corrected reality: VS Code `tools:` **ENFORCED**, Copilot `hooks` preToolUse can **BLOCK**, all three do per-agent MCP scope ([README#L162-L168](docs/rfcs/0002-risk-based-strictness-policy/README.md#L162-L168)).
+- **D5 (de-dup server triple) → still open, non-blocking.** The hardcoded `["github","terraform","atlassian"]` is still duplicated across install (`installer.py:782` region) and uninstall (`installer.py` ~948, verified literal triple). Rev 2 doesn't lift it to a constant — fine, it's independent of this RFC, but worth folding into the P2 implementation while that file is open.
+
+### Remaining non-blocking items (carry into the plan, not approval blockers)
+
+- **N1 — Q14 vs Trade-offs inconsistency (nit).** Trade-offs commits to option (a) "hand-edited into the static `agents/*.md`" ([README#L269-L271](docs/rfcs/0002-risk-based-strictness-policy/README.md#L269-L271)), while Q14 still lists "(a) … — or a global policy file read at install" ([README#L315-L316](docs/rfcs/0002-risk-based-strictness-policy/README.md#L315-L316)). Minor ambiguity for the implementer. **DECIDE:** drop the "or global policy file" alternative from Q14 to match the Trade-offs commitment, or explicitly defer the (a)/(b) choice to the execution plan. Not blocking.
+- **N2 — `--mcp`-decoupled lint false-positive (P3 design note).** Agent files install always but server defs only with `--mcp`; agents will carry `carter-*_*: deny` referencing servers that may be unwired. Harmless at runtime (denying an absent tool), but the §5 lint must **not** WARN "server not wired" when the user simply omitted `--mcp`. Rev 2 §5 ([README#L200-L210](docs/rfcs/0002-risk-based-strictness-policy/README.md#L200-L210)) doesn't note this interaction — capture it as a P3 lint requirement.
+- **N3 — relabel touches both sources (parity caveat).** `test_parity.py` checks **frontmatter** parity, but "read-only" lives in the agent **body** (`<mcp>` section). Dropping it from static `agents/*.md` won't be caught by parity if the template body diverges — P1 must edit both static and template bodies for consistency. One-line implementer note.
+
+No new infra/install defect introduced by the revision.
+
+---
+
 ## Round 1 — 2026-06-11 — reviewed revision 1 — verdict: request-changes
 
 **Summary.** The model is sound and the honest "scaffolder-not-a-runtime" framing is correct — emit platform-native config + lint, degrade to labelled prose elsewhere. But two load-bearing *installer* claims are wrong as written and will send a fresh-session implementer to the wrong code: (1) the Q14 "bake defaults **at build time**" recommendation rests on a mechanism that was explicitly abandoned (ADR-0002 Phase 2 = **WON'T DO**), and (2) P2's "`configure_mcp_servers` gains per-agent scoping" puts the work in the wrong function — per-agent MCP scope lives in *agent frontmatter*, not in `configure_mcp_servers`. Both are correctable framing/seam fixes, not fatal flaws — hence request-changes, not reject.
