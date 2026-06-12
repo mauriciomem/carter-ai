@@ -1,5 +1,19 @@
 # Review: RFC-0002 — pm
 
+## Round 3 — 2026-06-12 — reviewed revision 3 — verdict: approve
+
+Advisory, sequencing-only confirmation (my Round 1 was the sole prior pm review). My one Round 1 blocker — **P2 ships behavior-changing enforcement before P3's escape hatch + tests** — is resolved at the RFC level by the new **P2→P3 gate**: "`strict` enforcement ships only after P3 lands — the execution plan decomposes this into per-phase milestones with a **P2→P3 gate**" (`README.md:261-262`). This directly adopts my recommended "gate `strict` selection behind P3," so the `deny`-before-escape-hatch hard-block window is closed.
+
+**Round 1 concerns — disposition:**
+- **P2-before-P3 inversion / `deny` before escape hatch** — **RESOLVED** at RFC level; `strict` (R3/R5 = `deny`) held behind P3 via the gate (`README.md:261-262`).
+- **Partial-landing guardrail** — **RESOLVED** at RFC level; the RFC sets the gate, the task-level "may-not-merge" guardrail is correctly the execution plan's job per ADR-0004 (`README.md:344-345`, `360-363`).
+- **P2 untested (TDD ordering)** — **PARTIAL**, now a plan concern, not an RFC blocker: emission unit tests still sit in P3 (§7), but the gate prevents untested `strict` from shipping; fine-grained "tests alongside templates" is a milestone-ordering decision the plan carries.
+- **Q6 messaging** — **RESOLVED**; the "you're `guarded` now" message moved to P2 ("enforcement is real"), not P1 (`README.md:258-260`).
+- **Q18 one RFC** — **RESOLVED**; one phased RFC, plan decomposes into per-phase milestones with the P2→P3 gate (`README.md:344-345`).
+- **Q19 ADR numbering** — **RESOLVED**; de-reserved to next free number at write time, honoring my flag (`README.md:8`, `346-347`).
+
+No sequencing item remains an RFC-level blocker; the detailed milestone breakdown + merge gate are correctly deferred to the execution plan. I did not assess design/code/security (other agents' domains).
+
 ## Round 1 — 2026-06-11 — reviewed revision 1 — verdict: request-changes
 
 Advisory, sequencing-only. The three-phase skeleton (model → emission → lint/tests) is directionally sound and one phased RFC is the right delivery vehicle. But **P2 lands behavior-changing enforcement before P3 provides the lint, escape hatch, and tests that make it safe and verifiable** — a window where drift is undetectable and `strict`-level `deny` gates can hard-block users with no audited override. Pull the escape hatch and emission tests into P2, and ship the lint *with* (not after) emission.
