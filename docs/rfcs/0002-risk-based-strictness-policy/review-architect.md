@@ -1,5 +1,37 @@
 # Review: RFC-0002 — architect
 
+## Round 3 — 2026-06-12 — reviewed revision 3 — verdict: approve
+
+*Advisory delta review (ADR-0004): informs the maestro's synthesis; not a vote; no RFC-body edits. Narrow scope — verify the Round 2 QA blocker only + new-incoherence scan.*
+
+**Bottom line.** My one Round 2 blocker (QA — the R2/R6 cross-agent publish gap) is **RESOLVED** via option (a) author+handoff, exactly as the maintainer accepted. The composition is coherent, leaves no dangling case, and introduces no new contradiction across the four touched artifacts. Approve.
+
+### QA blocker — RESOLVED
+
+| Edit | Evidence | Check |
+|---|---|---|
+| D1 example split into two actors | [#L102](docs/rfcs/0002-risk-based-strictness-policy/README.md#L102)–L105 "narrator authors/redacts the R6 content, devops performs the R2 transmit — they **compose**, not collide" | The single-actor `gh pr comment` framing that contradicted the split is **gone**. ✓ |
+| narrator reworded publisher→author | [#L158](docs/rfcs/0002-risk-based-strictness-policy/README.md#L158) "the **only** external **author** … **devops transmits** via R2 (narrator→devops handoff)"; categories stay `R0,R1,R6` (no R2, **by design**) | ✓ |
+| Cross-agent boundary named | [#L160](docs/rfcs/0002-risk-based-strictness-policy/README.md#L160)–L163 "R2∩R6 … narrator authors+redacts (R6), then devops performs the transmit (R2) under its R2 gate … single-pusher invariant preserved" | ✓ Mirrors the engineer "R2 only via a devops handoff" pattern. |
+
+### Dangling-case probe — none
+
+Every outward **transport** (git push, PR/issue create·merge·comment, MCP POST/PATCH/PUT/DELETE) is R2 ([#L118](docs/rfcs/0002-risk-based-strictness-policy/README.md#L118)), and devops holds R2 ([#L155](docs/rfcs/0002-risk-based-strictness-policy/README.md#L155)). So there is **no** outward path that only narrator could reach — a narrator needing a direct MCP POST hands the redacted draft to devops, who transmits. The short-form D3 lane ([#L127](docs/rfcs/0002-risk-based-strictness-policy/README.md#L127)) also routes its transport through an R2 holder (devops runs the one-liner + inline redaction, skipping only the narrator authoring hop). Gap closed with no orphaned actor.
+
+### New-incoherence scan — clean
+
+- **Allowlist table vs composition prose** — consistent: narrator `R0,R1,R6` / devops `R0..R5`; prose splits R6-author (narrator) from R2-transmit (devops). ✓
+- **Most-restrictive-wins vs the handoff** — no conflict, and actually cleaner than a single composed gate: the R6 pass is applied by narrator **at authoring** and the R2 gate by devops **at transmit**, so each gate binds at its own actor rather than colliding at one chokepoint ([#L110](docs/rfcs/0002-risk-based-strictness-policy/README.md#L110)–L113 vs [#L160](docs/rfcs/0002-risk-based-strictness-policy/README.md#L160)–L163). ✓
+- **R6 two-lane vs table** — both lanes terminate at an R2 holder; coherent. ✓
+
+### Carried NITs (non-blocking — do NOT affect verdict)
+
+- `gate (narrator) + ask` still reads redundant against the `gate` ≡ "ask + handoff" definition ([#L123](docs/rfcs/0002-risk-based-strictness-policy/README.md#L123)) — unchanged from Round 2.
+- D3 two-lane still not encoded in the R6 table cell ([#L123](docs/rfcs/0002-risk-based-strictness-policy/README.md#L123) flat vs the [#L127](docs/rfcs/0002-risk-based-strictness-policy/README.md#L127) prose).
+- Minor: "only external **author**" ([#L158](docs/rfcs/0002-risk-based-strictness-policy/README.md#L158)) sits slightly against the short-form lane where devops authors a one-liner — reconcilable (short-form is the explicit D3 carve-out), pure wording.
+
+None block. Fold to the plan or leave as-is — owner's call.
+
 ## Round 2 — 2026-06-12 — reviewed revision 2 — verdict: request-changes
 
 *Advisory delta review (ADR-0004): informs the maestro's synthesis; not a vote; no RFC-body edits.*

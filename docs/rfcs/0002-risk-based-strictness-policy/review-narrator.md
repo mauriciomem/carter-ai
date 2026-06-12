@@ -1,5 +1,51 @@
 # Review: RFC-0002 — narrator
 
+## Round 3 — 2026-06-12 — reviewed revision 3 — verdict: approve
+
+**Scope:** narrow delta — only my two Round 2 blockers (QB, QC) on the R6 /
+redaction seam. Both resolved. Advisory — maestro synthesizes, user decides.
+
+### Blocker disposition
+
+| R2 blocker | Status | Evidence in rev 3 |
+|---|---|---|
+| **B1 (QB)** — Q16 forced pass + WARN stopped at `strict`; default `guarded` left a hollow `gate(narrator)` | **RESOLVED** | §6 forces the pass at "**`guarded` and `strict`** … R6 MUST force a redaction/narrator pass regardless of `redaction.enabled`" ([README.md:245](README.md#L245)); §5 WARN now fires on "the `redaction.enabled: false` contradiction at `guarded` or `strict`" ([README.md:225](README.md#L225)) — both halves extended off strict-only |
+| **B2 (QC)** — short-form R6 was a bare `ask`, zero redaction logic | **RESOLVED** | short-form = "**`ask` + an inline redaction check** … the agent still runs the redaction-category scan on the short-form content before the ask" ([README.md:128](README.md#L128)); substantive keeps full `gate(narrator)` ([README.md:129-132](README.md#L129-L132)) |
+
+### "Redaction on every outward path" — holds
+
+- `guarded`/`strict`: forced narrator pass (substantive) or inline category scan
+  (short-form) — no outward path skips redaction ([README.md:128-132](README.md#L128-L132), [README.md:245](README.md#L245)).
+- `loose`: R6 = `allow*` with the **advisory** skepticism nudge, explicitly "loose
+  stays advisory" ([README.md:245](README.md#L245)). This is an **honest, labeled
+  posture**, not a silent leak — loose's whole contract is advisory. Confirmed
+  intended.
+
+### Round 2 non-blocking items — rev 3 delta
+
+- **Commit-messages overlay** (was PARTIAL, accepted as labeled): unchanged —
+  still the honesty note "the redaction path is offered, not silently skipped"
+  ([README.md:133-136](README.md#L133-L136)). Carter can't gate the server-side
+  squash; labeled-and-sufficient as I accepted in R2. Not a default-config leak.
+- **G1 — dedicated R6-degradation honesty WARN** (was UNRESOLVED): still folded into
+  the generic Q15 hard ack ([README.md:218-224](README.md#L218-L224)); no R6-specific
+  "advisory-only on this target" line added. Remains a target-capability honesty
+  gap (e.g. VS Code prose backstop), **not** a default-config content leak — the
+  redaction logic still ships as agent-body prose, only platform-enforcement
+  degrades. Non-blocking, consistent with my R2 disposition.
+
+### Verdict
+
+Both leakage paths on the default (`guarded`) config are closed. No new
+default-config leak introduced by rev 3. **approve.** I do not reopen the
+R2↔R6 overlay (architect's domain) or G1 (honesty-label nit, not a leak).
+
+### DECIDE
+- **none** (blocking). G1 stays an optional honesty-polish item for the architect
+  if desired; it does not gate approval.
+
+---
+
 ## Round 2 — 2026-06-12 — reviewed revision 2 — verdict: request-changes
 
 **Scope unchanged:** R6 / redaction seam only (external-publish + Q16). Advisory —
