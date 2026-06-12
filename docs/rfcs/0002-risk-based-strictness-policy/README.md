@@ -1,7 +1,7 @@
 ---
 id: RFC-0002
 status: review                # draft | review | accepted | rejected | withdrawn
-revision: 2
+revision: 3
 created: 2026-06-11
 decided: null
 author: mauriciomem
@@ -14,15 +14,16 @@ tags: [strictness, enforcement, security, agents, mcp, policy]
 # RFC-0002: Risk-Based Strictness Policy
 
 **Status:** Review
-**Revision:** 2
+**Revision:** 3
 **Author:** mauriciomem
 
 > **Execution note.** Written to be picked up in a **fresh session**. It embeds
 > the verified current state (with `file:line` grounding) so the implementer need
-> not re-discover it. **Revision 2** integrates Round 1 multi-reviewer findings
-> and bakes in the maintainer's resolved decisions (2026-06-12): the prior
-> `DECIDE` items in **Open questions** (Q1–Q20) are now settled one-liners — no
-> open blockers remain for implementation.
+> not re-discover it. **Revision 2** integrated Round 1 multi-reviewer findings
+> and the maintainer's resolved decisions; **revision 3** integrates the accepted
+> **Round 2** fixes (QA–QF, 2026-06-12). The prior `DECIDE` items in **Open
+> questions** (Q1–Q20) are settled one-liners — no open blockers remain for
+> implementation.
 
 ## Summary
 
@@ -99,8 +100,10 @@ policy:
 
 Seven categories. **R0–R5 are mutually-exclusive transport/action categories;
 R6 (external-publish) is a content *overlay* dimension** that composes with the
-transport gate (narrator D1 — a `gh pr comment` is both transport **and** outward
-content). Gate vocabulary: `allow` (silent) · `ask` (human confirm) · `gate`
+transport gate (narrator D1 — a `gh pr comment` is both an R2 transport **and** an
+R6 content overlay: narrator authors/redacts the R6 content, devops performs the
+R2 transmit — they **compose**, not collide). Gate vocabulary: `allow` (silent) ·
+`ask` (human confirm) · `gate`
 (ask **+** required handoff to the owning agent / checkpoint artifact) · `deny`
 (blocked; override required).
 
@@ -122,9 +125,11 @@ gate and R6 gate).
 \* `loose` keeps the existing **advisory** skepticism nudge — it does not silence it.
 
 - **R6 two-lane (D3):** short-form low-risk outward content (e.g. a one-line PR
-  comment) = **`ask`**; substantive outward content (release notes, Slack posts,
-  Jira bodies, PR descriptions) = full **`gate(narrator)`** — avoids handoff
-  fatigue while keeping redaction on the heavy paths.
+  comment) = **`ask` + an inline redaction check** (the agent still runs the
+  redaction-category scan on the short-form content before the ask, skipping only
+  the full narrator handoff); substantive outward content (release notes, Slack
+  posts, Jira bodies, PR descriptions) keeps full **`gate(narrator)`** — avoids
+  handoff fatigue while keeping redaction on **every** outward path.
 - **Commit messages ship outward (honesty note):** squash-merge publishes the
   commit body, yet commits are R1=`allow` with no R6 pass. Carter cannot gate the
   merge, but the R6 overlay applies to any commit message destined to become
@@ -150,7 +155,13 @@ agent, always. This is the "tool allowlist per agent" pillar.
 | devops | R0, R1, R2, R3, R4, R5 | the **only** infra-mutator / pusher; **R4 included** — infra work legitimately reads secrets/tokens (`.env`, vault) for `terraform`/deploy |
 | pm | R0, R1 | plans; local artifacts only |
 | learner | R0 | explains; reads only |
-| narrator | R0, R1, R6 | the **only** external publisher |
+| narrator | R0, R1, R6 | the **only** external **author** — drafts + redacts R6 content; **devops transmits** via R2 (narrator→devops handoff) |
+
+A substantive outward publish is **R2∩R6** and flows as a **narrator→devops
+handoff**: narrator authors and applies the redaction pass (R6), then devops
+performs the transmit (R2) under its R2 gate. No single agent holds both
+categories — this preserves the single-pusher invariant (devops remains the only
+R2 agent).
 
 ### 4. Emission — enforce natively where supported, label the rest
 
@@ -191,9 +202,13 @@ omission + `sandbox` + prose.
 - **MCP / "read-only" (Q3 — P1 MUST):** all three targets support per-agent MCP
   scoping in **agent frontmatter**, *not* the global `configure_mcp_servers` @
   `installer.py:782` (`copilot mcp add` is inherently global). **Drop the
-  "read-only" wording** at `agents/carter-architect.md:39` and
-  `agents/carter-engineer.md:43` — the shared full-scope token (`installer.py:271`)
-  makes it a false guarantee. Scoped tokens are deferred to **RFC-0003**.
+  "read-only" wording** at **all four** static agents that carry it —
+  `agents/carter-architect.md:39`, `agents/carter-engineer.md:43`,
+  `agents/carter-learner.md:40`, and `agents/carter-pm.md:42` — the shared
+  full-scope token (`installer.py:271`) makes it a false guarantee. The drop is in
+  agent **body text** (not frontmatter), so the `test_parity` frontmatter check
+  won't catch it — P1 must edit both the static `agents/*.md` **and** the
+  templates. Scoped tokens are deferred to **RFC-0003**.
 
 ### 5. Static validation (`carter check` extension)
 
@@ -203,8 +218,12 @@ Deterministic, testable, runs offline:
 - Detect **drift** between `carter.yaml policy` and the installed agent/MCP files.
 - **HARD ACK (Q15):** when the active target **cannot natively enforce** the declared
   `strict` level, install **and** `carter check` require an explicit acknowledgement
-  (not a soft WARN) — the user must accept the degraded guarantee.
-- **WARN on the `strict` + `redaction.enabled: false` contradiction (Q16)** — see §6.
+  (not a soft WARN) — the user must accept the degraded guarantee. A non-interactive
+  `--accept-degraded` flag (install + `carter check`) satisfies the ack in
+  CI/automation without a prompt; absent the flag in a non-interactive context, the
+  command fails closed (does not silently proceed). (P3 detail.)
+- **WARN on the `redaction.enabled: false` contradiction at `guarded` or `strict`
+  (Q16)** — see §6.
 - It **cannot** verify that the platform actually denies at runtime — explicitly out
   of scope and documented (Q17).
 
@@ -222,7 +241,8 @@ proceed on trust (logged only). The ledger is accountability, not a bypass.
 `<redaction_rules>` block (incl. the anti-bypass clause) is wrapped in
 `{% if config.redaction.enabled %}` at `templates/agents/carter-narrator.md.j2:67-111`
 — so `redaction.enabled: false` renders a narrator with **zero** redaction rules. At
-**`strict`, R6 MUST force a redaction/narrator pass regardless of
+**`guarded` and `strict`** (every level where R6's gate is `gate(narrator)` — loose
+stays advisory), **R6 MUST force a redaction/narrator pass regardless of
 `redaction.enabled`**, and `carter check` MUST WARN on the contradiction.
 
 ### 7. Phasing (so a fresh session can land it incrementally)
@@ -309,11 +329,12 @@ Retained as a one-line audit trail; no open blockers remain.
   always re-emitted (global-agent exception, Q14).
 - **Q13 — Lint scope:** emitted frontmatter ↔ allowlist; category↔gate per level;
   carter.yaml↔installed drift. Runtime denial not verifiable.
-- **Q14 — Global agents (no `carter.yaml`) → REFRAMED.** "Bake at build time" is
-  **falsified** (ADR-0002:37 WON'T-DO; statics raw-copied `installer.py:498`).
-  Instead: hand-edited `guarded` defaults in static `agents/*.md` kept honest by a
-  `test_parity.py` extension (dual-source hand-edit, *not* generation) — or a global
-  policy file read at install.
+- **Q14 — Global agents (no `carter.yaml`) → REFRAMED, chose (a).** "Bake at build
+  time" is **falsified** (ADR-0002:37 WON'T-DO; statics raw-copied
+  `installer.py:498`). Decision: **baked hand-edited `guarded` defaults in static
+  `agents/*.md` + a `test_parity.py` extension** (dual-source hand-edit, *not*
+  generation). A global policy file read at install was considered and **deferred
+  to the execution plan** as a possible future alternative.
 - **Q15 — Strict on non-enforcing target → HARD ACK** (not soft WARN); install +
   `carter check` require explicit acknowledgement.
 - **Q16 — vs `redaction` → strict OVERRIDES `redaction.enabled: false`** (verified
