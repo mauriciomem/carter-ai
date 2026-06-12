@@ -1,11 +1,11 @@
 ---
 id: RFC-0002
 status: review                # draft | review | accepted | rejected | withdrawn
-revision: 1
+revision: 2
 created: 2026-06-11
 decided: null
 author: mauriciomem
-adr: null                     # set when accepted (likely ADR-0005 — see Q19)
+adr: null                     # next free ADR number at accept time — not pre-reserved (Q19)
 plan: null
 supersedes: []
 tags: [strictness, enforcement, security, agents, mcp, policy]
@@ -14,14 +14,15 @@ tags: [strictness, enforcement, security, agents, mcp, policy]
 # RFC-0002: Risk-Based Strictness Policy
 
 **Status:** Review
-**Revision:** 1
+**Revision:** 2
 **Author:** mauriciomem
 
-> **Execution note.** This RFC is written to be picked up in a **fresh session**.
-> It embeds the verified current state (with `file:line` grounding) so the
-> implementer need not re-discover it. Every doubt is captured in **Open
-> questions** (Q1–Q20) with a recommended default *and* a `DECIDE` flag where a
-> human call is required before coding. Resolve the `DECIDE` items first.
+> **Execution note.** Written to be picked up in a **fresh session**. It embeds
+> the verified current state (with `file:line` grounding) so the implementer need
+> not re-discover it. **Revision 2** integrates Round 1 multi-reviewer findings
+> and bakes in the maintainer's resolved decisions (2026-06-12): the prior
+> `DECIDE` items in **Open questions** (Q1–Q20) are now settled one-liners — no
+> open blockers remain for implementation.
 
 ## Summary
 
@@ -38,11 +39,15 @@ with three pillars:
    gates, emitted as **platform-native enforcement where supported** and advisory
    prose elsewhere — *honestly labelled* so a user knows which they're getting.
 
-The unifying honest premise: **Carter is a scaffolder, not a runtime.** It cannot
-intercept a tool call. "Enforcement" therefore means *emitting platform-native
-config that the target (OpenCode / VS Code / Copilot CLI) enforces*, plus a
-deterministic `carter check` lint that the emitted config matches the declared
-policy. Where a target can't enforce, the policy degrades to prose and says so.
+The unifying honest premise, **split correctly**: the Carter *process* cannot
+intercept a tool call (it exits after scaffolding) — but the *config Carter emits*
+**can** intercept deterministically, because modern targets ship native
+interceptors: OpenCode `permission: deny`, Copilot CLI `hooks` (preToolUse), and
+VS Code MCP `sandbox` + agent `hooks` (Preview). So "enforcement" = *emitting
+platform-native interceptors and allowlists* the target enforces at runtime, plus
+a deterministic `carter check` lint that the emitted config matches the declared
+policy. Where a target lacks a primitive, the policy degrades to prose and **says
+so** (Q15 hard ack).
 
 ## Problem
 
@@ -84,11 +89,25 @@ policy:
 - **`guarded` (L1)** = recommended default for *new* installs.
 - **`strict` (L2)** = regulated / prod-critical work.
 
+> **Merge footgun (verified).** `carter/config.py` `_deep_merge` recurses dicts
+> but **replaces lists wholesale**. The shipped tool→risk map and per-agent
+> allowlist MUST therefore be **dict-shaped** (`{tool: risk}`, `{agent: {cat:
+> bool}}`) — a list would let one user override silently wipe the whole shipped
+> map. `overrides` is already a dict; keep every policy collection a dict.
+
 ### 2. Risk taxonomy (fixed, shipped with Carter)
 
-Seven categories; every tool/MCP action maps to exactly one. Gate vocabulary:
-`allow` (silent) · `ask` (human confirm) · `gate` (ask **+** required handoff to
-the owning agent / checkpoint artifact) · `deny` (blocked; override required).
+Seven categories. **R0–R5 are mutually-exclusive transport/action categories;
+R6 (external-publish) is a content *overlay* dimension** that composes with the
+transport gate (narrator D1 — a `gh pr comment` is both transport **and** outward
+content). Gate vocabulary: `allow` (silent) · `ask` (human confirm) · `gate`
+(ask **+** required handoff to the owning agent / checkpoint artifact) · `deny`
+(blocked; override required).
+
+**Most-restrictive-wins precedence.** An action matching multiple categories takes
+the strictest gate: `git push --force` = R2∩R5 → R5; `terraform destroy` =
+R3∩R5 → R5. The R6 overlay composes the same way (most-restrictive of transport
+gate and R6 gate).
 
 | # | Category | Examples | loose | guarded | strict |
 |---|---|---|---|---|---|
@@ -102,6 +121,22 @@ the owning agent / checkpoint artifact) · `deny` (blocked; override required).
 
 \* `loose` keeps the existing **advisory** skepticism nudge — it does not silence it.
 
+- **R6 two-lane (D3):** short-form low-risk outward content (e.g. a one-line PR
+  comment) = **`ask`**; substantive outward content (release notes, Slack posts,
+  Jira bodies, PR descriptions) = full **`gate(narrator)`** — avoids handoff
+  fatigue while keeping redaction on the heavy paths.
+- **Commit messages ship outward (honesty note):** squash-merge publishes the
+  commit body, yet commits are R1=`allow` with no R6 pass. Carter cannot gate the
+  merge, but the R6 overlay applies to any commit message destined to become
+  public — so the redaction path is offered, not silently skipped.
+- **Network-egress / exfiltration — rejected as a separate category (rationale):**
+  arbitrary outbound spans `webfetch`/`websearch` and bash `curl`/`wget`, can't be
+  enumerated as one tool category at the scaffolder layer, and a true exfiltration
+  gate implies content inspection Carter cannot perform. Instead:
+  `webfetch`/`websearch` inherit the `unknown_tool` gate, bash egress rides the
+  R2/R3/R5 bash-glob path, and MCP `sandbox` network allowlists are emitted where
+  the target supports them.
+
 ### 3. Per-agent tool allowlist (deny-by-default)
 
 Independent of level: a category **not** listed for an agent is **denied** for that
@@ -112,33 +147,53 @@ agent, always. This is the "tool allowlist per agent" pillar.
 | maestro | R0 | routes; never mutates directly |
 | architect | R0 | design/review; reads only |
 | engineer | R0, R1 | codes/tests locally; R2 only via a devops handoff |
-| devops | R0, R1, R2, R3, R5 | the **only** infra-mutator / pusher |
+| devops | R0, R1, R2, R3, R4, R5 | the **only** infra-mutator / pusher; **R4 included** — infra work legitimately reads secrets/tokens (`.env`, vault) for `terraform`/deploy |
 | pm | R0, R1 | plans; local artifacts only |
 | learner | R0 | explains; reads only |
 | narrator | R0, R1, R6 | the **only** external publisher |
 
 ### 4. Emission — enforce natively where supported, label the rest
 
-The effective policy = `min(level gate, per-agent allowlist)` per category,
-translated per target:
+Effective policy = `min(level gate, per-agent allowlist)` per category, emitted via
+the **most authoritative primitive each target offers** (Q2 — verified against 2026
+docs):
 
-| Mechanism | OpenCode | VS Code / Copilot agents | Copilot CLI |
+| capability | OpenCode | VS Code custom agents | Copilot CLI |
 |---|---|---|---|
-| Per-agent tool allow/deny | `tools: {name: bool}` (enforced) | `tools:` frontmatter list | **verify (Q2)** |
-| Per-action gate (ask/deny) | `permission: {edit,bash,webfetch,...}` (enforced) | partial — **verify (Q2)** | **verify (Q2)** |
-| Per-agent MCP server scope | via tools/permission | **verify (Q2)** | **verify (Q2)** |
-| Prose `<policy>` backstop | yes | yes | yes |
+| per-agent tool allowlist | YES `permission` (`tools` boolean **DEPRECATED ≥v1.1.1**) | YES `tools:` list — **ENFORCED** (unlisted tool unavailable) | YES `tools:` in agent profile (default all; restrictable) |
+| per-action ask/deny gate | YES `permission:{edit,bash,webfetch,…}` allow\|ask\|deny + bash command globs | NO declarative per-category gate (interactive confirm + MCP `sandbox` fs/network) | partial (interactive allow/deny; `hooks` preToolUse can BLOCK deterministically) |
+| per-agent MCP scope | YES tool-name patterns (`mymcp_*: deny`) | YES `tools: [server/*]` / `mcp-servers` | YES `mcp-servers` per profile |
+| native handoff primitive | `permission.task` | `handoffs:` frontmatter | subagent delegation |
+| deterministic pre-action hook | plugins | `hooks` (**Preview**) | `hooks` preToolUse/postToolUse (strong) |
 
-Rules:
-- **OpenCode**: emit `tools`/`permission` in each agent's frontmatter → genuine
-  runtime enforcement.
-- **VS Code/Copilot**: emit `tools:` list where supported; otherwise prose backstop.
+**Emission ladder (per category, best-available first):**
+`native-deny` → `native-ask` → **prose backstop**. For `deny` on R2/R3/R5 prefer a
+native interceptor — OpenCode `permission: deny`, Copilot CLI `hooks` preToolUse —
+over an allowlist omission, so the action is *blocked*, not merely *unlisted*. VS
+Code `hooks` are **Preview**; until stable, VS Code `deny` falls back to allowlist
+omission + `sandbox` + prose.
+
+- **OpenCode**: emit **`permission`** (not the deprecated `tools` boolean) per agent
+  → genuine runtime enforcement, incl. bash command globs (`"git push": "ask"`).
+- **VS Code**: emit the **enforced** `tools:` allowlist + per-agent MCP scope
+  (`tools: [server/*]`); use `sandbox` for fs/network; `hooks` once out of Preview.
+- **Copilot CLI**: emit restricted `tools:` + `mcp-servers` per profile, and
+  **`hooks` preToolUse** as the deterministic deny/ask gate.
+- **Handoffs are native, not invented** (supersedes old Q10): use VS Code
+  `handoffs:` and OpenCode `permission.task` to scope which agent a category routes
+  to; label "advisory" only where no native primitive exists.
+- **Bash bypass:** R2/R3/R5 also run via shell against the same token — gate the
+  bash path too (OpenCode `permission.bash` globs; Copilot CLI `hooks`). VS Code
+  **cannot** gate bash declaratively — note the gap.
 - **All targets**: emit a `<policy>` block in the agent body (allowlist + gates) and
-  **upgrade the maestro risk table** from `skepticism`-gated prose to a policy-driven
-  gate that is always present (not conditional on `personality.skepticism`).
-- **MCP**: where per-agent server scoping is supported, emit it; otherwise restrict
-  by **denying the server's write tool names** and **drop the "read-only" wording**
-  wherever it cannot be enforced (no false guarantees — Q3).
+  **upgrade the maestro risk table** (`carter-maestro.md.j2:~170`) from
+  `skepticism`-gated prose to an always-present policy-driven gate.
+- **MCP / "read-only" (Q3 — P1 MUST):** all three targets support per-agent MCP
+  scoping in **agent frontmatter**, *not* the global `configure_mcp_servers` @
+  `installer.py:782` (`copilot mcp add` is inherently global). **Drop the
+  "read-only" wording** at `agents/carter-architect.md:39` and
+  `agents/carter-engineer.md:43` — the shared full-scope token (`installer.py:271`)
+  makes it a false guarantee. Scoped tokens are deferred to **RFC-0003**.
 
 ### 5. Static validation (`carter check` extension)
 
@@ -146,38 +201,55 @@ Deterministic, testable, runs offline:
 - Lint that each **installed** agent's emitted frontmatter matches its declared
   allowlist + the active level's gate map.
 - Detect **drift** between `carter.yaml policy` and the installed agent/MCP files.
-- **WARN** when the active target cannot natively enforce the declared level
-  (degradation transparency).
-- It **cannot** verify that the platform actually denies at runtime — explicitly
-  out of scope and documented (Q17).
+- **HARD ACK (Q15):** when the active target **cannot natively enforce** the declared
+  `strict` level, install **and** `carter check` require an explicit acknowledgement
+  (not a soft WARN) — the user must accept the degraded guarantee.
+- **WARN on the `strict` + `redaction.enabled: false` contradiction (Q16)** — see §6.
+- It **cannot** verify that the platform actually denies at runtime — explicitly out
+  of scope and documented (Q17).
 
-### 6. Escape hatch
+### 6. Escape hatch & redaction override
 
 A `deny`-gated action proceeds only with an **explicit, single-action override**
-recorded via `carter ops` audit (reuse the existing audit path shown in the
-session terminal). No blanket/session-wide overrides — overrides are per action to
-avoid override fatigue (Q11).
+(no blanket/session-wide overrides — avoids override fatigue, Q11). **Override ≠
+authorization:** the `carter ops` audit path is a **post-hoc ledger** — it *records*,
+it **cannot lift a platform `deny`**. So "override" means, per tier: at
+**native-deny**, the user edits the emitted config / re-runs with the gate relaxed
+(logged); at **native-ask**, confirm the interactive prompt; at **prose backstop**,
+proceed on trust (logged only). The ledger is accountability, not a bypass.
+
+**Redaction override (Q16 — verified leak).** The narrator's entire
+`<redaction_rules>` block (incl. the anti-bypass clause) is wrapped in
+`{% if config.redaction.enabled %}` at `templates/agents/carter-narrator.md.j2:67-111`
+— so `redaction.enabled: false` renders a narrator with **zero** redaction rules. At
+**`strict`, R6 MUST force a redaction/narrator pass regardless of
+`redaction.enabled`**, and `carter check` MUST WARN on the contradiction.
 
 ### 7. Phasing (so a fresh session can land it incrementally)
 
-- **P1 — model + docs (no behavior change):** `policy` block in `config.py`; risk
-  taxonomy + tool→risk map (shipped, user-extensible); agent-frontmatter schema
-  added to `docs/reference/frontmatter.md`; default level for *existing/omitted*
-  config = `loose` (Q6).
-- **P2 — emission:** agent templates + static `agents/*.md` emit `tools`/`permission`
-  (OpenCode) and `tools:`/`<policy>` (Copilot); `configure_mcp_servers` gains
-  per-agent scoping where supported; maestro risk table becomes policy-driven.
-- **P3 — lint + escape hatch + tests:** `carter check` policy lint; override audit;
-  unit tests for emission + lint (runtime denial is manual/out of scope).
+- **P1 — model + docs (no behavior change):** `policy` block (dict-shaped maps) in
+  `config.py`; risk taxonomy + tool→risk map (shipped, user-extensible); agent +
+  global-policy frontmatter schema in `docs/reference/frontmatter.md`; default
+  `guarded` for **new** installs, `loose` for existing/omitted config (Q6); **drop
+  the "read-only" prose** (Q3 P1 MUST).
+- **P2 — emission:** agent templates **and** the static `agents/*.md` emit
+  `permission` (OpenCode) / enforced `tools:` + `hooks` (VS Code/Copilot) + per-agent
+  MCP scope in frontmatter; maestro risk table becomes policy-driven; the "you're
+  `guarded` now" migration message surfaces **here** (enforcement is real), not P1.
+- **P3 — lint + escape hatch + tests:** `carter check` policy lint (incl. Q15 hard
+  ack, Q16 WARN); override ledger; unit tests for emission + lint (runtime denial is
+  manual/out of scope). **Gate:** `strict` enforcement ships only after P3 lands —
+  the execution plan decomposes this into per-phase milestones with a **P2→P3 gate**.
 
 ## Alternatives considered
 
 | Option | Pros | Cons |
 |--------|------|------|
-| **Risk-based hybrid (chosen)** | speed for low-risk; hard gates only where it matters; native enforcement where possible | per-target divergence; more config surface |
+| **Risk-based hybrid (chosen)** | speed for low-risk; hard gates only where it matters; emits **native interceptors** (hooks/permission-deny) where supported | per-target divergence; more config surface |
 | Globally rigid (everything gated) | simplest mental model | kills the loose-chain speed; users disable it (worse than loose) |
 | Prompt-only "be stricter" | zero code | unenforceable; the exact problem we have now |
-| Runtime proxy/wrapper intercepting tool calls | true enforcement on any target | huge complexity; Carter would become a runtime — rejected |
+| Carter as a **runtime proxy** intercepting calls itself | true enforcement on any target | huge complexity; Carter would become a runtime — rejected (we emit the target's *native* interceptors instead) |
+| Per-agent **scoped MCP tokens** (Q3(b)) | fixes the shared full-scope token at its root | out of scope here — **split into draft RFC-0003** (`../0003-per-agent-scoped-mcp-tokens/`) |
 | Reuse `quality_gate` pre-action | no new concept | gate is post-implementation review, not per-action authorization (different seam) |
 
 ## Trade-offs / Impact
@@ -185,91 +257,85 @@ avoid override fatigue (Q11).
 - **New config surface** (`policy` block) — additive, backward-compatible.
 - **Touches > 3 files** (config, all agent templates, static agents, installer MCP
   wiring, `carter check`, frontmatter docs) → justifies an RFC + ADR + plan.
-- **Per-target inequality:** OpenCode gets real enforcement; Copilot/VS Code may be
-  advisory-only until verified — `carter check` must surface this, not hide it.
-- **`carter update` re-emits agents** (they say "do not edit directly") — policy
-  customization must live in `carter.yaml`, never in hand-edited agent files (Q12).
-- **Reconciliations:** generalizes plan `push_policy`; sits orthogonal to
-  `personality.skepticism` (tone) and `quality_gate` (post-review); overlaps
-  `redaction` for R6.
+- **Per-target inequality (verified):** OpenCode + VS Code `tools:` are **enforced**;
+  per-category ask/deny is strongest on OpenCode (`permission`) and Copilot CLI
+  (`hooks`), weakest on VS Code (no declarative gate, `hooks` still Preview) —
+  `carter check` surfaces this via the Q15 hard ack, never hides it.
+- **Residual token risk (Q3):** the shared full-scope MCP token is **not** fixed by
+  this RFC; we drop the false "read-only" claim and defer the real fix to **RFC-0003**
+  (`../0003-per-agent-scoped-mcp-tokens/`). Accepted residual: medium.
+- **`carter update` re-emits agents** — customization must live in `carter.yaml`,
+  never in hand-edited agent files (Q12). **Exception:** *global* agents have no
+  `carter.yaml` in scope (Q14) — their `guarded` defaults are **hand-edited into the
+  static `agents/*.md`** and kept honest by a `test_parity.py` extension (build-time
+  generation is **WON'T-DO** per ADR-0002:37; statics are raw-copied at
+  `installer.py:498`).
+- **Reconciliations:** generalizes plan `push_policy` (Q20 — effective gate =
+  `max(workspace level, plan push_policy)`; `push_policy: manual` only ever *tightens*
+  R2); orthogonal to `personality.skepticism` (tone) and `quality_gate` (post-review);
+  **`strict` overrides `redaction.enabled: false`** for R6 (Q16).
 - **Risk of friction:** an over-strict default makes users disable the whole thing
-  → default `guarded`, single-action overrides, clear WARNs.
+  → default `guarded`, single-action overrides, clear acks.
 
 ## Open questions
 
-Each: **doubt → options → recommended default** (`DECIDE` = needs a human call
-before coding).
+**All Round 1 `DECIDE` items are resolved in revision 2** (maintainer, 2026-06-12).
+Retained as a one-line audit trail; no open blockers remain.
 
-- **Q1 — Enforcement locus.** Carter is a scaffolder, not a runtime; can it enforce
-  at all? → *Rec:* "enforce" ≝ emit platform-native config + lint; advisory
-  elsewhere. No proxy. **(framing — confirm)**
-- **Q2 — Per-target capability.** Which of OpenCode / VS Code agents / Copilot CLI
-  truly enforce per-agent `tools`, per-action `permission`, and per-agent **MCP
-  server** scoping in 2026? → *Rec:* verify against current docs before P2; OpenCode
-  `tools`+`permission` assumed enforcing; VS Code `tools:` assumed list-only.
-  **DECIDE after verification.**
-- **Q3 — MCP token blast radius.** "read-only" is fiction while tokens are
-  full-scope + shared. → *Rec:* deny write **tool names** where supported; drop
-  "read-only" wording where unenforceable; per-agent scoped tokens = out of scope.
-  **DECIDE** (accept residual risk vs. invest in scoped tokens).
-- **Q4 — vs `personality.skepticism`.** Overlap/contradiction (e.g.
-  `skepticism: off` + `level: strict`). → *Rec:* orthogonal — skepticism = **tone**,
-  policy = **enforcement**; on conflict, **policy gates win**, skepticism only
-  shapes prose.
-- **Q5 — vs `quality_gate` / `tdd.strict`.** Is "approval checkpoint" just the
-  quality gate pre-action? → *Rec:* keep separate seams; reuse the severity
-  vocabulary; policy = pre-action authorization, quality gate = post-implementation
-  review.
-- **Q6 — Default level.** New vs existing installs. → *Rec:* new installs default
-  `guarded`; omitted/existing config defaults `loose` to preserve behavior.
-  **DECIDE:** `loose`-preserve vs `guarded`-nudge-with-migration-note.
-- **Q7 — Level scope.** Global only, or per-agent / per-category overrides? → *Rec:*
-  global `level` + optional `overrides` map (category→gate); per-agent allowlist
-  always applies.
-- **Q8 — Taxonomy edge cases.** Is `git commit --amend` on a *published* commit R5?
-  Is `terraform plan` R0 even though it can refresh state / read secrets? Is reading
-  `.env` R4? → *Rec:* amend-published = R5; `tf plan` default R0 but `-refresh`/state
-  write = R2; `.env` read = R4. **Review the table.**
-- **Q9 — Tool→risk map ownership.** Hardcoded vs user-extensible; unknown tool/MCP
-  server default. → *Rec:* shipped map, user-extensible in `carter.yaml`;
-  `unknown_tool` defaults `ask` at guarded, `deny` at strict.
-- **Q10 — Handoff is advisory.** Models can ignore prompt protocol. What's the real
-  backstop? → *Rec:* backstop = platform `ask` (human-in-loop) for R2+; the handoff
-  protocol layers on top; label it advisory where not natively enforced.
-- **Q11 — Override UX.** How to override a `deny` without override fatigue? → *Rec:*
-  explicit single-action override + `carter ops` audit entry; no session-wide
-  overrides.
-- **Q12 — `carter update` clobbering.** Re-render wipes hand-edits. → *Rec:* all
-  policy customization lives in `carter.yaml`; agents are always re-emitted from it.
-- **Q13 — Lint scope.** What can `carter check` actually verify? → *Rec:* emitted
-  frontmatter ↔ declared allowlist; category↔gate per level; carter.yaml↔installed
-  drift. Runtime denial not verifiable.
-- **Q14 — Global vs workspace install.** `install_agents` copies static
-  `agents/*.md` globally with **no `carter.yaml`** in scope; workspace agents are
-  templated. What policy do *global* agents carry? → *Rec:* bake `guarded` defaults
-  into the static `agents/*.md` at build time. **DECIDE:** baked-default vs a global
+- **Q1 — Enforcement locus → REFRAMED.** Process can't intercept; *emitted config*
+  can (native interceptors). No proxy. See Summary.
+- **Q2 — Per-target capability → RESOLVED by verification.** See the §4 matrix
+  (2026 docs): all three targets do per-agent tool allowlist + MCP scope; gate
+  strength differs.
+- **Q3 — MCP token blast radius → chose (a).** Ship `guarded`; **drop "read-only"
+  wording** (P1 MUST); scoped-token fix deferred to **RFC-0003**.
+- **Q4 — vs `personality.skepticism`:** orthogonal; on conflict **policy gates win**,
+  skepticism only shapes prose.
+- **Q5 — vs `quality_gate`/`tdd.strict`:** separate seams; reuse severity vocab;
+  policy = pre-action authorization, quality gate = post-review.
+- **Q6 — Default level:** `guarded` for new installs, `loose` for existing/omitted;
+  migration message at **P2** (not P1).
+- **Q7 — Level scope:** global `level` + optional `overrides` (category→gate);
+  per-agent allowlist always applies.
+- **Q8 — Taxonomy edge cases:** amend-published = R5; `tf plan` default R0 but
+  `-refresh`/state-write = R2; `.env` read = R4 (table stands).
+- **Q9 — Tool→risk map:** shipped + user-extensible (**dict-shaped**); `unknown_tool`
+  = `ask` at guarded, `deny` at strict.
+- **Q10 — Handoff → SUPERSEDED.** Native primitives exist (VS Code `handoffs:`,
+  OpenCode `permission.task`); advisory only where none.
+- **Q11 — Override UX:** explicit single-action override + `carter ops` ledger; no
+  session-wide overrides (override ≠ authorization, §6).
+- **Q12 — `carter update` clobbering:** all customization in `carter.yaml`; agents
+  always re-emitted (global-agent exception, Q14).
+- **Q13 — Lint scope:** emitted frontmatter ↔ allowlist; category↔gate per level;
+  carter.yaml↔installed drift. Runtime denial not verifiable.
+- **Q14 — Global agents (no `carter.yaml`) → REFRAMED.** "Bake at build time" is
+  **falsified** (ADR-0002:37 WON'T-DO; statics raw-copied `installer.py:498`).
+  Instead: hand-edited `guarded` defaults in static `agents/*.md` kept honest by a
+  `test_parity.py` extension (dual-source hand-edit, *not* generation) — or a global
   policy file read at install.
-- **Q15 — Multi-target consistency.** A Copilot-only user may silently get weaker
-  guarantees than OpenCode. → *Rec:* install + `carter check` WARN when the target
-  lacks native enforcement for the declared level.
-- **Q16 — vs `redaction`.** R6 overlaps `redaction.enabled`. → *Rec:* R6 requires a
-  narrator handoff only when `redaction.enabled`; else `ask`.
-- **Q17 — Testing.** Enforcer is external. → *Rec:* unit-test emission
-  (policy→frontmatter/MCP) + lint + prose text; runtime denial = manual / out of
-  scope, documented.
-- **Q18 — One RFC vs split.** Allowlists / risk-tiers / gates / levels separable? →
-  *Rec:* one RFC, one coherent policy, **phased** (P1–P3).
-- **Q19 — ADR numbering.** An accepted RFC yields an ADR; the next number is
-  **ADR-0005**, but ADR-0005 was informally reserved for off-machine backup/
-  durability (deferred). → **DECIDE:** which decision takes ADR-0005 (recommend this
-  one; backup takes the next free number when written).
-- **Q20 — Reconcile `push_policy`.** Plan frontmatter already has
-  `push_policy: manual|auto`. → *Rec:* fold into the model — `manual` ⇒ R2=`gate`
-  for that plan; keep the field as a per-plan override; document the relationship in
+- **Q15 — Strict on non-enforcing target → HARD ACK** (not soft WARN); install +
+  `carter check` require explicit acknowledgement.
+- **Q16 — vs `redaction` → strict OVERRIDES `redaction.enabled: false`** (verified
+  leak, §6) + `carter check` WARN on the contradiction.
+- **Q17 — Testing:** unit-test emission + lint + prose; runtime denial manual/out of
+  scope.
+- **Q18 — One RFC vs split → ONE** phased RFC; the *execution plan* decomposes into
+  per-phase milestones with a **P2→P3 gate**.
+- **Q19 — ADR numbering:** **do not pre-reserve** — the resulting ADR takes the next
+  free number at write time.
+- **Q20 — `push_policy`:** effective gate = `max(workspace level, plan push_policy)`;
+  `manual` only *tightens* R2; kept as a per-plan override, documented in
   `frontmatter.md`.
+- **D1 (narrator) — R2↔R6 → OVERLAY** (not split): R6 is a content overlay composed
+  with the transport gate (most-restrictive-wins), so redaction stays on every
+  outward path; the "exactly one category" rule is relaxed accordingly (§2).
+- **D3 (narrator) — short-form R6 lane:** one-line/low-risk outward = `ask`;
+  substantive outward = full `gate(narrator)` (§2).
 
 ## Decision
 
-[Pending — filled when accepted/rejected. On acceptance: record as an ADR (Q19),
-then create an execution plan covering P1–P3, then implement. Per ADR-0004, an
-accepted RFC yields an ADR before a plan executes it.]
+[Pending — filled when accepted/rejected. On acceptance: record as an ADR (next free
+number, Q19), then create an execution plan covering P1–P3 (per-phase milestones,
+P2→P3 gate), then implement. Per ADR-0004, an accepted RFC yields an ADR before a
+plan executes it.]
