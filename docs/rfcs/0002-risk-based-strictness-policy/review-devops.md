@@ -1,5 +1,23 @@
 # Review: RFC-0002 — devops
 
+## Round 3 — 2026-06-12 — reviewed revision 3 — verdict: approve
+
+**Confirmation (advisory — no vote, RFC body untouched).** Revision 3 implements my Round 2 **N1** correctly and introduces no new installer/MCP regression; my Round 2 approval stands, now current @ rev 3.
+
+- **N1 (Q14 ↔ Trade-offs inconsistency) → RESOLVED.** The rev-2 "or global policy file" ambiguity is gone. Q14 now commits to "**baked hand-edited `guarded` defaults in static `agents/*.md` + a `test_parity.py` extension** (dual-source hand-edit, *not* generation)," with the global-policy-file alternative "**deferred to the execution plan**" ([README#L332-L337](docs/rfcs/0002-risk-based-strictness-policy/README.md#L332-L337)). Trade-offs matches in intent — defaults "**hand-edited into the static `agents/*.md`**" + `test_parity.py`, generation "**WON'T-DO** per ADR-0002:37; statics raw-copied at `installer.py:498`" ([README#L287-L292](docs/rfcs/0002-risk-based-strictness-policy/README.md#L287-L292)). Single committed mechanism; future alternative parked in the plan. Exactly the fix I asked for.
+
+- **Emission seam → still correct end-to-end.** Per-agent MCP scope stays in **agent frontmatter**, "*not* the global `configure_mcp_servers` @ `installer.py:782`," with "`copilot mcp add` … inherently global" ([README#L202-L203](docs/rfcs/0002-risk-based-strictness-policy/README.md#L202-L203)). QD's read-only relabel (P1 MUST) names all four static agents and flags the drop is **body text** — "the `test_parity` frontmatter check won't catch it — P1 must edit both the static `agents/*.md` **and** the templates" ([README#L202-L211](docs/rfcs/0002-risk-based-strictness-policy/README.md#L202-L211)) — coherent with raw-copy at `installer.py:498` (static body = what ships globally; template body = workspace render). This absorbs my Round 2 N3. No work relocated to the wrong function.
+
+- **Single-pusher invariant → preserved.** narrator = `R0, R1, R6` (no R2) ([README#L158](docs/rfcs/0002-risk-based-strictness-policy/README.md#L158)); devops = `R0, R1, R2, R3, R4, R5`, "the **only** infra-mutator / pusher" ([README#L155](docs/rfcs/0002-risk-based-strictness-policy/README.md#L155)). QA's R2∩R6 handoff is explicit: "No single agent holds both categories — this preserves the single-pusher invariant (devops remains the only R2 agent)" ([README#L161-L164](docs/rfcs/0002-risk-based-strictness-policy/README.md#L161-L164)). devops remains the sole R2 agent.
+
+- **D5 (de-dup server triple `installer.py:786`/`~948`) → carried, non-blocking.** Rev 3 does not lift the triple to a constant (no mention in the RFC body) — correct; it's a plan-level implementation task independent of this RFC. Fold into P2 while that file is open. Not reopening as a blocker.
+
+- **New regression → none.** QB/QC redaction changes are narrator-domain and don't touch install/MCP wiring. No new installer/MCP/infra defect introduced by rev 3.
+
+**Verdict: approve — approval current @ rev 3. N1 RESOLVED; single-pusher invariant intact; no new concern.**
+
+---
+
 ## Round 2 — 2026-06-12 — reviewed revision 2 — verdict: approve
 
 **Summary.** All four Round 1 blockers (B1–B4) are resolved with correct `file:line` grounding, and the emission seam is now right end-to-end: per-agent MCP scope lives in agent frontmatter, `configure_mcp_servers` is explicitly left global-only, and `copilot mcp add` is acknowledged as inherently global ([README#L191-L194](docs/rfcs/0002-risk-based-strictness-policy/README.md#L191-L194)). A fresh-session implementer is now pointed at the correct code (agent emission, not the server registry). Remaining items are non-blocking polish — no infra change here is wrong as written.

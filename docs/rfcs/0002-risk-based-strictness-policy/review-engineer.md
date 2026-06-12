@@ -1,5 +1,25 @@
 # Review: RFC-0002 — engineer
 
+## Round 3 — 2026-06-12 — reviewed revision 3 — verdict: approve
+
+*Advisory currency confirmation (ADR-0004): informs the maestro; does not vote or bind. Narrow scope — confirm rev 3 keeps my Round 2 approval and introduced no code/security regression. Settled items and nits not reopened.*
+
+**Confirmation.** My two Round 2 DECIDE items (read-only enumeration scope, HARD ACK non-interactive path) are both resolved in rev 3, and the QB guarded-extension is feasible and honestly framed — approval **current @ rev 3**, nothing regressed.
+
+**QD — read-only enumeration → RESOLVED.** The P1 MUST now enumerates **all four** leaking static agents, not the two I flagged in Round 2: `carter-architect.md:39`, `carter-engineer.md:43`, `carter-learner.md:40`, `carter-pm.md:42` ([README.md](docs/rfcs/0002-risk-based-strictness-policy/README.md#L205-L208)). The added note that the drop is in agent **body text** (not frontmatter), so `test_parity` "won't catch it" and P1 must edit both static `agents/*.md` **and** templates, is **technically accurate** — I verified [tests/test_parity.py](tests/test_parity.py#L1-L13) deliberately does *not* assert body byte-equality (docstring: "byte-equality of the bodies is intentionally NOT asserted"); it locks only frontmatter + a curated invariant set (NON-NEGOTIABLE, Anti-Bypass, redaction categories), none of which include the "read-only" wording. So the dual-source manual edit is genuinely required — correct, valuable guidance. Residual HIGH-honesty finding from Round 2 fully closed.
+
+**QF — HARD ACK non-interactive → RESOLVED (exceeds ask).** §5 adds the `--accept-degraded` flag for **install + `carter check`** ([README.md](docs/rfcs/0002-risk-based-strictness-policy/README.md#L222)) and, better than I asked, specifies **fail-closed** when the flag is absent in a non-interactive context — "the command fails closed (does not silently proceed)" ([README.md](docs/rfcs/0002-risk-based-strictness-policy/README.md#L223-L224)). Feasible (TTY/CI detection + `ConfigError`/non-zero exit) and the secure default. CI deadlock eliminated without a silent-degrade hole.
+
+**QB — guarded-extension feasible + honest.** §6 extends the forced redaction pass from strict-only to **`guarded` and `strict`** ([README.md](docs/rfcs/0002-risk-based-strictness-policy/README.md#L244-L245)), with §5 WARN extended to match. Implementable as `{% if config.redaction.enabled or config.policy.level in ('guarded','strict') %}` — `render_agents` passes the full `config` ([scaffold.py](carter/scaffold.py#L130)) so `policy.level` is reachable in [carter-narrator.md.j2](templates/agents/carter-narrator.md.j2#L67), and the WARN rides the existing `config_warnings` seam. **Honest:** "force a redaction/narrator pass" forces the *rendered prose block* into the narrator definition, not a runtime guarantee — consistent with the RFC's advisory framing (loose correctly stays advisory, [README.md](docs/rfcs/0002-risk-based-strictness-policy/README.md#L244-L245)). No overpromise.
+
+**QA/QC — no code/security regression.** QA's narrator→devops handoff for R2∩R6 ([README.md](docs/rfcs/0002-risk-based-strictness-policy/README.md#L141-L146)) actually *strengthens* security: the allowlist keeps narrator at R0/R1/R6 and devops at R0–R5, so no single agent holds both R2 and R6 — the single-pusher invariant is preserved under deny-by-default. QC's short-form `ask` + inline redaction scan keeps redaction on every outward path (architect/narrator domain; no code seam regressed).
+
+**Q3 residual — unchanged, accepted.** Ship `guarded` + wording-drop; scoped tokens → RFC-0003; residual MEDIUM, consistent with rev 2 labeling.
+
+**New concerns: none — approval current @ rev 3.**
+
+---
+
 ## Round 2 — 2026-06-12 — reviewed revision 2 — verdict: approve
 
 *Advisory delta review (ADR-0004): informs the maestro; does not vote or bind. Focus: feasibility + security delta vs. my Round 1 request-changes.*
