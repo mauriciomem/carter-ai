@@ -1094,12 +1094,16 @@ class TestPolicyStrictEnabled:
         raw = policy_frontmatter(_policy_config(level="strict"), "devops")
         assert "pending P3" not in raw
 
-    def test_strict_permission_bash_is_deny(self):
+    def test_strict_permission_bash_denies_destructive(self):
         block = _policy_block(
             _policy_config(level="strict", target="opencode"), "devops"
         )
-        # devops holds R3/R5 (deny at strict) -> bash denies on OpenCode.
-        assert block["permission"]["bash"] == "deny"
+        bash = block["permission"]["bash"]
+        # devops holds R3/R5 (deny at strict) -> those commands deny on OpenCode,
+        # but local shell stays available so the agent can still work.
+        assert bash["*"] == "allow"
+        assert bash["terraform apply*"] == "deny"
+        assert bash["rm -rf*"] == "deny"
 
     def test_read_only_agents_unaffected_by_strict(self):
         # architect holds only R0 (allow at every level) -> no deny leaks in.
@@ -1199,7 +1203,12 @@ class TestPolicyOpenCodePermission:
 
     def test_devops_permission_guarded(self):
         perm = _policy_block(_policy_config(target="opencode"), "devops")["permission"]
-        assert perm == {"edit": "allow", "bash": "ask", "webfetch": "allow"}
+        assert perm["edit"] == "allow"
+        assert perm["webfetch"] == "allow"
+        # devops holds R2/R3/R5 (gate->ask at guarded); local shell stays open.
+        assert perm["bash"]["*"] == "allow"
+        assert perm["bash"]["git push*"] == "ask"
+        assert perm["bash"]["rm -rf*"] == "ask"
 
     def test_edit_denied_without_local_write(self):
         perm = _policy_block(_policy_config(target="opencode"), "architect")[
@@ -1207,11 +1216,24 @@ class TestPolicyOpenCodePermission:
         ]
         assert perm["edit"] == "deny"
 
-    def test_bash_denied_without_shell_risk(self):
+    def test_local_write_agent_keeps_local_bash_denies_remote(self):
+        # The regression fix: an R0/R1 agent (engineer) must run local shell
+        # (pytest, git status/add/commit) yet cannot push/apply/destroy.
         perm = _policy_block(_policy_config(target="opencode"), "engineer")[
             "permission"
         ]
-        assert perm["bash"] == "deny"
+        assert perm["bash"]["*"] == "allow"
+        assert perm["bash"]["git push*"] == "deny"
+        assert perm["bash"]["terraform apply*"] == "deny"
+        assert perm["bash"]["rm -rf*"] == "deny"
+
+    def test_read_only_agent_bash_baseline_is_ask(self):
+        # architect holds only R0 (no local-write) -> shell prompts, dangerous deny.
+        perm = _policy_block(_policy_config(target="opencode"), "architect")[
+            "permission"
+        ]
+        assert perm["bash"]["*"] == "ask"
+        assert perm["bash"]["git push*"] == "deny"
 
     def test_webfetch_always_allowed(self):
         for role in _ALL_ROLES:
@@ -1222,7 +1244,9 @@ class TestPolicyOpenCodePermission:
         perm = _policy_block(
             _policy_config(level="loose", target="opencode"), "devops"
         )["permission"]
-        assert perm["bash"] == "allow"
+        # loose: every gate is allow, so even remote/destructive shell is allowed.
+        assert perm["bash"]["*"] == "allow"
+        assert perm["bash"]["git push*"] == "allow"
 
 
 class TestPolicyRenderedIntegration:

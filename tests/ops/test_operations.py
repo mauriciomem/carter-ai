@@ -1007,6 +1007,27 @@ class TestPolicyOverrideSubcommand:
         lines = (tmp_path / "audit.log").read_text().strip().splitlines()
         assert len(lines) == 2  # per-action, never a session-wide blanket
 
+    def test_prose_backstop_tier_records_unauthorized(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from carter.ops import carter_ops
+
+        monkeypatch.setattr(carter_ops, "AUDIT_LOG", tmp_path / "audit.log")
+        rc = carter_ops.main([
+            "policy-override",
+            "--category", "R6",
+            "--action", "post release notes",
+            "--tier", "prose-backstop",
+            "--reason", "advisory-only target",
+        ])
+        assert rc == 0
+
+        import json
+        entry = json.loads((tmp_path / "audit.log").read_text().strip())
+        assert entry["tier"] == "prose-backstop"
+        # The weakest tier still only records — it never authorizes.
+        assert entry["authorized"] is False
+
 
 class TestConfigSubcommand:
     def test_config_emit(self, capsys: pytest.CaptureFixture, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

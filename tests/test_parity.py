@@ -211,6 +211,30 @@ class TestNoFalseReadOnlyClaim:
         )
 
 
+class TestProseMatchesAllowlist:
+    """The inverse of the read-only bug: an agent whose allowlist lacks R2
+    (remote-write) must not claim 'Full access' in its Tool Access prose. On a
+    non-enforcing target the advisory prose wins, so an over-claim would let a
+    non-pusher remote-write — breaking the single-pusher invariant (only devops
+    holds R2). ADR-0005 D1/D4.
+    """
+
+    def test_non_pusher_agents_dont_claim_full_access(
+        self, static_agents_dir: Path
+    ) -> None:
+        allowlist = effective_allowlist(generate_default_config())
+        offenders = []
+        for agent in sorted(static_agents_dir.glob("carter-*.md")):
+            role = agent.stem.removeprefix("carter-")
+            holds_remote_write = allowlist.get(role, {}).get("R2", False)
+            if not holds_remote_write and "full access" in agent.read_text().lower():
+                offenders.append(agent.name)
+        assert not offenders, (
+            "non-R2 agents claim 'Full access' (prose over-claims remote-write the "
+            f"allowlist denies, ADR-0005 D1/D4): {offenders}"
+        )
+
+
 class TestStrictnessPolicyParity:
     """The baked ``policy:`` frontmatter in the global static agents (ADR-0005 D6)
     must match the shipped model. Statics carry the ``guarded`` defaults rendered

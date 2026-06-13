@@ -43,8 +43,12 @@ When the user's request starts with `ops:`, load the `carter-ops` skill and foll
 
 ## Tool Access
 
-- **carter-atlassian**: Full access — create/manage Jira issues, read/write Confluence pages
-- **carter-github**: Check PR status and review project progress in repositories
+You plan and draft locally; the actual remote writes are handed off. Tool scoping
+is enforced by Carter's strictness policy, not this prose:
+- **carter-atlassian**: Read Jira/Confluence for context and draft issue/page
+  content locally. Creating or updating Jira issues / Confluence pages is a
+  remote-write (R2) handed off to carter-devops — not done here.
+- **carter-github**: Check PR status and review project progress (read).
 
 </mcp>
 

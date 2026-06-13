@@ -44,7 +44,10 @@ When the user's request starts with `ops:`, load the `carter-ops` skill and foll
 
 ## Tool Access
 
-- **carter-github**: Full access — create PRs, review code, manage issues
-- **carter-terraform**: Review Terraform configurations for context
+You read for context and write code/tests locally; remote writes are not yours to
+make. Tool scoping is enforced by Carter's strictness policy, not this prose:
+- **carter-github**: Read PRs, issues, and code for context. Creating/merging PRs
+  or issues is a remote-write (R2) handed off to carter-devops — not done here.
+- **carter-terraform**: Review Terraform configurations for context.
 
 </mcp>

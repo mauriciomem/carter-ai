@@ -240,3 +240,36 @@ class TestCheckCliIntegration:
 
         ok = runner.invoke(main, ["check", str(tmp_path), "--accept-degraded"])
         assert ok.exit_code == 0, ok.output
+
+    def test_check_warns_on_redaction_contradiction(self, tmp_path):
+        runner, main = self._init(tmp_path)  # guarded, redaction on
+        cfg_path = tmp_path / ".carter" / "carter.yaml"
+        config = load_config(cfg_path)
+        config["redaction"]["enabled"] = False
+        write_config(cfg_path, config)
+        assert runner.invoke(main, ["update", str(tmp_path)]).exit_code == 0
+
+        result = runner.invoke(main, ["check", str(tmp_path)])
+        # guarded + redaction off is a contradiction → WARN, but not an error.
+        assert result.exit_code == 0, result.output
+        assert "redaction.enabled is false" in result.output
+
+    def test_init_surfaces_guarded_migration_notice(self, tmp_path):
+        from carter.cli import main
+
+        runner = CliRunner()
+        result = runner.invoke(main, ["init", str(tmp_path), "--no-git-state"])
+        assert result.exit_code == 0, result.output
+        # New installs default to guarded → the migration notice surfaces.
+        assert "Strictness policy is 'guarded'" in result.output
+
+    def test_update_to_loose_is_quiet(self, tmp_path):
+        runner, main = self._init(tmp_path)
+        cfg_path = tmp_path / ".carter" / "carter.yaml"
+        config = load_config(cfg_path)
+        config["policy"]["level"] = "loose"
+        write_config(cfg_path, config)
+        result = runner.invoke(main, ["update", str(tmp_path)])
+        assert result.exit_code == 0, result.output
+        # loose restores advisory-only behaviour → no migration notice.
+        assert "Strictness policy is" not in result.output

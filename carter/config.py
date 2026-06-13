@@ -308,8 +308,13 @@ _OPENCODE_GATE: dict[str, str] = {
     "deny": "deny",
 }
 
-# `bash` permission keys off the shell-risk categories an agent actually holds.
-_BASH_RISK_CATEGORIES: tuple[str, ...] = ("R2", "R3", "R5")
+# Representative shell commands per shell-risk category, used to gate/deny the
+# OpenCode `bash` path with command globs so it can't bypass the allowlist.
+_BASH_COMMANDS: dict[str, tuple[str, ...]] = {
+    "R2": ("git push*",),
+    "R3": ("terraform apply*", "terraform destroy*", "kubectl apply*", "helm upgrade*"),
+    "R5": ("rm -rf*", "git reset --hard*", "git push --force*"),
+}
 
 # Human-readable label per risk category, for the maestro policy gate table.
 RISK_LABELS: dict[str, str] = {
@@ -336,20 +341,38 @@ def _emit_level(level: str) -> str:
 
 def _opencode_permission(
     allowed: list[str], gates: dict[str, str]
-) -> dict[str, str]:
+) -> dict[str, Any]:
     """Best-effort OpenCode ``permission`` map from an agent's allowlist x gates.
 
-    Minimal deterministic mapping (ADR-0005 D3): ``edit`` follows local-write (R1),
-    ``bash`` follows the strictest shell-risk gate the agent holds (R2/R3/R5), and
-    ``webfetch`` is always allowed. Carter ``gate`` degrades to ``ask``.
+    ``edit`` follows local-write (R1). ``bash`` is a command-glob map: local shell
+    stays available (an R1 agent needs ``pytest``/local ``git``; a read-only agent
+    gets ``ask``), while commands in a shell-risk category the agent does NOT hold
+    are denied — so the bash path can't bypass the declared allowlist. ``webfetch``
+    is always allowed. Carter ``gate`` degrades to ``ask`` (OpenCode has no gate).
     """
     edit = "allow" if "R1" in allowed else "deny"
-    held = [cat for cat in _BASH_RISK_CATEGORIES if cat in allowed]
-    if held:
-        bash = _OPENCODE_GATE[most_restrictive_gate(gates[cat] for cat in held)]
-    else:
-        bash = "deny"
-    return {"edit": edit, "bash": bash, "webfetch": "allow"}
+    return {
+        "edit": edit,
+        "bash": _opencode_bash(allowed, gates),
+        "webfetch": "allow",
+    }
+
+
+def _opencode_bash(allowed: list[str], gates: dict[str, str]) -> dict[str, str]:
+    """OpenCode ``bash`` permission as ``{command-glob: action}`` rules.
+
+    The ``*`` baseline (first, lowest precedence — OpenCode applies the last
+    matching rule) allows local shell for a local-write agent, or ``ask`` for a
+    read-only one. Each shell-risk command then resolves to its category's gate if
+    the agent holds it, or ``deny`` if not.
+    """
+    baseline = "allow" if "R1" in allowed else "ask"
+    rules: dict[str, str] = {"*": baseline}
+    for cat, commands in _BASH_COMMANDS.items():
+        verdict = _OPENCODE_GATE[gates[cat]] if cat in allowed else "deny"
+        for cmd in commands:
+            rules[cmd] = verdict
+    return rules
 
 
 def _gates_for(
