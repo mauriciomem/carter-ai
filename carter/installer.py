@@ -276,6 +276,10 @@ REQUIRED_ENV_VARS = (
     "ATLASSIAN_URL",
 )
 
+# The MCP servers Carter wires into every target. Single source of truth so the
+# install and uninstall paths can never diverge (RFC-0002 / ADR-0005 D5).
+MCP_SERVERS = ("github", "terraform", "atlassian")
+
 
 def _which(cmd: str) -> str | None:
     return shutil.which(cmd)
@@ -788,7 +792,7 @@ def configure_mcp_servers(
 ) -> int:
     log_step("Configuring MCP servers...")
     count = 0
-    servers = ["github", "terraform", "atlassian"]
+    servers = list(MCP_SERVERS)
 
     if "copilot" in targets:
         # VS Code settings.json — only when a VS Code config dir actually exists,
@@ -945,7 +949,7 @@ def uninstall(targets: list[str], base_dir: Path | None, prereqs: dict[str, bool
         # Copilot CLI
         if prereqs.get("copilot", False) and not base_dir:
             log_step("Removing MCP servers (Copilot CLI)...")
-            for server in ["github", "terraform", "atlassian"]:
+            for server in MCP_SERVERS:
                 name = f"carter-{server}"
                 try:
                     subprocess.run(

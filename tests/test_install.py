@@ -332,6 +332,26 @@ class TestMCPMerging:
 
 
 # ──────────────────────────────────────────────────────────────────────────────
+# MCP server list — single source (D5)
+# ──────────────────────────────────────────────────────────────────────────────
+
+
+class TestMCPServerSingleSource:
+    """D5 (RFC-0002): the MCP server triple must come from one module constant,
+    not be hardcoded separately in install and uninstall (drift risk).
+    """
+
+    def test_mcp_servers_constant_is_the_triple(self) -> None:
+        assert tuple(install.MCP_SERVERS) == ("github", "terraform", "atlassian")
+
+    def test_server_triple_not_hardcoded_twice(self) -> None:
+        """Both install and uninstall must reference install.MCP_SERVERS — the
+        literal list may not be hardcoded anywhere in the module."""
+        src = Path(install.__file__).read_text()
+        assert '["github", "terraform", "atlassian"]' not in src
+
+
+# ──────────────────────────────────────────────────────────────────────────────
 # JSONC parsing
 # ──────────────────────────────────────────────────────────────────────────────
 
