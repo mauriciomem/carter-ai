@@ -190,6 +190,9 @@ class TestCheckCliIntegration:
         config = load_config(cfg_path)
         config["policy"]["level"] = "strict"
         write_config(cfg_path, config)
+        # Re-emit agents at the new level so there is no drift — isolating the
+        # hard-ack check (changing policy.level requires `carter update`).
+        assert runner.invoke(main, ["update", str(tmp_path)]).exit_code == 0
 
         failed = runner.invoke(main, ["check", str(tmp_path)])
         assert failed.exit_code == 1, failed.output

@@ -877,11 +877,14 @@ class TestPolicyGateTable:
         gates = {r["gate"] for r in policy_gate_table({"policy": {"level": "loose"}})}
         assert gates == {"allow"}
 
-    def test_strict_table_held_to_guarded_no_deny(self):
+    def test_strict_table_emits_deny(self):
+        """P2->P3 gate is open (step 9): strict now emits deny for R3/R5."""
         from carter.config import policy_gate_table
 
-        gates = {r["gate"] for r in policy_gate_table({"policy": {"level": "strict"}})}
-        assert "deny" not in gates  # strict deny held by the P2->P3 gate (step 9)
+        gates = {r["category"]: r["gate"] for r in policy_gate_table({"policy": {"level": "strict"}})}
+        assert gates["R3"] == "deny"
+        assert gates["R5"] == "deny"
+        assert gates["R2"] == "gate"
 
     def test_missing_policy_defaults_loose(self):
         from carter.config import policy_gate_table
@@ -1073,26 +1076,76 @@ class TestPolicyFrontmatterModel:
             assert "policy" in block
 
 
-class TestPolicyStrictHeldForP3:
-    """``strict`` enforcement (deny maps) is held by the P2->P3 gate (step 9)."""
+class TestPolicyStrictEnabled:
+    """P2->P3 gate open (step 9): ``strict`` emits the real deny maps, backed by
+    the step-7 lint (hard ack) and the step-8 escape hatch."""
 
-    def test_strict_does_not_emit_deny_gates(self):
+    def test_strict_emits_deny_gates(self):
         block = _policy_block(_policy_config(level="strict"), "devops")
-        assert "deny" not in set(block["policy"]["gates"].values())
+        gates = block["policy"]["gates"]
+        assert gates["R3"] == "deny"
+        assert gates["R5"] == "deny"
 
-    def test_strict_clamps_level_to_guarded(self):
+    def test_strict_level_is_strict(self):
         block = _policy_block(_policy_config(level="strict"), "devops")
-        assert block["policy"]["level"] == "guarded"
+        assert block["policy"]["level"] == "strict"
 
-    def test_strict_carries_pending_marker(self):
+    def test_strict_has_no_pending_marker(self):
         raw = policy_frontmatter(_policy_config(level="strict"), "devops")
-        assert "strict pending P3" in raw
+        assert "pending P3" not in raw
 
-    def test_strict_permission_bash_not_deny(self):
+    def test_strict_permission_bash_is_deny(self):
         block = _policy_block(
             _policy_config(level="strict", target="opencode"), "devops"
         )
-        assert block["permission"]["bash"] != "deny"
+        # devops holds R3/R5 (deny at strict) -> bash denies on OpenCode.
+        assert block["permission"]["bash"] == "deny"
+
+    def test_read_only_agents_unaffected_by_strict(self):
+        # architect holds only R0 (allow at every level) -> no deny leaks in.
+        block = _policy_block(_policy_config(level="strict"), "architect")
+        assert set(block["policy"]["gates"].values()) == {"allow"}
+
+
+class TestStrictGateMatrix:
+    """Step 9: strict emission + lint across targets (the P2->P3 gate proof).
+    Runtime denial itself is out of scope (Q17) — we prove emission + lint."""
+
+    def _installed(self, config: dict) -> dict:
+        return {
+            role: yaml.safe_load(policy_frontmatter(config, role))
+            for role in _ALL_ROLES
+        }
+
+    def test_strict_on_opencode_lints_clean(self):
+        from carter.scaffold import lint_policy
+
+        cfg = _policy_config(level="strict", target="opencode")
+        errors, _ = lint_policy(cfg, self._installed(cfg))
+        assert errors == []  # OpenCode enforces -> no hard-ack needed
+
+    def test_strict_on_copilot_fails_closed(self):
+        from carter.scaffold import lint_policy
+
+        cfg = _policy_config(level="strict", target="copilot")
+        errors, _ = lint_policy(cfg, self._installed(cfg))
+        assert any("accept-degraded" in e for e in errors)
+
+    def test_strict_on_copilot_passes_with_ack(self):
+        from carter.scaffold import lint_policy
+
+        cfg = _policy_config(level="strict", target="copilot")
+        errors, warnings = lint_policy(cfg, self._installed(cfg), accept_degraded=True)
+        assert errors == []
+        assert any("degrades to advisory" in w for w in warnings)
+
+    def test_strict_emitted_frontmatter_lints_without_drift(self):
+        from carter.scaffold import lint_policy
+
+        cfg = _policy_config(level="strict", target="opencode")
+        errors, _ = lint_policy(cfg, self._installed(cfg))
+        # The emitted strict frontmatter matches the strict model — no drift.
+        assert not [e for e in errors if "drifted" in e]
 
 
 class TestPolicyTargetShaping:

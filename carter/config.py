@@ -292,12 +292,14 @@ RISK_LABELS: dict[str, str] = {
 
 
 def _emit_level(level: str) -> str:
-    """Resolve the strictness level Carter emits today.
+    """The strictness level Carter emits.
 
-    ``strict`` enforcement (deny maps) is held by the P2->P3 gate (step 9); until
-    then a strict config emits the ``guarded`` map so no premature deny ships.
+    The P2->P3 gate is open (RFC-0002 step 9): ``strict`` emits its real gate map
+    (R3/R5 ``deny``), backed by the `carter check` lint (hard ack on a
+    non-enforcing target) and the single-action override ledger. This is the
+    identity today; it remains a single seam so a future level remap has one home.
     """
-    return "guarded" if level == "strict" else level
+    return level
 
 
 def _opencode_permission(
@@ -329,7 +331,8 @@ def policy_frontmatter(config: dict[str, Any], role: str) -> str:
     - ``tools`` (copilot/all targets): the per-agent MCP server scope, when any.
     - ``permission`` (opencode/all targets): the best-effort native map.
 
-    ``strict`` is clamped to the ``guarded`` map (with a pending marker) until P3.
+    The P2->P3 gate is open (step 9): ``strict`` emits its real gate map, gated
+    operationally by the `carter check` hard ack on a non-enforcing target.
     """
     policy = config.get("policy") or {}
     level = policy.get("level", "loose")
@@ -356,10 +359,6 @@ def policy_frontmatter(config: dict[str, Any], role: str) -> str:
         block["permission"] = _opencode_permission(allowed, gates)
 
     text = yaml.dump(block, sort_keys=False, default_flow_style=None).rstrip("\n")
-    if level == "strict":
-        text = text.replace(
-            "level: guarded", "level: guarded  # strict pending P3", 1
-        )
     return text
 
 
