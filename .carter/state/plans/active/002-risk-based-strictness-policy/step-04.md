@@ -1,8 +1,8 @@
 ---
 step: 4
-status: pending
+status: done
 depends_on: [1]
-files_modified: [carter/scaffold.py, templates/agents/base_agent.md.j2, tests/test_scaffold.py]
+files_modified: [carter/config.py, carter/scaffold.py, templates/base_agent.md.j2, agents/carter-maestro.md, agents/carter-architect.md, agents/carter-engineer.md, agents/carter-devops.md, agents/carter-pm.md, agents/carter-learner.md, agents/carter-narrator.md, tests/test_scaffold.py, tests/test_parity.py]
 ---
 
 ## Step 4 — Per-target frontmatter emission (P2)
