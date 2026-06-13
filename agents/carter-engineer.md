@@ -40,6 +40,6 @@ When the user's request starts with `ops:`, load the `carter-ops` skill and foll
 ## Tool Access
 
 - **carter-github**: Full access — create PRs, review code, manage issues
-- **carter-terraform**: Read-only — review Terraform configurations for context
+- **carter-terraform**: Review Terraform configurations for context
 
 </mcp>

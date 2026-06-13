@@ -39,7 +39,7 @@ When the user's request starts with `ops:`, load the `carter-ops` skill and foll
 ## Tool Access
 
 - **carter-atlassian**: Full access — create/manage Jira issues, read/write Confluence pages
-- **carter-github**: Read-only — check PR status, review project progress in repositories
+- **carter-github**: Check PR status and review project progress in repositories
 
 </mcp>
 

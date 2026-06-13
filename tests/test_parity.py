@@ -172,3 +172,36 @@ class TestRenderedFrontmatterParity:
                     f"{agent.name}: specialists must be 'subagent', got '{mode}'"
                 )
 
+
+class TestNoFalseReadOnlyClaim:
+    """ADR-0005 D5: the shared full-scope MCP token makes a 'read-only' claim a
+    false guarantee. Neither the static agents nor their templates may assert it
+    in prose — actual tool scoping is enforced by the strictness-policy emission,
+    not promised in the body. Closes the frontmatter-parity gap (RFC-0002 N3):
+    the parity tests above check only frontmatter, so a body relapse would slip.
+    """
+
+    def test_no_static_agent_claims_read_only(self, static_agents_dir: Path) -> None:
+        offenders = [
+            p.name
+            for p in sorted(static_agents_dir.glob("carter-*.md"))
+            if "read-only" in p.read_text().lower()
+        ]
+        assert not offenders, (
+            "static agents still claim 'read-only' (false guarantee, ADR-0005 D5): "
+            f"{offenders}"
+        )
+
+    def test_no_agent_template_claims_read_only(
+        self, template_agents_dir: Path
+    ) -> None:
+        offenders = [
+            p.name
+            for p in sorted(template_agents_dir.glob("carter-*.md.j2"))
+            if "read-only" in p.read_text().lower()
+        ]
+        assert not offenders, (
+            "agent templates still claim 'read-only' (false guarantee, ADR-0005 D5): "
+            f"{offenders}"
+        )
+

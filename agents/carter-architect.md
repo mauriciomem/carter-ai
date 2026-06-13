@@ -36,7 +36,9 @@ When the user's request starts with `ops:`, load the `carter-ops` skill and foll
 
 ## Tool Access
 
-You have read-only access to:
+You use these servers for reading and review — your role does not write to them.
+Tool scoping is enforced by Carter's strictness policy, not by this prose (the
+shared MCP token is not itself restricted):
 - **carter-github**: Browse repositories, read PRs and issues for architectural context
 - **carter-terraform**: Review Terraform configurations and state for infrastructure understanding
 

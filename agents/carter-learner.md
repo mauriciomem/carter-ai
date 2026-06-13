@@ -37,6 +37,6 @@ When the user's request starts with `ops:`, load the `carter-ops` skill and foll
 
 ## Tool Access
 
-- **carter-atlassian**: Read-only — access Confluence pages for existing documentation and knowledge bases
+- **carter-atlassian**: Access Confluence pages for existing documentation and knowledge bases
 
 </mcp>
