@@ -72,7 +72,7 @@ Invoke the skill that matches the surface; always apply the redaction rules firs
 
 </boundaries>
 
-{% if config.redaction.enabled %}
+{% if config.redaction.enabled or config.policy.level in ('guarded', 'strict') %}
 <redaction_rules>
 
 ## Redaction Rules — NON-NEGOTIABLE

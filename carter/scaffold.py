@@ -85,14 +85,18 @@ def agent_filename(role: str, config: dict[str, Any]) -> str:
 def config_warnings(config: dict[str, Any]) -> list[str]:
     """Return non-fatal configuration warnings for a workspace config.
 
-    Currently flags the redaction gap: if the narrator agent is enabled but
-    ``redaction.enabled`` is false, the scaffolded narrator carries no redaction
-    rules even though it is the agent Maestro routes external-facing content to.
+    Flags the redaction gap: if the narrator is enabled but ``redaction.enabled``
+    is false *at* ``loose``, the scaffolded narrator carries no redaction rules
+    even though Maestro routes external-facing content to it. At ``guarded`` and
+    ``strict`` the redaction pass is forced regardless (the narrator template
+    renders the rules), so the gap does not exist there — the policy lint instead
+    surfaces the ``redaction.enabled: false`` contradiction (Q16).
     """
     warnings: list[str] = []
     narrator_on = "narrator" in config.get("agents", [])
     redaction_on = bool(config.get("redaction", {}).get("enabled", False))
-    if narrator_on and not redaction_on:
+    level = (config.get("policy") or {}).get("level", "loose")
+    if narrator_on and not redaction_on and level == "loose":
         warnings.append(
             "narrator is enabled but redaction.enabled is false — the scaffolded "
             "narrator will have NO redaction rules, yet Maestro still routes "

@@ -574,12 +574,29 @@ class TestNarrator:
         content = results["carter-narrator.md"]
         assert "<redaction_rules>" in content
 
-    def test_redaction_rules_absent_when_disabled(self, default_config, env):
-        """Redaction rules are absent when redaction is disabled."""
+    def test_redaction_rules_absent_when_disabled_and_loose(self, default_config, env):
+        """At `loose`, redaction rules are absent when redaction is disabled."""
         default_config["redaction"]["enabled"] = False
+        default_config["policy"]["level"] = "loose"
         results = render_agents(default_config, env)
         content = results["carter-narrator.md"]
         assert "<redaction_rules>" not in content
+
+    def test_redaction_forced_at_guarded_despite_disabled(self, default_config, env):
+        """must_have #5: `guarded` forces a redaction pass even with redaction off."""
+        default_config["redaction"]["enabled"] = False
+        default_config["policy"]["level"] = "guarded"
+        results = render_agents(default_config, env)
+        content = results["carter-narrator.md"]
+        assert "<redaction_rules>" in content
+
+    def test_redaction_forced_at_strict_despite_disabled(self, default_config, env):
+        """must_have #5: `strict` forces a redaction pass even with redaction off."""
+        default_config["redaction"]["enabled"] = False
+        default_config["policy"]["level"] = "strict"
+        results = render_agents(default_config, env)
+        content = results["carter-narrator.md"]
+        assert "<redaction_rules>" in content
 
     def test_all_categories_render(self, default_config, env):
         """All configured redaction categories appear in output."""
@@ -829,10 +846,20 @@ class TestConfigWarnings:
 
         cfg = generate_default_config()
         cfg["redaction"]["enabled"] = False
+        cfg["policy"]["level"] = "loose"  # only loose leaves the narrator ruleless
         warnings = config_warnings(cfg)
         assert len(warnings) == 1
         assert "redaction" in warnings[0].lower()
         assert "narrator" in warnings[0].lower()
+
+    def test_no_config_warning_at_guarded_redaction_off(self):
+        # At guarded the redaction pass is forced, so the narrator DOES carry
+        # rules — config_warnings stays quiet (the lint surfaces the contradiction).
+        from carter.scaffold import config_warnings
+
+        cfg = generate_default_config()  # guarded
+        cfg["redaction"]["enabled"] = False
+        assert config_warnings(cfg) == []
 
     def test_no_warning_when_both_on(self):
         from carter.scaffold import config_warnings
