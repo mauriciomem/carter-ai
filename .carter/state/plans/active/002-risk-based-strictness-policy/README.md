@@ -43,7 +43,7 @@ enforcement until P3 is green. Every step is TDD-first (red → green → refact
 ## Steps
 | # | Step | Status | File |
 |---|------|--------|------|
-| 1 | P1 policy model — config block + R0–R6 taxonomy + tool→risk map (dict-shaped) | pending | step-01.md |
+| 1 | P1 policy model — config block + R0–R6 taxonomy + tool→risk map (dict-shaped) | done | step-01.md |
 | 2 | P1 drop the false "read-only" prose (4 statics + templates) | pending | step-02.md |
 | 3 | P1 frontmatter schema docs (policy + per-agent + global-policy) | pending | step-03.md |
 | 4 | P2 per-target frontmatter emission (permission / tools: / MCP scope) | pending | step-04.md |

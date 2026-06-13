@@ -1,6 +1,6 @@
 ---
 step: 1
-status: pending
+status: done
 depends_on: []
 files_modified: [carter/config.py, tests/test_config.py]
 ---
