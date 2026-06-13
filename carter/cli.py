@@ -10,6 +10,7 @@ from carter.plans import validate_checkpoint, validate_plans_dir
 from carter.scaffold import (    agent_filename,
     config_warnings,
     create_env,
+    policy_notice,
     render_agents,
     render_instructions,
     write_rendered_files,
@@ -141,6 +142,10 @@ def init(
     for warning in config_warnings(config):
         click.echo(f"⚠  {warning}", err=True)
 
+    notice = policy_notice(config)
+    if notice:
+        click.echo(f"ℹ  {notice}")
+
     click.echo(f"Workspace '{workspace_name}' initialized ({mode} mode)")
 
 
@@ -175,6 +180,9 @@ def update(target_dir: str, dry_run: bool):
     _render_and_write(target, config, env)
     for warning in config_warnings(config):
         click.echo(f"⚠  {warning}", err=True)
+    notice = policy_notice(config)
+    if notice:
+        click.echo(f"ℹ  {notice}")
     click.echo("Templates re-rendered from carter.yaml")
 
 

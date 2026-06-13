@@ -364,12 +364,16 @@ class TestScaffold:
         maestro = results["carter-maestro.md"]
         assert "<interaction_rules>" in maestro
 
-    def test_skepticism_off_no_interaction_rules(self, default_config, env):
-        """Off skepticism omits interaction_rules."""
+    def test_skepticism_off_keeps_policy_drops_calibration(self, default_config, env):
+        """Off skepticism keeps the always-on policy gate table (in
+        interaction_rules) but drops only the Skepticism Calibration sub-section
+        (RFC-0002 P2 step 5 — the policy gate is independent of skepticism)."""
         default_config["personality"]["skepticism"] = "off"
         results = render_agents(default_config, env)
         maestro = results["carter-maestro.md"]
-        assert "<interaction_rules>" not in maestro
+        assert "<interaction_rules>" in maestro
+        assert "Strictness Policy" in maestro
+        assert "Skepticism Calibration" not in maestro
 
 
 # ─── Quality Gate Tests ──────────────────────────────────────────────────────
@@ -843,6 +847,102 @@ class TestConfigWarnings:
         cfg["agents"] = [a for a in cfg["agents"] if a != "narrator"]
         cfg["redaction"]["enabled"] = False
         assert config_warnings(cfg) == []
+
+
+# ─── Policy gate table + migration notice + R6 handoff (P2 step 5) ────────────
+
+
+class TestPolicyGateTable:
+    """`policy_gate_table` drives the always-on maestro risk/gate table."""
+
+    def test_guarded_table_has_all_seven_categories(self):
+        from carter.config import policy_gate_table
+
+        rows = policy_gate_table({"policy": {"level": "guarded"}})
+        assert [r["category"] for r in rows] == ["R0", "R1", "R2", "R3", "R4", "R5", "R6"]
+        assert all(r["label"] for r in rows)
+
+    def test_guarded_gates_match_taxonomy(self):
+        from carter.config import policy_gate_table
+
+        gates = {r["category"]: r["gate"] for r in policy_gate_table({"policy": {"level": "guarded"}})}
+        assert gates == {
+            "R0": "allow", "R1": "allow", "R2": "ask", "R3": "gate",
+            "R4": "ask", "R5": "gate", "R6": "gate",
+        }
+
+    def test_loose_table_is_all_allow(self):
+        from carter.config import policy_gate_table
+
+        gates = {r["gate"] for r in policy_gate_table({"policy": {"level": "loose"}})}
+        assert gates == {"allow"}
+
+    def test_strict_table_held_to_guarded_no_deny(self):
+        from carter.config import policy_gate_table
+
+        gates = {r["gate"] for r in policy_gate_table({"policy": {"level": "strict"}})}
+        assert "deny" not in gates  # strict deny held by the P2->P3 gate (step 9)
+
+    def test_missing_policy_defaults_loose(self):
+        from carter.config import policy_gate_table
+
+        gates = {r["gate"] for r in policy_gate_table({})}
+        assert gates == {"allow"}
+
+
+class TestMaestroPolicyTable:
+    """The maestro renders the policy gate table regardless of skepticism."""
+
+    def _render_maestro(self, skepticism: str) -> str:
+        cfg = generate_default_config()
+        cfg["agent_suffix"] = ""
+        cfg["personality"]["skepticism"] = skepticism
+        return render_agents(cfg, create_env())["carter-maestro.md"]
+
+    def test_table_renders_when_skepticism_off(self):
+        body = self._render_maestro("off")
+        assert "Strictness Policy" in body
+        assert "remote-write" in body  # a taxonomy row is present
+
+    def test_table_renders_when_skepticism_scaled(self):
+        body = self._render_maestro("scaled")
+        assert "Strictness Policy" in body
+        # skepticism calibration remains, as a tone sub-section
+        assert "Skepticism Calibration" in body
+
+    def test_skepticism_off_drops_only_calibration_not_policy(self):
+        body = self._render_maestro("off")
+        assert "Skepticism Calibration" not in body
+        assert "Strictness Policy" in body
+
+
+class TestPolicyNotice:
+    """`policy_notice` surfaces the 'you're guarded now' migration message at P2."""
+
+    def test_notice_fires_for_guarded(self):
+        from carter.scaffold import policy_notice
+
+        msg = policy_notice(generate_default_config())  # new install -> guarded
+        assert msg is not None
+        assert "guarded" in msg.lower()
+
+    def test_no_notice_for_loose(self):
+        from carter.scaffold import policy_notice
+
+        cfg = generate_default_config()
+        cfg["policy"]["level"] = "loose"
+        assert policy_notice(cfg) is None
+
+
+class TestNarratorR6Handoff:
+    """The narrator template wires the R6 overlay: author + redact -> devops transmits."""
+
+    def test_narrator_describes_devops_transmit_handoff(self):
+        cfg = generate_default_config()
+        cfg["agent_suffix"] = ""
+        body = render_agents(cfg, create_env())["carter-narrator.md"]
+        assert "devops" in body.lower()
+        assert "transmit" in body.lower()
 
 
 # ─── carter init CLI flags (--target / --agent-suffix) ───────────────────────

@@ -267,4 +267,23 @@ class TestStrictnessPolicyParity:
                 f"{agent.name}: static (copilot default) must not bake opencode permission"
             )
 
+    def test_static_maestro_carries_policy_gate_table(
+        self, static_agents_dir: Path
+    ) -> None:
+        """The global static maestro body must carry the always-on policy gate
+        table (ADR-0005 D6) — frontmatter parity can't catch a body relapse."""
+        body = (static_agents_dir / "carter-maestro.md").read_text()
+        assert "Strictness Policy" in body
+        assert "external-publish" in body  # R6 row present
+        assert "narrator→devops handoff" in body  # R6 overlay wired
+
+    def test_static_narrator_carries_r6_handoff(
+        self, static_agents_dir: Path
+    ) -> None:
+        """The global static narrator body must wire the R6 author/transmit
+        handoff (ADR-0005 D4) — narrator authors + redacts, devops transmits."""
+        body = (static_agents_dir / "carter-narrator.md").read_text().lower()
+        assert "transmit" in body
+        assert "devops" in body
+
 

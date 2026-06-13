@@ -279,6 +279,17 @@ _OPENCODE_GATE: dict[str, str] = {
 # `bash` permission keys off the shell-risk categories an agent actually holds.
 _BASH_RISK_CATEGORIES: tuple[str, ...] = ("R2", "R3", "R5")
 
+# Human-readable label per risk category, for the maestro policy gate table.
+RISK_LABELS: dict[str, str] = {
+    "R0": "read",
+    "R1": "local-write",
+    "R2": "remote-write",
+    "R3": "infra-mutate",
+    "R4": "secret-access",
+    "R5": "destructive",
+    "R6": "external-publish",
+}
+
 
 def _emit_level(level: str) -> str:
     """Resolve the strictness level Carter emits today.
@@ -350,6 +361,20 @@ def policy_frontmatter(config: dict[str, Any], role: str) -> str:
             "level: guarded", "level: guarded  # strict pending P3", 1
         )
     return text
+
+
+def policy_gate_table(config: dict[str, Any]) -> list[dict[str, str]]:
+    """Rows for the maestro's always-on risk/gate table at the active level.
+
+    One row per category R0-R6: ``category`` id, human ``label``, and the active
+    level's ``gate``. ``strict`` is clamped to the ``guarded`` map until P3 (the
+    P2->P3 gate), so no ``deny`` row ships yet.
+    """
+    level = _emit_level((config.get("policy") or {}).get("level", "loose"))
+    return [
+        {"category": cat, "label": RISK_LABELS[cat], "gate": RISK_TAXONOMY[cat][level]}
+        for cat in ("R0", "R1", "R2", "R3", "R4", "R5", "R6")
+    ]
 
 
 def generate_default_config(

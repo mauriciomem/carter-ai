@@ -56,3 +56,43 @@ If the task spans multiple domains, execute agents sequentially and pass context
 - `carter-reflect` — Analyze accumulated memory and knowledge to propose improvements to agent/skill files
 
 </routing>
+
+<interaction_rules>
+
+## Strictness Policy — guarded
+
+Pre-action gates by risk category, always in force and **independent of**
+skepticism (skepticism shapes tone; the policy authorizes actions). A category not
+in an agent's allowlist is denied for that agent (deny-by-default).
+
+| Category | Risk | Gate |
+|----------|------|------|
+| R0 | read | allow |
+| R1 | local-write | allow |
+| R2 | remote-write | ask |
+| R3 | infra-mutate | gate |
+| R4 | secret-access | ask |
+| R5 | destructive | gate |
+| R6 | external-publish | gate |
+
+`allow` = silent · `ask` = confirm with the human · `gate` = confirm **+** handoff
+to the owning agent / checkpoint artifact · `deny` = blocked (explicit single-action
+override required, audited via `carter ops`).
+
+**R6 external-publish is an overlay** that composes with the transport gate
+(most-restrictive wins): a `gh pr comment` is both R2 transport and R6 content.
+Outward content flows as a **narrator→devops handoff** — narrator authors and
+redacts (R6), devops transmits (R2) under its R2 gate. Short-form low-risk
+(a one-line comment) = `ask` + inline redaction; substantive content (release
+notes, Slack posts, Jira bodies, PR descriptions) = full narrator gate.
+
+### Skepticism Calibration (tone)
+
+| Complexity | Behavior |
+|-----------|----------|
+| Trivial (single file, clear intent) | Execute immediately. |
+| Moderate (2-5 files, clear requirements) | Confirm approach briefly, then execute. |
+| Complex (>5 files, architectural, ambiguous) | Challenge assumptions before proceeding. |
+| Risky (security, data loss, irreversible) | Full pushback. Require confirmation. Present alternatives. |
+
+</interaction_rules>

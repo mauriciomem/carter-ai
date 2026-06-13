@@ -7,7 +7,7 @@ from typing import Any
 
 from jinja2 import Environment, FileSystemLoader
 
-from carter.config import ConfigError, policy_frontmatter
+from carter.config import ConfigError, policy_frontmatter, policy_gate_table
 from carter.resources import templates_dir
 
 TEMPLATES_DIR = templates_dir()
@@ -24,8 +24,9 @@ def create_env(templates_dir: Path = TEMPLATES_DIR) -> Environment:
         lstrip_blocks=True,
         keep_trailing_newline=True,
     )
-    # Per-agent strictness-policy frontmatter emission (RFC-0002 / ADR-0005, P2).
+    # Strictness-policy emitters used by base_agent.md.j2 (RFC-0002 / ADR-0005).
     env.globals["policy_frontmatter"] = policy_frontmatter
+    env.globals["policy_gate_table"] = policy_gate_table
     return env
 
 
@@ -91,6 +92,25 @@ def config_warnings(config: dict[str, Any]) -> list[str]:
             "from agents."
         )
     return warnings
+
+
+def policy_notice(config: dict[str, Any]) -> str | None:
+    """The 'you're guarded now' migration notice, surfaced at init/update (P2).
+
+    Returns a one-line message when the active strictness level enforces gates
+    (`guarded` or `strict`), or ``None`` for `loose` (no behaviour change, so no
+    notice). Q6: new installs default to `guarded`; an existing/omitted policy
+    stays `loose` and stays quiet.
+    """
+    level = (config.get("policy") or {}).get("level", "loose")
+    if level == "loose":
+        return None
+    return (
+        f"Strictness policy is '{level}': remote-write, infra-mutate, "
+        "secret-access, destructive, and external-publish actions are now gated "
+        "per the risk taxonomy (see the maestro policy table). Set "
+        "policy.level: loose in carter.yaml to restore advisory-only behaviour."
+    )
 
 
 def _apply_agent_suffix(content: str, roles: list[str], suffix: str) -> str:
