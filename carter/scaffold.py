@@ -197,17 +197,16 @@ def lint_policy(
         # advisory policy block, so lint them against the same model.
         expected_native = policy_native_keys(config, role)
         for key in ("tools", "permission"):
-            if emitted is not None and emitted.get("allow") is not None:
-                if (key in expected_native) != (key in (frontmatter or {})):
-                    errors.append(
-                        f"{role}: emitted {key} presence drifted from the declared "
-                        f"target policy"
-                    )
-                elif key in expected_native and (frontmatter or {}).get(key) != expected_native[key]:
-                    errors.append(
-                        f"{role}: emitted {key} {(frontmatter or {}).get(key)} drifted "
-                        f"from declared {expected_native[key]}"
-                    )
+            if (key in expected_native) != (key in (frontmatter or {})):
+                errors.append(
+                    f"{role}: emitted {key} presence drifted from the declared "
+                    f"target policy"
+                )
+            elif key in expected_native and (frontmatter or {}).get(key) != expected_native[key]:
+                errors.append(
+                    f"{role}: emitted {key} {(frontmatter or {}).get(key)} drifted "
+                    f"from declared {expected_native[key]}"
+                )
 
     # Q15 HARD ACK: strict on a non-enforcing target must be explicitly accepted.
     if level == "strict":

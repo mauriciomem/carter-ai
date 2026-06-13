@@ -136,6 +136,34 @@ class TestPolicyLevelValidation:
             path.write_text(_yaml.dump(cfg))
             assert load_config(path)["policy"]["level"] == level
 
+    def _write(self, tmp_path, policy):
+        import yaml as _yaml
+
+        cfg = {
+            "version": "2",
+            "workspace": {"name": "x", "mode": "umbrella"},
+            "identity": {"git_account": "y"},
+            "agents": ["maestro"],
+            "policy": policy,
+        }
+        path = tmp_path / "carter.yaml"
+        path.write_text(_yaml.dump(cfg))
+        return path
+
+    def test_invalid_override_gate_raises(self, tmp_path):
+        from carter.config import ConfigError, load_config
+
+        path = self._write(tmp_path, {"level": "guarded", "overrides": {"R2": "nuke"}})
+        with pytest.raises(ConfigError, match="overrides"):
+            load_config(path)
+
+    def test_invalid_override_category_raises(self, tmp_path):
+        from carter.config import ConfigError, load_config
+
+        path = self._write(tmp_path, {"level": "guarded", "overrides": {"R9": "deny"}})
+        with pytest.raises(ConfigError, match="category"):
+            load_config(path)
+
 
 class TestShippedMapsAreDictShaped:
     def test_taxonomy_is_dict_with_all_levels(self):

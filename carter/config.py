@@ -121,6 +121,11 @@ def _validate_policy(policy: Any) -> None:
             f"Invalid policy.level: {level!r}. Must be one of: {', '.join(POLICY_LEVELS)}."
         )
     for cat, gate in (policy.get("overrides") or {}).items():
+        if cat not in RISK_TAXONOMY:
+            raise ConfigError(
+                f"Invalid policy.overrides category {cat!r}. "
+                f"Must be one of: {', '.join(RISK_TAXONOMY)}."
+            )
         if gate not in GATE_SEVERITY:
             raise ConfigError(
                 f"Invalid policy.overrides[{cat!r}]: {gate!r}. "

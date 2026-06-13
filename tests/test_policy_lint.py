@@ -123,6 +123,13 @@ class TestLintNativeKeyDrift:
         errors, _ = lint_policy(cfg, _installed(cfg), accept_degraded=True)
         assert not [e for e in errors if "permission" in e.lower() or "tools" in e.lower()]
 
+    def test_overridden_install_has_no_false_drift(self):
+        # A legitimately-overridden install emits gates the lint must accept.
+        cfg = _config(level="guarded", target="opencode")
+        cfg["policy"]["overrides"] = {"R2": "deny", "R3": "ask"}
+        errors, _ = lint_policy(cfg, _installed(cfg))
+        assert errors == []
+
 
 # ─── HARD ACK (Q15): strict on a non-enforcing target fails closed ───────────
 
