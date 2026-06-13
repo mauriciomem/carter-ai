@@ -91,6 +91,39 @@ class TestLintDrift:
         assert not any("learner" in e for e in errors)
 
 
+class TestLintNativeKeyDrift:
+    """The lint must also guard the ENFORCED native keys — OpenCode ``permission``
+    and copilot ``tools`` — not only the advisory ``policy`` block (audit HIGH-2).
+    """
+
+    def test_permission_tamper_is_error(self):
+        cfg = _config(level="strict", target="opencode")
+        installed = _installed(cfg)
+        # devops bash is `deny` at strict; tamper it to a permissive value.
+        installed["devops"]["permission"]["bash"] = "allow"
+        errors, _ = lint_policy(cfg, installed, accept_degraded=True)
+        assert any("devops" in e and "permission" in e.lower() for e in errors)
+
+    def test_tools_tamper_is_error(self):
+        cfg = _config(level="guarded", target="copilot")
+        installed = _installed(cfg)
+        installed["devops"]["tools"] = ["carter-github/*", "carter-evil/*"]  # widened
+        errors, _ = lint_policy(cfg, installed)
+        assert any("devops" in e and "tools" in e.lower() for e in errors)
+
+    def test_missing_permission_on_opencode_is_error(self):
+        cfg = _config(level="guarded", target="opencode")
+        installed = _installed(cfg)
+        del installed["devops"]["permission"]
+        errors, _ = lint_policy(cfg, installed)
+        assert any("devops" in e and "permission" in e.lower() for e in errors)
+
+    def test_matching_native_keys_are_clean(self):
+        cfg = _config(level="strict", target="all")
+        errors, _ = lint_policy(cfg, _installed(cfg), accept_degraded=True)
+        assert not [e for e in errors if "permission" in e.lower() or "tools" in e.lower()]
+
+
 # ─── HARD ACK (Q15): strict on a non-enforcing target fails closed ───────────
 
 

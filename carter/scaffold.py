@@ -8,12 +8,13 @@ from typing import Any
 from jinja2 import Environment, FileSystemLoader
 
 from carter.config import (
-    RISK_TAXONOMY,
     ConfigError,
     _emit_level,
+    _gates_for,
     effective_allowlist,
     policy_frontmatter,
     policy_gate_table,
+    policy_native_keys,
 )
 from carter.resources import templates_dir
 
@@ -171,15 +172,16 @@ def lint_policy(
     level = policy.get("level", "loose")
     emit_level = _emit_level(level)
     allowlist = effective_allowlist(config)
+    overrides = policy.get("overrides")
 
-    # Drift: emitted allow/gates must match the model the scaffolder declared.
+    # Drift: emitted allow/gates + native keys must match the declared model.
     for role, frontmatter in installed.items():
         emitted = (frontmatter or {}).get("policy")
         if not emitted:
             errors.append(f"{role}: agent frontmatter is missing the policy block")
             continue
         expected_allow = [cat for cat, on in sorted(allowlist.get(role, {}).items()) if on]
-        expected_gates = {cat: RISK_TAXONOMY[cat][emit_level] for cat in expected_allow}
+        expected_gates = _gates_for(expected_allow, emit_level, overrides)
         if emitted.get("allow") != expected_allow:
             errors.append(
                 f"{role}: emitted allow {emitted.get('allow')} drifted from "
@@ -190,6 +192,22 @@ def lint_policy(
                 f"{role}: emitted gates {emitted.get('gates')} drifted from "
                 f"declared gate map {expected_gates}"
             )
+        # The native enforcement keys (OpenCode `permission`, copilot `tools`) are
+        # the ACTUALLY-enforced surface — drift here matters more than the
+        # advisory policy block, so lint them against the same model.
+        expected_native = policy_native_keys(config, role)
+        for key in ("tools", "permission"):
+            if emitted is not None and emitted.get("allow") is not None:
+                if (key in expected_native) != (key in (frontmatter or {})):
+                    errors.append(
+                        f"{role}: emitted {key} presence drifted from the declared "
+                        f"target policy"
+                    )
+                elif key in expected_native and (frontmatter or {}).get(key) != expected_native[key]:
+                    errors.append(
+                        f"{role}: emitted {key} {(frontmatter or {}).get(key)} drifted "
+                        f"from declared {expected_native[key]}"
+                    )
 
     # Q15 HARD ACK: strict on a non-enforcing target must be explicitly accepted.
     if level == "strict":

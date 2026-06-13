@@ -105,6 +105,29 @@ def _validate_agent_suffix(suffix: Any) -> None:
         )
 
 
+def _validate_policy(policy: Any) -> None:
+    """Validate the ``policy`` block at the config boundary.
+
+    Catches an unknown ``policy.level`` and an override gate that isn't a known
+    gate keyword, so a typo fails fast with a clear ``ConfigError`` instead of a
+    raw ``KeyError`` deep in rendering. ``GATE_SEVERITY``/``POLICY_LEVELS`` are
+    defined below in the policy-model section.
+    """
+    if not isinstance(policy, dict):
+        raise ConfigError(f"Invalid policy block: {policy!r} (must be a mapping)")
+    level = policy.get("level", "loose")
+    if level not in POLICY_LEVELS:
+        raise ConfigError(
+            f"Invalid policy.level: {level!r}. Must be one of: {', '.join(POLICY_LEVELS)}."
+        )
+    for cat, gate in (policy.get("overrides") or {}).items():
+        if gate not in GATE_SEVERITY:
+            raise ConfigError(
+                f"Invalid policy.overrides[{cat!r}]: {gate!r}. "
+                f"Must be one of: {', '.join(GATE_SEVERITY)}."
+            )
+
+
 def load_config(config_path: Path) -> dict[str, Any]:
     """Load and validate carter.yaml from the given path.
 
@@ -126,6 +149,7 @@ def load_config(config_path: Path) -> dict[str, Any]:
 
     merged = _merge_with_defaults(config)
     _validate_agent_suffix(merged.get("agent_suffix", ""))
+    _validate_policy(merged.get("policy", {}))
     return merged
 
 
@@ -168,6 +192,9 @@ def _deep_merge(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any
 
 # Gate vocabulary, least -> most restrictive.
 GATE_SEVERITY: dict[str, int] = {"allow": 0, "ask": 1, "gate": 2, "deny": 3}
+
+# Valid strictness levels (validated at the config boundary).
+POLICY_LEVELS: tuple[str, ...] = ("loose", "guarded", "strict")
 
 # R0-R6 risk taxonomy: category -> {level -> gate}. Fixed, shipped with Carter.
 RISK_TAXONOMY: dict[str, dict[str, str]] = {
@@ -320,6 +347,47 @@ def _opencode_permission(
     return {"edit": edit, "bash": bash, "webfetch": "allow"}
 
 
+def _gates_for(
+    allowed: list[str], emit_level: str, overrides: dict[str, str] | None = None
+) -> dict[str, str]:
+    """The gate per allowed category at ``emit_level``, with ``policy.overrides``
+    applied on top (an explicit per-category override replaces the level gate).
+    """
+    overrides = overrides or {}
+    return {
+        cat: overrides.get(cat, RISK_TAXONOMY[cat][emit_level]) for cat in allowed
+    }
+
+
+def policy_native_keys(config: dict[str, Any], role: str) -> dict[str, Any]:
+    """The target-native enforcement keys Carter emits for ``role``.
+
+    ``tools`` (copilot/all): the per-agent MCP server scope, when any.
+    ``permission`` (opencode/all): the best-effort native gate map.
+    Pure function of the model + target — the single source both
+    ``policy_frontmatter`` (emission) and ``lint_policy`` (drift detection) derive
+    these enforced keys from.
+    """
+    target = config.get("target", "copilot")
+    policy = config.get("policy") or {}
+    emit_level = _emit_level(policy.get("level", "loose"))
+    allowed = [
+        cat
+        for cat, on in sorted(effective_allowlist(config).get(role, {}).items())
+        if on
+    ]
+    gates = _gates_for(allowed, emit_level, policy.get("overrides"))
+
+    keys: dict[str, Any] = {}
+    if target in ("copilot", "all"):
+        scope = AGENT_MCP_SCOPE.get(role, [])
+        if scope:
+            keys["tools"] = [f"carter-{server}/*" for server in sorted(scope)]
+    if target in ("opencode", "all"):
+        keys["permission"] = _opencode_permission(allowed, gates)
+    return keys
+
+
 def policy_frontmatter(config: dict[str, Any], role: str) -> str:
     """Render the per-agent strictness-policy frontmatter for ``role``.
 
@@ -337,26 +405,18 @@ def policy_frontmatter(config: dict[str, Any], role: str) -> str:
     policy = config.get("policy") or {}
     level = policy.get("level", "loose")
     emit_level = _emit_level(level)
-    target = config.get("target", "copilot")
 
     allowed = [
         cat
         for cat, on in sorted(effective_allowlist(config).get(role, {}).items())
         if on
     ]
-    gates = {cat: RISK_TAXONOMY[cat][emit_level] for cat in allowed}
+    gates = _gates_for(allowed, emit_level, policy.get("overrides"))
 
     block: dict[str, Any] = {
         "policy": {"level": emit_level, "allow": allowed, "gates": gates},
     }
-
-    if target in ("copilot", "all"):
-        scope = AGENT_MCP_SCOPE.get(role, [])
-        if scope:
-            block["tools"] = [f"carter-{server}/*" for server in sorted(scope)]
-
-    if target in ("opencode", "all"):
-        block["permission"] = _opencode_permission(allowed, gates)
+    block.update(policy_native_keys(config, role))
 
     text = yaml.dump(block, sort_keys=False, default_flow_style=None).rstrip("\n")
     return text
@@ -366,13 +426,17 @@ def policy_gate_table(config: dict[str, Any]) -> list[dict[str, str]]:
     """Rows for the maestro's always-on risk/gate table at the active level.
 
     One row per category R0-R6: ``category`` id, human ``label``, and the active
-    level's ``gate``. ``strict`` is clamped to the ``guarded`` map until P3 (the
-    P2->P3 gate), so no ``deny`` row ships yet.
+    level's ``gate`` with any ``policy.overrides`` applied. The P2->P3 gate is open
+    (step 9), so ``strict`` shows the real ``deny`` rows for R3/R5.
     """
-    level = _emit_level((config.get("policy") or {}).get("level", "loose"))
+    policy = config.get("policy") or {}
+    level = _emit_level(policy.get("level", "loose"))
+    overrides = policy.get("overrides") or {}
+    cats = ("R0", "R1", "R2", "R3", "R4", "R5", "R6")
+    gates = _gates_for(list(cats), level, overrides)
     return [
-        {"category": cat, "label": RISK_LABELS[cat], "gate": RISK_TAXONOMY[cat][level]}
-        for cat in ("R0", "R1", "R2", "R3", "R4", "R5", "R6")
+        {"category": cat, "label": RISK_LABELS[cat], "gate": gates[cat]}
+        for cat in cats
     ]
 
 

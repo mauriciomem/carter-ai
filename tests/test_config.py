@@ -7,6 +7,7 @@ wholesale) merges overrides instead of wiping the shipped defaults.
 """
 from __future__ import annotations
 
+import pytest
 import yaml
 
 from carter.config import (
@@ -59,6 +60,81 @@ class TestPolicyBlock:
         cfg = generate_default_config()
         cfg["policy"]["overrides"]["R2"] = "deny"
         assert DEFAULT_CONFIG["policy"]["overrides"] == {}
+
+
+class TestPolicyOverridesAreHonored:
+    """`policy.overrides` (category -> gate) must actually change the emitted
+    gate map and the gate table — not silently no-op (audit HIGH-1)."""
+
+    def test_override_tightens_emitted_gate(self):
+        from carter.config import policy_frontmatter
+        import yaml as _yaml
+
+        cfg = generate_default_config()
+        cfg["agent_suffix"] = ""
+        cfg["policy"]["level"] = "guarded"
+        cfg["policy"]["overrides"] = {"R2": "deny"}  # tighten ask -> deny
+        block = _yaml.safe_load(policy_frontmatter(cfg, "devops"))
+        assert block["policy"]["gates"]["R2"] == "deny"
+
+    def test_override_reflected_in_gate_table(self):
+        from carter.config import policy_gate_table
+
+        rows = policy_gate_table({"policy": {"level": "guarded", "overrides": {"R3": "ask"}}})
+        gates = {r["category"]: r["gate"] for r in rows}
+        assert gates["R3"] == "ask"  # overridden from the guarded default (gate)
+
+    def test_no_override_uses_taxonomy_default(self):
+        from carter.config import policy_gate_table
+
+        rows = policy_gate_table({"policy": {"level": "guarded"}})
+        gates = {r["category"]: r["gate"] for r in rows}
+        assert gates["R2"] == "ask"  # unchanged shipped default
+
+    def test_override_only_affects_named_category(self):
+        from carter.config import policy_gate_table
+
+        rows = policy_gate_table({"policy": {"level": "guarded", "overrides": {"R2": "deny"}}})
+        gates = {r["category"]: r["gate"] for r in rows}
+        assert gates["R2"] == "deny"
+        assert gates["R3"] == "gate"  # untouched
+
+
+class TestPolicyLevelValidation:
+    """`load_config` must reject an unknown policy.level at the boundary rather
+    than crashing with a KeyError deep in rendering (audit medium)."""
+
+    def test_invalid_level_raises_config_error(self, tmp_path):
+        import yaml as _yaml
+        from carter.config import ConfigError, load_config
+
+        cfg = {
+            "version": "2",
+            "workspace": {"name": "x", "mode": "umbrella"},
+            "identity": {"git_account": "y"},
+            "agents": ["maestro"],
+            "policy": {"level": "strikt"},
+        }
+        path = tmp_path / "carter.yaml"
+        path.write_text(_yaml.dump(cfg))
+        with pytest.raises(ConfigError, match="policy.level"):
+            load_config(path)
+
+    def test_valid_levels_accepted(self, tmp_path):
+        import yaml as _yaml
+        from carter.config import load_config
+
+        for level in ("loose", "guarded", "strict"):
+            cfg = {
+                "version": "2",
+                "workspace": {"name": "x", "mode": "umbrella"},
+                "identity": {"git_account": "y"},
+                "agents": ["maestro"],
+                "policy": {"level": level},
+            }
+            path = tmp_path / f"carter-{level}.yaml"
+            path.write_text(_yaml.dump(cfg))
+            assert load_config(path)["policy"]["level"] == level
 
 
 class TestShippedMapsAreDictShaped:
