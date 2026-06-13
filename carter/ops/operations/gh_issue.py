@@ -42,7 +42,7 @@ class GhIssue(Operation):
         body = params.get("body", "")
         labels = params.get("labels", [])
         if isinstance(labels, str):
-            labels = [l.strip() for l in labels.split(",")]
+            labels = [label.strip() for label in labels.split(",")]
 
         steps = [
             f"POST /repos/{repo}/issues",
@@ -68,7 +68,7 @@ class GhIssue(Operation):
         body = params.get("body", "")
         labels = params.get("labels", [])
         if isinstance(labels, str):
-            labels = [l.strip() for l in labels.split(",")]
+            labels = [label.strip() for label in labels.split(",")]
 
         body_with_footer = append_github_footer(body, cfg) if body else ""
 

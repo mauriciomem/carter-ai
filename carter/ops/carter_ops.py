@@ -115,7 +115,7 @@ def _parse_argv(argv: list[str]) -> tuple[str, dict[str, Any], str]:
     # Normalize labels param to list
     if "labels" in params and isinstance(params["labels"], str):
         if "," in params["labels"]:
-            params["labels"] = [l.strip() for l in params["labels"].split(",")]
+            params["labels"] = [label.strip() for label in params["labels"].split(",")]
 
     return operation, params, phase
 

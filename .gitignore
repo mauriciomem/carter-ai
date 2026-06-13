@@ -31,7 +31,7 @@ Thumbs.db
 # Installer backups and manifests are user-local, not repo content
 
 # yui-soul workspace overlay (scaffolded into this repo root, not part of carter-ai).
-# Root-anchored so carter's own knowledge/, docs/rfcs/, and .github/workflows/ are unaffected.
+# Root-anchored so carter's own knowledge/, design/, docs/, and .github/workflows/ are unaffected.
 /.yui.json
 /AGENTS.md
 /PORTABILITY.md
@@ -45,3 +45,6 @@ Thumbs.db
 
 # External reference repos (vendored for inspection, not carter-ai source)
 /external/
+
+# Project scratch / pre-build notes (kept on disk, out of git — ADR-0006)
+/notes/

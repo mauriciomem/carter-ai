@@ -63,7 +63,7 @@ python -m pytest evals/test_skills.py evals/test_routing.py -q  # 28 offline eva
 
 The live evals (`evals/test_live.py`, marked `live`) require an API key and are
 **not** run in CI. The agent-generation drift check described in
-[ADR-0002](adr/0002-single-source-agent-generation.md) is deferred until the
+[ADR-0002](../design/adr/0002-single-source-agent-generation.md) is deferred until the
 static/template sources are reconciled; until then, `tests/test_parity.py` is the
 drift guardrail.
 

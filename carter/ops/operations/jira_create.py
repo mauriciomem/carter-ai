@@ -34,7 +34,7 @@ class JiraCreate(Operation):
         priority = params.get("priority", "Medium")
         labels = params.get("labels", [])
         if isinstance(labels, str):
-            labels = [l.strip() for l in labels.split(",")]
+            labels = [label.strip() for label in labels.split(",")]
 
         steps = [
             "POST /rest/api/3/issue",
@@ -63,7 +63,7 @@ class JiraCreate(Operation):
         priority = params.get("priority", "Medium")
         labels = params.get("labels", [])
         if isinstance(labels, str):
-            labels = [l.strip() for l in labels.split(",")]
+            labels = [label.strip() for label in labels.split(",")]
 
         # Append footer to description if present
         if description:

@@ -85,7 +85,7 @@ decision change, and is permitted.
 
 ## RFC frontmatter
 
-An RFC (design proposal, [ADR-0004](../adr/0004-rfc-system.md)) is a **directory**
+An RFC (design proposal, [ADR-0004](../../design/adr/0004-rfc-system.md)) is a **directory**
 under `docs/rfcs/NNNN-name/`; its `README.md` carries frontmatter + a human header
 block. Status lives in frontmatter; the directory never moves.
 
@@ -162,7 +162,7 @@ repo, outside any `.carter/`, so `carter.yaml` cannot govern them. It is a
 ## Risk-based strictness policy (`policy` block)
 
 The risk-based strictness policy (RFC-0002 /
-[ADR-0005](../adr/0005-risk-based-strictness-policy.md)) adds a `policy` block to
+[ADR-0005](../../design/adr/0005-risk-based-strictness-policy.md)) adds a `policy` block to
 `carter.yaml`. It is additive and backward-compatible: an existing config that
 omits it resolves to `loose` (no behaviour change); a new install resolves to
 `guarded`.
@@ -217,9 +217,9 @@ Per-agent MCP scope is emitted in **agent frontmatter**, never the global
 **Global agents (no `carter.yaml` in scope).** Globally-installed static
 `agents/*.md` carry baked hand-edited `guarded` defaults, kept honest by a
 `test_parity` extension (Q14 / ADR-0005 D6 — build-time generation is WON'T-DO per
-[ADR-0002](../adr/0002-single-source-agent-generation.md)).
+[ADR-0002](../../design/adr/0002-single-source-agent-generation.md)).
 
 ## See also
 
-- [ADR-0003](../adr/0003-knowledge-adr-rfc-plan-storage.md) — the decision of record
-- [ADR-0003 implementation plan](../adr/0003-implementation.md) — execution checklist
+- [ADR-0003](../../design/adr/0003-knowledge-adr-rfc-plan-storage.md) — the decision of record
+- [ADR-0003 implementation plan](../../design/adr/0003-implementation.md) — execution checklist

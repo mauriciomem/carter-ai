@@ -79,5 +79,5 @@ Each ADR carries YAML frontmatter (machine-readable) *and* the human Status bloc
 ## See also
 
 - [reference/frontmatter.md](reference/frontmatter.md) — the canonical schemas
-- [ADR-0003](adr/0003-knowledge-adr-rfc-plan-storage.md) — the decision of record
+- [ADR-0003](../design/adr/0003-knowledge-adr-rfc-plan-storage.md) — the decision of record
 - [memory-and-knowledge.md](memory-and-knowledge.md) — knowledge & memory layers

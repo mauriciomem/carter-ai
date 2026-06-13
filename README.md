@@ -93,7 +93,7 @@ Maestro and let it route, or `@`-mention any specialist directly.
 | **DevOps** | CI/CD, IaC, containers, git | Pipelines, Terraform, Packer, deployment |
 | **Learner** | Explanation, research, memory | Documentation, mistake capture, topic research |
 | **PM** | Planning, risk, agile | WBS, roadmaps, sprint planning, risk assessment |
-| **Narrator** | External-facing content | Reframes + redacts PRs, Jira, docs, announcements ([ADR-0001](docs/adr/0001-narrator-content-suite.md)) |
+| **Narrator** | External-facing content | Reframes + redacts PRs, Jira, docs, announcements ([ADR-0001](design/adr/0001-narrator-content-suite.md)) |
 
 ## Carter-Ops — write operations
 
@@ -133,7 +133,7 @@ workspace.
 ## Strictness policy
 
 Carter's safety posture is **enforced**, not just described. A **risk-based
-strictness policy** ([ADR-0005](docs/adr/0005-risk-based-strictness-policy.md))
+strictness policy** ([ADR-0005](design/adr/0005-risk-based-strictness-policy.md))
 gives each agent a deny-by-default tool allowlist and gates actions by risk
 category (read → local-write → remote-write → infra-mutate → secret-access →
 destructive → external-publish). One `policy.level` knob sets how strict:
@@ -166,7 +166,8 @@ Plans are directories under `.carter/state/plans/` with machine-readable
 frontmatter and verifiable `must_haves`; a session `checkpoint.md` cursor enables
 "where were we?" recovery. `carter check` validates the frontmatter contract;
 `carter save` commits a recovery snapshot of `.carter/`. Architecture decisions
-live as ADRs in `docs/adr/`.
+live as ADRs in `docs/adr/`. (carter-ai's own ADRs, RFCs, and execution plans
+live in [`design/`](design/).)
 
 → Reference: **[docs/plans-and-state.md](docs/plans-and-state.md)**
 
