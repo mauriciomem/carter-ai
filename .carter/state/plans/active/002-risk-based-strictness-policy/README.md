@@ -44,11 +44,11 @@ enforcement until P3 is green. Every step is TDD-first (red → green → refact
 | # | Step | Status | File |
 |---|------|--------|------|
 | 1 | P1 policy model — config block + R0–R6 taxonomy + tool→risk map (dict-shaped) | done | step-01.md |
-| 2 | P1 drop the false "read-only" prose (4 statics + templates) | pending | step-02.md |
-| 3 | P1 frontmatter schema docs (policy + per-agent + global-policy) | pending | step-03.md |
+| 2 | P1 drop the false "read-only" prose (4 statics + templates) | done | step-02.md |
+| 3 | P1 frontmatter schema docs (policy + per-agent + global-policy) | done | step-03.md |
 | 4 | P2 per-target frontmatter emission (permission / tools: / MCP scope) | pending | step-04.md |
 | 5 | P2 policy-driven maestro table + migration message + R6 handoff | pending | step-05.md |
-| 6 | P2 fold D5 — de-dup hardcoded server triple (installer.py:786, :948) | pending | step-06.md |
+| 6 | P2 fold D5 — de-dup hardcoded server triple (installer.py:786, :948) | done | step-06.md |
 | 7 | P3 `carter check` policy lint + hard ack + redaction WARN (folds N2) | pending | step-07.md |
 | 8 | P3 single-action override ledger (`carter ops`, override ≠ authz) | pending | step-08.md |
 | 9 | P3 emission/lint tests + P2→P3 gate (folds N3, optional G1) | pending | step-09.md |

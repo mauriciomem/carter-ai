@@ -1,6 +1,6 @@
 ---
 step: 6
-status: pending
+status: done
 depends_on: []
 files_modified: [carter/installer.py, tests/test_install.py]
 ---

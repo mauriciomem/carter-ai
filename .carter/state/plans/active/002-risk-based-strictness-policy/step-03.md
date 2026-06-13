@@ -1,6 +1,6 @@
 ---
 step: 3
-status: pending
+status: done
 depends_on: [1]
 files_modified: [docs/reference/frontmatter.md]
 ---
