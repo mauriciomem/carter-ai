@@ -1,8 +1,8 @@
 ---
 step: 7
-status: pending
+status: done
 depends_on: [1, 3, 4]
-files_modified: [carter/cli.py, carter/plans.py, tests/test_install.py]
+files_modified: [carter/scaffold.py, carter/cli.py, tests/test_policy_lint.py]
 ---
 
 ## Step 7 — `carter check` policy lint + hard ack + redaction WARN (P3)

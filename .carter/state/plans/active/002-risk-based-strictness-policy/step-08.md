@@ -1,8 +1,8 @@
 ---
 step: 8
-status: pending
+status: done
 depends_on: [1]
-files_modified: [carter/ops/carter_ops.py, tests/ops/test_carter_ops.py]
+files_modified: [carter/ops/carter_ops.py, tests/ops/test_operations.py]
 ---
 
 ## Step 8 — Single-action override ledger (P3)

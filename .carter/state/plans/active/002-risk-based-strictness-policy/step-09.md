@@ -1,8 +1,8 @@
 ---
 step: 9
-status: pending
+status: done
 depends_on: [4, 7, 8]
-files_modified: [carter/scaffold.py, tests/test_scaffold.py, tests/test_install.py]
+files_modified: [carter/config.py, tests/test_scaffold.py, tests/test_policy_lint.py]
 ---
 
 ## Step 9 — Emission/lint tests + P2→P3 gate (P3)

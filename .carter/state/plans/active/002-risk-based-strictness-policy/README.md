@@ -49,9 +49,9 @@ enforcement until P3 is green. Every step is TDD-first (red → green → refact
 | 4 | P2 per-target frontmatter emission (permission / tools: / MCP scope) | done | step-04.md |
 | 5 | P2 policy-driven maestro table + migration message + R6 handoff | done | step-05.md |
 | 6 | P2 fold D5 — de-dup hardcoded server triple (installer.py:786, :948) | done | step-06.md |
-| 7 | P3 `carter check` policy lint + hard ack + redaction WARN (folds N2) | pending | step-07.md |
-| 8 | P3 single-action override ledger (`carter ops`, override ≠ authz) | pending | step-08.md |
-| 9 | P3 emission/lint tests + P2→P3 gate (folds N3, optional G1) | pending | step-09.md |
+| 7 | P3 `carter check` policy lint + hard ack + redaction WARN (folds N2) | done | step-07.md |
+| 8 | P3 single-action override ledger (`carter ops`, override ≠ authz) | done | step-08.md |
+| 9 | P3 emission/lint tests + P2→P3 gate (folds N3, optional G1) | done | step-09.md |
 
 ## P2→P3 gate
 `strict` enforcement (R3/R5 `deny`, the strict gate map) **ships only after** the
