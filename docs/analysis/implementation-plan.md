@@ -2,7 +2,7 @@
 
 > Adopting the best of Yui Soul's architecture while preserving Carter's identity, pragmatism, and existing value.
 
-**Source**: [yui-soul-assessment.md](yui-soul-assessment.md)
+**Source**: yui-soul assessment (archived planning note)
 **Status**: Draft
 **Date**: 2026-05-28
 
@@ -1470,5 +1470,5 @@ Before writing code:
 ---
 
 *Plan authored: 2026-05-28*
-*Source analysis: [yui-soul-assessment.md](yui-soul-assessment.md)*
+*Source analysis: yui-soul assessment (archived planning note)*
 *Status: Ready for review and phased execution*

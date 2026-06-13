@@ -51,7 +51,7 @@ class GitFlow(Operation):
             side_effects=[
                 f"New branch '{branch_name}' from '{from_branch}'",
                 f"1 new commit as {cfg.bot_name}",
-                f"Branch pushed to origin",
+                "Branch pushed to origin",
             ],
         )
 

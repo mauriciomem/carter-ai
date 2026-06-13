@@ -38,7 +38,7 @@ class GitCommit(Operation):
             operation=self.name,
             steps=steps,
             attribution=attribution_summary(cfg, "git"),
-            side_effects=[f"1 new commit on current branch"],
+            side_effects=["1 new commit on current branch"],
         )
 
     def execute(self, params: dict[str, Any], cfg: Config) -> Result:

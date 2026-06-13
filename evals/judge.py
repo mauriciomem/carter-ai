@@ -107,7 +107,6 @@ def judge_response(
     Raises:
         pytest.skip if no auth is available
     """
-    import pytest
 
     provider, api_key = _get_judge_auth()
 

@@ -290,7 +290,7 @@ def main(argv: list[str] | None = None) -> int:
         return 1
 
     if not phase:
-        emit_error(f"Must specify --dry-run or --execute")
+        emit_error("Must specify --dry-run or --execute")
         return 1
 
     # Look up operation

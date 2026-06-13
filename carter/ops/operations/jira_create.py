@@ -37,7 +37,7 @@ class JiraCreate(Operation):
             labels = [l.strip() for l in labels.split(",")]
 
         steps = [
-            f"POST /rest/api/3/issue",
+            "POST /rest/api/3/issue",
             f"Project: {project}",
             f"Type: {issue_type}",
             f"Summary: {summary}",

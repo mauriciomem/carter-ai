@@ -676,7 +676,7 @@ Legacy `--dry-run` / `--execute` commands still work for backward compatibility.
 
 ## Design Decisions
 
-Full design rationale is in [docs/interactions/conversation-log-carter-ops.md](interactions/conversation-log-carter-ops.md) and [docs/interactions/v3-carter-ops-enforcement.md](interactions/v3-carter-ops-enforcement.md). Key decisions:
+Key decisions behind the carter-ops protocol:
 
 1. **Direct execution over CLI middleman** — Models run commands directly. Attribution is injected via flags. A previous CLI-based approach failed because instructions cannot force tool invocation.
 2. **Stateless audit** — No execution IDs to track; audit is post-hoc best-effort
