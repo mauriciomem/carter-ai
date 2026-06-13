@@ -919,6 +919,95 @@ class TestAuditSubcommand:
         assert entry["result"] == "failure"
 
 
+class TestPolicyOverrideSubcommand:
+    """RFC-0002 / ADR-0005 step 8: the single-action override ledger.
+
+    Override != authorization — the ledger RECORDS a deliberate override of a
+    policy gate; it cannot lift a platform deny. One entry per action; no
+    blanket/session-wide overrides (Q11).
+    """
+
+    def test_override_logs_one_entry(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        from carter.ops import carter_ops
+
+        monkeypatch.setattr(carter_ops, "AUDIT_LOG", tmp_path / "audit.log")
+        rc = carter_ops.main([
+            "policy-override",
+            "--category", "R2",
+            "--action", "git push origin main",
+            "--tier", "native-ask",
+            "--reason", "hotfix release",
+        ])
+        assert rc == 0
+
+        import json
+        lines = (tmp_path / "audit.log").read_text().strip().splitlines()
+        assert len(lines) == 1  # exactly one entry per action — not session-wide
+        entry = json.loads(lines[0])
+        assert entry["event"] == "policy-override"
+        assert entry["category"] == "R2"
+        assert entry["action"] == "git push origin main"
+        assert entry["tier"] == "native-ask"
+        assert entry["reason"] == "hotfix release"
+        # Honesty: the ledger records, it does not authorize/lift a deny.
+        assert entry["authorized"] is False
+
+    def test_override_requires_category(self, capsys: pytest.CaptureFixture) -> None:
+        from carter.ops import carter_ops
+
+        rc = carter_ops.main(["policy-override", "--action", "x", "--tier", "native-ask"])
+        assert rc == 1
+
+    def test_override_requires_action(self, capsys: pytest.CaptureFixture) -> None:
+        from carter.ops import carter_ops
+
+        rc = carter_ops.main(["policy-override", "--category", "R2", "--tier", "native-ask"])
+        assert rc == 1
+
+    def test_override_rejects_unknown_tier(self, capsys: pytest.CaptureFixture) -> None:
+        from carter.ops import carter_ops
+
+        rc = carter_ops.main([
+            "policy-override", "--category", "R2", "--action", "x", "--tier", "blanket",
+        ])
+        assert rc == 1
+
+    def test_override_native_deny_records_not_authorizes(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from carter.ops import carter_ops
+
+        monkeypatch.setattr(carter_ops, "AUDIT_LOG", tmp_path / "audit.log")
+        rc = carter_ops.main([
+            "policy-override",
+            "--category", "R3",
+            "--action", "terraform apply",
+            "--tier", "native-deny",
+            "--reason", "approved exception",
+        ])
+        assert rc == 0
+
+        import json
+        entry = json.loads((tmp_path / "audit.log").read_text().strip())
+        assert entry["tier"] == "native-deny"
+        # Even at native-deny the ledger only records — it cannot lift the deny.
+        assert entry["authorized"] is False
+
+    def test_two_overrides_are_two_entries(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from carter.ops import carter_ops
+
+        monkeypatch.setattr(carter_ops, "AUDIT_LOG", tmp_path / "audit.log")
+        for _ in range(2):
+            carter_ops.main([
+                "policy-override", "--category", "R2",
+                "--action", "git push", "--tier", "native-ask",
+            ])
+        lines = (tmp_path / "audit.log").read_text().strip().splitlines()
+        assert len(lines) == 2  # per-action, never a session-wide blanket
+
+
 class TestConfigSubcommand:
     def test_config_emit(self, capsys: pytest.CaptureFixture, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         from carter.ops import carter_ops

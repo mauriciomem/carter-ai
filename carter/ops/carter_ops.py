@@ -160,6 +160,59 @@ def _handle_audit(params: dict[str, Any]) -> int:
     return 0
 
 
+_OVERRIDE_TIERS = ("native-deny", "native-ask", "prose-backstop")
+
+
+def _handle_policy_override(params: dict[str, Any]) -> int:
+    """Record a single-action strictness-policy override in the audit ledger.
+
+    RFC-0002 / ADR-0005 §6: **override ≠ authorization**. This RECORDS a deliberate
+    override of a policy gate for one action; it cannot lift a platform ``deny``
+    (the emitted native config does that). One entry per action — there is no
+    blanket/session-wide override (avoids override fatigue, Q11). The per-tier
+    meaning: ``native-deny`` the user relaxed the emitted config (logged);
+    ``native-ask`` confirmed the interactive prompt; ``prose-backstop`` proceeded
+    on trust (logged only).
+    """
+    category = params.get("category", "")
+    if not category:
+        emit_error("--category is required for policy-override (e.g. R2)")
+        return 1
+
+    action = params.get("action", "")
+    if not action:
+        emit_error("--action is required for policy-override (the action being overridden)")
+        return 1
+
+    tier = params.get("tier", "")
+    if tier not in _OVERRIDE_TIERS:
+        emit_error(
+            "--tier must be one of: " + ", ".join(_OVERRIDE_TIERS)
+            + " (no blanket/session-wide overrides)"
+        )
+        return 1
+
+    entry: dict[str, Any] = {
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "event": "policy-override",
+        "category": category,
+        "action": action,
+        "tier": tier,
+        "reason": params.get("reason", ""),
+        # The ledger records; it never authorizes or lifts a platform deny.
+        "authorized": False,
+    }
+    _audit(entry)
+    emit({
+        "status": "logged",
+        "event": "policy-override",
+        "category": category,
+        "tier": tier,
+        "authorized": False,
+    })
+    return 0
+
+
 def _handle_config_emit() -> int:
     """Print config values for model consumption."""
     cfg = Config.load()
@@ -200,6 +253,21 @@ def main(argv: list[str] | None = None) -> int:
             else:
                 i += 1
         return _handle_audit(audit_params)
+
+    if argv and argv[0] == "policy-override":
+        override_params: dict[str, Any] = {}
+        i = 1
+        while i < len(argv):
+            arg = argv[i]
+            if arg.startswith("--") and i + 1 < len(argv) and not argv[i + 1].startswith("--"):
+                override_params[arg[2:]] = argv[i + 1]
+                i += 2
+            elif arg.startswith("--"):
+                override_params[arg[2:]] = True
+                i += 1
+            else:
+                i += 1
+        return _handle_policy_override(override_params)
 
     if argv and argv[0] == "config":
         if "--emit" in argv:
