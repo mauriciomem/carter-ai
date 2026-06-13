@@ -6,7 +6,7 @@ created: 2026-06-11
 decided: 2026-06-13
 author: mauriciomem
 adr: ADR-0005                 # records this decision (ADR-0004 RFC system)
-plan: null
+plan: 002-risk-based-strictness-policy  # execution plan (completed 2026-06-13)
 supersedes: []
 tags: [strictness, enforcement, security, agents, mcp, policy]
 ---

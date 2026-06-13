@@ -1,6 +1,6 @@
 ---
 id: 002-risk-based-strictness-policy
-status: active
+status: completed
 created: 2026-06-13
 updated: 2026-06-13
 adr: ADR-0005
@@ -69,8 +69,20 @@ before its lint + escape-hatch + tests land. P2 emission (step 4) ships `loose` 
   both statics and templates and adds an explicit guard (carried N3).
 
 ## Notes
-Dogfoods the structure it implements: lives at
-`.carter/state/plans/active/002-risk-based-strictness-policy/`, carries the D6
-frontmatter, tiers into step files (>3 steps), and passes `validate_plan_dir`.
+Dogfoods the structure it implements: a directory plan carrying the D6
+frontmatter, tiered into step files (>3 steps), that passes `validate_plan_dir`
+(moved `active/` → `completed/` on close, 2026-06-13).
 Repo test cmd: `python -m pytest tests/ evals/test_skills.py evals/test_routing.py
 -q -p no:cacheprovider` (exclude `evals/test_live.py` — it hangs).
+
+## Deferred findings
+Low/nit audit items (2 rounds clean at critical/high); no `.backlog/` in this repo,
+so recorded here. Pick up opportunistically:
+- **low** — `_audit` swallows `OSError` yet emits `status: logged`; report `log-failed` on write failure.
+- **low** — `carter check` excludes a managed agent whose frontmatter fails to parse (returns None) instead of erroring.
+- **low** — no cross-consistency guard that `TOOL_RISK_MAP`/`AGENT_ALLOWLIST` categories ⊆ `RISK_TAXONOMY` (typo → runtime `KeyError`, though `_validate_policy` now covers user overrides).
+- **low** — `unknown_tool` + `TOOL_RISK_MAP` + `resolve_action_gate` are model-ahead-of-consumer (runtime action-gating is a future phase; no live consumer yet).
+- **nit** — `~/.carter/audit.log` written with default umask; create mode 0600.
+- **nit** — `_resolve_policy_targets` duplicates `_resolve_targets` (cli) + the installer copy; share one helper.
+- **nit** — `webfetch: allow` is hardcoded per agent; `AGENT_MCP_SCOPE` has no user-override hook.
+- **nit** — some parity guards assert exact body substrings (e.g. the `narrator→devops handoff` glyph); brittle to rewording.
