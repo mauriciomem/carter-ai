@@ -159,6 +159,66 @@ The **ADR ≤ 400-line budget is NOT workspace config** — ADRs live in the mai
 repo, outside any `.carter/`, so `carter.yaml` cannot govern them. It is a
 `carter-adr` skill constant.
 
+## Risk-based strictness policy (`policy` block)
+
+The risk-based strictness policy (RFC-0002 /
+[ADR-0005](../adr/0005-risk-based-strictness-policy.md)) adds a `policy` block to
+`carter.yaml`. It is additive and backward-compatible: an existing config that
+omits it resolves to `loose` (no behaviour change); a new install resolves to
+`guarded`.
+
+```yaml
+policy:
+  level: guarded            # loose | guarded | strict
+  unknown_tool: ask         # gate for a tool not in the risk map: allow | ask | deny
+  overrides: {}             # category -> gate, explicit per-category override
+  audit_overrides: true     # log escape-hatch overrides via `carter ops`
+  # Optional user extensions — DICT-shaped so they deep-merge over the shipped
+  # defaults (a list would replace them wholesale; carter/config.py _deep_merge):
+  tool_risk: {}             # tool/command -> risk category, e.g. {my_tool: R2}
+  allowlist: {}             # agent -> {category: bool}, e.g. {engineer: {R2: true}}
+```
+
+**Risk taxonomy (shipped, fixed).** Seven categories; each maps a strictness level
+to a gate (`allow` | `ask` | `gate` | `deny`). An action in multiple categories
+takes the most restrictive gate.
+
+| Category | Meaning | loose | guarded | strict |
+|----------|---------|-------|---------|--------|
+| R0 read | reads, `git status/log/diff`, MCP GET | allow | allow | allow |
+| R1 local-write | file edit, `git add/commit`, run tests | allow | allow | allow |
+| R2 remote-write | `git push`, PR/issue write, MCP POST/PATCH/DELETE | allow | ask | gate |
+| R3 infra-mutate | `terraform apply/destroy`, `kubectl apply` | allow | gate | deny |
+| R4 secret-access | read `.env`/secret files, vault reads | allow | ask | gate |
+| R5 destructive | `rm -rf`, `git reset --hard`, `--force` | allow | gate | deny |
+| R6 external-publish | outward content (overlay; composes with transport) | allow | gate | gate |
+
+**Per-agent allowlist (deny-by-default).** A category absent for an agent is denied
+for that agent. The shipped default keeps `devops` the sole R2 pusher and `narrator`
+the sole R6 author:
+
+| Agent | Allowed categories |
+|-------|--------------------|
+| maestro, architect, learner | R0 |
+| engineer, pm | R0, R1 |
+| devops | R0, R1, R2, R3, R4, R5 |
+| narrator | R0, R1, R6 |
+
+**Per-agent emitted frontmatter (P2).** Carter emits the allowlist + gates into
+each agent, using the canonical mechanism per target:
+
+- **OpenCode:** `permission` (the `tools` boolean is deprecated ≥ v1.1.1) + per-agent
+  MCP scope via tool-name patterns.
+- **VS Code / Copilot:** an enforced `tools:` allowlist + per-agent `mcp-servers`.
+
+Per-agent MCP scope is emitted in **agent frontmatter**, never the global
+`configure_mcp_servers` wiring.
+
+**Global agents (no `carter.yaml` in scope).** Globally-installed static
+`agents/*.md` carry baked hand-edited `guarded` defaults, kept honest by a
+`test_parity` extension (Q14 / ADR-0005 D6 — build-time generation is WON'T-DO per
+[ADR-0002](../adr/0002-single-source-agent-generation.md)).
+
 ## See also
 
 - [ADR-0003](../adr/0003-knowledge-adr-rfc-plan-storage.md) — the decision of record
