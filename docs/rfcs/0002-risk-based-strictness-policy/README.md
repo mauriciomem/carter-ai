@@ -1,11 +1,11 @@
 ---
 id: RFC-0002
-status: review                # draft | review | accepted | rejected | withdrawn
+status: accepted              # draft | review | accepted | rejected | withdrawn
 revision: 3
 created: 2026-06-11
-decided: null
+decided: 2026-06-13
 author: mauriciomem
-adr: null                     # next free ADR number at accept time — not pre-reserved (Q19)
+adr: ADR-0005                 # records this decision (ADR-0004 RFC system)
 plan: null
 supersedes: []
 tags: [strictness, enforcement, security, agents, mcp, policy]
@@ -13,7 +13,7 @@ tags: [strictness, enforcement, security, agents, mcp, policy]
 
 # RFC-0002: Risk-Based Strictness Policy
 
-**Status:** Review
+**Status:** Accepted
 **Revision:** 3
 **Author:** mauriciomem
 
@@ -356,7 +356,14 @@ Retained as a one-line audit trail; no open blockers remain.
 
 ## Decision
 
-[Pending — filled when accepted/rejected. On acceptance: record as an ADR (next free
-number, Q19), then create an execution plan covering P1–P3 (per-phase milestones,
-P2→P3 gate), then implement. Per ADR-0004, an accepted RFC yields an ADR before a
-plan executes it.]
+**Accepted 2026-06-13.** After a three-round review — rev 1 drew 5× request-changes;
+rev 2 integrated the Round 1 findings and resolved Q1–Q20; rev 3 integrated the
+Round 2 fixes (QA–QF) — all five reviewers (architect, engineer, devops, narrator,
+pm) approve, each current at revision 3. No open blockers remain.
+
+The decision is recorded as **[ADR-0005](../../adr/0005-risk-based-strictness-policy.md)**
+(per ADR-0004, an accepted RFC yields an ADR before a plan executes it). The next
+step is **execution plan 002**, covering phases P1–P3 with per-phase milestones and
+the **P2→P3 gate** (`strict` enforcement ships only after P3 lands).
+
+This RFC is now **frozen**; any change is a new RFC that supersedes it, never an edit.
