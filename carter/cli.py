@@ -4,12 +4,15 @@ from __future__ import annotations
 from pathlib import Path
 
 import click
+import yaml
 
 from carter.config import ConfigError, _validate_agent_suffix, generate_default_config, load_config
 from carter.plans import validate_checkpoint, validate_plans_dir
-from carter.scaffold import (    agent_filename,
+from carter.scaffold import (
+    agent_filename,
     config_warnings,
     create_env,
+    lint_policy,
     policy_notice,
     render_agents,
     render_instructions,
@@ -188,7 +191,14 @@ def update(target_dir: str, dry_run: bool):
 
 @main.command()
 @click.argument("target_dir", default=".", type=click.Path(exists=True, file_okay=False))
-def check(target_dir: str):
+@click.option(
+    "--accept-degraded",
+    is_flag=True,
+    default=False,
+    help="Acknowledge that a strict policy degrades to advisory on a "
+    "non-enforcing target (e.g. copilot). Required for strict on such targets.",
+)
+def check(target_dir: str, accept_degraded: bool):
     """Validate workspace integrity."""
     target = Path(target_dir).resolve()
     config_path = target / ".carter" / "carter.yaml"
@@ -205,13 +215,20 @@ def check(target_dir: str):
     except ConfigError as e:
         raise click.ClickException(str(e)) from e
 
-    # Check agent and instruction files exist in each target's discovery path
+    # Check agent and instruction files exist in each target's discovery path,
+    # collecting each role's parsed frontmatter for the policy lint as we go.
+    installed: dict[str, dict] = {}
     for tool in _resolve_targets(config.get("target", "copilot")):
         agents_dir = _agents_dir(target, tool)
         for agent_name in config["agents"]:
             agent_file = agents_dir / agent_filename(agent_name, config)
             if not agent_file.exists():
                 errors.append(f"Missing agent file: {agent_file.relative_to(target)}")
+                continue
+            if agent_name not in installed:
+                parsed = _parse_agent_frontmatter(agent_file.read_text())
+                if parsed is not None:
+                    installed[agent_name] = parsed
 
         instructions_file = _instructions_path(target, tool)
         if not instructions_file.exists():
@@ -232,13 +249,19 @@ def check(target_dir: str):
     checkpoint = target / ".carter" / "state" / "sessions" / "checkpoint.md"
     errors.extend(validate_checkpoint(checkpoint, plans_root))
 
+    # Lint emitted policy frontmatter against the declared model (P3, ADR-0005).
+    policy_errors, policy_warnings = lint_policy(
+        config, installed, accept_degraded=accept_degraded
+    )
+    errors.extend(policy_errors)
+
     if errors:
         click.echo("Workspace issues found:", err=True)
         for error in errors:
             click.echo(f"  ✗ {error}", err=True)
         raise SystemExit(1)
 
-    for warning in config_warnings(config):
+    for warning in [*config_warnings(config), *policy_warnings]:
         click.echo(f"⚠  {warning}", err=True)
 
     click.echo("Workspace OK")
@@ -304,6 +327,24 @@ def _agents_dir(target_root: Path, tool: str) -> Path:
 
 def _instructions_path(target_root: Path, tool: str) -> Path:
     return target_root.joinpath(*_INSTRUCTION_PATHS[tool])
+
+
+def _parse_agent_frontmatter(text: str) -> dict | None:
+    """Parse the leading YAML frontmatter from an agent markdown file.
+
+    Returns the parsed mapping, or ``None`` if the file has no parseable
+    ``---``-delimited frontmatter block.
+    """
+    if not text.startswith("---"):
+        return None
+    parts = text.split("---", 2)
+    if len(parts) < 3:
+        return None
+    try:
+        data = yaml.safe_load(parts[1])
+    except yaml.YAMLError:
+        return None
+    return data if isinstance(data, dict) else None
 
 
 def _write_if_absent(path: Path, content: str) -> bool:

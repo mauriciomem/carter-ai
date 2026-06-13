@@ -7,7 +7,14 @@ from typing import Any
 
 from jinja2 import Environment, FileSystemLoader
 
-from carter.config import ConfigError, policy_frontmatter, policy_gate_table
+from carter.config import (
+    RISK_TAXONOMY,
+    ConfigError,
+    _emit_level,
+    effective_allowlist,
+    policy_frontmatter,
+    policy_gate_table,
+)
 from carter.resources import templates_dir
 
 TEMPLATES_DIR = templates_dir()
@@ -111,6 +118,111 @@ def policy_notice(config: dict[str, Any]) -> str | None:
         "per the risk taxonomy (see the maestro policy table). Set "
         "policy.level: loose in carter.yaml to restore advisory-only behaviour."
     )
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Policy lint (RFC-0002 / ADR-0005, P3)
+# ──────────────────────────────────────────────────────────────────────────────
+# `carter check` runs `lint_policy` to verify the emitted agent frontmatter still
+# matches the declared policy model (the per-agent allowlist x the active level's
+# gate map). This is a *config* lint: it proves what Carter wrote equals what Carter
+# declared. It deliberately CANNOT verify runtime denial — that a platform actually
+# refuses a gated action at execution time is out of scope (Q17); only an enforcing
+# target does that, and only at runtime.
+
+# Whether a target natively enforces per-category gates. OpenCode's `permission`
+# block gates/denies per category at runtime; VS Code/Copilot has no declarative
+# per-category gate, so a strict policy degrades to advisory there (verified 2026).
+_TARGET_ENFORCES_GATES: dict[str, bool] = {"opencode": True, "copilot": False}
+
+
+def _resolve_policy_targets(target: str) -> list[str]:
+    """Resolve a config ``target`` to concrete tool targets (``all`` = both)."""
+    return ["copilot", "opencode"] if target == "all" else [target]
+
+
+def lint_policy(
+    config: dict[str, Any],
+    installed: dict[str, dict[str, Any]],
+    *,
+    accept_degraded: bool = False,
+) -> tuple[list[str], list[str]]:
+    """Lint emitted agent frontmatter against the declared strictness policy.
+
+    ``installed`` maps each role to its parsed agent-file frontmatter (the dict
+    carrying the emitted ``policy`` block). For every installed role this recomputes
+    the expected allowlist + gate map from the model and reports drift as an error;
+    a role absent from ``installed`` is not lint's concern (missing files are handled
+    by ``carter check`` itself). It also enforces the strict-on-non-enforcing-target
+    acknowledgement (Q15, fail-closed) and the redaction contradiction (Q16).
+
+    Returns ``(errors, warnings)``. Scope notes:
+
+    - Per-agent MCP scope is read from frontmatter only; global MCP server wiring is
+      ``configure_mcp_servers``' job and is NOT linted here (N2 — no false
+      "server not wired" warning).
+    - Runtime denial is out of scope (Q17): this verifies that emitted config matches
+      declared policy, not that the platform refuses a gated action at runtime.
+    """
+    errors: list[str] = []
+    warnings: list[str] = []
+
+    policy = config.get("policy") or {}
+    level = policy.get("level", "loose")
+    emit_level = _emit_level(level)
+    allowlist = effective_allowlist(config)
+
+    # Drift: emitted allow/gates must match the model the scaffolder declared.
+    for role, frontmatter in installed.items():
+        emitted = (frontmatter or {}).get("policy")
+        if not emitted:
+            errors.append(f"{role}: agent frontmatter is missing the policy block")
+            continue
+        expected_allow = [cat for cat, on in sorted(allowlist.get(role, {}).items()) if on]
+        expected_gates = {cat: RISK_TAXONOMY[cat][emit_level] for cat in expected_allow}
+        if emitted.get("allow") != expected_allow:
+            errors.append(
+                f"{role}: emitted allow {emitted.get('allow')} drifted from "
+                f"declared allowlist {expected_allow}"
+            )
+        if emitted.get("gates") != expected_gates:
+            errors.append(
+                f"{role}: emitted gates {emitted.get('gates')} drifted from "
+                f"declared gate map {expected_gates}"
+            )
+
+    # Q15 HARD ACK: strict on a non-enforcing target must be explicitly accepted.
+    if level == "strict":
+        non_enforcing = [
+            t
+            for t in _resolve_policy_targets(config.get("target", "copilot"))
+            if not _TARGET_ENFORCES_GATES.get(t, False)
+        ]
+        if non_enforcing:
+            targets = ", ".join(non_enforcing)
+            if accept_degraded:
+                warnings.append(
+                    f"strict level degrades to advisory on {targets} "
+                    "(acknowledged via --accept-degraded)"
+                )
+            else:
+                errors.append(
+                    f"strict level on a non-enforcing target ({targets}) requires "
+                    "explicit --accept-degraded"
+                )
+
+    # Q16 redaction WARN: guarded|strict forces a redaction pass at runtime, so a
+    # disabled redaction config is a contradiction worth surfacing.
+    if level in ("guarded", "strict") and not (config.get("redaction") or {}).get(
+        "enabled", False
+    ):
+        warnings.append(
+            f"{level} forces a redaction pass but redaction.enabled is false — "
+            "narrator renders with no redaction rules; strict|guarded will force "
+            "the pass at runtime"
+        )
+
+    return errors, warnings
 
 
 def _apply_agent_suffix(content: str, roles: list[str], suffix: str) -> str:
