@@ -505,6 +505,32 @@ Every operation (dry-run and execute) is appended to `~/.carter/audit.log` as JS
 
 The audit log is append-only and best-effort — if the write fails, the operation still proceeds.
 
+## Policy override (escape hatch)
+
+When the [strictness policy](strictness-policy.md) gates an action, a deliberate
+single-action override is recorded with the `policy-override` subcommand. This is
+the escape hatch from ADR-0005 §6 — **override ≠ authorization**: the ledger
+*records* that you overrode a gate; it cannot lift a platform `deny`. There is no
+blanket or session-wide override (one entry per action, to avoid override fatigue).
+
+```bash
+carter ops policy-override \
+  --category R2 \
+  --action "git push origin main" \
+  --tier native-ask \
+  --reason "hotfix release"
+```
+
+| Param | Required | Description |
+|-------|----------|-------------|
+| `--category` | Yes | Risk category being overridden (`R0`–`R6`) |
+| `--action` | Yes | The exact action overridden |
+| `--tier` | Yes | `native-deny` (relaxed emitted config) · `native-ask` (confirmed a prompt) · `prose-backstop` (proceeded on trust) |
+| `--reason` | No | Free-text justification (recorded, never a secret) |
+
+Every entry carries `"authorized": false` — the ledger is accountability, not a
+bypass. Entries land in the same `~/.carter/audit.log`.
+
 ## File Structure
 
 ```

@@ -4,13 +4,17 @@ This document covers the Carter test suite — what it tests, how to run it, how
 
 ## Overview
 
-The test suite validates three systems:
+The test suite validates these systems:
 
 | System | Test File | What It Covers |
 |--------|-----------|----------------|
 | **Installer** | `tests/test_install.py` | File copying, MCP merging, manifest tracking, idempotency |
-| **Scaffold (CLI + Templates)** | `tests/test_scaffold.py` | Config loading, template rendering, quality gates, workspace init |
-| **Carter-Ops** | `tests/ops/test_operations.py` | CLI parsing, operations, attribution, output formatting |
+| **Scaffold (CLI + Templates)** | `tests/test_scaffold.py` | Config loading, template rendering, quality gates, **policy emission**, workspace init |
+| **Policy model** | `tests/test_config.py` | The `policy` block, risk taxonomy, per-agent allowlist, gate precedence, overrides |
+| **Policy lint** | `tests/test_policy_lint.py` | `carter check` drift detection, hard ack, redaction WARN |
+| **Agent parity** | `tests/test_parity.py` | Static↔template invariants, baked policy frontmatter, no false claims |
+| **Plans & state** | `tests/test_plans.py`, `tests/test_state.py` | Plan frontmatter contract, checkpoint recovery, `.carter/` git state |
+| **Carter-Ops** | `tests/ops/test_operations.py` | CLI parsing, operations, the policy-override ledger, attribution |
 
 The tests run in full isolation using temporary directories — they never touch your real `~/.copilot/`, `~/.config/opencode/`, or any workspace paths.
 
@@ -29,17 +33,20 @@ uv pip install -e ".[dev]"
 ### Run everything
 
 ```bash
-# From the venv (covers all three test files — 239 tests)
+# From the venv (covers every test file — 467 tests)
 python -m pytest tests/ -v
 ```
 
 ### Run a single suite
 
 ```bash
-python -m pytest tests/test_install.py -v     # installer (73)
-python -m pytest tests/test_scaffold.py -v    # scaffold (87)
-python -m pytest tests/test_parity.py -v      # agent source parity (8)
-python -m pytest tests/ops/ -v                # carter-ops (71)
+python -m pytest tests/test_install.py -v     # installer (75)
+python -m pytest tests/test_scaffold.py -v    # scaffold + policy emission (154)
+python -m pytest tests/test_config.py -v      # policy model (24)
+python -m pytest tests/test_policy_lint.py -v # policy lint / carter check (26)
+python -m pytest tests/test_parity.py -v      # agent source parity (17)
+python -m pytest tests/test_plans.py -v       # plan frontmatter contract (80)
+python -m pytest tests/ops/ -v                # carter-ops (78)
 ```
 
 ## Continuous Integration
@@ -50,7 +57,7 @@ Every push to `main` and every pull request runs the suite via GitHub Actions
 ```bash
 uv venv --clear
 uv pip install -e ".[dev]"
-python -m pytest tests/ -q                                  # 239 unit tests
+python -m pytest tests/ -q                                  # 467 unit tests
 python -m pytest evals/test_skills.py evals/test_routing.py -q  # 28 offline evals
 ```
 
@@ -78,15 +85,20 @@ No external mocking libraries are used. Both the installer and the scaffold acce
 ```
 tests/
 ├── conftest.py             # Shared fixtures (base_dir, settings, etc.)
-├── test_install.py         # Installer tests (73 tests, 22 classes)
-├── test_scaffold.py        # Scaffold tests (87 tests, 12 classes)
-├── test_parity.py          # Agent source-parity tests (8 tests, 3 classes)
+├── test_install.py         # Installer tests (75)
+├── test_scaffold.py        # Scaffold + policy emission tests (154)
+├── test_config.py          # Policy model: taxonomy, allowlist, overrides (24)
+├── test_policy_lint.py     # carter check policy lint + hard ack (26)
+├── test_parity.py          # Agent source-parity + baked policy frontmatter (17)
+├── test_plans.py           # Plan frontmatter contract + recovery (80)
+├── test_state.py           # .carter/ git state (13)
 └── ops/
     ├── conftest.py         # Ops path setup
-    └── test_operations.py  # Carter-ops tests (71 tests, 27 classes)
+    └── test_operations.py  # Carter-ops + policy-override ledger (78)
 ```
 
-The full suite is **239 tests** (`python -m pytest tests/ -v`).
+The full suite is **467 tests** (`python -m pytest tests/ -v`), plus 28 offline
+evals under `evals/`.
 
 ## Fixtures (conftest.py)
 

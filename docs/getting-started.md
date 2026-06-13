@@ -23,6 +23,11 @@ Before diving in, here's the mental model:
 
 **carter-ops** is the protocol for write operations (git commits, pushes, Jira comments). It ensures you always see a plan before anything is executed.
 
+**Strictness policy** is Carter's enforced safety posture. Each agent has a
+deny-by-default tool allowlist, and actions are gated by risk category. One
+`policy.level` setting (`loose` / `guarded` / `strict`) decides how much is gated
+versus merely advised — see [strictness-policy.md](strictness-policy.md).
+
 ---
 
 ## Step 1: Install Carter
@@ -73,9 +78,12 @@ carter init ~/my-workspace --target all --agent-suffix local
 #   --agent-suffix <suffix>         (default local; "" for none)
 ```
 
-> If you enable the `narrator` agent but turn `redaction.enabled` off, `carter
-> init`/`update`/`check` print a warning: the narrator would ship with no
-> redaction rules even though Maestro routes external content to it.
+> At `policy.level: loose`, if you enable the `narrator` agent but turn
+> `redaction.enabled` off, `carter init`/`update`/`check` print a warning: the
+> narrator would ship with no redaction rules even though Maestro routes external
+> content to it. At `guarded` and `strict` the redaction pass is **forced**
+> regardless of `redaction.enabled`, so instead `carter check` flags the
+> `redaction.enabled: false` contradiction.
 
 **What `carter init` creates** (agent/instruction locations depend on `target` in
 `carter.yaml`; the tree below shows the default `target: copilot`):
@@ -146,6 +154,13 @@ agent_suffix: local
 
 # Where to write agents/instructions: copilot | opencode | all
 target: copilot
+
+# Risk-based strictness policy (ADR-0005). One knob; deny-by-default per agent.
+policy:
+  level: guarded        # loose | guarded | strict
+  unknown_tool: ask     # gate for a tool not in the risk map: allow | ask | deny
+  overrides: {}         # category -> gate, e.g. {R2: deny} to tighten remote-write
+  audit_overrides: true # log escape-hatch overrides via `carter ops`
 
 # Should Carter review your code before you push?
 quality_gate:
@@ -358,6 +373,7 @@ Running `carter update` re-renders agent files but **never touches knowledge fil
 
 ## Next Steps
 
+- [strictness-policy.md](strictness-policy.md) — Tutorial: gating actions by risk with `policy.level`
 - [carter-ops.md](carter-ops.md) — Full reference for write operations
 - [memory-and-knowledge.md](memory-and-knowledge.md) — Deep dive on the knowledge system
 - [testing.md](testing.md) — How to run and extend the test suite

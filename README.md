@@ -119,6 +119,7 @@ workspace.
 
 | Config key | Effect |
 |------------|--------|
+| `policy.level` | Risk-based strictness: `loose` / `guarded` / `strict` (pre-action gates) |
 | `personality.skepticism` | How much Carter challenges your decisions |
 | `quality_gate.enabled` | Multi-agent review before push |
 | `tdd.strict` | Force test-first workflow |
@@ -128,6 +129,27 @@ workspace.
 | `agent_suffix` | Distinguish workspace agents from global (default `local`) |
 
 → Config reference and walkthrough: **[docs/getting-started.md](docs/getting-started.md)**
+
+## Strictness policy
+
+Carter's safety posture is **enforced**, not just described. A **risk-based
+strictness policy** ([ADR-0005](docs/adr/0005-risk-based-strictness-policy.md))
+gives each agent a deny-by-default tool allowlist and gates actions by risk
+category (read → local-write → remote-write → infra-mutate → secret-access →
+destructive → external-publish). One `policy.level` knob sets how strict:
+
+| Level | Behaviour |
+|-------|-----------|
+| `loose` | Advisory only — today's behaviour, nothing blocks (default for existing configs) |
+| `guarded` | Recommended default for new installs — remote/infra/destructive actions are gated |
+| `strict` | Regulated / prod-critical — infra-mutate and destructive actions are denied |
+
+Where the target runtime supports it (OpenCode `permission`, Copilot CLI `hooks`),
+Carter **emits native enforcement**; elsewhere it degrades to honestly-labelled
+prose and `carter check` flags the gap. `devops` is the only agent that can push
+or mutate infra; `narrator` is the only one that can publish outward content.
+
+→ Tutorial: **[docs/strictness-policy.md](docs/strictness-policy.md)** · schema: **[docs/reference/frontmatter.md](docs/reference/frontmatter.md)**
 
 ## Memory & knowledge
 
@@ -164,7 +186,7 @@ Configured by `carter install --mcp` into VS Code, Copilot CLI, and OpenCode:
 git clone https://github.com/mauriciomem/carter-ai.git && cd carter-ai
 uv venv && source .venv/bin/activate
 uv pip install -e ".[dev]"
-python -m pytest tests/ -q          # 239 tests
+python -m pytest tests/ -q          # 467 tests
 ```
 
 The suite (installer, scaffold, parity, carter-ops) runs on every push and PR via
