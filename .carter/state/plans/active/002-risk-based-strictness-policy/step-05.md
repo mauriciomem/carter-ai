@@ -1,8 +1,8 @@
 ---
 step: 5
-status: pending
+status: done
 depends_on: [1, 4]
-files_modified: [templates/agents/carter-maestro.md.j2, templates/agents/carter-narrator.md.j2, carter/installer.py, tests/test_scaffold.py]
+files_modified: [carter/config.py, carter/scaffold.py, carter/cli.py, templates/agents/carter-maestro.md.j2, templates/agents/carter-narrator.md.j2, agents/carter-maestro.md, agents/carter-narrator.md, tests/test_scaffold.py, tests/test_parity.py]
 ---
 
 ## Step 5 — Policy-driven maestro table + migration message + R6 handoff (P2)
