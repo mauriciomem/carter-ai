@@ -2,6 +2,11 @@
 description: "Software Engineer — code quality, testing, design patterns, and implementation best practices."
 mode: subagent
 temperature: 0.1
+policy:
+  level: guarded
+  allow: [R0, R1]
+  gates: {R0: allow, R1: allow}
+tools: [carter-github/*, carter-terraform/*]
 ---
 
 <role>

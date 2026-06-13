@@ -2,6 +2,11 @@
 description: "Project Manager — planning, roadmaps, work breakdown, risk management, and agile methodology."
 mode: subagent
 temperature: 0.2
+policy:
+  level: guarded
+  allow: [R0, R1]
+  gates: {R0: allow, R1: allow}
+tools: [carter-atlassian/*, carter-github/*]
 ---
 
 <role>

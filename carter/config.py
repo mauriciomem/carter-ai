@@ -245,6 +245,113 @@ def effective_allowlist(config: dict[str, Any]) -> dict[str, dict[str, bool]]:
     return _deep_merge(copy.deepcopy(AGENT_ALLOWLIST), overrides)
 
 
+# ──────────────────────────────────────────────────────────────────────────────
+# Per-target frontmatter emission (RFC-0002 / ADR-0005, P2)
+# ──────────────────────────────────────────────────────────────────────────────
+# Carter is a scaffolder, not a runtime: it emits the per-agent allowlist + gates
+# into agent frontmatter using the most authoritative native primitive per target,
+# with a deterministic, target-agnostic `policy:` block as the source of truth the
+# P3 lint validates. Per-agent MCP scope lives here (agent frontmatter), never in
+# the global `configure_mcp_servers` wiring.
+
+# Per-agent MCP server scope, mirroring each static agent's <mcp> block. Drives the
+# copilot/VS Code `tools:` allowlist. maestro (pure orchestrator) and narrator wire
+# no MCP servers directly, so they emit no `tools:` key.
+AGENT_MCP_SCOPE: dict[str, list[str]] = {
+    "maestro": [],
+    "architect": ["github", "terraform"],
+    "engineer": ["github", "terraform"],
+    "devops": ["github", "terraform"],
+    "pm": ["atlassian", "github"],
+    "learner": ["atlassian"],
+    "narrator": [],
+}
+
+# OpenCode's permission model has no `gate` tier, so Carter's `gate` degrades to
+# `ask` (the closest "prompt the human" semantics); `allow`/`deny` pass through.
+_OPENCODE_GATE: dict[str, str] = {
+    "allow": "allow",
+    "ask": "ask",
+    "gate": "ask",
+    "deny": "deny",
+}
+
+# `bash` permission keys off the shell-risk categories an agent actually holds.
+_BASH_RISK_CATEGORIES: tuple[str, ...] = ("R2", "R3", "R5")
+
+
+def _emit_level(level: str) -> str:
+    """Resolve the strictness level Carter emits today.
+
+    ``strict`` enforcement (deny maps) is held by the P2->P3 gate (step 9); until
+    then a strict config emits the ``guarded`` map so no premature deny ships.
+    """
+    return "guarded" if level == "strict" else level
+
+
+def _opencode_permission(
+    allowed: list[str], gates: dict[str, str]
+) -> dict[str, str]:
+    """Best-effort OpenCode ``permission`` map from an agent's allowlist x gates.
+
+    Minimal deterministic mapping (ADR-0005 D3): ``edit`` follows local-write (R1),
+    ``bash`` follows the strictest shell-risk gate the agent holds (R2/R3/R5), and
+    ``webfetch`` is always allowed. Carter ``gate`` degrades to ``ask``.
+    """
+    edit = "allow" if "R1" in allowed else "deny"
+    held = [cat for cat in _BASH_RISK_CATEGORIES if cat in allowed]
+    if held:
+        bash = _OPENCODE_GATE[most_restrictive_gate(gates[cat] for cat in held)]
+    else:
+        bash = "deny"
+    return {"edit": edit, "bash": bash, "webfetch": "allow"}
+
+
+def policy_frontmatter(config: dict[str, Any], role: str) -> str:
+    """Render the per-agent strictness-policy frontmatter for ``role``.
+
+    Returns YAML lines (no surrounding ``---``, no trailing newline) carrying:
+
+    - ``policy``: the deterministic, target-agnostic source of truth — the agent's
+      allowed risk categories and the active level's gate per allowed category.
+      Always emitted; this is what the P3 lint validates.
+    - ``tools`` (copilot/all targets): the per-agent MCP server scope, when any.
+    - ``permission`` (opencode/all targets): the best-effort native map.
+
+    ``strict`` is clamped to the ``guarded`` map (with a pending marker) until P3.
+    """
+    policy = config.get("policy") or {}
+    level = policy.get("level", "loose")
+    emit_level = _emit_level(level)
+    target = config.get("target", "copilot")
+
+    allowed = [
+        cat
+        for cat, on in sorted(effective_allowlist(config).get(role, {}).items())
+        if on
+    ]
+    gates = {cat: RISK_TAXONOMY[cat][emit_level] for cat in allowed}
+
+    block: dict[str, Any] = {
+        "policy": {"level": emit_level, "allow": allowed, "gates": gates},
+    }
+
+    if target in ("copilot", "all"):
+        scope = AGENT_MCP_SCOPE.get(role, [])
+        if scope:
+            block["tools"] = [f"carter-{server}/*" for server in sorted(scope)]
+
+    if target in ("opencode", "all"):
+        block["permission"] = _opencode_permission(allowed, gates)
+
+    text = yaml.dump(block, sort_keys=False, default_flow_style=None).rstrip("\n")
+    if level == "strict":
+        text = text.replace(
+            "level: guarded", "level: guarded  # strict pending P3", 1
+        )
+    return text
+
+
 def generate_default_config(
     workspace_name: str = "my-workspace",
     mode: str = "umbrella",

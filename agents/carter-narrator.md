@@ -2,6 +2,10 @@
 description: "Narrator — external-facing content, redaction, and audience-aware narrative."
 mode: subagent
 temperature: 0.3
+policy:
+  level: guarded
+  allow: [R0, R1, R6]
+  gates: {R0: allow, R1: allow, R6: gate}
 ---
 
 <role>

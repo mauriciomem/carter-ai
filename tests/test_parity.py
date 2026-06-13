@@ -18,7 +18,12 @@ from pathlib import Path
 import pytest
 import yaml
 
-from carter.config import generate_default_config
+from carter.config import (
+    AGENT_MCP_SCOPE,
+    RISK_TAXONOMY,
+    effective_allowlist,
+    generate_default_config,
+)
 from carter.scaffold import create_env, render_agents
 
 # The seven redaction categories that must be present in BOTH narrator sources.
@@ -204,4 +209,62 @@ class TestNoFalseReadOnlyClaim:
             "agent templates still claim 'read-only' (false guarantee, ADR-0005 D5): "
             f"{offenders}"
         )
+
+
+class TestStrictnessPolicyParity:
+    """The baked ``policy:`` frontmatter in the global static agents (ADR-0005 D6)
+    must match the shipped model. Statics carry the ``guarded`` defaults rendered
+    at the default target (``copilot``); this is the N3-style dual-source guard —
+    if the model changes but a static is not re-baked, this fails loudly.
+    """
+
+    def _role(self, agent_path: Path) -> str:
+        return agent_path.stem.removeprefix("carter-")
+
+    def test_static_agents_carry_policy_block(self, static_agents_dir: Path) -> None:
+        for agent in sorted(static_agents_dir.glob("carter-*.md")):
+            fm = _parse_frontmatter(agent.read_text())
+            assert "policy" in fm, f"{agent.name}: missing baked policy block"
+            assert "allow" in fm["policy"] and "gates" in fm["policy"], (
+                f"{agent.name}: policy block missing allow/gates"
+            )
+
+    def test_static_allow_matches_shipped_allowlist(
+        self, static_agents_dir: Path
+    ) -> None:
+        allowlist = effective_allowlist(generate_default_config())
+        for agent in sorted(static_agents_dir.glob("carter-*.md")):
+            role = self._role(agent)
+            fm = _parse_frontmatter(agent.read_text())
+            expected = sorted(c for c, on in allowlist[role].items() if on)
+            assert fm["policy"]["allow"] == expected, (
+                f"{agent.name}: baked allow drifted from the shipped allowlist"
+            )
+
+    def test_static_gates_are_guarded(self, static_agents_dir: Path) -> None:
+        for agent in sorted(static_agents_dir.glob("carter-*.md")):
+            fm = _parse_frontmatter(agent.read_text())
+            for cat, gate in fm["policy"]["gates"].items():
+                assert gate == RISK_TAXONOMY[cat]["guarded"], (
+                    f"{agent.name}: gate for {cat} is not the guarded value"
+                )
+
+    def test_static_tools_match_mcp_scope(self, static_agents_dir: Path) -> None:
+        """Copilot is the default target, so statics carry ``tools`` (MCP scope)
+        and never the OpenCode ``permission`` map.
+        """
+        for agent in sorted(static_agents_dir.glob("carter-*.md")):
+            role = self._role(agent)
+            fm = _parse_frontmatter(agent.read_text())
+            scope = AGENT_MCP_SCOPE.get(role, [])
+            if scope:
+                assert fm.get("tools") == [f"carter-{s}/*" for s in sorted(scope)], (
+                    f"{agent.name}: baked tools drifted from the MCP scope"
+                )
+            else:
+                assert "tools" not in fm, f"{agent.name}: unexpected tools for empty scope"
+            assert "permission" not in fm, (
+                f"{agent.name}: static (copilot default) must not bake opencode permission"
+            )
+
 

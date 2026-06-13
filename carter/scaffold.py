@@ -7,7 +7,7 @@ from typing import Any
 
 from jinja2 import Environment, FileSystemLoader
 
-from carter.config import ConfigError
+from carter.config import ConfigError, policy_frontmatter
 from carter.resources import templates_dir
 
 TEMPLATES_DIR = templates_dir()
@@ -18,12 +18,15 @@ _AGENT_NAME_RE = re.compile(r"^[a-z][a-z0-9-]*$")
 
 def create_env(templates_dir: Path = TEMPLATES_DIR) -> Environment:
     """Create a Jinja2 environment configured for Carter templates."""
-    return Environment(
+    env = Environment(
         loader=FileSystemLoader(str(templates_dir)),
         trim_blocks=True,
         lstrip_blocks=True,
         keep_trailing_newline=True,
     )
+    # Per-agent strictness-policy frontmatter emission (RFC-0002 / ADR-0005, P2).
+    env.globals["policy_frontmatter"] = policy_frontmatter
+    return env
 
 
 def _available_agents(templates_dir: Path) -> list[str]:

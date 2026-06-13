@@ -2,6 +2,10 @@
 description: "Carter's orchestrator — analyzes requests and routes to the right specialist agent."
 mode: primary
 temperature: 0.2
+policy:
+  level: guarded
+  allow: [R0]
+  gates: {R0: allow}
 ---
 
 <role>

@@ -2,6 +2,11 @@
 description: "DevOps Engineer — CI/CD, infrastructure as code, containers, deployment, and git workflows."
 mode: subagent
 temperature: 0.1
+policy:
+  level: guarded
+  allow: [R0, R1, R2, R3, R4, R5]
+  gates: {R0: allow, R1: allow, R2: ask, R3: gate, R4: ask, R5: gate}
+tools: [carter-github/*, carter-terraform/*]
 ---
 
 <role>

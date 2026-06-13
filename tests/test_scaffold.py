@@ -1,12 +1,22 @@
 """Tests for Carter scaffold — template rendering and workspace initialization."""
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import pytest
 import yaml
 
-from carter.config import ConfigError, generate_default_config, load_config, write_config
+from carter.config import (
+    AGENT_MCP_SCOPE,
+    RISK_TAXONOMY,
+    ConfigError,
+    effective_allowlist,
+    generate_default_config,
+    load_config,
+    policy_frontmatter,
+    write_config,
+)
 from carter.scaffold import create_env, render_agents, render_instructions, write_rendered_files
 from carter.state import KNOWLEDGE_FILES, add_to_gitignore, init_workspace
 
@@ -890,6 +900,235 @@ class TestInitFlags:
         result = self._run_init(tmp_path)
         assert result.exit_code == 0
         assert "NO redaction" not in result.output
+
+
+# ─── Risk-Based Strictness Policy Frontmatter (P2 / ADR-0005) ────────────────
+
+
+_ALL_ROLES = ["maestro", "architect", "engineer", "devops", "pm", "learner", "narrator"]
+
+
+def _policy_config(level: str = "guarded", target: str = "copilot") -> dict:
+    """Default config pinned to a policy level + target, canonical agent names."""
+    cfg = generate_default_config(workspace_name="policy", mode="single")
+    cfg["agent_suffix"] = ""
+    cfg["policy"]["level"] = level
+    cfg["target"] = target
+    return cfg
+
+
+def _policy_block(config: dict, role: str) -> dict:
+    """Parse the emitted policy frontmatter for a role into a dict."""
+    return yaml.safe_load(policy_frontmatter(config, role))
+
+
+class TestPolicyFrontmatterModel:
+    """The deterministic ``policy:`` block is the target-agnostic source of truth."""
+
+    @pytest.mark.parametrize("role", _ALL_ROLES)
+    def test_allow_matches_effective_allowlist(self, role):
+        cfg = _policy_config()
+        block = _policy_block(cfg, role)
+        expected = sorted(c for c, on in effective_allowlist(cfg)[role].items() if on)
+        assert block["policy"]["allow"] == expected
+
+    @pytest.mark.parametrize("role", _ALL_ROLES)
+    def test_gates_match_guarded_level(self, role):
+        block = _policy_block(_policy_config(level="guarded"), role)
+        for cat, gate in block["policy"]["gates"].items():
+            assert gate == RISK_TAXONOMY[cat]["guarded"]
+
+    @pytest.mark.parametrize("role", _ALL_ROLES)
+    def test_gates_cover_exactly_allowed_categories(self, role):
+        block = _policy_block(_policy_config(), role)
+        assert sorted(block["policy"]["gates"]) == block["policy"]["allow"]
+
+    def test_devops_holds_remote_infra_destructive(self):
+        block = _policy_block(_policy_config(), "devops")
+        assert block["policy"]["allow"] == ["R0", "R1", "R2", "R3", "R4", "R5"]
+
+    def test_narrator_holds_external_publish(self):
+        block = _policy_block(_policy_config(), "narrator")
+        assert block["policy"]["allow"] == ["R0", "R1", "R6"]
+
+    def test_orchestrators_hold_read_only(self):
+        for role in ("maestro", "architect", "learner"):
+            block = _policy_block(_policy_config(), role)
+            assert block["policy"]["allow"] == ["R0"]
+
+    def test_guarded_gates_are_concrete(self):
+        gates = _policy_block(_policy_config(), "devops")["policy"]["gates"]
+        assert gates["R0"] == "allow"
+        assert gates["R2"] == "ask"
+        assert gates["R3"] == "gate"
+        assert gates["R5"] == "gate"
+
+    def test_loose_emits_all_allow(self):
+        gates = _policy_block(_policy_config(level="loose"), "devops")["policy"]["gates"]
+        assert set(gates.values()) == {"allow"}
+
+    def test_policy_block_emitted_for_every_target(self):
+        for target in ("copilot", "opencode", "all"):
+            block = _policy_block(_policy_config(target=target), "devops")
+            assert "policy" in block
+
+
+class TestPolicyStrictHeldForP3:
+    """``strict`` enforcement (deny maps) is held by the P2->P3 gate (step 9)."""
+
+    def test_strict_does_not_emit_deny_gates(self):
+        block = _policy_block(_policy_config(level="strict"), "devops")
+        assert "deny" not in set(block["policy"]["gates"].values())
+
+    def test_strict_clamps_level_to_guarded(self):
+        block = _policy_block(_policy_config(level="strict"), "devops")
+        assert block["policy"]["level"] == "guarded"
+
+    def test_strict_carries_pending_marker(self):
+        raw = policy_frontmatter(_policy_config(level="strict"), "devops")
+        assert "strict pending P3" in raw
+
+    def test_strict_permission_bash_not_deny(self):
+        block = _policy_block(
+            _policy_config(level="strict", target="opencode"), "devops"
+        )
+        assert block["permission"]["bash"] != "deny"
+
+
+class TestPolicyTargetShaping:
+    """Native enforcement keys follow the resolved target (copilot|opencode|all)."""
+
+    def test_copilot_emits_tools_only(self):
+        block = _policy_block(_policy_config(target="copilot"), "devops")
+        assert "tools" in block
+        assert "permission" not in block
+
+    def test_opencode_emits_permission_only(self):
+        block = _policy_block(_policy_config(target="opencode"), "devops")
+        assert "permission" in block
+        assert "tools" not in block
+
+    def test_all_emits_both_native_forms(self):
+        block = _policy_block(_policy_config(target="all"), "devops")
+        assert "tools" in block
+        assert "permission" in block
+
+    def test_tools_are_per_agent_mcp_scope(self):
+        assert _policy_block(_policy_config(), "devops")["tools"] == [
+            "carter-github/*",
+            "carter-terraform/*",
+        ]
+        assert _policy_block(_policy_config(), "pm")["tools"] == [
+            "carter-atlassian/*",
+            "carter-github/*",
+        ]
+        assert _policy_block(_policy_config(), "learner")["tools"] == [
+            "carter-atlassian/*"
+        ]
+
+    def test_agents_without_mcp_scope_omit_tools(self):
+        for role in ("maestro", "narrator"):
+            block = _policy_block(_policy_config(target="copilot"), role)
+            assert "tools" not in block
+
+    def test_tools_track_the_scope_constant(self):
+        # Guard the role->servers map from drifting out of the emitted tools.
+        for role, servers in AGENT_MCP_SCOPE.items():
+            block = _policy_block(_policy_config(target="copilot"), role)
+            if servers:
+                assert block["tools"] == [f"carter-{s}/*" for s in sorted(servers)]
+            else:
+                assert "tools" not in block
+
+
+class TestPolicyOpenCodePermission:
+    """Best-effort OpenCode permission map derived from allowlist x gates."""
+
+    def test_devops_permission_guarded(self):
+        perm = _policy_block(_policy_config(target="opencode"), "devops")["permission"]
+        assert perm == {"edit": "allow", "bash": "ask", "webfetch": "allow"}
+
+    def test_edit_denied_without_local_write(self):
+        perm = _policy_block(_policy_config(target="opencode"), "architect")[
+            "permission"
+        ]
+        assert perm["edit"] == "deny"
+
+    def test_bash_denied_without_shell_risk(self):
+        perm = _policy_block(_policy_config(target="opencode"), "engineer")[
+            "permission"
+        ]
+        assert perm["bash"] == "deny"
+
+    def test_webfetch_always_allowed(self):
+        for role in _ALL_ROLES:
+            perm = _policy_block(_policy_config(target="opencode"), role)["permission"]
+            assert perm["webfetch"] == "allow"
+
+    def test_loose_bash_allowed_for_pusher(self):
+        perm = _policy_block(
+            _policy_config(level="loose", target="opencode"), "devops"
+        )["permission"]
+        assert perm["bash"] == "allow"
+
+
+class TestPolicyRenderedIntegration:
+    """The policy block lands in rendered agent frontmatter as valid YAML."""
+
+    def test_rendered_frontmatter_parses_with_policy(self, env):
+        rendered = render_agents(_policy_config(), env)
+        assert rendered
+        for name, content in rendered.items():
+            assert content.startswith("---\n"), f"{name}: no frontmatter"
+            _, fm, _ = content.split("---", 2)
+            data = yaml.safe_load(fm)
+            assert data["description"], f"{name}: lost description"
+            assert data["mode"], f"{name}: lost mode"
+            assert "policy" in data, f"{name}: missing policy block"
+            assert "allow" in data["policy"] and "gates" in data["policy"]
+
+    def test_rendered_devops_policy_matches_model(self, env):
+        content = render_agents(_policy_config(), env)["carter-devops.md"]
+        _, fm, _ = content.split("---", 2)
+        data = yaml.safe_load(fm)
+        assert data["policy"]["allow"] == ["R0", "R1", "R2", "R3", "R4", "R5"]
+        assert data["tools"] == ["carter-github/*", "carter-terraform/*"]
+
+
+class TestConfigureMcpServersUnchanged:
+    """Per-agent MCP scope lives in agent frontmatter, NOT the global wiring."""
+
+    def test_global_server_set_is_the_shipped_triple(self, tmp_path):
+        from carter import installer
+
+        manifest = {"files": [], "file_hashes": {}, "mcp_servers": []}
+        installer.configure_mcp_servers(
+            ["opencode"], tmp_path, manifest, {}, tmp_path / "backup"
+        )
+        assert manifest["mcp_servers"] == [
+            "carter-github",
+            "carter-terraform",
+            "carter-atlassian",
+        ]
+        opencode_cfg = json.loads(
+            (tmp_path / "opencode" / "opencode.json").read_text()
+        )
+        assert {"carter-github", "carter-terraform", "carter-atlassian"} <= set(
+            opencode_cfg["mcp"]
+        )
+
+    def test_no_per_agent_dimension_in_global_wiring(self, tmp_path):
+        from carter import installer
+
+        manifest = {"files": [], "file_hashes": {}, "mcp_servers": []}
+        installer.configure_mcp_servers(
+            ["opencode"], tmp_path, manifest, {}, tmp_path / "backup"
+        )
+        opencode_cfg = json.loads(
+            (tmp_path / "opencode" / "opencode.json").read_text()
+        )
+        for role in _ALL_ROLES:
+            assert role not in opencode_cfg["mcp"]
 
 
 
