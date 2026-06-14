@@ -20,8 +20,8 @@ must_haves:
     - "red-then-green tests for: policy config merge (dict-shaped), per-target frontmatter emission, and the carter check policy lint"
     - "docs/reference/frontmatter.md updated with the `policy` block + per-agent + global-policy frontmatter schema"
   key_links:
-    - "design/adr/0005-risk-based-strictness-policy.md"
-    - "design/rfcs/0002-risk-based-strictness-policy/README.md"
+    - "docs/adr/0005-risk-based-strictness-policy.md"
+    - "docs/rfcs/0002-risk-based-strictness-policy/README.md"
 ---
 
 # Plan: Risk-Based Strictness Policy (RFC-0002 / ADR-0005)

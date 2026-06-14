@@ -4,7 +4,7 @@ status: accepted
 created: 2026-06-13
 decided: 2026-06-13
 supersedes: []
-superseded_by: null
+superseded_by: ADR-0007§D1§D2
 rfc: null
 tags: [repo, docs, organization, adr, rfc, plans]
 ---

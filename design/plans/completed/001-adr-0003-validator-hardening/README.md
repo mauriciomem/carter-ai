@@ -18,7 +18,7 @@ must_haves:
   artifacts:
     - "red-then-green tests covering every new validation branch"
   key_links:
-    - "design/adr/0003-knowledge-adr-rfc-plan-storage.md"
+    - "docs/adr/0003-knowledge-adr-rfc-plan-storage.md"
 ---
 
 # Plan: ADR-0003 validator hardening & recovery integrity

@@ -5,7 +5,7 @@ described in prose. This tutorial shows how to turn the policy on, what each lev
 does, and how to customize, audit, and override it.
 
 > Background: the decision is recorded in
-> [ADR-0005](../design/adr/0005-risk-based-strictness-policy.md); the canonical config
+> [ADR-0005](adr/0005-risk-based-strictness-policy.md); the canonical config
 > schema lives in [reference/frontmatter.md](reference/frontmatter.md).
 
 ---
@@ -267,7 +267,7 @@ carter ops policy-override \
 
 ## See also
 
-- [ADR-0005](../design/adr/0005-risk-based-strictness-policy.md) — the decision and its rationale
+- [ADR-0005](adr/0005-risk-based-strictness-policy.md) — the decision and its rationale
 - [reference/frontmatter.md](reference/frontmatter.md) — canonical `policy` schema
 - [carter-ops.md](carter-ops.md) — the override ledger + write-operation protocol
 - [getting-started.md](getting-started.md) — overall setup walkthrough

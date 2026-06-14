@@ -9,7 +9,7 @@ Instead these tests lock the *invariants* that must never drift between the two
 sources — the security- and structure-critical contracts, including the YAML
 frontmatter (``description``/``mode``/``temperature``) which both sources must now
 emit identically (ADR-0002). This is the phase-1 guardrail from
-design/adr/0002-single-source-agent-generation.md.
+docs/adr/0002-single-source-agent-generation.md.
 """
 from __future__ import annotations
 

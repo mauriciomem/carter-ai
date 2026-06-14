@@ -48,3 +48,7 @@ Thumbs.db
 
 # Project scratch / pre-build notes (kept on disk, out of git — ADR-0006)
 /notes/
+
+# carter-ai private plan workspace — versioned in its own nested .carter/.git,
+# never tracked in the main repo (ADR-0007).
+/.carter/
