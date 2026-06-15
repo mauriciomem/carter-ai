@@ -11,5 +11,6 @@ lives in frontmatter (the directory never moves). An accepted RFC yields an ADR
 | ✅ accepted | [0001-rfc-system](0001-rfc-system/) | rfc, process |
 | ✅ accepted | [0002-risk-based-strictness-policy](0002-risk-based-strictness-policy/) | strictness, enforcement, security, agents, mcp, policy |
 | ⬜ draft | [0003-per-agent-scoped-mcp-tokens](0003-per-agent-scoped-mcp-tokens/) | security, mcp, tokens, secrets, policy, deferred |
+| ✅ accepted | [0004-cost-context-optimization](0004-cost-context-optimization/) | cost, tokens, context, mcp, performance, harness, billing |
 
 Status icons: ⬜ draft · 📝 review · ✅ accepted · ❌ rejected · 🚫 withdrawn.
