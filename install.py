@@ -27,6 +27,7 @@ All options are forwarded unchanged to ``carter.installer.main``:
     --debug, -vv                      Debug output
     --help, -h                        Show this help
 """
+
 from __future__ import annotations
 
 import sys

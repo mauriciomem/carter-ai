@@ -5,6 +5,7 @@ required keys, status/push_policy enums, id↔directory match, must_haves shape,
 the O6 rule (an ``active`` plan must declare >= 1 must_haves entry), and the
 configurable size/step thresholds.
 """
+
 from __future__ import annotations
 
 import textwrap
@@ -13,13 +14,12 @@ from pathlib import Path
 import pytest
 
 from carter.plans import (
+    _count_step_rows,
     parse_frontmatter,
     validate_checkpoint,
     validate_plan_dir,
     validate_plans_dir,
 )
-from carter.plans import _count_step_rows
-
 
 # ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -121,7 +121,9 @@ class TestStructuralErrors:
         errors = validate_plan_dir(plan)
         assert any("frontmatter" in e for e in errors)
 
-    @pytest.mark.parametrize("key", ["id", "status", "created", "updated", "push_policy", "must_haves"])
+    @pytest.mark.parametrize(
+        "key", ["id", "status", "created", "updated", "push_policy", "must_haves"]
+    )
     def test_missing_required_key(self, tmp_path, key):
         readme = VALID_README.replace(f"{key}:", f"x_{key}:", 1)
         plan = make_plan(tmp_path, readme=readme)
@@ -192,7 +194,8 @@ class TestEnums:
 class TestMustHaves:
     def test_must_haves_not_a_mapping(self, tmp_path):
         readme = VALID_README.replace(
-            'must_haves:\n  truths:\n    - "The sample behaviour works"\n  artifacts: []\n  key_links: []',
+            'must_haves:\n  truths:\n    - "The sample behaviour works"\n'
+            "  artifacts: []\n  key_links: []",
             "must_haves: nope",
         )
         plan = make_plan(tmp_path, readme=readme)
@@ -279,27 +282,48 @@ class TestValidatePlansDir:
 
     def test_duplicate_numeric_id_flagged(self, tmp_path):
         """001-foo and 001-bar share the NNN prefix within one bucket."""
-        make_plan(tmp_path, name="001-foo", state="active",
-                  readme=VALID_README.replace("id: 001-sample-plan", "id: 001-foo"))
-        make_plan(tmp_path, name="001-bar", state="active",
-                  readme=VALID_README.replace("id: 001-sample-plan", "id: 001-bar"))
+        make_plan(
+            tmp_path,
+            name="001-foo",
+            state="active",
+            readme=VALID_README.replace("id: 001-sample-plan", "id: 001-foo"),
+        )
+        make_plan(
+            tmp_path,
+            name="001-bar",
+            state="active",
+            readme=VALID_README.replace("id: 001-sample-plan", "id: 001-bar"),
+        )
         errors = validate_plans_dir(tmp_path)
         assert any("001" in e and "duplicate" in e.lower() for e in errors)
 
     def test_distinct_numeric_ids_clean(self, tmp_path):
-        make_plan(tmp_path, name="001-foo", state="active",
-                  readme=VALID_README.replace("id: 001-sample-plan", "id: 001-foo"))
-        make_plan(tmp_path, name="002-bar", state="active",
-                  readme=VALID_README.replace("id: 001-sample-plan", "id: 002-bar"))
+        make_plan(
+            tmp_path,
+            name="001-foo",
+            state="active",
+            readme=VALID_README.replace("id: 001-sample-plan", "id: 001-foo"),
+        )
+        make_plan(
+            tmp_path,
+            name="002-bar",
+            state="active",
+            readme=VALID_README.replace("id: 001-sample-plan", "id: 002-bar"),
+        )
         assert not any("duplicate" in e.lower() for e in validate_plans_dir(tmp_path))
 
     def test_duplicate_numeric_id_across_buckets_flagged(self, tmp_path):
         """NNN must be unique globally, not just within a bucket (001 in active/ + completed/)."""
-        make_plan(tmp_path, name="001-foo", state="active",
-                  readme=VALID_README.replace("id: 001-sample-plan", "id: 001-foo"))
+        make_plan(
+            tmp_path,
+            name="001-foo",
+            state="active",
+            readme=VALID_README.replace("id: 001-sample-plan", "id: 001-foo"),
+        )
         # 001-done is completed-status, correctly in completed/, but shares NNN 001
         done = VALID_README.replace("id: 001-sample-plan", "id: 001-done").replace(
-            "status: active", "status: completed")
+            "status: active", "status: completed"
+        )
         make_plan(tmp_path, name="001-done", state="completed", readme=done)
         errors = validate_plans_dir(tmp_path)
         assert any("001" in e and "duplicate" in e.lower() for e in errors)
@@ -357,12 +381,7 @@ class TestSkillExampleValidates:
     """
 
     def _skill_readme_example(self) -> str:
-        skill = (
-            Path(__file__).resolve().parent.parent
-            / "skills"
-            / "carter-plan"
-            / "SKILL.md"
-        )
+        skill = Path(__file__).resolve().parent.parent / "skills" / "carter-plan" / "SKILL.md"
         text = skill.read_text(encoding="utf-8")
         # first ```markdown ... ``` fence is the plan README example
         marker = "```markdown"
@@ -389,7 +408,8 @@ class TestValidateCheckpoint:
     def test_valid(self, tmp_path):
         f = tmp_path / "checkpoint.md"
         f.write_text(
-            "---\nupdated: 2026-06-09T18:00:00Z\nactive_plan: 001-x\nnext_step: 4\n---\nwhere we left off\n",
+            "---\nupdated: 2026-06-09T18:00:00Z\nactive_plan: 001-x\n"
+            "next_step: 4\n---\nwhere we left off\n",
             encoding="utf-8",
         )
         assert validate_checkpoint(f) == []
@@ -467,8 +487,12 @@ class TestCheckpointCrossRef:
 
     def test_valid_pointer_clean(self, tmp_path):
         plans_root = tmp_path / "plans"
-        make_plan(plans_root, name="001-real", state="active",
-                  readme=VALID_README.replace("id: 001-sample-plan", "id: 001-real"))
+        make_plan(
+            plans_root,
+            name="001-real",
+            state="active",
+            readme=VALID_README.replace("id: 001-sample-plan", "id: 001-real"),
+        )
         cp = self._checkpoint(tmp_path, "001-real")
         assert validate_checkpoint(cp, plans_root) == []
 
@@ -644,5 +668,3 @@ class TestCountStepRowsHeuristic:
         # '## Step-by-step' is prose, not the Steps table — must not be counted
         text = "## Step-by-step guide\n1. do a\n2. do b\n3. do c\n4. do d\n"
         assert _count_step_rows(text) is None
-
-

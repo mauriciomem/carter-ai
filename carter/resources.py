@@ -8,6 +8,7 @@ In an installed wheel the data lives at ``carter/_data/``. In a development
 checkout it lives at the repository root. ``data_dir()`` resolves whichever
 layout is present so callers can simply use ``data_dir() / "agents"`` etc.
 """
+
 from __future__ import annotations
 
 from pathlib import Path

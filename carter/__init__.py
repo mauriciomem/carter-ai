@@ -1,3 +1,8 @@
 """Carter AI — workspace scaffolding and management."""
 
-__version__ = "2.0.0a1"
+from importlib.metadata import PackageNotFoundError, version
+
+try:
+    __version__ = version("carter-ai")
+except PackageNotFoundError:  # running from a source tree without installed metadata
+    __version__ = "0+unknown"

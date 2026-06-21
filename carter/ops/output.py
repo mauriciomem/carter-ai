@@ -5,6 +5,7 @@
 
 All output to stdout is JSON. Human-readable errors go to stderr.
 """
+
 from __future__ import annotations
 
 import json

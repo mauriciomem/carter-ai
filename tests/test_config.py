@@ -5,6 +5,7 @@ the tool->risk map, and the per-agent allowlist. No emission or enforcement yet.
 Everything user-extensible is dict-shaped so `_deep_merge` (which replaces lists
 wholesale) merges overrides instead of wiping the shipped defaults.
 """
+
 from __future__ import annotations
 
 import pytest
@@ -67,8 +68,9 @@ class TestPolicyOverridesAreHonored:
     gate map and the gate table — not silently no-op (audit HIGH-1)."""
 
     def test_override_tightens_emitted_gate(self):
-        from carter.config import policy_frontmatter
         import yaml as _yaml
+
+        from carter.config import policy_frontmatter
 
         cfg = generate_default_config()
         cfg["agent_suffix"] = ""
@@ -106,6 +108,7 @@ class TestPolicyLevelValidation:
 
     def test_invalid_level_raises_config_error(self, tmp_path):
         import yaml as _yaml
+
         from carter.config import ConfigError, load_config
 
         cfg = {
@@ -122,6 +125,7 @@ class TestPolicyLevelValidation:
 
     def test_valid_levels_accepted(self, tmp_path):
         import yaml as _yaml
+
         from carter.config import load_config
 
         for level in ("loose", "guarded", "strict"):
@@ -230,7 +234,7 @@ class TestGatePrecedence:
         assert most_restrictive_gate([]) == "allow"
 
     def test_resolve_action_gate_push_force_is_destructive(self):
-        """push --force = R2 (remote-write) and R5 (destructive); guarded -> gate (most restrictive)."""
+        """push --force = R2 (remote-write) and R5 (destructive); guarded -> gate (strictest)."""
         assert resolve_action_gate(["R2", "R5"], "guarded") == "gate"
 
     def test_resolve_action_gate_destroy_denied_at_strict(self):

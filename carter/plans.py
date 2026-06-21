@@ -10,6 +10,7 @@ Design: pure functions returning lists of human-readable error strings (empty =
 valid), mirroring the existing ``carter check`` error-collection style. No I/O
 beyond reading the plan files passed in.
 """
+
 from __future__ import annotations
 
 import datetime
@@ -92,7 +93,7 @@ def _is_date_like(value: Any) -> bool:
     """True if ``value`` is a date Carter accepts: a parsed date/datetime (YAML
     parses unquoted ``2026-06-09`` to ``datetime.date``) or a string that is a real
     ISO calendar date (a quoted ``"2026-02-30"`` is regex-shaped but rejected)."""
-    if isinstance(value, (datetime.date, datetime.datetime)):
+    if isinstance(value, datetime.date | datetime.datetime):
         return True
     if not isinstance(value, str) or not _DATE_STR_RE.match(value):
         return False
@@ -143,6 +144,7 @@ def _validate_step_file(step_file: Path, plan_name: str, thresholds: dict[str, A
     text, read_err = _safe_read(step_file, rel)
     if read_err:
         return [read_err]
+    assert text is not None  # read_err is None ⇒ text is set
     fm = parse_frontmatter(text)
     if fm is None:
         return [f"{rel}: missing or malformed YAML frontmatter"]
@@ -156,9 +158,7 @@ def _validate_step_file(step_file: Path, plan_name: str, thresholds: dict[str, A
     else:
         m = STEP_FILE_RE.match(step_file.name)
         if m and step != int(m.group(1)):
-            errors.append(
-                f"{rel}: step {step} must match the filename number {int(m.group(1))}"
-            )
+            errors.append(f"{rel}: step {step} must match the filename number {int(m.group(1))}")
 
     status = fm.get("status")
     if "status" in fm and status not in VALID_STEP_STATUS:
@@ -203,6 +203,7 @@ def _validate_plan_dir(
     text, read_err = _safe_read(readme, f"{name}/README.md")
     if read_err:
         return [read_err], None
+    assert text is not None  # read_err is None ⇒ text is set
     fm = parse_frontmatter(text)
     if fm is None:
         return [f"{name}/README.md: missing or malformed YAML frontmatter"], None
@@ -217,9 +218,13 @@ def _validate_plan_dir(
     plan_id = fm.get("id")
     if "id" in fm:
         if not isinstance(plan_id, str) or not PLAN_ID_RE.match(plan_id):
-            errors.append(f"{name}/README.md: id {plan_id!r} must be NNN-kebab (e.g. 001-feature-name)")
+            errors.append(
+                f"{name}/README.md: id {plan_id!r} must be NNN-kebab (e.g. 001-feature-name)"
+            )
         elif plan_id != name:
-            errors.append(f"{name}/README.md: id {plan_id!r} must match the directory name {name!r}")
+            errors.append(
+                f"{name}/README.md: id {plan_id!r} must match the directory name {name!r}"
+            )
 
     status = fm.get("status")
     if "status" in fm and status not in VALID_PLAN_STATUS:
@@ -227,7 +232,9 @@ def _validate_plan_dir(
 
     push_policy = fm.get("push_policy")
     if "push_policy" in fm and push_policy not in VALID_PUSH_POLICY:
-        errors.append(f"{name}/README.md: push_policy {push_policy!r} not in {sorted(VALID_PUSH_POLICY)}")
+        errors.append(
+            f"{name}/README.md: push_policy {push_policy!r} not in {sorted(VALID_PUSH_POLICY)}"
+        )
 
     # created / updated must be dates
     for date_key in ("created", "updated"):
@@ -242,8 +249,7 @@ def _validate_plan_dir(
     if "must_haves" in fm:
         if not isinstance(must_haves, dict):
             errors.append(
-                f"{name}/README.md: must_haves must be a mapping with "
-                f"{'/'.join(MUST_HAVES_KEYS)}"
+                f"{name}/README.md: must_haves must be a mapping with {'/'.join(MUST_HAVES_KEYS)}"
             )
         else:
             unknown = [k for k in must_haves if k not in MUST_HAVES_KEYS]
@@ -313,9 +319,7 @@ def validate_plans_dir(plans_root: Path, thresholds: dict[str, Any] | None = Non
                 seen.setdefault(m.group(1), []).append(f"{state}/{plan_dir.name}")
     for nnn, names in sorted(seen.items()):
         if len(names) > 1:
-            errors.append(
-                f"duplicate plan number {nnn} ({', '.join(sorted(names))})"
-            )
+            errors.append(f"duplicate plan number {nnn} ({', '.join(sorted(names))})")
     return errors
 
 
@@ -338,9 +342,7 @@ def _check_bucket_status(name: str, status: Any, bucket: str) -> list[str]:
     return []
 
 
-def validate_checkpoint(
-    checkpoint_file: Path, plans_root: Path | None = None
-) -> list[str]:
+def validate_checkpoint(checkpoint_file: Path, plans_root: Path | None = None) -> list[str]:
     """Validate the session ``checkpoint.md`` recovery cursor (ADR-0003 D7.2).
 
     The checkpoint is optional: its absence is clean. If present, it must carry
@@ -358,6 +360,7 @@ def validate_checkpoint(
     text, read_err = _safe_read(checkpoint_file, rel)
     if read_err:
         return [read_err]
+    assert text is not None  # read_err is None ⇒ text is set
     fm = parse_frontmatter(text)
     if fm is None:
         return [f"{rel}: missing or malformed YAML frontmatter"]
@@ -383,10 +386,7 @@ def validate_checkpoint(
 
     next_step = fm.get("next_step")
     # bool is a subclass of int, but `next_step: true` is not a step index.
-    if next_step is not None and (
-        not isinstance(next_step, int) or isinstance(next_step, bool)
-    ):
+    if next_step is not None and (not isinstance(next_step, int) or isinstance(next_step, bool)):
         errors.append(f"{rel}: next_step must be an integer or null")
 
     return errors
-

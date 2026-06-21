@@ -4,6 +4,7 @@ Covers ``carter.scaffold.lint_policy`` — the deterministic, offline lint that
 verifies the emitted agent frontmatter still matches the declared policy model —
 and the ``carter check --accept-degraded`` CLI integration.
 """
+
 from __future__ import annotations
 
 import yaml
@@ -27,10 +28,7 @@ def _installed(config: dict) -> dict[str, dict]:
     """Build the {role: parsed frontmatter} map the way ``carter check`` does:
     parse each role's emitted policy frontmatter into a dict.
     """
-    return {
-        role: yaml.safe_load(policy_frontmatter(config, role))
-        for role in config["agents"]
-    }
+    return {role: yaml.safe_load(policy_frontmatter(config, role)) for role in config["agents"]}
 
 
 # ─── Drift detection (emitted frontmatter ↔ declared model) ──────────────────

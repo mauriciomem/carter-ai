@@ -3,6 +3,7 @@
 # dependencies = ["httpx"]
 # ///
 """carter-ops: jira-update — composite: add comment + optionally transition status."""
+
 from __future__ import annotations
 
 from typing import Any
@@ -59,7 +60,8 @@ class JiraUpdate(Operation):
         if comment:
             comment_op = JiraComment()
             comment_result = comment_op.execute(
-                {"ticket": ticket, "body": comment}, cfg,
+                {"ticket": ticket, "body": comment},
+                cfg,
             )
             if not comment_result.success:
                 return Result(

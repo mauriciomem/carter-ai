@@ -2,6 +2,7 @@
 # requires-python = ">=3.11"
 # ///
 """carter-ops: git-commit — stage files and commit as carter-bot."""
+
 from __future__ import annotations
 
 import subprocess
@@ -52,20 +53,27 @@ class GitCommit(Operation):
         try:
             subprocess.run(
                 ["git", "add"] + files,
-                check=True, capture_output=True, text=True,
+                check=True,
+                capture_output=True,
+                text=True,
             )
 
             cmd = [
-                "git", "commit",
+                "git",
+                "commit",
                 f"--author={author}",
-                "-m", message,
+                "-m",
+                message,
             ]
             # Only sign if signing key exists
             if cfg.signing_key:
                 cmd.insert(2, "-S")
 
             result = subprocess.run(
-                cmd, check=True, capture_output=True, text=True,
+                cmd,
+                check=True,
+                capture_output=True,
+                text=True,
             )
 
             # Extract commit SHA
@@ -82,13 +90,15 @@ class GitCommit(Operation):
             if not sha:
                 rev = subprocess.run(
                     ["git", "rev-parse", "--short", "HEAD"],
-                    capture_output=True, text=True,
+                    capture_output=True,
+                    text=True,
                 )
                 sha = rev.stdout.strip()
 
             branch = subprocess.run(
                 ["git", "branch", "--show-current"],
-                capture_output=True, text=True,
+                capture_output=True,
+                text=True,
             ).stdout.strip()
 
         except subprocess.CalledProcessError as e:

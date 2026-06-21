@@ -1,12 +1,11 @@
 """Tests for the Carter installer."""
+
 from __future__ import annotations
 
 import json
 from pathlib import Path
 
-
 from carter import installer as install
-
 
 # ──────────────────────────────────────────────────────────────────────────────
 # File operations
@@ -214,13 +213,9 @@ class TestMCPMerging:
     def test_preserves_existing_servers(self, base_dir: Path) -> None:
         settings = base_dir / "vscode" / "settings.json"
         settings.parent.mkdir(parents=True, exist_ok=True)
-        settings.write_text(json.dumps({
-            "mcp.servers": {"my-server": {"command": "node"}}
-        }))
+        settings.write_text(json.dumps({"mcp.servers": {"my-server": {"command": "node"}}}))
 
-        entries = {
-            "carter-github": {"command": "npx", "args": ["-y", "server-github"]}
-        }
+        entries = {"carter-github": {"command": "npx", "args": ["-y", "server-github"]}}
         install._merge_json_key(settings, "mcp.servers", entries)
 
         data = json.loads(settings.read_text())
@@ -230,10 +225,14 @@ class TestMCPMerging:
     def test_preserves_other_settings(self, base_dir: Path) -> None:
         settings = base_dir / "vscode" / "settings.json"
         settings.parent.mkdir(parents=True, exist_ok=True)
-        settings.write_text(json.dumps({
-            "editor.fontSize": 14,
-            "mcp.servers": {},
-        }))
+        settings.write_text(
+            json.dumps(
+                {
+                    "editor.fontSize": 14,
+                    "mcp.servers": {},
+                }
+            )
+        )
 
         entries = {"carter-github": {"command": "npx"}}
         install._merge_json_key(settings, "mcp.servers", entries)
@@ -530,7 +529,7 @@ class TestInstallOps:
     def test_does_not_overwrite_existing_config(self, base_dir: Path) -> None:
         config = base_dir / "carter" / "config.toml"
         config.parent.mkdir(parents=True, exist_ok=True)
-        config.write_text("[attribution]\nname = \"my-custom-bot\"\n")
+        config.write_text('[attribution]\nname = "my-custom-bot"\n')
 
         manifest = {"files": [], "file_hashes": {}}
         backup = base_dir / "backup"
@@ -623,9 +622,7 @@ class TestMCPFlag:
         settings.parent.mkdir(parents=True, exist_ok=True)
         settings.write_text(json.dumps({}))
 
-        install.configure_mcp_servers(
-            ["copilot"], base_dir, manifest, {}, backup
-        )
+        install.configure_mcp_servers(["copilot"], base_dir, manifest, {}, backup)
 
         data = json.loads(settings.read_text())
         assert "mcp.servers" in data
@@ -967,7 +964,9 @@ class TestVisibleMemoryReferences:
         backup = base_dir / "backup"
         install.install_instructions(["copilot"], base_dir, manifest, backup)
 
-        instructions = (base_dir / "copilot" / "instructions" / "copilot-instructions.md").read_text()
+        instructions = (
+            base_dir / "copilot" / "instructions" / "copilot-instructions.md"
+        ).read_text()
         assert "~/.carter/memories/" in instructions
 
     def test_opencode_rules_reference_visible_memory(self, base_dir: Path) -> None:

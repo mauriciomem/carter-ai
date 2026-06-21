@@ -6,6 +6,7 @@ These tests verify:
 3. Trigger keywords in scenarios actually appear in routing table
 4. No routing ambiguity (one trigger doesn't match multiple agents)
 """
+
 from __future__ import annotations
 
 import re
@@ -30,9 +31,7 @@ def routing_table(maestro_content: str) -> dict[str, list[str]]:
     """Parse the maestro routing table into {agent: [triggers]}."""
     table: dict[str, list[str]] = {}
     # Match table rows: | Domain | @agent | triggers |
-    for match in re.finditer(
-        r"\|\s*[^|]+\|\s*@(carter-\w+)\s*\|\s*([^|]+)\|", maestro_content
-    ):
+    for match in re.finditer(r"\|\s*[^|]+\|\s*@(carter-\w+)\s*\|\s*([^|]+)\|", maestro_content):
         agent = match.group(1)
         triggers = [t.strip() for t in match.group(2).split(",")]
         table[agent] = triggers
@@ -65,9 +64,7 @@ class TestRoutingTableCompleteness:
             for trigger in triggers:
                 normalized = trigger.lower().strip()
                 if normalized in seen:
-                    duplicates.append(
-                        f"'{normalized}' in both {seen[normalized]} and {agent}"
-                    )
+                    duplicates.append(f"'{normalized}' in both {seen[normalized]} and {agent}")
                 seen[normalized] = agent
         assert not duplicates, f"Ambiguous triggers: {duplicates}"
 
@@ -112,9 +109,7 @@ class TestRoutingScenarios:
         self, routing_scenarios: list[dict], maestro_content: str
     ) -> None:
         """The ops: prefix should trigger a skill load, not agent delegation."""
-        ops_scenarios = [
-            s for s in routing_scenarios if s["expect"].get("skill") == "carter-ops"
-        ]
+        ops_scenarios = [s for s in routing_scenarios if s["expect"].get("skill") == "carter-ops"]
         assert ops_scenarios, "No ops: scenarios defined"
 
         # Maestro must have the ops: one-liner

@@ -1,4 +1,5 @@
 """Shared test fixtures for Carter installer tests."""
+
 from __future__ import annotations
 
 import json

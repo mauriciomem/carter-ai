@@ -1,6 +1,8 @@
 """Workspace state management — .carter/ directory structure."""
+
 from __future__ import annotations
 
+import contextlib
 import subprocess
 from pathlib import Path
 from typing import Any
@@ -96,10 +98,9 @@ def _git_init(directory: Path) -> None:
         return
 
     _run_git(["init"], directory)
-    try:
+    # init is best-effort; a broken git environment must not abort it
+    with contextlib.suppress(StateError):
         commit_state(directory, "chore: init carter state", allow_empty=True)
-    except StateError:
-        pass  # init is best-effort; a broken git environment must not abort it
 
 
 # Identity for automated state commits — these are local recovery snapshots, not
@@ -119,9 +120,7 @@ class StateError(Exception):
 
 def _run_git(args: list[str], cwd: Path) -> subprocess.CompletedProcess[str]:
     """Run a git command in ``cwd``, capturing output and never raising."""
-    return subprocess.run(
-        ["git", *args], cwd=cwd, capture_output=True, text=True, check=False
-    )
+    return subprocess.run(["git", *args], cwd=cwd, capture_output=True, text=True, check=False)
 
 
 def commit_state(carter_dir: Path, message: str, *, allow_empty: bool = False) -> bool:
@@ -166,7 +165,6 @@ def commit_state(carter_dir: Path, message: str, *, allow_empty: bool = False) -
     if commit.returncode != 0:
         raise StateError(f"git commit failed in {carter_dir}: {commit.stderr.strip()}")
     return True
-
 
 
 def add_to_gitignore(target_dir: Path, entry: str = ".carter/") -> None:

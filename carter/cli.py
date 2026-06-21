@@ -1,10 +1,13 @@
 """Carter CLI — workspace scaffolding and management commands."""
+
 from __future__ import annotations
 
+from datetime import UTC
 from pathlib import Path
 
 import click
 import yaml
+from jinja2 import Environment
 
 from carter.config import ConfigError, _validate_agent_suffix, generate_default_config, load_config
 from carter.plans import validate_checkpoint, validate_plans_dir
@@ -23,7 +26,7 @@ from carter.state import StateError, add_to_gitignore, commit_state, init_worksp
 
 @click.group()
 @click.version_option(package_name="carter-ai")
-def main():
+def main() -> None:
     """Carter AI — workspace scaffolding and management."""
 
 
@@ -59,7 +62,7 @@ def install(
     quiet: bool,
     verbose: bool,
     debug: bool,
-):
+) -> None:
     """Install Carter agents, skills, and MCP servers system-wide (~/.copilot/)."""
     from carter.installer import run as run_install
 
@@ -106,7 +109,7 @@ def init(
     name: str | None,
     target_tool: str | None,
     agent_suffix: str | None,
-):
+) -> None:
     """Initialize a Carter workspace."""
     target = Path(target_dir).resolve()
     workspace_name = name or target.name
@@ -155,7 +158,7 @@ def init(
 @main.command()
 @click.argument("target_dir", default=".", type=click.Path(exists=True, file_okay=False))
 @click.option("--dry-run", is_flag=True, help="Preview changes without writing")
-def update(target_dir: str, dry_run: bool):
+def update(target_dir: str, dry_run: bool) -> None:
     """Re-render templated files from carter.yaml."""
     target = Path(target_dir).resolve()
     config_path = target / ".carter" / "carter.yaml"
@@ -198,7 +201,7 @@ def update(target_dir: str, dry_run: bool):
     help="Acknowledge that a strict policy degrades to advisory on a "
     "non-enforcing target (e.g. copilot). Required for strict on such targets.",
 )
-def check(target_dir: str, accept_degraded: bool):
+def check(target_dir: str, accept_degraded: bool) -> None:
     """Validate workspace integrity."""
     target = Path(target_dir).resolve()
     config_path = target / ".carter" / "carter.yaml"
@@ -250,9 +253,7 @@ def check(target_dir: str, accept_degraded: bool):
     errors.extend(validate_checkpoint(checkpoint, plans_root))
 
     # Lint emitted policy frontmatter against the declared model (P3, ADR-0005).
-    policy_errors, policy_warnings = lint_policy(
-        config, installed, accept_degraded=accept_degraded
-    )
+    policy_errors, policy_warnings = lint_policy(config, installed, accept_degraded=accept_degraded)
     errors.extend(policy_errors)
 
     if errors:
@@ -270,14 +271,14 @@ def check(target_dir: str, accept_degraded: bool):
 @main.command()
 @click.argument("target_dir", default=".", type=click.Path(exists=True, file_okay=False))
 @click.option("--message", "-m", default=None, help="Commit message for the state snapshot.")
-def save(target_dir: str, message: str | None):
+def save(target_dir: str, message: str | None) -> None:
     """Commit the .carter/ workspace state (recovery checkpoint).
 
     Snapshots plans, sessions, and knowledge into the nested .carter/.git so a
     deleted plan or session is recoverable. No-op if there is nothing to commit
     or the workspace was initialized with --no-git-state.
     """
-    from datetime import datetime, timezone
+    from datetime import datetime
 
     target = Path(target_dir).resolve()
     carter_dir = target / ".carter"
@@ -286,7 +287,7 @@ def save(target_dir: str, message: str | None):
             f"Not a Carter workspace: {carter_dir} not found. Run 'carter init' first."
         )
 
-    stamp = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    stamp = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
     msg = message or f"chore: checkpoint state ({stamp})"
     try:
         saved = commit_state(carter_dir, msg)
@@ -296,7 +297,6 @@ def save(target_dir: str, message: str | None):
         click.echo("Saved .carter/ state")
     else:
         click.echo("Nothing to save (no changes or git state disabled)")
-
 
 
 def _resolve_targets(target: str) -> list[str]:
@@ -361,7 +361,7 @@ def _write_if_absent(path: Path, content: str) -> bool:
     return True
 
 
-def _render_and_write(target: Path, config: dict, env) -> None:
+def _render_and_write(target: Path, config: dict, env: Environment) -> None:
     """Render templates and write them to each target's discovery paths.
 
     Carter-owned agent files (``carter-*``) are always (re)written so that
@@ -378,7 +378,6 @@ def _render_and_write(target: Path, config: dict, env) -> None:
         _write_if_absent(_instructions_path(target, tool), instructions_content)
 
 
-
 @main.command(
     "ops",
     context_settings={
@@ -388,7 +387,7 @@ def _render_and_write(target: Path, config: dict, env) -> None:
     },
 )
 @click.argument("args", nargs=-1, type=click.UNPROCESSED)
-def ops(args: tuple[str, ...]):
+def ops(args: tuple[str, ...]) -> None:
     """Run a carter-ops operation (deterministic executor).
 
     All arguments are passed through to the carter-ops CLI, e.g.:

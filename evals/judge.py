@@ -14,6 +14,7 @@ Usage:
     assert result.passed
     assert result.score >= 0.7
 """
+
 from __future__ import annotations
 
 import json
@@ -68,7 +69,9 @@ def _get_copilot_token() -> str | None:
     try:
         result = subprocess.run(
             ["gh", "auth", "token"],
-            capture_output=True, text=True, timeout=5,
+            capture_output=True,
+            text=True,
+            timeout=5,
         )
         if result.returncode == 0 and result.stdout.strip():
             return result.stdout.strip()
@@ -86,6 +89,7 @@ def _get_judge_auth() -> tuple[str, str]:
     if key := os.environ.get("OPENAI_API_KEY"):
         return "openai", key
     import pytest
+
     pytest.skip("No auth available for judge")
 
 
@@ -113,8 +117,7 @@ def judge_response(
     user_msg = (
         f"## Context\n{context}\n\n"
         f"## Response to Evaluate\n{response}\n\n"
-        f"## Rubric Criteria\n"
-        + "\n".join(f"- {r}" for r in rubric)
+        f"## Rubric Criteria\n" + "\n".join(f"- {r}" for r in rubric)
     )
 
     model = os.environ.get("EVAL_JUDGE_MODEL", "claude-sonnet-4.6")

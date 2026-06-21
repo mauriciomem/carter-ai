@@ -2,6 +2,7 @@
 # requires-python = ">=3.11"
 # ///
 """Carter-ops operation base class and auto-discovery registry."""
+
 from __future__ import annotations
 
 import importlib
@@ -16,6 +17,7 @@ from carter.ops.config import Config
 @dataclass
 class Plan:
     """Dry-run result describing what would happen."""
+
     operation: str
     steps: list[str]
     attribution: str
@@ -25,6 +27,7 @@ class Plan:
 @dataclass
 class Result:
     """Execution result."""
+
     operation: str
     success: bool
     data: dict[str, Any]

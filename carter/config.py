@@ -1,4 +1,5 @@
 """Configuration loading and schema validation for carter.yaml."""
+
 from __future__ import annotations
 
 import copy
@@ -176,11 +177,7 @@ def _deep_merge(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any
     """Recursively merge override into base. Override wins for non-dict values."""
     result = dict(base)
     for key, value in override.items():
-        if (
-            key in result
-            and isinstance(result[key], dict)
-            and isinstance(value, dict)
-        ):
+        if key in result and isinstance(result[key], dict) and isinstance(value, dict):
             result[key] = _deep_merge(result[key], value)
         else:
             result[key] = value
@@ -215,13 +212,21 @@ RISK_TAXONOMY: dict[str, dict[str, str]] = {
 # Tool/command -> risk category. Shipped defaults; user-extensible via
 # `policy.tool_risk` in carter.yaml (deep-merged over this map).
 TOOL_RISK_MAP: dict[str, str] = {
-    "git status": "R0", "git log": "R0", "git diff": "R0",
-    "git add": "R1", "git commit": "R1",
-    "git push": "R2", "git push --force": "R5",
-    "terraform apply": "R3", "terraform destroy": "R3",
-    "kubectl apply": "R3", "helm upgrade": "R3",
-    "rm -rf": "R5", "git reset --hard": "R5",
-    "vault read": "R4", "read .env": "R4",
+    "git status": "R0",
+    "git log": "R0",
+    "git diff": "R0",
+    "git add": "R1",
+    "git commit": "R1",
+    "git push": "R2",
+    "git push --force": "R5",
+    "terraform apply": "R3",
+    "terraform destroy": "R3",
+    "kubectl apply": "R3",
+    "helm upgrade": "R3",
+    "rm -rf": "R5",
+    "git reset --hard": "R5",
+    "vault read": "R4",
+    "read .env": "R4",
 }
 
 # Per-agent allowlist: agent -> {category: True}. A category absent for an agent is
@@ -339,9 +344,7 @@ def _emit_level(level: str) -> str:
     return level
 
 
-def _opencode_permission(
-    allowed: list[str], gates: dict[str, str]
-) -> dict[str, Any]:
+def _opencode_permission(allowed: list[str], gates: dict[str, str]) -> dict[str, Any]:
     """Best-effort OpenCode ``permission`` map from an agent's allowlist x gates.
 
     ``edit`` follows local-write (R1). ``bash`` is a command-glob map: local shell
@@ -382,9 +385,7 @@ def _gates_for(
     applied on top (an explicit per-category override replaces the level gate).
     """
     overrides = overrides or {}
-    return {
-        cat: overrides.get(cat, RISK_TAXONOMY[cat][emit_level]) for cat in allowed
-    }
+    return {cat: overrides.get(cat, RISK_TAXONOMY[cat][emit_level]) for cat in allowed}
 
 
 def policy_native_keys(config: dict[str, Any], role: str) -> dict[str, Any]:
@@ -399,11 +400,7 @@ def policy_native_keys(config: dict[str, Any], role: str) -> dict[str, Any]:
     target = config.get("target", "copilot")
     policy = config.get("policy") or {}
     emit_level = _emit_level(policy.get("level", "loose"))
-    allowed = [
-        cat
-        for cat, on in sorted(effective_allowlist(config).get(role, {}).items())
-        if on
-    ]
+    allowed = [cat for cat, on in sorted(effective_allowlist(config).get(role, {}).items()) if on]
     gates = _gates_for(allowed, emit_level, policy.get("overrides"))
 
     keys: dict[str, Any] = {}
@@ -434,11 +431,7 @@ def policy_frontmatter(config: dict[str, Any], role: str) -> str:
     level = policy.get("level", "loose")
     emit_level = _emit_level(level)
 
-    allowed = [
-        cat
-        for cat, on in sorted(effective_allowlist(config).get(role, {}).items())
-        if on
-    ]
+    allowed = [cat for cat, on in sorted(effective_allowlist(config).get(role, {}).items()) if on]
     gates = _gates_for(allowed, emit_level, policy.get("overrides"))
 
     block: dict[str, Any] = {
@@ -462,10 +455,7 @@ def policy_gate_table(config: dict[str, Any]) -> list[dict[str, str]]:
     overrides = policy.get("overrides") or {}
     cats = ("R0", "R1", "R2", "R3", "R4", "R5", "R6")
     gates = _gates_for(list(cats), level, overrides)
-    return [
-        {"category": cat, "label": RISK_LABELS[cat], "gate": gates[cat]}
-        for cat in cats
-    ]
+    return [{"category": cat, "label": RISK_LABELS[cat], "gate": gates[cat]} for cat in cats]
 
 
 def generate_default_config(

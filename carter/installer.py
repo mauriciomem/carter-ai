@@ -10,6 +10,7 @@ This module backs the ``carter install`` command. Data files are resolved via
 ``carter.resources.data_dir()`` so it works both from a development checkout
 and from an installed wheel (``uv tool install``).
 """
+
 from __future__ import annotations
 
 import argparse
@@ -20,7 +21,7 @@ import platform
 import shutil
 import subprocess
 import sys
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 from carter.resources import data_dir
@@ -196,7 +197,7 @@ def _strip_jsonc(text: str) -> str:
             while i < n:
                 sc = text[i]
                 result.append(sc)
-                if sc == '\\' and i + 1 < n:
+                if sc == "\\" and i + 1 < n:
                     i += 1
                     result.append(text[i])
                 elif sc == '"':
@@ -206,17 +207,17 @@ def _strip_jsonc(text: str) -> str:
             continue
 
         # Single-line comment
-        if c == '/' and i + 1 < n and text[i + 1] == '/':
+        if c == "/" and i + 1 < n and text[i + 1] == "/":
             # Skip to end of line
             i += 2
-            while i < n and text[i] != '\n':
+            while i < n and text[i] != "\n":
                 i += 1
             continue
 
         # Block comment
-        if c == '/' and i + 1 < n and text[i + 1] == '*':
+        if c == "/" and i + 1 < n and text[i + 1] == "*":
             i += 2
-            while i + 1 < n and not (text[i] == '*' and text[i + 1] == '/'):
+            while i + 1 < n and not (text[i] == "*" and text[i + 1] == "/"):
                 i += 1
             i += 2  # skip */
             continue
@@ -226,8 +227,9 @@ def _strip_jsonc(text: str) -> str:
 
     # Remove trailing commas before } or ]
     import re
+
     cleaned = "".join(result)
-    cleaned = re.sub(r',\s*([}\]])', r'\1', cleaned)
+    cleaned = re.sub(r",\s*([}\]])", r"\1", cleaned)
     return cleaned
 
 
@@ -287,9 +289,7 @@ def _which(cmd: str) -> str | None:
 
 def _cmd_version(cmd: str, flag: str = "--version") -> str | None:
     try:
-        result = subprocess.run(
-            [cmd, flag], capture_output=True, text=True, timeout=10
-        )
+        result = subprocess.run([cmd, flag], capture_output=True, text=True, timeout=10)
         return result.stdout.strip().split("\n")[0] if result.returncode == 0 else None
     except (FileNotFoundError, subprocess.TimeoutExpired):
         return None
@@ -389,6 +389,7 @@ def _get_template_vars(config_path: Path, bot_name: str) -> dict[str, str]:
         try:
             text = config_path.read_text()
             import re as _re
+
             # Parse bot name
             m = _re.search(r'^name\s*=\s*"(.+)"', text, _re.MULTILINE)
             if m:
@@ -409,7 +410,9 @@ def _get_template_vars(config_path: Path, bot_name: str) -> dict[str, str]:
         try:
             result = subprocess.run(
                 ["git", "config", "user.signingkey"],
-                capture_output=True, text=True, timeout=5,
+                capture_output=True,
+                text=True,
+                timeout=5,
             )
             if result.returncode == 0 and result.stdout.strip():
                 signing_key = result.stdout.strip()
@@ -551,12 +554,14 @@ def install_skills(
             rel = src_file.relative_to(skill_dir)
 
             # Template substitution for carter-ops SKILL.md
-            needs_template = (skill_dir.name == "carter-ops" and src_file.name == "SKILL.md")
+            needs_template = skill_dir.name == "carter-ops" and src_file.name == "SKILL.md"
 
             if "copilot" in targets:
                 dst = _copilot_base(base_dir) / "skills" / skill_dir.name / rel
                 if needs_template:
-                    status = _install_templated_file(src_file, dst, manifest, backup_root, template_vars)
+                    status = _install_templated_file(
+                        src_file, dst, manifest, backup_root, template_vars
+                    )
                 else:
                     status = _install_file(src_file, dst, manifest, backup_root)
                 stats[status] += 1
@@ -564,7 +569,9 @@ def install_skills(
             if "opencode" in targets:
                 dst = _opencode_base(base_dir) / "skills" / skill_dir.name / rel
                 if needs_template:
-                    status = _install_templated_file(src_file, dst, manifest, backup_root, template_vars)
+                    status = _install_templated_file(
+                        src_file, dst, manifest, backup_root, template_vars
+                    )
                 else:
                     status = _install_file(src_file, dst, manifest, backup_root)
                 stats[status] += 1
@@ -593,12 +600,16 @@ def install_instructions(
 _OPENCODE_AGENTS_MD = """\
 # Carter — Global Rules
 
-When the user's request starts with `ops:`, load the `carter-ops` skill and follow its instructions exactly.
+When the user's request starts with `ops:`, load the `carter-ops` skill and follow
+its instructions exactly.
 
 ## Memory
-- Record mistakes and key learnings to `~/.carter/memories/` (visible) and `/memories/` (platform, if available).
-- Use `~/.carter/memories/user/` for cross-project notes, `repo/<name>/` for project-specific notes, and `session/` for conversation-scoped working notes.
-- Consult `~/.carter/memories/` and `~/.copilot/knowledge/` before proposing solutions to check for past decisions and lessons.
+- Record mistakes and key learnings to `~/.carter/memories/` (visible) and
+  `/memories/` (platform, if available).
+- Use `~/.carter/memories/user/` for cross-project notes, `repo/<name>/` for
+  project-specific notes, and `session/` for conversation-scoped working notes.
+- Consult `~/.carter/memories/` and `~/.copilot/knowledge/` before proposing
+  solutions to check for past decisions and lessons.
 """
 
 
@@ -672,7 +683,9 @@ def install_knowledge(
 # ──────────────────────────────────────────────────────────────────────────────
 
 
-def _merge_json_key(file_path: Path, key: str, entries: dict, backup_root: Path | None = None) -> None:
+def _merge_json_key(
+    file_path: Path, key: str, entries: dict, backup_root: Path | None = None
+) -> None:
     """Merge entries into a specific key of a JSON file.
 
     Handles JSONC (JSON with Comments) used by VS Code settings.json.
@@ -684,14 +697,15 @@ def _merge_json_key(file_path: Path, key: str, entries: dict, backup_root: Path 
         if backup_root:
             _backup_file(file_path, backup_root)
 
-        data = _load_jsonc(file_path)
-        if data is None:
+        loaded = _load_jsonc(file_path)
+        if loaded is None:
             log_err(f"Could not parse {file_path} — skipping to avoid data loss")
             log_warn(
                 "The file may contain syntax errors. Fix them and re-run the installer.",
                 f"File: {file_path}",
             )
             return
+        data = loaded
 
     if key not in data:
         data[key] = {}
@@ -750,7 +764,9 @@ def install_ops(
         try:
             result = subprocess.run(
                 ["git", "config", "user.signingkey"],
-                capture_output=True, text=True, timeout=5,
+                capture_output=True,
+                text=True,
+                timeout=5,
             )
             if result.returncode == 0 and result.stdout.strip():
                 signing_key = result.stdout.strip()
@@ -759,18 +775,18 @@ def install_ops(
 
         bot_email = f"{bot_name}@users.noreply.github.com"
         config_content = (
-            '[attribution]\n'
+            "[attribution]\n"
             f'name = "{bot_name}"\n'
             f'email = "{bot_email}"\n'
             f'footer = "This comment was generated by {bot_name}."\n'
-            '\n'
-            '[git]\n'
+            "\n"
+            "[git]\n"
             f'signing_key = "{signing_key}"\n'
-            '\n'
-            '[jira]\n'
+            "\n"
+            "[jira]\n"
             'url = ""\n'
             'email = ""\n'
-            '# token comes from JIRA_TOKEN or ATLASSIAN_API_TOKEN env var — never in config file\n'
+            "# token comes from JIRA_TOKEN or ATLASSIAN_API_TOKEN env var — never in config file\n"
         )
         config_path.write_text(config_content)
         log_ok(f"{str(config_path).replace(str(_home()), '~')}")
@@ -829,11 +845,14 @@ def configure_mcp_servers(
                     # Remove first if exists (idempotent)
                     subprocess.run(
                         ["copilot", "mcp", "remove", name],
-                        capture_output=True, timeout=10,
+                        capture_output=True,
+                        timeout=10,
                     )
                     subprocess.run(
                         ["copilot", "mcp", "add", name] + env_args + ["--"] + cmd_parts,
-                        capture_output=True, timeout=10, check=True,
+                        capture_output=True,
+                        timeout=10,
+                        check=True,
                     )
                     log_ok(f"{name} → copilot mcp add")
                     count += 1
@@ -895,10 +914,12 @@ def uninstall(targets: list[str], base_dir: Path | None, prereqs: dict[str, bool
                 copilot_base = str(_copilot_base(base_dir))
                 opencode_base = str(_opencode_base(base_dir))
 
-                if "copilot" in targets and f.startswith(copilot_base):
-                    p.unlink()
-                    log_ok(f"Removed {f.replace(str(_home()), '~')}")
-                elif "opencode" in targets and f.startswith(opencode_base):
+                if (
+                    "copilot" in targets
+                    and f.startswith(copilot_base)
+                    or "opencode" in targets
+                    and f.startswith(opencode_base)
+                ):
                     p.unlink()
                     log_ok(f"Removed {f.replace(str(_home()), '~')}")
     else:
@@ -954,7 +975,8 @@ def uninstall(targets: list[str], base_dir: Path | None, prereqs: dict[str, bool
                 try:
                     subprocess.run(
                         ["copilot", "mcp", "remove", name],
-                        capture_output=True, timeout=10,
+                        capture_output=True,
+                        timeout=10,
                     )
                     log_ok(f"Removed {name} from Copilot CLI")
                 except (subprocess.CalledProcessError, subprocess.TimeoutExpired):
@@ -1035,17 +1057,20 @@ def parse_args() -> argparse.Namespace:
         help="Override install base directory (for testing)",
     )
     parser.add_argument(
-        "-q", "--quiet",
+        "-q",
+        "--quiet",
         action="store_true",
         help="Errors only",
     )
     parser.add_argument(
-        "-v", "--verbose",
+        "-v",
+        "--verbose",
         action="store_true",
         help="Detailed output",
     )
     parser.add_argument(
-        "-vv", "--debug",
+        "-vv",
+        "--debug",
         action="store_true",
         help="Debug output",
     )
@@ -1087,7 +1112,7 @@ def run(
     else:
         log_step("Skipping MCP credentials (no --mcp flag)")
 
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     backup_root = _copilot_base(base_dir) / "backup" / now.strftime("%Y%m%dT%H%M%S")
 
     manifest: dict = {
@@ -1143,8 +1168,11 @@ def run(
     updated = agent_stats["updated"] + skill_stats["updated"]
     unchanged = agent_stats["unchanged"] + skill_stats["unchanged"]
     if updated > 0 or unchanged > 0:
-        _log(f"  Changes: {agent_stats['created'] + skill_stats['created']} created, "
-             f"{updated} updated, {unchanged} unchanged", level=2)
+        _log(
+            f"  Changes: {agent_stats['created'] + skill_stats['created']} created, "
+            f"{updated} updated, {unchanged} unchanged",
+            level=2,
+        )
 
 
 def main() -> None:

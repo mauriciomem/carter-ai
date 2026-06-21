@@ -3,6 +3,7 @@
 ``commit_state`` is what makes "I deleted a plan/session" recoverable: the nested
 .carter/.git must carry ongoing history beyond the single init commit.
 """
+
 from __future__ import annotations
 
 import shutil
@@ -164,4 +165,3 @@ class TestStateExtras:
         assert not plan.exists()
         _git(carter_dir, "checkout", "HEAD", "--", "state/plans/active/001-x/README.md")
         assert (plan / "README.md").exists()
-

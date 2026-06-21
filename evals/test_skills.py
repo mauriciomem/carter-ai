@@ -6,6 +6,7 @@ These tests verify:
 3. Skills don't teach anti-patterns
 4. Workflow phases are documented in correct order
 """
+
 from __future__ import annotations
 
 from pathlib import Path

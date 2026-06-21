@@ -1,4 +1,5 @@
 """Tests for carter-ops CLI and operations."""
+
 from __future__ import annotations
 
 import json
@@ -7,7 +8,6 @@ from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
-
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Config
@@ -27,11 +27,11 @@ class TestConfig:
 
         toml = tmp_path / "config.toml"
         toml.write_text(
-            '[attribution]\n'
+            "[attribution]\n"
             'name = "my-bot"\n'
             'email = "my-bot@example.com"\n'
-            '\n'
-            '[git]\n'
+            "\n"
+            "[git]\n"
             f'signing_key = "{tmp_path / "fake_key"}"\n'
         )
         # Create the fake key so validation would pass
@@ -266,7 +266,8 @@ class TestGitFlowDryRun:
         op = get_operation("git-flow")
         cfg = Config()
         plan = op.dry_run(
-            {"branch": "feature/x", "message": "feat: x", "from": "main"}, cfg,
+            {"branch": "feature/x", "message": "feat: x", "from": "main"},
+            cfg,
         )
         assert plan.operation == "git-flow"
         assert len(plan.steps) == 6  # checkout, pull, branch, add, commit, push
@@ -325,7 +326,8 @@ class TestJiraCreateDryRun:
         op = get_operation("jira-create")
         cfg = Config()
         plan = op.dry_run(
-            {"project": "PROJ", "type": "Story", "summary": "Add auth"}, cfg,
+            {"project": "PROJ", "type": "Story", "summary": "Add auth"},
+            cfg,
         )
         assert plan.operation == "jira-create"
         assert any("PROJ" in s for s in plan.steps)
@@ -349,7 +351,8 @@ class TestJiraUpdateDryRun:
         op = get_operation("jira-update")
         cfg = Config()
         plan = op.dry_run(
-            {"ticket": "PROJ-123", "comment": "Done", "transition": "Done"}, cfg,
+            {"ticket": "PROJ-123", "comment": "Done", "transition": "Done"},
+            cfg,
         )
         assert plan.operation == "jira-update"
         assert len(plan.side_effects) == 2
@@ -545,7 +548,9 @@ class TestGitHubConfig:
         errors = cfg.validate_github()
         assert any("GITHUB_TOKEN" in e for e in errors)
 
-    def test_validate_github_with_token(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_validate_github_with_token(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         from carter.ops.config import Config
 
         monkeypatch.setenv("GITHUB_TOKEN", "ghp_testtoken123")
@@ -655,7 +660,9 @@ class TestGhIssueExecute:
         mock_resp.status_code = 403
         mock_resp.text = "Forbidden"
         mock_post.side_effect = _httpx.HTTPStatusError(
-            "Forbidden", request=MagicMock(), response=mock_resp,
+            "Forbidden",
+            request=MagicMock(),
+            response=mock_resp,
         )
 
         discover_operations()
@@ -798,7 +805,13 @@ class TestGhPrExecute:
         op = get_operation("gh-pr")
         cfg = Config(github_token="ghp_test")
         result = op.execute(
-            {"repo": "owner/repo", "title": "Draft PR", "head": "feat/y", "base": "main", "draft": True},
+            {
+                "repo": "owner/repo",
+                "title": "Draft PR",
+                "head": "feat/y",
+                "base": "main",
+                "draft": True,
+            },
             cfg,
         )
         assert result.success is True
@@ -871,18 +884,25 @@ class TestAuditSubcommand:
         # Redirect audit log to tmp
         monkeypatch.setattr(carter_ops, "AUDIT_LOG", tmp_path / "audit.log")
 
-        rc = carter_ops.main([
-            "audit",
-            "--operation", "git-flow",
-            "--params", '{"branch": "feature/x", "message": "feat: x"}',
-            "--result", "success",
-            "--identifiers", '{"commit_sha": "abc1234"}',
-        ])
+        rc = carter_ops.main(
+            [
+                "audit",
+                "--operation",
+                "git-flow",
+                "--params",
+                '{"branch": "feature/x", "message": "feat: x"}',
+                "--result",
+                "success",
+                "--identifiers",
+                '{"commit_sha": "abc1234"}',
+            ]
+        )
         assert rc == 0
 
         # Verify audit log was written
         log_content = (tmp_path / "audit.log").read_text()
         import json
+
         entry = json.loads(log_content.strip())
         assert entry["operation"] == "git-flow"
         assert entry["result"] == "success"
@@ -906,14 +926,19 @@ class TestAuditSubcommand:
 
         monkeypatch.setattr(carter_ops, "AUDIT_LOG", tmp_path / "audit.log")
 
-        rc = carter_ops.main([
-            "audit",
-            "--operation", "git-push",
-            "--result", "failure",
-        ])
+        rc = carter_ops.main(
+            [
+                "audit",
+                "--operation",
+                "git-push",
+                "--result",
+                "failure",
+            ]
+        )
         assert rc == 0
 
         import json
+
         entry = json.loads((tmp_path / "audit.log").read_text().strip())
         assert entry["operation"] == "git-push"
         assert entry["result"] == "failure"
@@ -931,16 +956,23 @@ class TestPolicyOverrideSubcommand:
         from carter.ops import carter_ops
 
         monkeypatch.setattr(carter_ops, "AUDIT_LOG", tmp_path / "audit.log")
-        rc = carter_ops.main([
-            "policy-override",
-            "--category", "R2",
-            "--action", "git push origin main",
-            "--tier", "native-ask",
-            "--reason", "hotfix release",
-        ])
+        rc = carter_ops.main(
+            [
+                "policy-override",
+                "--category",
+                "R2",
+                "--action",
+                "git push origin main",
+                "--tier",
+                "native-ask",
+                "--reason",
+                "hotfix release",
+            ]
+        )
         assert rc == 0
 
         import json
+
         lines = (tmp_path / "audit.log").read_text().strip().splitlines()
         assert len(lines) == 1  # exactly one entry per action — not session-wide
         entry = json.loads(lines[0])
@@ -967,9 +999,17 @@ class TestPolicyOverrideSubcommand:
     def test_override_rejects_unknown_tier(self, capsys: pytest.CaptureFixture) -> None:
         from carter.ops import carter_ops
 
-        rc = carter_ops.main([
-            "policy-override", "--category", "R2", "--action", "x", "--tier", "blanket",
-        ])
+        rc = carter_ops.main(
+            [
+                "policy-override",
+                "--category",
+                "R2",
+                "--action",
+                "x",
+                "--tier",
+                "blanket",
+            ]
+        )
         assert rc == 1
 
     def test_override_native_deny_records_not_authorizes(
@@ -978,16 +1018,23 @@ class TestPolicyOverrideSubcommand:
         from carter.ops import carter_ops
 
         monkeypatch.setattr(carter_ops, "AUDIT_LOG", tmp_path / "audit.log")
-        rc = carter_ops.main([
-            "policy-override",
-            "--category", "R3",
-            "--action", "terraform apply",
-            "--tier", "native-deny",
-            "--reason", "approved exception",
-        ])
+        rc = carter_ops.main(
+            [
+                "policy-override",
+                "--category",
+                "R3",
+                "--action",
+                "terraform apply",
+                "--tier",
+                "native-deny",
+                "--reason",
+                "approved exception",
+            ]
+        )
         assert rc == 0
 
         import json
+
         entry = json.loads((tmp_path / "audit.log").read_text().strip())
         assert entry["tier"] == "native-deny"
         # Even at native-deny the ledger only records — it cannot lift the deny.
@@ -1000,10 +1047,17 @@ class TestPolicyOverrideSubcommand:
 
         monkeypatch.setattr(carter_ops, "AUDIT_LOG", tmp_path / "audit.log")
         for _ in range(2):
-            carter_ops.main([
-                "policy-override", "--category", "R2",
-                "--action", "git push", "--tier", "native-ask",
-            ])
+            carter_ops.main(
+                [
+                    "policy-override",
+                    "--category",
+                    "R2",
+                    "--action",
+                    "git push",
+                    "--tier",
+                    "native-ask",
+                ]
+            )
         lines = (tmp_path / "audit.log").read_text().strip().splitlines()
         assert len(lines) == 2  # per-action, never a session-wide blanket
 
@@ -1013,16 +1067,23 @@ class TestPolicyOverrideSubcommand:
         from carter.ops import carter_ops
 
         monkeypatch.setattr(carter_ops, "AUDIT_LOG", tmp_path / "audit.log")
-        rc = carter_ops.main([
-            "policy-override",
-            "--category", "R6",
-            "--action", "post release notes",
-            "--tier", "prose-backstop",
-            "--reason", "advisory-only target",
-        ])
+        rc = carter_ops.main(
+            [
+                "policy-override",
+                "--category",
+                "R6",
+                "--action",
+                "post release notes",
+                "--tier",
+                "prose-backstop",
+                "--reason",
+                "advisory-only target",
+            ]
+        )
         assert rc == 0
 
         import json
+
         entry = json.loads((tmp_path / "audit.log").read_text().strip())
         assert entry["tier"] == "prose-backstop"
         # The weakest tier still only records — it never authorizes.
@@ -1030,23 +1091,26 @@ class TestPolicyOverrideSubcommand:
 
 
 class TestConfigSubcommand:
-    def test_config_emit(self, capsys: pytest.CaptureFixture, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_config_emit(
+        self, capsys: pytest.CaptureFixture, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         from carter.ops import carter_ops
 
         # Create a test config file
         config_toml = tmp_path / "config.toml"
         config_toml.write_text(
-            '[attribution]\n'
+            "[attribution]\n"
             'name = "test-bot"\n'
             'email = "test-bot@example.com"\n'
             'footer = "Generated by test-bot."\n'
-            '\n'
-            '[git]\n'
+            "\n"
+            "[git]\n"
             'signing_key = ""\n'
         )
 
         # Monkey-patch Config.load to use our test config
         from carter.ops.config import Config
+
         original_load = Config.load
 
         @classmethod
@@ -1059,6 +1123,7 @@ class TestConfigSubcommand:
         assert rc == 0
 
         import json
+
         captured = capsys.readouterr()
         data = json.loads(captured.out)
         assert data["bot_name"] == "test-bot"

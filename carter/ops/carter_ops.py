@@ -28,11 +28,12 @@ Usage:
   carter-ops --list
   carter-ops git-flow --branch feature/X --message "feat: X" --dry-run  (legacy)
 """
+
 from __future__ import annotations
 
 import json
 import sys
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -113,9 +114,8 @@ def _parse_argv(argv: list[str]) -> tuple[str, dict[str, Any], str]:
             params["files"] = [params["files"]]
 
     # Normalize labels param to list
-    if "labels" in params and isinstance(params["labels"], str):
-        if "," in params["labels"]:
-            params["labels"] = [label.strip() for label in params["labels"].split(",")]
+    if "labels" in params and isinstance(params["labels"], str) and "," in params["labels"]:
+        params["labels"] = [label.strip() for label in params["labels"].split(",")]
 
     return operation, params, phase
 
@@ -133,7 +133,7 @@ def _handle_audit(params: dict[str, Any]) -> int:
         return 1
 
     entry: dict[str, Any] = {
-        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "timestamp": datetime.now(UTC).isoformat(),
         "operation": operation,
         "phase": "execute",
         "result": result_status,
@@ -143,7 +143,9 @@ def _handle_audit(params: dict[str, Any]) -> int:
     params_json = params.get("params", "")
     if params_json:
         try:
-            entry["params"] = json.loads(params_json) if isinstance(params_json, str) else params_json
+            entry["params"] = (
+                json.loads(params_json) if isinstance(params_json, str) else params_json
+            )
         except (json.JSONDecodeError, TypeError):
             entry["params"] = {"raw": str(params_json)}
 
@@ -151,7 +153,11 @@ def _handle_audit(params: dict[str, Any]) -> int:
     identifiers_json = params.get("identifiers", "")
     if identifiers_json:
         try:
-            entry["identifiers"] = json.loads(identifiers_json) if isinstance(identifiers_json, str) else identifiers_json
+            entry["identifiers"] = (
+                json.loads(identifiers_json)
+                if isinstance(identifiers_json, str)
+                else identifiers_json
+            )
         except (json.JSONDecodeError, TypeError):
             entry["identifiers"] = {"raw": str(identifiers_json)}
 
@@ -187,13 +193,14 @@ def _handle_policy_override(params: dict[str, Any]) -> int:
     tier = params.get("tier", "")
     if tier not in _OVERRIDE_TIERS:
         emit_error(
-            "--tier must be one of: " + ", ".join(_OVERRIDE_TIERS)
+            "--tier must be one of: "
+            + ", ".join(_OVERRIDE_TIERS)
             + " (no blanket/session-wide overrides)"
         )
         return 1
 
     entry: dict[str, Any] = {
-        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "timestamp": datetime.now(UTC).isoformat(),
         "event": "policy-override",
         "category": category,
         "action": action,
@@ -203,29 +210,33 @@ def _handle_policy_override(params: dict[str, Any]) -> int:
         "authorized": False,
     }
     _audit(entry)
-    emit({
-        "status": "logged",
-        "event": "policy-override",
-        "category": category,
-        "tier": tier,
-        "authorized": False,
-    })
+    emit(
+        {
+            "status": "logged",
+            "event": "policy-override",
+            "category": category,
+            "tier": tier,
+            "authorized": False,
+        }
+    )
     return 0
 
 
 def _handle_config_emit() -> int:
     """Print config values for model consumption."""
     cfg = Config.load()
-    emit({
-        "bot_name": cfg.bot_name,
-        "bot_email": cfg.bot_email,
-        "signing_key": cfg.signing_key,
-        "footer": cfg.footer,
-        "jira_url": cfg.jira_url,
-        "jira_email": cfg.jira_email,
-        "has_jira_token": bool(cfg.jira_token),
-        "has_github_token": bool(cfg.github_token),
-    })
+    emit(
+        {
+            "bot_name": cfg.bot_name,
+            "bot_email": cfg.bot_email,
+            "signing_key": cfg.signing_key,
+            "footer": cfg.footer,
+            "jira_url": cfg.jira_url,
+            "jira_email": cfg.jira_email,
+            "has_jira_token": bool(cfg.jira_token),
+            "has_github_token": bool(cfg.github_token),
+        }
+    )
     return 0
 
 
@@ -333,57 +344,64 @@ def main(argv: list[str] | None = None) -> int:
         )
         emit(result)
 
-        _audit({
-            "timestamp": datetime.now(timezone.utc).isoformat(),
-            "operation": operation_name,
-            "phase": "dry-run",
-            "params": {k: v for k, v in params.items() if k not in ("body", "description")},
-        })
+        _audit(
+            {
+                "timestamp": datetime.now(UTC).isoformat(),
+                "operation": operation_name,
+                "phase": "dry-run",
+                "params": {k: v for k, v in params.items() if k not in ("body", "description")},
+            }
+        )
         return 0
 
     elif phase == "execute":
-        result = op.execute(params, cfg)
+        outcome = op.execute(params, cfg)
 
-        if result.success:
+        if outcome.success:
             output = execute_output(
-                operation=result.operation,
+                operation=outcome.operation,
                 success=True,
-                result=result.data,
-                attribution=result.attribution,
+                result=outcome.data,
+                attribution=outcome.attribution,
             )
             emit(output)
 
-            _audit({
-                "timestamp": datetime.now(timezone.utc).isoformat(),
-                "operation": operation_name,
-                "phase": "execute",
-                "params": {k: v for k, v in params.items() if k not in ("body", "description")},
-                "result": "success",
-                "identifiers": {
-                    k: v for k, v in result.data.items()
-                    if k in ("commit_sha", "branch", "key", "comment_id", "ticket")
-                },
-            })
+            _audit(
+                {
+                    "timestamp": datetime.now(UTC).isoformat(),
+                    "operation": operation_name,
+                    "phase": "execute",
+                    "params": {k: v for k, v in params.items() if k not in ("body", "description")},
+                    "result": "success",
+                    "identifiers": {
+                        k: v
+                        for k, v in outcome.data.items()
+                        if k in ("commit_sha", "branch", "key", "comment_id", "ticket")
+                    },
+                }
+            )
             return 0
         else:
             # Check if result has a suggestion
-            suggestion = result.data.pop("suggestion", "")
+            suggestion = outcome.data.pop("suggestion", "")
             output = error_output(
-                operation=result.operation,
-                code=result.data.get("error", "EXECUTION_ERROR"),
-                message=result.data.get("message", result.data.get("error", "Unknown error")),
+                operation=outcome.operation,
+                code=outcome.data.get("error", "EXECUTION_ERROR"),
+                message=outcome.data.get("message", outcome.data.get("error", "Unknown error")),
                 suggestion=suggestion,
             )
             emit(output)
 
-            _audit({
-                "timestamp": datetime.now(timezone.utc).isoformat(),
-                "operation": operation_name,
-                "phase": "execute",
-                "params": {k: v for k, v in params.items() if k not in ("body", "description")},
-                "result": "failure",
-                "error": result.data.get("error", ""),
-            })
+            _audit(
+                {
+                    "timestamp": datetime.now(UTC).isoformat(),
+                    "operation": operation_name,
+                    "phase": "execute",
+                    "params": {k: v for k, v in params.items() if k not in ("body", "description")},
+                    "result": "failure",
+                    "error": outcome.data.get("error", ""),
+                }
+            )
             return 2
 
     return 1

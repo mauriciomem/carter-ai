@@ -1,6 +1,6 @@
 [project]
 name = "carter-ai"
-version = "2.0.0a1"
+dynamic = ["version"]
 description = "AI assistant scaffolding and workspace management"
 requires-python = ">=3.11"
 dependencies = [
@@ -16,14 +16,53 @@ carter = "carter.cli:main"
 [project.optional-dependencies]
 dev = [
     "pytest>=8.0",
+    "ruff>=0.6",
+    "mypy>=1.11",
+    "types-PyYAML",
 ]
 
 [build-system]
-requires = ["hatchling"]
+requires = ["hatchling", "hatch-vcs"]
 build-backend = "hatchling.build"
+
+# Tag-driven version (ADR-0009 D1): the latest vX.Y.Z git tag is the ONLY version
+# source. No literal in source, no version-file written back. With no tag yet, the
+# backend emits a PEP 440 dev version (e.g. 0.1.dev<N>+g<sha>) until v2.0.0 lands.
+[tool.hatch.version]
+source = "vcs"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+
+[tool.ruff]
+target-version = "py311"
+line-length = 100
+src = ["carter", "tests", "evals"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B", "SIM", "C4"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["carter"]
+
+[tool.mypy]
+python_version = "3.11"
+packages = ["carter"]
+warn_unused_ignores = true
+warn_redundant_casts = true
+no_implicit_optional = true
+disallow_untyped_defs = true
+
+# Ratchet: small, already-clean modules held to extra strictness. Expand this list
+# as more modules are typed; full-repo strict is a tracked follow-up, not an M1 gate.
+# NB: enumerate explicit per-module flags — `strict = true` here leaks its checks
+# (e.g. disallow_any_generics) globally in mypy, defeating the non-strict baseline.
+[[tool.mypy.overrides]]
+module = ["carter.resources", "carter.ops.attribution"]
+disallow_any_generics = true
+disallow_untyped_calls = true
+warn_return_any = true
+extra_checks = true
 
 [tool.hatch.build.targets.wheel]
 packages = ["carter"]

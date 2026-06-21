@@ -3,6 +3,7 @@
 # dependencies = ["httpx"]
 # ///
 """carter-ops: jira-comment — add a comment to a Jira ticket."""
+
 from __future__ import annotations
 
 import re
@@ -16,9 +17,7 @@ from carter.ops.operations import Operation, Plan, Result, register
 def _jira_headers(cfg: Config) -> dict[str, str]:
     import base64
 
-    creds = base64.b64encode(
-        f"{cfg.jira_email}:{cfg.jira_token}".encode()
-    ).decode()
+    creds = base64.b64encode(f"{cfg.jira_email}:{cfg.jira_token}".encode()).decode()
     return {
         "Authorization": f"Basic {creds}",
         "Content-Type": "application/json",

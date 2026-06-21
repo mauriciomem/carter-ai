@@ -2,6 +2,7 @@
 # requires-python = ">=3.11"
 # ///
 """carter-ops: git-push — push branch to remote."""
+
 from __future__ import annotations
 
 import subprocess
@@ -36,7 +37,9 @@ class GitPush(Operation):
         try:
             subprocess.run(
                 ["git", "push", "origin", branch],
-                check=True, capture_output=True, text=True,
+                check=True,
+                capture_output=True,
+                text=True,
             )
         except subprocess.CalledProcessError as e:
             suggestion = ""
@@ -66,7 +69,9 @@ class GitPush(Operation):
         try:
             r = subprocess.run(
                 ["git", "branch", "--show-current"],
-                capture_output=True, text=True, check=True,
+                capture_output=True,
+                text=True,
+                check=True,
             )
             return r.stdout.strip()
         except subprocess.CalledProcessError:

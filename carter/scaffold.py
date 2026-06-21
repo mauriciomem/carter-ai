@@ -1,4 +1,5 @@
 """Jinja2 template rendering engine for Carter workspaces."""
+
 from __future__ import annotations
 
 import re
@@ -203,8 +204,7 @@ def lint_policy(
         for key in ("tools", "permission"):
             if (key in expected_native) != (key in (frontmatter or {})):
                 errors.append(
-                    f"{role}: emitted {key} presence drifted from the declared "
-                    f"target policy"
+                    f"{role}: emitted {key} presence drifted from the declared target policy"
                 )
             elif key in expected_native and (frontmatter or {}).get(key) != expected_native[key]:
                 errors.append(
@@ -234,9 +234,7 @@ def lint_policy(
 
     # Q16 redaction WARN: guarded|strict forces a redaction pass at runtime, so a
     # disabled redaction config is a contradiction worth surfacing.
-    if level in ("guarded", "strict") and not (config.get("redaction") or {}).get(
-        "enabled", False
-    ):
+    if level in ("guarded", "strict") and not (config.get("redaction") or {}).get("enabled", False):
         warnings.append(
             f"{level} forces a redaction pass but redaction.enabled is false — "
             "narrator renders with no redaction rules; strict|guarded will force "
@@ -272,6 +270,7 @@ def render_agents(config: dict[str, Any], env: Environment) -> dict[str, str]:
     agents stay distinct from globally installed ones.
     Raises ConfigError if any agent name is invalid or has no template.
     """
+    assert isinstance(env.loader, FileSystemLoader)  # always created via create_env
     templates_dir = Path(env.loader.searchpath[0])
     _validate_agents(config["agents"], templates_dir)
 

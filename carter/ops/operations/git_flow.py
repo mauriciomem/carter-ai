@@ -2,6 +2,7 @@
 # requires-python = ">=3.11"
 # ///
 """carter-ops: git-flow — composite: branch → add → commit → push."""
+
 from __future__ import annotations
 
 from typing import Any
@@ -64,7 +65,8 @@ class GitFlow(Operation):
         # Step 1: branch
         branch_op = GitBranch()
         branch_result = branch_op.execute(
-            {"name": branch_name, "from": from_branch}, cfg,
+            {"name": branch_name, "from": from_branch},
+            cfg,
         )
         if not branch_result.success:
             return Result(
@@ -77,7 +79,8 @@ class GitFlow(Operation):
         # Step 2: commit
         commit_op = GitCommit()
         commit_result = commit_op.execute(
-            {"message": message, "files": files}, cfg,
+            {"message": message, "files": files},
+            cfg,
         )
         if not commit_result.success:
             return Result(

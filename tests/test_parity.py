@@ -11,6 +11,7 @@ frontmatter (``description``/``mode``/``temperature``) which both sources must n
 emit identically (ADR-0002). This is the phase-1 guardrail from
 docs/adr/0002-single-source-agent-generation.md.
 """
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -95,9 +96,7 @@ class TestAgentSourceParity:
 class TestNarratorParity:
     """The narrator's security contract must be identical in spirit across sources."""
 
-    def _both_sources(
-        self, static_agents_dir: Path, template_agents_dir: Path
-    ) -> dict[str, str]:
+    def _both_sources(self, static_agents_dir: Path, template_agents_dir: Path) -> dict[str, str]:
         return {
             "static": (static_agents_dir / "carter-narrator.md").read_text(),
             "template": (template_agents_dir / "carter-narrator.md.j2").read_text(),
@@ -106,9 +105,7 @@ class TestNarratorParity:
     def test_redaction_invariants_in_both_sources(
         self, static_agents_dir: Path, template_agents_dir: Path
     ) -> None:
-        for source, content in self._both_sources(
-            static_agents_dir, template_agents_dir
-        ).items():
+        for source, content in self._both_sources(static_agents_dir, template_agents_dir).items():
             assert "NON-NEGOTIABLE" in content, f"narrator {source}: missing NON-NEGOTIABLE"
             assert "Anti-Bypass" in content, f"narrator {source}: missing Anti-Bypass clause"
             for category in REDACTION_CATEGORIES:
@@ -119,9 +116,7 @@ class TestNarratorParity:
     def test_reader_principle_in_both_sources(
         self, static_agents_dir: Path, template_agents_dir: Path
     ) -> None:
-        for source, content in self._both_sources(
-            static_agents_dir, template_agents_dir
-        ).items():
+        for source, content in self._both_sources(static_agents_dir, template_agents_dir).items():
             assert "Write for the reader" in content, (
                 f"narrator {source}: missing 'write for the reader' principle"
             )
@@ -143,26 +138,22 @@ class TestRenderedFrontmatterParity:
             fm = _parse_frontmatter(content)
             assert fm.get("description"), f"{name}: rendered without a description"
             assert fm.get("mode"), f"{name}: rendered without a mode"
-            assert isinstance(
-                fm.get("temperature"), (int, float)
-            ), f"{name}: rendered without a numeric temperature"
+            assert isinstance(fm.get("temperature"), int | float), (
+                f"{name}: rendered without a numeric temperature"
+            )
 
-    def test_rendered_frontmatter_matches_static(
-        self, static_agents_dir: Path
-    ) -> None:
+    def test_rendered_frontmatter_matches_static(self, static_agents_dir: Path) -> None:
         cfg = generate_default_config(workspace_name="parity", mode="single")
         cfg["agent_suffix"] = ""  # match canonical static filenames
         rendered = render_agents(cfg, create_env())
         for name, content in rendered.items():
             static = static_agents_dir / name
             assert static.exists(), f"no static counterpart for rendered {name}"
-            assert _parse_frontmatter(content) == _parse_frontmatter(
-                static.read_text()
-            ), f"{name}: rendered frontmatter diverges from the static file"
+            assert _parse_frontmatter(content) == _parse_frontmatter(static.read_text()), (
+                f"{name}: rendered frontmatter diverges from the static file"
+            )
 
-    def test_mode_vocabulary_is_valid_and_orchestrator_only(
-        self, static_agents_dir: Path
-    ) -> None:
+    def test_mode_vocabulary_is_valid_and_orchestrator_only(self, static_agents_dir: Path) -> None:
         """Pure-orchestrator model: maestro is the sole `primary`; every other
         agent is a `subagent`. All values must be valid OpenCode modes.
         """
@@ -193,21 +184,17 @@ class TestNoFalseReadOnlyClaim:
             if "read-only" in p.read_text().lower()
         ]
         assert not offenders, (
-            "static agents still claim 'read-only' (false guarantee, ADR-0005 D5): "
-            f"{offenders}"
+            f"static agents still claim 'read-only' (false guarantee, ADR-0005 D5): {offenders}"
         )
 
-    def test_no_agent_template_claims_read_only(
-        self, template_agents_dir: Path
-    ) -> None:
+    def test_no_agent_template_claims_read_only(self, template_agents_dir: Path) -> None:
         offenders = [
             p.name
             for p in sorted(template_agents_dir.glob("carter-*.md.j2"))
             if "read-only" in p.read_text().lower()
         ]
         assert not offenders, (
-            "agent templates still claim 'read-only' (false guarantee, ADR-0005 D5): "
-            f"{offenders}"
+            f"agent templates still claim 'read-only' (false guarantee, ADR-0005 D5): {offenders}"
         )
 
 
@@ -219,9 +206,7 @@ class TestProseMatchesAllowlist:
     holds R2). ADR-0005 D1/D4.
     """
 
-    def test_non_pusher_agents_dont_claim_full_access(
-        self, static_agents_dir: Path
-    ) -> None:
+    def test_non_pusher_agents_dont_claim_full_access(self, static_agents_dir: Path) -> None:
         allowlist = effective_allowlist(generate_default_config())
         offenders = []
         for agent in sorted(static_agents_dir.glob("carter-*.md")):
@@ -253,9 +238,7 @@ class TestStrictnessPolicyParity:
                 f"{agent.name}: policy block missing allow/gates"
             )
 
-    def test_static_allow_matches_shipped_allowlist(
-        self, static_agents_dir: Path
-    ) -> None:
+    def test_static_allow_matches_shipped_allowlist(self, static_agents_dir: Path) -> None:
         allowlist = effective_allowlist(generate_default_config())
         for agent in sorted(static_agents_dir.glob("carter-*.md")):
             role = self._role(agent)
@@ -291,9 +274,7 @@ class TestStrictnessPolicyParity:
                 f"{agent.name}: static (copilot default) must not bake opencode permission"
             )
 
-    def test_static_maestro_carries_policy_gate_table(
-        self, static_agents_dir: Path
-    ) -> None:
+    def test_static_maestro_carries_policy_gate_table(self, static_agents_dir: Path) -> None:
         """The global static maestro body must carry the always-on policy gate
         table (ADR-0005 D6) — frontmatter parity can't catch a body relapse."""
         body = (static_agents_dir / "carter-maestro.md").read_text()
@@ -301,13 +282,9 @@ class TestStrictnessPolicyParity:
         assert "external-publish" in body  # R6 row present
         assert "narrator→devops handoff" in body  # R6 overlay wired
 
-    def test_static_narrator_carries_r6_handoff(
-        self, static_agents_dir: Path
-    ) -> None:
+    def test_static_narrator_carries_r6_handoff(self, static_agents_dir: Path) -> None:
         """The global static narrator body must wire the R6 author/transmit
         handoff (ADR-0005 D4) — narrator authors + redacts, devops transmits."""
         body = (static_agents_dir / "carter-narrator.md").read_text().lower()
         assert "transmit" in body
         assert "devops" in body
-
-

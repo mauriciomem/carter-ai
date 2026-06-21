@@ -2,6 +2,7 @@
 # requires-python = ">=3.11"
 # ///
 """carter-ops: git-branch — create a feature branch."""
+
 from __future__ import annotations
 
 import re
@@ -49,15 +50,21 @@ class GitBranch(Operation):
         try:
             subprocess.run(
                 ["git", "checkout", from_branch],
-                check=True, capture_output=True, text=True,
+                check=True,
+                capture_output=True,
+                text=True,
             )
             subprocess.run(
                 ["git", "pull", "origin", from_branch],
-                check=True, capture_output=True, text=True,
+                check=True,
+                capture_output=True,
+                text=True,
             )
             subprocess.run(
                 ["git", "checkout", "-b", name],
-                check=True, capture_output=True, text=True,
+                check=True,
+                capture_output=True,
+                text=True,
             )
         except subprocess.CalledProcessError as e:
             return Result(

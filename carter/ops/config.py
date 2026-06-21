@@ -6,6 +6,7 @@
 Loads settings from ~/.carter/config.toml (non-secrets) and environment
 variables (secrets). Validates required settings per operation domain.
 """
+
 from __future__ import annotations
 
 import os
@@ -88,7 +89,9 @@ class Config:
             cfg.jira_email = jira.get("email", "")
 
         # Env vars override file values (secrets always from env)
-        cfg.jira_token = os.environ.get("JIRA_TOKEN", "") or os.environ.get("ATLASSIAN_API_TOKEN", "")
+        cfg.jira_token = os.environ.get("JIRA_TOKEN", "") or os.environ.get(
+            "ATLASSIAN_API_TOKEN", ""
+        )
         cfg.jira_url = os.environ.get("ATLASSIAN_URL", "") or cfg.jira_url
         cfg.jira_email = os.environ.get("ATLASSIAN_EMAIL", "") or cfg.jira_email
 
@@ -127,7 +130,9 @@ def _detect_signing_key() -> str:
     try:
         result = subprocess.run(
             ["git", "config", "user.signingkey"],
-            capture_output=True, text=True, timeout=5,
+            capture_output=True,
+            text=True,
+            timeout=5,
         )
         if result.returncode == 0 and result.stdout.strip():
             key = result.stdout.strip()

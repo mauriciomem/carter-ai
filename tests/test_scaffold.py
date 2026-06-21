@@ -1,4 +1,5 @@
 """Tests for Carter scaffold — template rendering and workspace initialization."""
+
 from __future__ import annotations
 
 import json
@@ -19,7 +20,6 @@ from carter.config import (
 )
 from carter.scaffold import create_env, render_agents, render_instructions, write_rendered_files
 from carter.state import KNOWLEDGE_FILES, add_to_gitignore, init_workspace
-
 
 # ─── Fixtures ────────────────────────────────────────────────────────────────
 
@@ -287,7 +287,15 @@ class TestAgentValidation:
 
     def test_valid_agents_pass_validation(self, default_config, env):
         """All standard agents pass validation without error."""
-        default_config["agents"] = ["maestro", "architect", "engineer", "devops", "pm", "learner", "narrator"]
+        default_config["agents"] = [
+            "maestro",
+            "architect",
+            "engineer",
+            "devops",
+            "pm",
+            "learner",
+            "narrator",
+        ]
         # Should not raise
         results = render_agents(default_config, env)
         assert len(results) == 7
@@ -459,7 +467,6 @@ class TestQualityGate:
         assert "suggest-and-confirm" in maestro
         # the checkpoint is a thin cursor, not a content duplicate
         assert "source of truth" in maestro
-
 
 
 # ─── State Tests ─────────────────────────────────────────────────────────────
@@ -892,10 +899,17 @@ class TestPolicyGateTable:
     def test_guarded_gates_match_taxonomy(self):
         from carter.config import policy_gate_table
 
-        gates = {r["category"]: r["gate"] for r in policy_gate_table({"policy": {"level": "guarded"}})}
+        gates = {
+            r["category"]: r["gate"] for r in policy_gate_table({"policy": {"level": "guarded"}})
+        }
         assert gates == {
-            "R0": "allow", "R1": "allow", "R2": "ask", "R3": "gate",
-            "R4": "ask", "R5": "gate", "R6": "gate",
+            "R0": "allow",
+            "R1": "allow",
+            "R2": "ask",
+            "R3": "gate",
+            "R4": "ask",
+            "R5": "gate",
+            "R6": "gate",
         }
 
     def test_loose_table_is_all_allow(self):
@@ -908,7 +922,9 @@ class TestPolicyGateTable:
         """P2->P3 gate is open (step 9): strict now emits deny for R3/R5."""
         from carter.config import policy_gate_table
 
-        gates = {r["category"]: r["gate"] for r in policy_gate_table({"policy": {"level": "strict"}})}
+        gates = {
+            r["category"]: r["gate"] for r in policy_gate_table({"policy": {"level": "strict"}})
+        }
         assert gates["R3"] == "deny"
         assert gates["R5"] == "deny"
         assert gates["R2"] == "gate"
@@ -987,9 +1003,7 @@ class TestInitFlags:
         from carter.cli import main
 
         runner = CliRunner()
-        return runner.invoke(
-            main, ["init", str(tmp_path), "--no-git-state", *args]
-        )
+        return runner.invoke(main, ["init", str(tmp_path), "--no-git-state", *args])
 
     def test_target_flag_writes_opencode(self, tmp_path):
         result = self._run_init(tmp_path, "--target", "opencode")
@@ -1122,9 +1136,7 @@ class TestPolicyStrictEnabled:
         assert "pending P3" not in raw
 
     def test_strict_permission_bash_denies_destructive(self):
-        block = _policy_block(
-            _policy_config(level="strict", target="opencode"), "devops"
-        )
+        block = _policy_block(_policy_config(level="strict", target="opencode"), "devops")
         bash = block["permission"]["bash"]
         # devops holds R3/R5 (deny at strict) -> those commands deny on OpenCode,
         # but local shell stays available so the agent can still work.
@@ -1143,10 +1155,7 @@ class TestStrictGateMatrix:
     Runtime denial itself is out of scope (Q17) — we prove emission + lint."""
 
     def _installed(self, config: dict) -> dict:
-        return {
-            role: yaml.safe_load(policy_frontmatter(config, role))
-            for role in _ALL_ROLES
-        }
+        return {role: yaml.safe_load(policy_frontmatter(config, role)) for role in _ALL_ROLES}
 
     def test_strict_on_opencode_lints_clean(self):
         from carter.scaffold import lint_policy
@@ -1206,9 +1215,7 @@ class TestPolicyTargetShaping:
             "carter-atlassian/*",
             "carter-github/*",
         ]
-        assert _policy_block(_policy_config(), "learner")["tools"] == [
-            "carter-atlassian/*"
-        ]
+        assert _policy_block(_policy_config(), "learner")["tools"] == ["carter-atlassian/*"]
 
     def test_agents_without_mcp_scope_omit_tools(self):
         for role in ("maestro", "narrator"):
@@ -1238,17 +1245,13 @@ class TestPolicyOpenCodePermission:
         assert perm["bash"]["rm -rf*"] == "ask"
 
     def test_edit_denied_without_local_write(self):
-        perm = _policy_block(_policy_config(target="opencode"), "architect")[
-            "permission"
-        ]
+        perm = _policy_block(_policy_config(target="opencode"), "architect")["permission"]
         assert perm["edit"] == "deny"
 
     def test_local_write_agent_keeps_local_bash_denies_remote(self):
         # The regression fix: an R0/R1 agent (engineer) must run local shell
         # (pytest, git status/add/commit) yet cannot push/apply/destroy.
-        perm = _policy_block(_policy_config(target="opencode"), "engineer")[
-            "permission"
-        ]
+        perm = _policy_block(_policy_config(target="opencode"), "engineer")["permission"]
         assert perm["bash"]["*"] == "allow"
         assert perm["bash"]["git push*"] == "deny"
         assert perm["bash"]["terraform apply*"] == "deny"
@@ -1256,9 +1259,7 @@ class TestPolicyOpenCodePermission:
 
     def test_read_only_agent_bash_baseline_is_ask(self):
         # architect holds only R0 (no local-write) -> shell prompts, dangerous deny.
-        perm = _policy_block(_policy_config(target="opencode"), "architect")[
-            "permission"
-        ]
+        perm = _policy_block(_policy_config(target="opencode"), "architect")["permission"]
         assert perm["bash"]["*"] == "ask"
         assert perm["bash"]["git push*"] == "deny"
 
@@ -1268,9 +1269,9 @@ class TestPolicyOpenCodePermission:
             assert perm["webfetch"] == "allow"
 
     def test_loose_bash_allowed_for_pusher(self):
-        perm = _policy_block(
-            _policy_config(level="loose", target="opencode"), "devops"
-        )["permission"]
+        perm = _policy_block(_policy_config(level="loose", target="opencode"), "devops")[
+            "permission"
+        ]
         # loose: every gate is allow, so even remote/destructive shell is allowed.
         assert perm["bash"]["*"] == "allow"
         assert perm["bash"]["git push*"] == "allow"
@@ -1306,33 +1307,20 @@ class TestConfigureMcpServersUnchanged:
         from carter import installer
 
         manifest = {"files": [], "file_hashes": {}, "mcp_servers": []}
-        installer.configure_mcp_servers(
-            ["opencode"], tmp_path, manifest, {}, tmp_path / "backup"
-        )
+        installer.configure_mcp_servers(["opencode"], tmp_path, manifest, {}, tmp_path / "backup")
         assert manifest["mcp_servers"] == [
             "carter-github",
             "carter-terraform",
             "carter-atlassian",
         ]
-        opencode_cfg = json.loads(
-            (tmp_path / "opencode" / "opencode.json").read_text()
-        )
-        assert {"carter-github", "carter-terraform", "carter-atlassian"} <= set(
-            opencode_cfg["mcp"]
-        )
+        opencode_cfg = json.loads((tmp_path / "opencode" / "opencode.json").read_text())
+        assert {"carter-github", "carter-terraform", "carter-atlassian"} <= set(opencode_cfg["mcp"])
 
     def test_no_per_agent_dimension_in_global_wiring(self, tmp_path):
         from carter import installer
 
         manifest = {"files": [], "file_hashes": {}, "mcp_servers": []}
-        installer.configure_mcp_servers(
-            ["opencode"], tmp_path, manifest, {}, tmp_path / "backup"
-        )
-        opencode_cfg = json.loads(
-            (tmp_path / "opencode" / "opencode.json").read_text()
-        )
+        installer.configure_mcp_servers(["opencode"], tmp_path, manifest, {}, tmp_path / "backup")
+        opencode_cfg = json.loads((tmp_path / "opencode" / "opencode.json").read_text())
         for role in _ALL_ROLES:
             assert role not in opencode_cfg["mcp"]
-
-
-
