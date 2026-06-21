@@ -68,4 +68,55 @@ jobs:
       - name: Run offline evals
         run: |
           source .venv/bin/activate
-          python -m pytest evals/test_skills.py evals/test_routing.py -q
+          python -m pytest evals/test_skills.py evals/test_routing.py evals/test_metrics.py -q
+
+  install-smoke:
+    name: install-smoke (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          fetch-depth: 0 # hatch-vcs needs full history + tags to derive the version
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@d4b2f3b6ecc6e67c4457f6d3e41ec42d3d0fcb86 # v5
+
+      - name: Install carter as a real uv tool
+        run: |
+          uv tool install .
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      - name: carter --version (PEP 440)
+        run: |
+          carter --version
+          python3 - <<'PY'
+          import re, subprocess
+          out = subprocess.check_output(["carter", "--version"], text=True).strip()
+          ver = out.rsplit(" ", 1)[-1]
+          assert re.match(
+              r"^(\d+!)?\d+(\.\d+)*((a|b|rc)\d+)?(\.post\d+)?(\.dev\d+)?(\+[a-z0-9.]+)?$",
+              ver, re.I,
+          ), f"not PEP 440: {ver!r}"
+          print("version OK:", ver)
+          PY
+
+      - name: carter init + check (fresh workspace)
+        run: |
+          mkdir -p "$RUNNER_TEMP/smoke-ws"
+          carter init "$RUNNER_TEMP/smoke-ws" --target all
+          carter check "$RUNNER_TEMP/smoke-ws"
+
+      - name: carter install (throwaway home) + assert files
+        run: |
+          carter install --base-dir "$RUNNER_TEMP/fake-home" --target all
+          for tool in copilot opencode; do
+            count=$(ls "$RUNNER_TEMP/fake-home/$tool/agents/"*.md 2>/dev/null | wc -l)
+            echo "$tool agents: $count"
+            test "$count" -ge 7 || { echo "::error::expected >=7 $tool agent files"; exit 1; }
+          done

@@ -23,10 +23,13 @@ from __future__ import annotations
 import json
 import os
 import subprocess
+import time
 from pathlib import Path
 
 import pytest
 import yaml
+
+from evals.metrics import DEFAULT_MODEL, from_response, record
 
 # Skip entire module if no API key
 pytestmark = pytest.mark.live
@@ -85,16 +88,21 @@ def _get_api_key() -> tuple[str, str]:
 
 def _get_model() -> str:
     """Get model name from env or use default."""
-    return os.environ.get("EVAL_MODEL", "claude-sonnet-4.6")
+    return os.environ.get("EVAL_MODEL", DEFAULT_MODEL)
 
 
 def _call_model(system_prompt: str, user_message: str) -> str:
-    """Call the LLM and return the response text."""
+    """Call the LLM and return the response text.
+
+    Times the request and records normalized token/latency/cost metrics (temperature
+    pinned to 0 for determinism) without changing the string return contract.
+    """
     import httpx
 
     provider, api_key = _get_api_key()
     model = _get_model()
 
+    t0 = time.perf_counter()
     if provider == "copilot":
         resp = httpx.post(
             _COPILOT_API_URL,
@@ -107,6 +115,7 @@ def _call_model(system_prompt: str, user_message: str) -> str:
             json={
                 "model": model,
                 "max_tokens": 4096,
+                "temperature": 0,
                 "messages": [
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": user_message},
@@ -115,11 +124,13 @@ def _call_model(system_prompt: str, user_message: str) -> str:
             timeout=60,
         )
         resp.raise_for_status()
-        return resp.json()["choices"][0]["message"]["content"]
+        data = resp.json()
+        record(from_response(provider, data, time.perf_counter() - t0))
+        return data["choices"][0]["message"]["content"]
 
     elif provider == "anthropic":
         if "EVAL_MODEL" not in os.environ:
-            model = "claude-sonnet-4-20250514"
+            model = DEFAULT_MODEL
         resp = httpx.post(
             "https://api.anthropic.com/v1/messages",
             headers={
@@ -130,13 +141,16 @@ def _call_model(system_prompt: str, user_message: str) -> str:
             json={
                 "model": model,
                 "max_tokens": 4096,
+                "temperature": 0,
                 "system": system_prompt,
                 "messages": [{"role": "user", "content": user_message}],
             },
             timeout=60,
         )
         resp.raise_for_status()
-        return resp.json()["content"][0]["text"]
+        data = resp.json()
+        record(from_response(provider, data, time.perf_counter() - t0))
+        return data["content"][0]["text"]
 
     elif provider == "openai":
         if "EVAL_MODEL" not in os.environ:
@@ -150,6 +164,7 @@ def _call_model(system_prompt: str, user_message: str) -> str:
             json={
                 "model": model,
                 "max_tokens": 4096,
+                "temperature": 0,
                 "messages": [
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": user_message},
@@ -158,7 +173,9 @@ def _call_model(system_prompt: str, user_message: str) -> str:
             timeout=60,
         )
         resp.raise_for_status()
-        return resp.json()["choices"][0]["message"]["content"]
+        data = resp.json()
+        record(from_response(provider, data, time.perf_counter() - t0))
+        return data["choices"][0]["message"]["content"]
 
     raise ValueError(f"Unknown provider: {provider}")
 

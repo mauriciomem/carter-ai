@@ -20,10 +20,13 @@ from __future__ import annotations
 import json
 import os
 import subprocess
+import time
 from dataclasses import dataclass
 from pathlib import Path
 
 import httpx
+
+from evals.metrics import DEFAULT_JUDGE_MODEL, from_response, record
 
 
 @dataclass
@@ -120,8 +123,9 @@ def judge_response(
         f"## Rubric Criteria\n" + "\n".join(f"- {r}" for r in rubric)
     )
 
-    model = os.environ.get("EVAL_JUDGE_MODEL", "claude-sonnet-4.6")
+    model = os.environ.get("EVAL_JUDGE_MODEL", DEFAULT_JUDGE_MODEL)
 
+    t0 = time.perf_counter()
     if provider == "copilot":
         resp = httpx.post(
             _COPILOT_API_URL,
@@ -134,6 +138,7 @@ def judge_response(
             json={
                 "model": model,
                 "max_tokens": 1024,
+                "temperature": 0,
                 "messages": [
                     {"role": "system", "content": JUDGE_SYSTEM_PROMPT},
                     {"role": "user", "content": user_msg},
@@ -142,7 +147,8 @@ def judge_response(
             timeout=30,
         )
         resp.raise_for_status()
-        raw = resp.json()["choices"][0]["message"]["content"]
+        data = resp.json()
+        raw = data["choices"][0]["message"]["content"]
     elif provider == "anthropic":
         resp = httpx.post(
             "https://api.anthropic.com/v1/messages",
@@ -154,13 +160,15 @@ def judge_response(
             json={
                 "model": model,
                 "max_tokens": 1024,
+                "temperature": 0,
                 "system": JUDGE_SYSTEM_PROMPT,
                 "messages": [{"role": "user", "content": user_msg}],
             },
             timeout=30,
         )
         resp.raise_for_status()
-        raw = resp.json()["content"][0]["text"]
+        data = resp.json()
+        raw = data["content"][0]["text"]
     else:
         if "EVAL_JUDGE_MODEL" not in os.environ:
             model = "gpt-4o-mini"
@@ -173,6 +181,7 @@ def judge_response(
             json={
                 "model": model,
                 "max_tokens": 1024,
+                "temperature": 0,
                 "messages": [
                     {"role": "system", "content": JUDGE_SYSTEM_PROMPT},
                     {"role": "user", "content": user_msg},
@@ -181,7 +190,10 @@ def judge_response(
             timeout=30,
         )
         resp.raise_for_status()
-        raw = resp.json()["choices"][0]["message"]["content"]
+        data = resp.json()
+        raw = data["choices"][0]["message"]["content"]
+
+    record(from_response(provider, data, time.perf_counter() - t0))
 
     # Parse JSON response from judge
     # Handle markdown code blocks if present

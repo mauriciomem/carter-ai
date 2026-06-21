@@ -124,8 +124,8 @@ Scenarios are YAML files in `evals/scenarios/`. Each scenario has:
 
 | Variable | Purpose | Default |
 |----------|---------|---------|
-| `EVAL_MODEL` | Model to use for live evals | `claude-sonnet-4-20250514` |
-| `EVAL_JUDGE_MODEL` | Model for LLM-as-judge | `claude-sonnet-4-20250514` |
+| `EVAL_MODEL` | Model to use for live evals | `claude-sonnet-4-6` (single-sourced in `evals/metrics.py`) |
+| `EVAL_JUDGE_MODEL` | Model for LLM-as-judge | `claude-sonnet-4-6` (single-sourced in `evals/metrics.py`) |
 | `ANTHROPIC_API_KEY` | API key for Anthropic (fallback if no Copilot auth) | — |
 | `OPENAI_API_KEY` | API key for OpenAI (last resort fallback) | — |
 
