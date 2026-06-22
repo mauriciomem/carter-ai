@@ -1,150 +1,70 @@
-# /// script
-# requires-python = ">=3.11"
-# ///
-"""Carter system-level installer.
+"""Carter system-level installer (public entry point).
 
 Installs Carter agents, skills, instructions, knowledge base, and MCP server
 configurations for VS Code Copilot, Copilot CLI, and OpenCode.
 
-This module backs the ``carter install`` command. Data files are resolved via
-``carter.resources.data_dir()`` so it works both from a development checkout
-and from an installed wheel (``uv tool install``).
+This module backs the ``carter install`` command (and the legacy ``install.sh`` /
+``install.py`` bootstrap). The implementation was split into the ``carter.install``
+package (plan 004 step 8); this module re-exports those leaves and keeps the
+orchestration plus the few helpers that tests monkeypatch through this namespace
+(``_vscode_detected``, ``_vscode_settings_path``, ``check_prerequisites``,
+``configure_mcp_servers`` — each resolves a patched dependency from this module's
+globals). Data files are resolved via ``carter.resources.data_dir()`` so it works
+both from a development checkout and from an installed wheel (``uv tool install``).
 """
 
 from __future__ import annotations
 
 import argparse
-import hashlib
 import json
 import os
-import platform
-import shutil
+import platform  # noqa: F401  re-exported: tests monkeypatch ``installer.platform.system``
 import subprocess
-import sys
 from datetime import UTC, datetime
 from pathlib import Path
 
-from carter.resources import data_dir
+from carter.install.components import (
+    install_agents,
+    install_instructions,
+    install_knowledge,
+    install_memories,
+    install_opencode_rules,
+    install_ops,
+    install_skills,
+    read_manifest,
+    write_manifest,
+)
+from carter.install.console import (
+    _log,
+    bold,
+    green,
+    log_debug,
+    log_ok,
+    log_skip,
+    log_step,
+    log_warn,
+    set_verbosity,
+)
+from carter.install.files import _sha256  # noqa: F401  re-exported for tests
+from carter.install.jsonc import (  # noqa: F401  _strip_jsonc/_load_jsonc re-exported for tests
+    _load_jsonc,
+    _strip_jsonc,
+)
+from carter.install.mcp import MCP_SERVERS, _merge_json_key
+from carter.install.paths import (
+    REPO_ROOT,
+    _copilot_base,
+    _home,
+    _opencode_base,
+    _vscode_user_dirs,
+)
+from carter.install.prereqs import _cmd_version, _which, check_credentials, detect_environment
+from carter.install.uninstall import uninstall
 
 # ──────────────────────────────────────────────────────────────────────────────
-# ANSI output helpers
+# VS Code path detection (kept here so `_vscode_user_dirs` resolves through this
+# module's namespace — tests monkeypatch `installer._vscode_user_dirs`)
 # ──────────────────────────────────────────────────────────────────────────────
-
-_NO_COLOR = not sys.stdout.isatty() or os.environ.get("NO_COLOR")
-
-
-def _c(code: str, text: str) -> str:
-    if _NO_COLOR:
-        return text
-    return f"\033[{code}m{text}\033[0m"
-
-
-def green(t: str) -> str:
-    return _c("32", t)
-
-
-def yellow(t: str) -> str:
-    return _c("33", t)
-
-
-def red(t: str) -> str:
-    return _c("31", t)
-
-
-def bold(t: str) -> str:
-    return _c("1", t)
-
-
-def dim(t: str) -> str:
-    return _c("2", t)
-
-
-# Log levels: 0=quiet, 1=default, 2=verbose, 3=debug
-_verbosity = 1
-
-
-def _log(msg: str, level: int = 1) -> None:
-    if _verbosity >= level:
-        print(msg)
-
-
-def log_step(msg: str) -> None:
-    _log(f"\n{bold('→')} {bold(msg)}")
-
-
-def log_ok(msg: str, detail: str = "") -> None:
-    suffix = f" {dim(detail)}" if detail else ""
-    _log(f"  {green('✓')} {msg}{suffix}")
-
-
-def log_warn(msg: str, hint: str = "") -> None:
-    _log(f"  {yellow('⚠')} {msg}")
-    if hint:
-        _log(f"    {dim(hint)}")
-
-
-def log_err(msg: str) -> None:
-    _log(f"  {red('✗')} {msg}", level=0)
-
-
-def log_skip(msg: str) -> None:
-    _log(f"  {dim('·')} {msg}", level=2)
-
-
-def log_debug(msg: str) -> None:
-    _log(f"  {dim('[debug]')} {msg}", level=3)
-
-
-# ──────────────────────────────────────────────────────────────────────────────
-# Path resolution
-# ──────────────────────────────────────────────────────────────────────────────
-
-REPO_ROOT = data_dir()
-
-
-def _home() -> Path:
-    return Path.home()
-
-
-def _copilot_base(base_dir: Path | None) -> Path:
-    if base_dir:
-        return base_dir / "copilot"
-    return _home() / ".copilot"
-
-
-def _opencode_base(base_dir: Path | None) -> Path:
-    if base_dir:
-        return base_dir / "opencode"
-    return _home() / ".config" / "opencode"
-
-
-def _vscode_user_dirs(base_dir: Path | None) -> list[Path]:
-    """Return candidate VS Code ``User/`` config directories, most-preferred first.
-
-    Covers the common variants on macOS and Linux: stable VS Code, Insiders,
-    VSCodium, and (Linux) the Flatpak sandbox location. The ``base_dir`` test
-    override yields a single deterministic path.
-    """
-    if base_dir:
-        return [base_dir / "vscode"]
-
-    home = _home()
-    if platform.system() == "Darwin":
-        app_support = home / "Library" / "Application Support"
-        return [
-            app_support / "Code" / "User",
-            app_support / "Code - Insiders" / "User",
-            app_support / "VSCodium" / "User",
-        ]
-    # Linux / other POSIX
-    config = home / ".config"
-    return [
-        config / "Code" / "User",
-        config / "Code - Insiders" / "User",
-        config / "VSCodium" / "User",
-        # Flatpak-sandboxed VS Code
-        home / ".var" / "app" / "com.visualstudio.code" / "config" / "Code" / "User",
-    ]
 
 
 def _vscode_settings_path(base_dir: Path | None) -> Path:
@@ -174,138 +94,8 @@ def _vscode_detected(base_dir: Path | None) -> bool:
 
 
 # ──────────────────────────────────────────────────────────────────────────────
-# JSONC parsing (JSON with Comments — used by VS Code settings.json)
+# Prerequisite checks (kept here so `_which` resolves through this namespace)
 # ──────────────────────────────────────────────────────────────────────────────
-
-
-def _strip_jsonc(text: str) -> str:
-    """Strip // and /* */ comments and trailing commas from JSONC text.
-
-    Handles comments inside strings correctly (leaves them alone).
-    """
-    result: list[str] = []
-    i = 0
-    n = len(text)
-
-    while i < n:
-        c = text[i]
-
-        # String literal — copy verbatim, including any // or /* inside
-        if c == '"':
-            result.append(c)
-            i += 1
-            while i < n:
-                sc = text[i]
-                result.append(sc)
-                if sc == "\\" and i + 1 < n:
-                    i += 1
-                    result.append(text[i])
-                elif sc == '"':
-                    break
-                i += 1
-            i += 1
-            continue
-
-        # Single-line comment
-        if c == "/" and i + 1 < n and text[i + 1] == "/":
-            # Skip to end of line
-            i += 2
-            while i < n and text[i] != "\n":
-                i += 1
-            continue
-
-        # Block comment
-        if c == "/" and i + 1 < n and text[i + 1] == "*":
-            i += 2
-            while i + 1 < n and not (text[i] == "*" and text[i + 1] == "/"):
-                i += 1
-            i += 2  # skip */
-            continue
-
-        result.append(c)
-        i += 1
-
-    # Remove trailing commas before } or ]
-    import re
-
-    cleaned = "".join(result)
-    cleaned = re.sub(r",\s*([}\]])", r"\1", cleaned)
-    return cleaned
-
-
-def _load_jsonc(path: Path) -> dict | None:
-    """Load a JSONC file (JSON with Comments). Returns None on failure."""
-    try:
-        raw = path.read_text()
-        stripped = _strip_jsonc(raw)
-        return json.loads(stripped)
-    except (json.JSONDecodeError, OSError) as e:
-        log_debug(f"JSONC parse failed for {path}: {e}")
-        return None
-
-
-def _write_json_preserving(path: Path, data: dict) -> None:
-    """Write JSON data to a file.
-
-    If the original file used JSONC features (comments, trailing commas),
-    we cannot preserve those through a round-trip. We write clean JSON
-    with the same indent style.
-    """
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(data, indent=2) + "\n")
-
-
-# ──────────────────────────────────────────────────────────────────────────────
-# File hashing
-# ──────────────────────────────────────────────────────────────────────────────
-
-
-def _sha256(path: Path) -> str:
-    h = hashlib.sha256()
-    h.update(path.read_bytes())
-    return f"sha256:{h.hexdigest()}"
-
-
-# ──────────────────────────────────────────────────────────────────────────────
-# Prerequisite checks
-# ──────────────────────────────────────────────────────────────────────────────
-
-REQUIRED_ENV_VARS = (
-    "GITHUB_TOKEN",
-    "TF_TOKEN",
-    "ATLASSIAN_API_TOKEN",
-    "ATLASSIAN_EMAIL",
-    "ATLASSIAN_URL",
-)
-
-# The MCP servers Carter wires into every target. Single source of truth so the
-# install and uninstall paths can never diverge (RFC-0002 / ADR-0005 D5).
-MCP_SERVERS = ("github", "terraform", "atlassian")
-
-
-def _which(cmd: str) -> str | None:
-    return shutil.which(cmd)
-
-
-def _cmd_version(cmd: str, flag: str = "--version") -> str | None:
-    try:
-        result = subprocess.run([cmd, flag], capture_output=True, text=True, timeout=10)
-        return result.stdout.strip().split("\n")[0] if result.returncode == 0 else None
-    except (FileNotFoundError, subprocess.TimeoutExpired):
-        return None
-
-
-def detect_environment() -> dict:
-    log_step("Detecting environment...")
-    info = {
-        "os": platform.system(),
-        "os_version": platform.version().split()[0] if platform.version() else "unknown",
-        "python": platform.python_version(),
-    }
-    uv_ver = _cmd_version("uv", "--version")
-    info["uv"] = uv_ver.replace("uv ", "") if uv_ver else "not found"
-    _log(f"  OS: {info['os']} | Python: {info['python']} | uv: {info['uv']}")
-    return info
 
 
 def check_prerequisites(targets: list[str]) -> dict[str, bool]:
@@ -344,459 +134,10 @@ def check_prerequisites(targets: list[str]) -> dict[str, bool]:
     return checks
 
 
-def check_credentials() -> dict[str, bool]:
-    log_step("Checking credentials...")
-    results: dict[str, bool] = {}
-
-    for var in REQUIRED_ENV_VARS:
-        val = os.environ.get(var)
-        if val:
-            log_ok(var)
-            results[var] = True
-        else:
-            log_warn(var, f'export {var}="your-value"')
-            results[var] = False
-
-    return results
-
-
 # ──────────────────────────────────────────────────────────────────────────────
-# Backup
+# MCP server configuration (kept here so `_vscode_detected` resolves through this
+# namespace — tests monkeypatch `installer._vscode_detected`)
 # ──────────────────────────────────────────────────────────────────────────────
-
-
-def _backup_file(path: Path, backup_root: Path) -> None:
-    if not path.exists():
-        return
-    rel = path.name
-    dest = backup_root / rel
-    dest.parent.mkdir(parents=True, exist_ok=True)
-    shutil.copy2(path, dest)
-    log_debug(f"Backed up {path} → {dest}")
-
-
-# ──────────────────────────────────────────────────────────────────────────────
-# File installation
-# ──────────────────────────────────────────────────────────────────────────────
-
-
-def _get_template_vars(config_path: Path, bot_name: str) -> dict[str, str]:
-    """Get template variables from config.toml or defaults."""
-    bot_email = f"{bot_name}@users.noreply.github.com"
-    signing_key = ""
-
-    if config_path.exists():
-        try:
-            text = config_path.read_text()
-            import re as _re
-
-            # Parse bot name
-            m = _re.search(r'^name\s*=\s*"(.+)"', text, _re.MULTILINE)
-            if m:
-                bot_name = m.group(1)
-            # Parse bot email
-            m = _re.search(r'^email\s*=\s*"(.+)"', text, _re.MULTILINE)
-            if m:
-                bot_email = m.group(1)
-            # Parse signing key
-            m = _re.search(r'^signing_key\s*=\s*"(.+)"', text, _re.MULTILINE)
-            if m:
-                signing_key = m.group(1)
-        except Exception:
-            pass
-
-    # Fallback: auto-detect signing key
-    if not signing_key:
-        try:
-            result = subprocess.run(
-                ["git", "config", "user.signingkey"],
-                capture_output=True,
-                text=True,
-                timeout=5,
-            )
-            if result.returncode == 0 and result.stdout.strip():
-                signing_key = result.stdout.strip()
-        except (subprocess.SubprocessError, FileNotFoundError):
-            pass
-
-    return {
-        "{{BOT_NAME}}": bot_name,
-        "{{BOT_EMAIL}}": bot_email,
-        "{{SIGNING_KEY}}": signing_key,
-    }
-
-
-def _install_templated_file(
-    src: Path,
-    dst: Path,
-    manifest: dict,
-    backup_root: Path,
-    template_vars: dict[str, str],
-) -> str:
-    """Copy src to dst with template variable substitution. Returns status."""
-    dst.parent.mkdir(parents=True, exist_ok=True)
-
-    content = src.read_text()
-    for placeholder, value in template_vars.items():
-        content = content.replace(placeholder, value)
-
-    content_hash = hashlib.sha256(content.encode()).hexdigest()
-
-    if dst.exists():
-        dst_hash = _sha256(dst)
-        if content_hash == dst_hash:
-            log_skip(str(dst).replace(str(_home()), "~"))
-            manifest["files"].append(str(dst))
-            manifest["file_hashes"][str(dst)] = content_hash
-            return "unchanged"
-        _backup_file(dst, backup_root)
-        dst.write_text(content)
-        log_ok(f"{str(dst).replace(str(_home()), '~')}", "updated")
-        manifest["files"].append(str(dst))
-        manifest["file_hashes"][str(dst)] = content_hash
-        return "updated"
-
-    dst.write_text(content)
-    log_ok(str(dst).replace(str(_home()), "~"))
-    manifest["files"].append(str(dst))
-    manifest["file_hashes"][str(dst)] = content_hash
-    return "created"
-
-
-def _install_file(
-    src: Path,
-    dst: Path,
-    manifest: dict,
-    backup_root: Path,
-) -> str:
-    """Copy src to dst. Returns status: 'created', 'updated', or 'unchanged'."""
-    dst.parent.mkdir(parents=True, exist_ok=True)
-    src_hash = _sha256(src)
-
-    if dst.exists():
-        dst_hash = _sha256(dst)
-        if src_hash == dst_hash:
-            log_skip(str(dst).replace(str(_home()), "~"))
-            manifest["files"].append(str(dst))
-            manifest["file_hashes"][str(dst)] = src_hash
-            return "unchanged"
-        _backup_file(dst, backup_root)
-        shutil.copy2(src, dst)
-        log_ok(f"{str(dst).replace(str(_home()), '~')}", "updated")
-        manifest["files"].append(str(dst))
-        manifest["file_hashes"][str(dst)] = src_hash
-        return "updated"
-
-    shutil.copy2(src, dst)
-    log_ok(str(dst).replace(str(_home()), "~"))
-    manifest["files"].append(str(dst))
-    manifest["file_hashes"][str(dst)] = src_hash
-    return "created"
-
-
-# ──────────────────────────────────────────────────────────────────────────────
-# Agent format translation (Copilot → OpenCode)
-# ──────────────────────────────────────────────────────────────────────────────
-# Both Copilot CLI and OpenCode use nearly identical formats.
-# We store canonical files and copy to both locations as-is.
-# ──────────────────────────────────────────────────────────────────────────────
-
-
-def install_agents(
-    targets: list[str],
-    base_dir: Path | None,
-    manifest: dict,
-    backup_root: Path,
-) -> dict[str, int]:
-    log_step("Installing agents...")
-    src_dir = REPO_ROOT / "agents"
-    stats: dict[str, int] = {"created": 0, "updated": 0, "unchanged": 0}
-
-    for agent_file in sorted(src_dir.glob("carter-*.md")):
-        if "copilot" in targets:
-            dst = _copilot_base(base_dir) / "agents" / agent_file.name
-            status = _install_file(agent_file, dst, manifest, backup_root)
-            stats[status] += 1
-
-        if "opencode" in targets:
-            dst = _opencode_base(base_dir) / "agents" / agent_file.name
-            status = _install_file(agent_file, dst, manifest, backup_root)
-            stats[status] += 1
-
-    return stats
-
-
-def install_skills(
-    targets: list[str],
-    base_dir: Path | None,
-    manifest: dict,
-    backup_root: Path,
-    bot_name: str = "carter-bot",
-) -> dict[str, int]:
-    log_step("Installing skills...")
-    src_dir = REPO_ROOT / "skills"
-    stats: dict[str, int] = {"created": 0, "updated": 0, "unchanged": 0}
-
-    # Load config for template substitution (carter-ops SKILL.md)
-    carter_home = _carter_base(base_dir)
-    config_path = carter_home / "config.toml"
-    template_vars = _get_template_vars(config_path, bot_name)
-
-    for skill_dir in sorted(src_dir.iterdir()):
-        if not skill_dir.is_dir():
-            continue
-        skill_file = skill_dir / "SKILL.md"
-        if not skill_file.exists():
-            continue
-
-        skill_files = [f for f in sorted(skill_dir.iterdir()) if f.is_file()]
-        for src_file in skill_files:
-            rel = src_file.relative_to(skill_dir)
-
-            # Template substitution for carter-ops SKILL.md
-            needs_template = skill_dir.name == "carter-ops" and src_file.name == "SKILL.md"
-
-            if "copilot" in targets:
-                dst = _copilot_base(base_dir) / "skills" / skill_dir.name / rel
-                if needs_template:
-                    status = _install_templated_file(
-                        src_file, dst, manifest, backup_root, template_vars
-                    )
-                else:
-                    status = _install_file(src_file, dst, manifest, backup_root)
-                stats[status] += 1
-
-            if "opencode" in targets:
-                dst = _opencode_base(base_dir) / "skills" / skill_dir.name / rel
-                if needs_template:
-                    status = _install_templated_file(
-                        src_file, dst, manifest, backup_root, template_vars
-                    )
-                else:
-                    status = _install_file(src_file, dst, manifest, backup_root)
-                stats[status] += 1
-
-    return stats
-
-
-def install_instructions(
-    targets: list[str],
-    base_dir: Path | None,
-    manifest: dict,
-    backup_root: Path,
-) -> None:
-    log_step("Installing instructions...")
-    src = REPO_ROOT / "instructions" / "copilot-instructions.md"
-
-    if "copilot" in targets:
-        dst = _copilot_base(base_dir) / "instructions" / "copilot-instructions.md"
-        _install_file(src, dst, manifest, backup_root)
-
-    if "opencode" in targets:
-        dst = _opencode_base(base_dir) / "instructions" / "copilot-instructions.md"
-        _install_file(src, dst, manifest, backup_root)
-
-
-_OPENCODE_AGENTS_MD = """\
-# Carter — Global Rules
-
-When the user's request starts with `ops:`, load the `carter-ops` skill and follow
-its instructions exactly.
-
-## Memory
-- Record mistakes and key learnings to `~/.carter/memories/` (visible) and
-  `/memories/` (platform, if available).
-- Use `~/.carter/memories/user/` for cross-project notes, `repo/<name>/` for
-  project-specific notes, and `session/` for conversation-scoped working notes.
-- Consult `~/.carter/memories/` and `~/.copilot/knowledge/` before proposing
-  solutions to check for past decisions and lessons.
-"""
-
-
-def install_opencode_rules(
-    targets: list[str],
-    base_dir: Path | None,
-    manifest: dict,
-    backup_root: Path,
-) -> None:
-    """Generate ~/.config/opencode/AGENTS.md for OpenCode global rules."""
-    if "opencode" not in targets:
-        return
-    log_step("Installing OpenCode global rules...")
-    dst = _opencode_base(base_dir) / "AGENTS.md"
-    dst.parent.mkdir(parents=True, exist_ok=True)
-    if dst.exists():
-        log_skip(f"{str(dst).replace(str(_home()), '~')} (exists, not overwriting)")
-        manifest["files"].append(str(dst))
-    else:
-        dst.write_text(_OPENCODE_AGENTS_MD)
-        log_ok(str(dst).replace(str(_home()), "~"))
-        manifest["files"].append(str(dst))
-
-
-def install_memories(
-    base_dir: Path | None,
-    manifest: dict,
-) -> int:
-    """Create ~/.carter/memories/ directory structure."""
-    log_step("Initializing memory directories...")
-    memories_dir = _carter_base(base_dir) / "memories"
-    count = 0
-
-    for scope in ("user", "session", "repo"):
-        scope_dir = memories_dir / scope
-        if scope_dir.exists():
-            log_skip(f"{str(scope_dir).replace(str(_home()), '~')} (exists)")
-        else:
-            scope_dir.mkdir(parents=True, exist_ok=True)
-            log_ok(str(scope_dir).replace(str(_home()), "~"))
-            count += 1
-        manifest["files"].append(str(scope_dir))
-
-    return count
-
-
-def install_knowledge(
-    base_dir: Path | None,
-    manifest: dict,
-    backup_root: Path,
-) -> int:
-    log_step("Initializing knowledge base...")
-    src_dir = REPO_ROOT / "knowledge"
-    dst_dir = _copilot_base(base_dir) / "knowledge"
-    count = 0
-
-    for src_file in sorted(src_dir.glob("*.md")):
-        dst = dst_dir / src_file.name
-        if dst.exists():
-            log_skip(f"{str(dst).replace(str(_home()), '~')} (exists, not overwriting)")
-            manifest["files"].append(str(dst))
-        else:
-            _install_file(src_file, dst, manifest, backup_root)
-            count += 1
-
-    return count
-
-
-# ──────────────────────────────────────────────────────────────────────────────
-# MCP server configuration
-# ──────────────────────────────────────────────────────────────────────────────
-
-
-def _merge_json_key(
-    file_path: Path, key: str, entries: dict, backup_root: Path | None = None
-) -> None:
-    """Merge entries into a specific key of a JSON file.
-
-    Handles JSONC (JSON with Comments) used by VS Code settings.json.
-    Backs up the file before any modification.
-    """
-    data: dict = {}
-    if file_path.exists():
-        # Back up before modifying
-        if backup_root:
-            _backup_file(file_path, backup_root)
-
-        loaded = _load_jsonc(file_path)
-        if loaded is None:
-            log_err(f"Could not parse {file_path} — skipping to avoid data loss")
-            log_warn(
-                "The file may contain syntax errors. Fix them and re-run the installer.",
-                f"File: {file_path}",
-            )
-            return
-        data = loaded
-
-    if key not in data:
-        data[key] = {}
-
-    # Check for non-carter conflicts
-    for name in entries:
-        base_name = name.replace("carter-", "")
-        if base_name in data.get(key, {}) and name not in data.get(key, {}):
-            log_warn(
-                f'Existing "{base_name}" server found in {file_path.name}',
-                f'Carter will install as "{name}" (separate entry). '
-                f'You may want to remove "{base_name}" to avoid duplicate tools.',
-            )
-
-    data[key].update(entries)
-    _write_json_preserving(file_path, data)
-
-
-def _carter_base(base_dir: Path | None) -> Path:
-    """Return the carter home directory (~/.carter or base_dir/carter)."""
-    if base_dir:
-        return base_dir / "carter"
-    return _home() / ".carter"
-
-
-def _local_bin(base_dir: Path | None) -> Path:
-    """Return the local bin directory (~/.local/bin or base_dir/local/bin)."""
-    if base_dir:
-        return base_dir / "local" / "bin"
-    return _home() / ".local" / "bin"
-
-
-def install_ops(
-    base_dir: Path | None,
-    manifest: dict,
-    backup_root: Path,
-    bot_name: str = "carter-bot",
-) -> dict[str, int]:
-    """Generate carter-ops configuration.
-
-    The ``carter ops`` subcommand ships with the installed ``carter`` CLI, so
-    no source files or wrapper scripts need to be copied. This only generates
-    ``~/.carter/config.toml`` (non-secret attribution + git settings) if it
-    does not already exist.
-    """
-    log_step("Configuring carter-ops...")
-    carter_home = _carter_base(base_dir)
-    stats: dict[str, int] = {"created": 0, "updated": 0, "unchanged": 0}
-
-    config_path = carter_home / "config.toml"
-    if not config_path.exists():
-        config_path.parent.mkdir(parents=True, exist_ok=True)
-
-        # Auto-detect signing key
-        signing_key = ""
-        try:
-            result = subprocess.run(
-                ["git", "config", "user.signingkey"],
-                capture_output=True,
-                text=True,
-                timeout=5,
-            )
-            if result.returncode == 0 and result.stdout.strip():
-                signing_key = result.stdout.strip()
-        except (subprocess.SubprocessError, FileNotFoundError):
-            pass
-
-        bot_email = f"{bot_name}@users.noreply.github.com"
-        config_content = (
-            "[attribution]\n"
-            f'name = "{bot_name}"\n'
-            f'email = "{bot_email}"\n'
-            f'footer = "This comment was generated by {bot_name}."\n'
-            "\n"
-            "[git]\n"
-            f'signing_key = "{signing_key}"\n'
-            "\n"
-            "[jira]\n"
-            'url = ""\n'
-            'email = ""\n'
-            "# token comes from JIRA_TOKEN or ATLASSIAN_API_TOKEN env var — never in config file\n"
-        )
-        config_path.write_text(config_content)
-        log_ok(f"{str(config_path).replace(str(_home()), '~')}")
-        manifest["files"].append(str(config_path))
-        stats["created"] += 1
-    else:
-        log_skip(f"{str(config_path).replace(str(_home()), '~')} (exists, not overwriting)")
-        stats["unchanged"] += 1
-
-    return stats
 
 
 def configure_mcp_servers(
@@ -878,147 +219,6 @@ def configure_mcp_servers(
 
 
 # ──────────────────────────────────────────────────────────────────────────────
-# Manifest
-# ──────────────────────────────────────────────────────────────────────────────
-
-
-def write_manifest(manifest: dict, base_dir: Path | None) -> Path:
-    manifest_path = _copilot_base(base_dir) / ".carter-manifest.json"
-    manifest_path.parent.mkdir(parents=True, exist_ok=True)
-    manifest_path.write_text(json.dumps(manifest, indent=2) + "\n")
-    return manifest_path
-
-
-def read_manifest(base_dir: Path | None) -> dict | None:
-    manifest_path = _copilot_base(base_dir) / ".carter-manifest.json"
-    if manifest_path.exists():
-        return json.loads(manifest_path.read_text())
-    return None
-
-
-# ──────────────────────────────────────────────────────────────────────────────
-# Uninstall
-# ──────────────────────────────────────────────────────────────────────────────
-
-
-def uninstall(targets: list[str], base_dir: Path | None, prereqs: dict[str, bool]) -> None:
-    log_step("Uninstalling Carter...")
-    manifest = read_manifest(base_dir)
-
-    if manifest:
-        # Remove files from manifest
-        for f in manifest.get("files", []):
-            p = Path(f)
-            if p.exists():
-                # Check if this file belongs to a requested target
-                copilot_base = str(_copilot_base(base_dir))
-                opencode_base = str(_opencode_base(base_dir))
-
-                if (
-                    "copilot" in targets
-                    and f.startswith(copilot_base)
-                    or "opencode" in targets
-                    and f.startswith(opencode_base)
-                ):
-                    p.unlink()
-                    log_ok(f"Removed {f.replace(str(_home()), '~')}")
-    else:
-        # No manifest — remove by convention
-        if "copilot" in targets:
-            base = _copilot_base(base_dir)
-            for pattern_dir in ["agents", "skills"]:
-                d = base / pattern_dir
-                if d.exists():
-                    for f in d.glob("carter-*"):
-                        if f.is_file():
-                            f.unlink()
-                            log_ok(f"Removed {str(f).replace(str(_home()), '~')}")
-                        elif f.is_dir():
-                            shutil.rmtree(f)
-                            log_ok(f"Removed {str(f).replace(str(_home()), '~')}/")
-
-        if "opencode" in targets:
-            base = _opencode_base(base_dir)
-            for pattern_dir in ["agents", "skills"]:
-                d = base / pattern_dir
-                if d.exists():
-                    for f in d.glob("carter-*"):
-                        if f.is_file():
-                            f.unlink()
-                            log_ok(f"Removed {str(f).replace(str(_home()), '~')}")
-                        elif f.is_dir():
-                            shutil.rmtree(f)
-                            log_ok(f"Removed {str(f).replace(str(_home()), '~')}/")
-
-    # Remove MCP server entries
-    if "copilot" in targets:
-        log_step("Removing MCP servers (VS Code)...")
-        vscode_settings = _vscode_settings_path(base_dir)
-        if vscode_settings.exists():
-            data = _load_jsonc(vscode_settings)
-            if data is not None:
-                mcp = data.get("mcp.servers", {})
-                removed = [k for k in list(mcp.keys()) if k.startswith("carter-")]
-                for k in removed:
-                    del mcp[k]
-                    log_ok(f"Removed {k} from settings.json")
-                data["mcp.servers"] = mcp
-                _write_json_preserving(vscode_settings, data)
-            else:
-                log_err("Could not parse VS Code settings.json — skipping to avoid data loss")
-
-        # Copilot CLI
-        if prereqs.get("copilot", False) and not base_dir:
-            log_step("Removing MCP servers (Copilot CLI)...")
-            for server in MCP_SERVERS:
-                name = f"carter-{server}"
-                try:
-                    subprocess.run(
-                        ["copilot", "mcp", "remove", name],
-                        capture_output=True,
-                        timeout=10,
-                    )
-                    log_ok(f"Removed {name} from Copilot CLI")
-                except (subprocess.CalledProcessError, subprocess.TimeoutExpired):
-                    log_skip(f"{name} not found in Copilot CLI")
-
-    if "opencode" in targets:
-        log_step("Removing MCP servers (OpenCode)...")
-        opencode_config = _opencode_base(base_dir) / "opencode.json"
-        if opencode_config.exists():
-            data = _load_jsonc(opencode_config)
-            if data is not None:
-                mcp = data.get("mcp", {})
-                removed = [k for k in list(mcp.keys()) if k.startswith("carter-")]
-                for k in removed:
-                    del mcp[k]
-                    log_ok(f"Removed {k} from opencode.json")
-                data["mcp"] = mcp
-                _write_json_preserving(opencode_config, data)
-            else:
-                log_err("Could not parse opencode.json — skipping to avoid data loss")
-
-    # Remove manifest
-    manifest_path = _copilot_base(base_dir) / ".carter-manifest.json"
-    if manifest_path.exists():
-        manifest_path.unlink()
-        log_ok("Removed manifest")
-
-    # Remove carter-ops
-    ops_dir = _carter_base(base_dir) / "ops"
-    if ops_dir.exists():
-        shutil.rmtree(ops_dir)
-        log_ok(f"Removed {str(ops_dir).replace(str(_home()), '~')}/")
-
-    wrapper = _local_bin(base_dir) / "carter-ops"
-    if wrapper.exists():
-        wrapper.unlink()
-        log_ok(f"Removed {str(wrapper).replace(str(_home()), '~')}")
-
-    _log(f"\n{green('✓')} {bold('Uninstall complete')}")
-
-
-# ──────────────────────────────────────────────────────────────────────────────
 # Main
 # ──────────────────────────────────────────────────────────────────────────────
 
@@ -1090,8 +290,7 @@ def run(
     This is the programmatic entry point used by the ``carter install``
     command. Parameters mirror the CLI options.
     """
-    global _verbosity
-    _verbosity = verbosity
+    set_verbosity(verbosity)
 
     targets = ["copilot", "opencode"] if target == "all" else [target]
 
