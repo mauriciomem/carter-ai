@@ -91,6 +91,15 @@ def _get_model() -> str:
     return os.environ.get("EVAL_MODEL", DEFAULT_MODEL)
 
 
+def _max_tokens() -> int:
+    """Per-call completion ceiling — a hard cost cap for the weekly live cron.
+
+    Defaults to 4096 for local runs; the budgeted CI canary sets a low EVAL_MAX_TOKENS
+    so a misbehaving prompt can't run up the bill (ADR-0009 D5, plan 004 step 10).
+    """
+    return int(os.environ.get("EVAL_MAX_TOKENS", "4096"))
+
+
 def _call_model(system_prompt: str, user_message: str) -> str:
     """Call the LLM and return the response text.
 
@@ -114,7 +123,7 @@ def _call_model(system_prompt: str, user_message: str) -> str:
             },
             json={
                 "model": model,
-                "max_tokens": 4096,
+                "max_tokens": _max_tokens(),
                 "temperature": 0,
                 "messages": [
                     {"role": "system", "content": system_prompt},
@@ -140,7 +149,7 @@ def _call_model(system_prompt: str, user_message: str) -> str:
             },
             json={
                 "model": model,
-                "max_tokens": 4096,
+                "max_tokens": _max_tokens(),
                 "temperature": 0,
                 "system": system_prompt,
                 "messages": [{"role": "user", "content": user_message}],
@@ -163,7 +172,7 @@ def _call_model(system_prompt: str, user_message: str) -> str:
             },
             json={
                 "model": model,
-                "max_tokens": 4096,
+                "max_tokens": _max_tokens(),
                 "temperature": 0,
                 "messages": [
                     {"role": "system", "content": system_prompt},

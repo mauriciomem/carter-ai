@@ -51,18 +51,50 @@ python -m pytest tests/ops/ -v                # carter-ops (78)
 
 ## Continuous Integration
 
-Every push to `main` and every pull request runs the suite via GitHub Actions
-([.github/workflows/ci.yml](../.github/workflows/ci.yml)) on Python 3.11 and 3.13:
+CI runs as **two tiers** (ADR-0009 D5): a free, deterministic, key-free gate on
+every PR, and a budgeted live-accuracy canary on a weekly cron.
+
+| Tier | Workflow | Trigger | Key? | What it proves |
+|------|----------|---------|------|----------------|
+| **PR gate** (required) | [ci.yml](../.github/workflows/ci.yml) | every push to `main` + every PR | none | Functionality + structural accuracy: `ruff check`, `ruff format --check`, `mypy`, unit tests + offline evals (py3.11 & py3.13), and a real `install-smoke` (`uv tool install` → `carter --version`/`init`/`check`) on Linux + macOS |
+| **Live canary** (informational) | [evals-live.yml](../.github/workflows/evals-live.yml) | weekly cron + manual dispatch | one repo secret | Prompt-quality accuracy + token/latency/cost against a budgeted low-cost model |
+
+The PR gate, in full:
 
 ```bash
 uv venv --clear
 uv pip install -e ".[dev]"
+ruff check . && ruff format --check . && mypy        # lint + types
 python -m pytest tests/ -q                                  # 467 unit tests
-python -m pytest evals/test_skills.py evals/test_routing.py -q  # 28 offline evals
+python -m pytest evals/test_skills.py evals/test_routing.py evals/test_metrics.py -q  # offline evals
 ```
 
-The live evals (`evals/test_live.py`, marked `live`) require an API key and are
-**not** run in CI. The agent-generation drift check described in
+### Why the live evals need an API key (and the PR gate does not)
+
+The live evals (`evals/test_live.py`, marked `live`) send the agent/skill prompt
+markdown to a **raw model** and assert on the response. Locally they reuse your
+GitHub Copilot OAuth token (via OpenCode's `auth.json` or `gh auth token`), so no
+extra key is needed. **CI runners cannot do this:** there is no Copilot OAuth token
+on a runner — `gh auth token` there yields only the repo `GITHUB_TOKEN`, which the
+Copilot API rejects, and there is no `opencode/auth.json`. Running live evals in CI
+therefore *requires* a dedicated LLM key.
+
+We do **not** want a key on the PR gate: it would cost money per PR, be
+non-deterministic (a flaky merge gate), and expose a secret to fork PRs. So:
+
+- **PR gate stays key-free** — offline evals assert on prompt *structure* only.
+- **The weekly canary** (`evals-live.yml`) supplies a single trusted
+  `ANTHROPIC_API_KEY` **repo secret**, runs a Haiku-class model with a hard
+  `EVAL_MAX_TOKENS` cap, and uploads an `eval-metrics` artifact (pass count, total
+  tokens, mean latency, estimated USD — from `evals/metrics.py:summary()`). If the
+  secret is unset the live tests skip cleanly. **A key is never committed; it lives
+  only in repo secrets.**
+
+> **Read the canary honestly:** it measures the prompt sent to a raw model — a proxy
+> for *prompt quality*, **not** the real VS Code Copilot tool-calling loop. Treat it
+> as an accuracy/cost trend, not a pass/fail merge signal.
+
+The agent-generation drift check described in
 [ADR-0002](adr/0002-single-source-agent-generation.md) is deferred until the
 static/template sources are reconciled; until then, `tests/test_parity.py` is the
 drift guardrail.

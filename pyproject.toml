@@ -64,6 +64,23 @@ disallow_untyped_calls = true
 warn_return_any = true
 extra_checks = true
 
+# python-semantic-release (PSR) — release automation (ADR-0009, plan 004 step 5).
+# Verified against PSR 10.5.x (2026). The git tag is the SINGLE version source
+# (ADR-0009 D1): PSR derives the current version from the latest `v{version}` tag
+# and we set NEITHER `version_toml` NOR `version_variables`, so NO version file is
+# written back. PSR's job here is purely to compute the bump, create the tag,
+# update the CHANGELOG, and publish the GitHub Release.
+[tool.semantic_release]
+tag_format = "v{version}"
+commit_parser = "conventional"
+build_command = "uv build"
+
+[tool.semantic_release.branches.main]
+match = "main"
+
+[tool.semantic_release.changelog]
+default_templates = { changelog_file = "CHANGELOG.md" }
+
 [tool.hatch.build.targets.wheel]
 packages = ["carter"]
 
