@@ -371,6 +371,43 @@ Running `carter update` re-renders agent files but **never touches knowledge fil
 | Review before push | `@carter-maestro review my changes` |
 | Git operations | `@carter-maestro ops: create branch, commit, push` |
 
+## Releasing
+
+Carter uses **automated SemVer releases** driven entirely by your commit messages —
+there is no version number to bump by hand (ADR-0009). The git tag is the single
+source of truth: `carter --version` and the built wheel both derive from the latest
+`vX.Y.Z` tag via `hatch-vcs`. An untagged checkout reports a dev version like
+`0.1.1.dev3+g<sha>`.
+
+### How a release happens
+
+Every push to `main` runs [`.github/workflows/release.yml`](../.github/workflows/release.yml),
+which inspects the [Conventional Commits](https://www.conventionalcommits.org/) since
+the last tag, computes the next version, creates the tag, updates `CHANGELOG.md`, and
+publishes a GitHub Release with generated notes.
+
+| Commit type | Example | Version effect (pre-1.0) |
+|-------------|---------|--------------------------|
+| `fix:` | `fix: handle missing settings.json` | PATCH — `0.1.0 → 0.1.1` |
+| `feat:` | `feat: add opencode MCP target` | MINOR — `0.1.1 → 0.2.0` |
+| `feat!:` / `BREAKING CHANGE:` | `feat!: drop python 3.10` | breaking — stays in `0.y` until 1.0 is declared |
+| `docs:` `chore:` `refactor:` `test:` `ci:` `build:` `style:` | `docs: fix typo` | **no release** |
+
+> The project is intentionally **pre-1.0** (`0.y.z`): the API is still unstable. The
+> baseline tag is `v0.1.0`; `1.0.0` will be cut deliberately when we commit to API
+> stability, not automatically.
+
+### Pinning an exact release
+
+Install a specific tagged version (reproducible, won't drift):
+
+```bash
+uv tool install git+https://github.com/mauriciomem/carter-ai.git@v0.1.0
+carter --version   # carter, version 0.1.0
+```
+
+Omit `@vX.Y.Z` to track the default branch's latest (a dev version).
+
 ## Next Steps
 
 - [strictness-policy.md](strictness-policy.md) — Tutorial: gating actions by risk with `policy.level`

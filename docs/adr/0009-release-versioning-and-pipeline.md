@@ -67,9 +67,15 @@ pipeline produces and guarantees*.
   `feat:` → MINOR, `feat!:`/`BREAKING CHANGE:` → MAJOR; `docs/chore/refactor/test/
   ci/build/style` → no release. PSR owns the `vX.Y.Z` tag, the `CHANGELOG`, and the
   GitHub Release. The version literal is **never** written back into source (D1).
-- **D3 — Baseline tag `v2.0.0`.** A one-time, manually created annotated tag at the
-  chosen `main` commit graduates the current `2.0.0a1` pre-release and gives PSR and
-  `hatch-vcs` a starting point. Every subsequent version is computed.
+- **D3 — Baseline tag `v0.1.0`.** A one-time, manually created annotated tag at the
+  chosen `main` commit gives PSR and `hatch-vcs` a starting point. Every subsequent
+  version is computed.
+  > **Amended (2026-06-22):** the baseline was originally specified as `v2.0.0`
+  > (graduating the historical `2.0.0a1`). On execution we reset to **`v0.1.0`** to
+  > honestly signal the project is still **pre-1.0 / pre-stable** rather than claim a
+  > 2.x maturity it has not earned. SemVer `0.y.z` also keeps the API explicitly
+  > unstable. PSR bumps from here: `fix:`→`0.1.1`, `feat:`→`0.2.0`,
+  > `feat!:`/`BREAKING CHANGE:`→still `0.y` (no `1.0.0` until we declare stability).
 - **D4 — Quality gates in CI.** `ruff` (lint + format-check) and `mypy carter/`
   become **required** checks, plus an **`install-smoke`** job that performs a real
   `uv tool install` then `carter --version` / `init` / `check` on **Linux and
@@ -156,7 +162,7 @@ pipeline produces and guarantees*.
 - **PSR ↔ `hatch-vcs` integration** is the main unknown → the plan front-loads a
   doc-verification spike and dry-runs releases on a throwaway branch before wiring
   `main`.
-- **The baseline tag is one-way** once others pull → tag `v2.0.0` only after dynamic
+- **The baseline tag is one-way** once others pull → tag `v0.1.0` only after dynamic
   versioning resolves correctly.
 - **Secret handling** for the live cron → never echo the key; restrict the workflow
   to non-fork triggers (`schedule`/`workflow_dispatch`).
