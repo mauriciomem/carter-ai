@@ -1,0 +1,67 @@
+name: evals-live
+
+# Weekly live-eval canary (ADR-0009 D5, plan 004 step 10).
+#
+# The PR gate (ci.yml) runs only the key-free, deterministic OFFLINE evals. This
+# workflow is the budgeted ACCURACY canary: it sends the real agent/skill prompts to
+# a low-cost model and records pass-rate + token/latency/cost metrics on a cadence.
+#
+# It tests the PROMPT MARKDOWN sent to a RAW model — a proxy for prompt quality, NOT
+# the real VS Code Copilot tool-calling loop. Read the metrics with that caveat.
+#
+# Auth: CI runners have NO Copilot OAuth token (`gh auth token` there only yields the
+# repo GITHUB_TOKEN, which the Copilot API rejects). We therefore (a) DO NOT expose
+# GITHUB_TOKEN/GH_TOKEN to the run step — so `_get_copilot_token()` returns None and
+# the harness falls through to the key — and (b) provide a dedicated ANTHROPIC_API_KEY
+# repo secret. If the secret is unset the live tests skip cleanly (no failure).
+
+on:
+  schedule:
+    - cron: "0 6 * * 1" # Mondays 06:00 UTC
+  workflow_dispatch:
+
+# Least privilege: no writes; the job only needs to read the repo + upload an artifact.
+permissions:
+  contents: read
+
+jobs:
+  live-evals:
+    name: live-evals (budgeted canary)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15 # wall-clock guard on top of the per-call token cap
+    env:
+      # Budget controls: low-cost model + a hard per-call completion ceiling so a
+      # misbehaving prompt can't run up the bill. The suite is a small, fixed set of
+      # scenarios, so model + max-tokens bound the spend.
+      EVAL_MODEL: claude-haiku-4-5
+      EVAL_JUDGE_MODEL: claude-haiku-4-5
+      EVAL_MAX_TOKENS: "1024"
+      EVAL_METRICS_OUT: ${{ github.workspace }}/eval-metrics.json
+      # Dedicated key from secrets — NEVER commit a key. Empty when unset → tests skip.
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@d4b2f3b6ecc6e67c4457f6d3e41ec42d3d0fcb86 # v5
+        with:
+          python-version: "3.13"
+
+      - name: Create venv and install (with dev deps + httpx)
+        run: |
+          uv venv --clear
+          uv pip install -e ".[dev]" httpx
+
+      - name: Run live evals (budgeted, low-cost model)
+        run: |
+          source .venv/bin/activate
+          python -m pytest evals/test_live.py -v -p no:cacheprovider
+
+      - name: Upload metrics summary artifact
+        if: always() # publish the cost/latency summary even if an assertion fails
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: eval-metrics
+          path: eval-metrics.json
+          if-no-files-found: warn
