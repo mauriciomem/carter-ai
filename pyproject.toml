@@ -73,7 +73,11 @@ extra_checks = true
 [tool.semantic_release]
 tag_format = "v{version}"
 commit_parser = "conventional"
-build_command = "uv build"
+# No build in the release job: the PSR Action runs in its OWN Docker container (uv is
+# not on its PATH → `uv build` exited 127), and we publish nothing from here — install
+# is `git+https@vX.Y.Z`, and the wheel build is already verified by the `install-smoke`
+# CI job. PSR only needs to tag, write the CHANGELOG, and cut the GitHub Release.
+build_command = ""
 # Stay pre-1.0 (ADR-0009 D3, amended): PSR's `allow_zero_version` defaults to FALSE,
 # which would force-graduate the v0.1.0 baseline straight to 1.0.0. Keep 0.y.z, and
 # with `major_on_zero = false` a breaking change bumps the MINOR (0.x → 0.x+1) instead
