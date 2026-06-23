@@ -74,11 +74,23 @@ extra_checks = true
 tag_format = "v{version}"
 commit_parser = "conventional"
 build_command = "uv build"
+# Stay pre-1.0 (ADR-0009 D3, amended): PSR's `allow_zero_version` defaults to FALSE,
+# which would force-graduate the v0.1.0 baseline straight to 1.0.0. Keep 0.y.z, and
+# with `major_on_zero = false` a breaking change bumps the MINOR (0.x → 0.x+1) instead
+# of cutting 1.0.0 — 1.0.0 is a deliberate, manual stability declaration, not automatic.
+allow_zero_version = true
+major_on_zero = false
 
 [tool.semantic_release.branches.main]
 match = "main"
 
 [tool.semantic_release.changelog]
+# PSR renders changelog templates from `changelog.template_dir` (default "templates")
+# IF that dir exists, else it uses the bundled default. The repo's `templates/` is
+# Carter's scaffold dir (contains `{{ policy_frontmatter }}` etc.), which PSR must NOT
+# treat as changelog templates — point template_dir at a dedicated, non-existent path
+# so PSR falls back to its built-in CHANGELOG.md template.
+template_dir = ".psr-templates"
 default_templates = { changelog_file = "CHANGELOG.md" }
 
 [tool.hatch.build.targets.wheel]
