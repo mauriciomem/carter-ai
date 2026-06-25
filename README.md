@@ -1,7 +1,6 @@
 # Carter
 
 [![CI](https://github.com/mauriciomem/carter-ai/actions/workflows/ci.yml/badge.svg)](https://github.com/mauriciomem/carter-ai/actions/workflows/ci.yml)
-[![Release](https://img.shields.io/github/v/release/mauriciomem/carter-ai?label=release)](https://github.com/mauriciomem/carter-ai/releases/latest)
 
 A multi-agent AI assistant for software architecture, engineering, DevOps,
 learning, and project management. Instead of one generic assistant, you get
