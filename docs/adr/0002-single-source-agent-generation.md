@@ -112,8 +112,7 @@ artifact in two formats. This has three consequences:
 > ([.github/workflows/ci.yml](../../.github/workflows/ci.yml)). The text below
 > describes the pre-CI state.
 
-This repo has **no CI workflow and no pre-commit config** of its own (only
-`yui-soul/` and `external/` carry workflows). Any "drift check" guardrail is
+This repo has **no CI workflow and no pre-commit config** of its own. Any "drift check" guardrail is
 **net-new infrastructure**, not a tweak to an existing pipeline.
 
 ---
