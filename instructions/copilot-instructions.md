@@ -30,6 +30,11 @@ When the user's request starts with `ops:`, load the `carter-ops` skill and foll
 - Propose tests before implementation unless explicitly told otherwise.
 - Think before acting — read the existing codebase and documentation first.
 - Accuracy is more important than brevity, but avoid unnecessary verbosity.
+- **Obtain the current date** (a native harness date variable where the target
+  exposes one, otherwise run `date`) before writing any dated frontmatter —
+  `created:`/`decided:`/`updated:` and the like. Your training cutoff means you
+  cannot know today's date unaided; never guess it, and verify a native value
+  against `date` before relying on it.
 
 ## Technology Defaults
 - Languages: Python, Go, bash

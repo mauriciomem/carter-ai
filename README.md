@@ -83,18 +83,24 @@ User
 
 ### Agents
 
-Maestro is the **primary** agent; the six specialists are **subagents**. Talk to
-Maestro and let it route, or `@`-mention any specialist directly.
+Maestro is the **primary** agent; the six specialists are **subagents** — a **flat,
+one-level** chain (Maestro routes; specialists don't re-delegate). Talk to Maestro
+and let it route, or `@`-mention any specialist directly. Every specialist is a
+first-class citizen, each the authority in its domain.
 
 | Agent | Domain | Key capabilities |
 |-------|--------|------------------|
 | **Maestro** | Orchestration, routing, quality gates | Routes requests, triggers reviews, captures knowledge |
 | **Architect** | System design, cloud, trade-offs | ADRs, diagrams, API contracts, design review |
 | **Engineer** | Code quality, testing, patterns | TDD, code review, refactoring, security checks |
-| **DevOps** | CI/CD, IaC, containers, git | Pipelines, Terraform, Packer, deployment |
+| **DevOps** | CI/CD, IaC, containers, git | Pipelines, Terraform, Packer, deployment — the **only** agent that pushes/mutates infra |
 | **Learner** | Explanation, research, memory | Documentation, mistake capture, topic research |
 | **PM** | Planning, risk, agile | WBS, roadmaps, sprint planning, risk assessment |
-| **Narrator** | External-facing content | Reframes + redacts PRs, Jira, docs, announcements ([ADR-0001](docs/adr/0001-narrator-content-suite.md)) |
+| **Narrator** | External-facing content | The external-content specialist (the way Architect is the design specialist) — drafts + **redacts** outward content (PRs, Jira, docs, announcements); on `guarded`/`strict` substantive outward content routes through the narrator's redaction pass before DevOps transmits it ([ADR-0001](docs/adr/0001-narrator-content-suite.md)) |
+
+> Across targets, the per-agent `mode:` (`primary`/`subagent`) is **OpenCode-scoped**:
+> OpenCode reads it; VS Code ignores it (there the primary/subagent split comes from
+> the `agents:` allowlist).
 
 ## Carter-Ops — write operations
 

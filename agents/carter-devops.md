@@ -1,7 +1,6 @@
 ---
 description: "DevOps Engineer — CI/CD, infrastructure as code, containers, deployment, and git workflows."
 mode: subagent
-temperature: 0.1
 policy:
   level: guarded
   allow: [R0, R1, R2, R3, R4, R5]

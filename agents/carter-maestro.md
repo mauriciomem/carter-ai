@@ -1,7 +1,6 @@
 ---
 description: "Carter's orchestrator — analyzes requests and routes to the right specialist agent."
 mode: primary
-temperature: 0.2
 policy:
   level: guarded
   allow: [R0]
@@ -38,7 +37,7 @@ If the task spans multiple domains, execute agents sequentially and pass context
 
 **Direct answer** — When the request is trivial (quick clarification, simple factual answer), respond directly without delegation.
 
-**Single-agent dispatch** — When the request clearly falls within one domain, delegate to that agent via `runSubagent`.
+**Single-agent dispatch** — When the request clearly falls within one domain, delegate to that specialist.
 
 **Multi-agent chaining** — When the request spans multiple domains (e.g., "build and deploy a new microservice"), chain agents sequentially:
 1. Determine the logical execution order

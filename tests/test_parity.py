@@ -7,9 +7,10 @@ of the bodies is intentionally NOT asserted here.
 
 Instead these tests lock the *invariants* that must never drift between the two
 sources — the security- and structure-critical contracts, including the YAML
-frontmatter (``description``/``mode``/``temperature``) which both sources must now
-emit identically (ADR-0002). This is the phase-1 guardrail from
-docs/adr/0002-single-source-agent-generation.md.
+frontmatter (``description``/``mode``) which both sources must emit identically
+(ADR-0002). ``temperature`` is NOT emitted (ADR-0010 D7 — dead-or-rejected on every
+model Carter pins; effort/temperature are runtime-owned). This is the phase-1
+guardrail from docs/adr/0002-single-source-agent-generation.md.
 """
 
 from __future__ import annotations
@@ -93,6 +94,52 @@ class TestAgentSourceParity:
             )
 
 
+class TestNoRunSubagentFiction:
+    """ADR-0010 D1/D8: ``runSubagent`` is a fiction — it exists on no target. It
+    drifted back once before (the static maestro said ``runSubagent`` while the
+    template said "chain sequentially", S3), so lock its absence across BOTH
+    sources and the routing skill. Native dispatch (``agent``/``agents:``/
+    ``permission.task``) is P3; here we only assert the fiction is gone.
+    """
+
+    def test_no_runsubagent_in_static_agents(self, static_agents_dir: Path) -> None:
+        offenders = [
+            p.name for p in sorted(static_agents_dir.glob("carter-*.md")) if "runSubagent" in p.read_text()
+        ]
+        assert not offenders, f"static agents still cite the runSubagent fiction: {offenders}"
+
+    def test_no_runsubagent_in_agent_templates(self, template_agents_dir: Path) -> None:
+        offenders = [
+            p.name
+            for p in sorted(template_agents_dir.glob("carter-*.md.j2"))
+            if "runSubagent" in p.read_text()
+        ]
+        assert not offenders, f"agent templates still cite the runSubagent fiction: {offenders}"
+
+
+class TestNoTemperatureEmission:
+    """ADR-0010 D7: ``temperature`` is dropped wholesale — VS Code ignores it,
+    OpenCode accepts it syntactically but every pinned Anthropic model rejects it
+    at the API. Neither static source nor template may emit it in frontmatter.
+    """
+
+    def test_no_temperature_in_static_frontmatter(self, static_agents_dir: Path) -> None:
+        offenders = [
+            p.name
+            for p in sorted(static_agents_dir.glob("carter-*.md"))
+            if "temperature" in _parse_frontmatter(p.read_text())
+        ]
+        assert not offenders, f"static agents still emit temperature (ADR-0010 D7): {offenders}"
+
+    def test_no_temperature_in_agent_templates(self, template_agents_dir: Path) -> None:
+        offenders = [
+            p.name
+            for p in sorted(template_agents_dir.glob("carter-*.md.j2"))
+            if "temperature:" in p.read_text()
+        ]
+        assert not offenders, f"agent templates still emit temperature (ADR-0010 D7): {offenders}"
+
+
 class TestNarratorParity:
     """The narrator's security contract must be identical in spirit across sources."""
 
@@ -127,7 +174,8 @@ class TestRenderedFrontmatterParity:
 
     This is the ADR-0002 scaffold-bug fix: ``carter init`` previously produced
     agents with no frontmatter, dropping the ``description`` OpenCode requires and
-    the ``mode``/``temperature`` the runtimes honor.
+    the ``mode`` the runtimes honor. ``temperature`` is dropped entirely (ADR-0010
+    D7) — it must NOT appear in any emitted frontmatter.
     """
 
     def test_rendered_agents_have_valid_frontmatter(self) -> None:
@@ -138,8 +186,8 @@ class TestRenderedFrontmatterParity:
             fm = _parse_frontmatter(content)
             assert fm.get("description"), f"{name}: rendered without a description"
             assert fm.get("mode"), f"{name}: rendered without a mode"
-            assert isinstance(fm.get("temperature"), int | float), (
-                f"{name}: rendered without a numeric temperature"
+            assert "temperature" not in fm, (
+                f"{name}: emits temperature (dropped wholesale, ADR-0010 D7)"
             )
 
     def test_rendered_frontmatter_matches_static(self, static_agents_dir: Path) -> None:

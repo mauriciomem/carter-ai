@@ -24,7 +24,7 @@ Analyze the user's request and determine which Carter specialist agent(s) should
 
 ## Classification Rules
 
-1. **Single domain** — If the request clearly maps to one agent, delegate directly via `runSubagent`.
+1. **Single domain** — If the request clearly maps to one agent, delegate directly to that specialist.
 
 2. **Multi-domain** — If the request spans domains, determine the logical execution order and chain agents:
    - Example: "Build and deploy a Python API" → carter-engineer (code) → carter-devops (deploy)

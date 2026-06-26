@@ -1,7 +1,6 @@
 ---
 description: "Learner — explains complex topics, researches documentation, and tracks mistakes to learn from them."
 mode: subagent
-temperature: 0.3
 policy:
   level: guarded
   allow: [R0]

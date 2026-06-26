@@ -906,6 +906,41 @@ class TestContentSkills:
             assert "carter-docs" in content
 
 
+class TestTimeAwareness:
+    """ADR-0010 D6: agents author dated frontmatter but have a training cutoff, so
+    they cannot know today's date unaided. The authoring skills + global
+    instructions carry a REQUIRED date-fetch checklist item: obtain the current
+    date (native harness var or `date`) BEFORE writing any dated frontmatter. No
+    literal date is ever baked into a template (it would be stale + poison caching).
+    """
+
+    DATED_SKILLS = ("carter-plan", "carter-rfc", "carter-adr")
+
+    def test_authoring_skills_carry_date_fetch_item(self, repo_root: Path) -> None:
+        for skill in self.DATED_SKILLS:
+            content = (repo_root / "skills" / skill / "SKILL.md").read_text().lower()
+            assert "current date" in content, f"{skill}: missing date-fetch checklist item"
+            assert "before writing any dated frontmatter" in content, (
+                f"{skill}: date-fetch item must gate dated frontmatter writes"
+            )
+
+    def test_global_instructions_carry_date_fetch_item(self, repo_root: Path) -> None:
+        content = (repo_root / "instructions" / "copilot-instructions.md").read_text().lower()
+        assert "current date" in content, "global instructions missing date-fetch guidance"
+        assert "before writing any dated frontmatter" in content
+
+    def test_no_template_bakes_a_literal_date(self, repo_root: Path) -> None:
+        """`Today is <date>` (or any baked literal date) must never appear in a
+        template — it is stale the moment it renders and invalidates the cache.
+        """
+        offenders = []
+        for tmpl in (repo_root / "templates").rglob("*.j2"):
+            text = tmpl.read_text().lower()
+            if "today is" in text:
+                offenders.append(tmpl.name)
+        assert not offenders, f"templates bake a literal date (ADR-0010 D6): {offenders}"
+
+
 class TestInstallMemories:
     def test_creates_memory_directories(self, base_dir: Path) -> None:
         """Memory directories should be created under ~/.carter/memories/."""

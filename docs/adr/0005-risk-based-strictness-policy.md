@@ -1,17 +1,17 @@
 ---
 id: ADR-0005
-status: accepted
+status: superseded
 created: 2026-06-13
 decided: 2026-06-13
 supersedes: []
-superseded_by: null
+superseded_by: ADR-0010
 rfc: RFC-0002
 tags: [strictness, enforcement, security, agents, mcp, policy]
 ---
 
 # ADR-0005: Risk-Based Strictness Policy
 
-**Status:** Accepted
+**Status:** Superseded by [ADR-0010](0010-agent-platform-refresh.md) (2026-06-26)
 **Date:** 2026-06-13
 **Deciders:** Carter maintainer (mauriciomem), Carter Maestro (synthesis of architect/engineer/devops/narrator/pm reviews)
 **Reference format:** Michael Nygard ADR (<https://cognitect.com/blog/2011/11/15/documenting-architecture-decisions>)

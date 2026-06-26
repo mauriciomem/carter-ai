@@ -9,8 +9,9 @@ lives in frontmatter (the directory never moves). An accepted RFC yields an ADR
 | Status | RFC | Tags |
 |--------|-----|------|
 | ✅ accepted | [0001-rfc-system](0001-rfc-system/) | rfc, process |
-| ✅ accepted | [0002-risk-based-strictness-policy](0002-risk-based-strictness-policy/) | strictness, enforcement, security, agents, mcp, policy |
+| ✅ accepted | [0002-risk-based-strictness-policy](0002-risk-based-strictness-policy/) *(superseded by RFC-0005)* | strictness, enforcement, security, agents, mcp, policy |
 | ⬜ draft | [0003-per-agent-scoped-mcp-tokens](0003-per-agent-scoped-mcp-tokens/) | security, mcp, tokens, secrets, policy, deferred |
 | ✅ accepted | [0004-cost-context-optimization](0004-cost-context-optimization/) | cost, tokens, context, mcp, performance, harness, billing |
+| ✅ accepted | [0005-native-subagent-orchestration](0005-native-subagent-orchestration/) | agents, orchestration, subagents, dispatch, models, strictness, policy, time, copilot, vscode, opencode |
 
 Status icons: ⬜ draft · 📝 review · ✅ accepted · ❌ rejected · 🚫 withdrawn.

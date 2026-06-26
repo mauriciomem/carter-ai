@@ -137,8 +137,12 @@ def policy_notice(config: dict[str, Any]) -> str | None:
 # target does that, and only at runtime.
 
 # Whether a target natively enforces per-category gates. OpenCode's `permission`
-# block gates/denies per category at runtime; VS Code/Copilot has no declarative
-# per-category gate, so a strict policy degrades to advisory there (verified 2026).
+# block gates/denies per category at runtime. The `copilot` target spans two
+# surfaces (ADR-0010 D8 re-eval): Copilot CLI `hooks` preToolUse *can* now
+# deterministically block, but VS-Code-declarative custom agents still have no
+# per-category gate. Since `copilot` covers both, it resolves to the weaker member
+# — non-enforcing — so a strict policy honestly degrades to advisory there and the
+# hard-ack fires. Flipping it to True would over-promise on the VS Code surface.
 _TARGET_ENFORCES_GATES: dict[str, bool] = {"opencode": True, "copilot": False}
 
 
