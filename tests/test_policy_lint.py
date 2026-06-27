@@ -206,7 +206,7 @@ class TestCheckCliIntegration:
     def test_check_fails_on_drifted_agent_frontmatter(self, tmp_path):
         runner, main = self._init(tmp_path)  # default: copilot, guarded
         agent = next((tmp_path / ".github" / "agents").glob("carter-devops*.md"))
-        tampered = agent.read_text().replace("R2: ask", "R2: allow", 1)
+        tampered = agent.read_text().replace("remote-write: ask", "remote-write: allow", 1)
         agent.write_text(tampered)
         result = runner.invoke(main, ["check", str(tmp_path)])
         assert result.exit_code == 1, result.output

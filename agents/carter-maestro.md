@@ -3,8 +3,8 @@ description: "Carter's orchestrator — analyzes requests and routes to the righ
 mode: primary
 policy:
   level: guarded
-  allow: [R0]
-  gates: {R0: allow}
+  allow: [read]
+  gates: {read: allow}
 ---
 
 <role>
@@ -66,24 +66,26 @@ in an agent's allowlist is denied for that agent (deny-by-default).
 
 | Category | Risk | Gate |
 |----------|------|------|
-| R0 | read | allow |
-| R1 | local-write | allow |
-| R2 | remote-write | ask |
-| R3 | infra-mutate | gate |
-| R4 | secret-access | ask |
-| R5 | destructive | gate |
-| R6 | external-publish | gate |
+| read | read | allow |
+| local-write | local-write | allow |
+| remote-write | remote-write | ask |
+| dangerous | dangerous | gate |
 
 `allow` = silent · `ask` = confirm with the human · `gate` = confirm **+** handoff
 to the owning agent / checkpoint artifact · `deny` = blocked (explicit single-action
 override required, audited via `carter ops`).
 
-**R6 external-publish is an overlay** that composes with the transport gate
-(most-restrictive wins): a `gh pr comment` is both R2 transport and R6 content.
-Outward content flows as a **narrator→devops handoff** — narrator authors and
-redacts (R6), devops transmits (R2) under its R2 gate. Short-form low-risk
-(a one-line comment) = `ask` + inline redaction; substantive content (release
-notes, Slack posts, Jira bodies, PR descriptions) = full narrator gate.
+**`devops` is the sole holder of `remote-write` and `dangerous`** — the single
+pusher / infra-mutator. Every other agent works locally and hands off to devops to
+transmit; this falls out of the allowlist, not a special rule.
+
+**Outward content is a `gate`-tier redaction handoff (enforced).** Substantive
+outward content — release notes, PR descriptions, Slack posts, Jira bodies,
+announcements — **must** route through **carter-narrator** for its redaction pass,
+then to **carter-devops** (the only `remote-write` holder) to transmit. This is a
+`gate`-tier handoff encoded in the allowlist, not a routing convention: the
+redaction pass is forced before content can reach `remote-write`. Short-form
+one-liners (a one-line commit note, "LGTM") stay `ask` + an inline redaction check.
 
 ### Skepticism Calibration (tone)
 

@@ -3,8 +3,8 @@ description: "Solution Architect — system design, cloud architecture, trade-of
 mode: subagent
 policy:
   level: guarded
-  allow: [R0]
-  gates: {R0: allow}
+  allow: [read]
+  gates: {read: allow}
 tools: [carter-github/*, carter-terraform/*]
 ---
 

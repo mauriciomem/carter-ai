@@ -203,49 +203,59 @@ GATE_SEVERITY: dict[str, int] = {"allow": 0, "ask": 1, "gate": 2, "deny": 3}
 # these to two; `guarded` is the floor and default.
 POLICY_LEVELS: tuple[str, ...] = ("guarded", "strict")
 
-# R0-R6 risk taxonomy: category -> {level -> gate}. Fixed, shipped with Carter.
+# 4-category risk taxonomy (ADR-0010 D4): category -> {level -> gate}. Fixed,
+# shipped with Carter. Collapsed from the old seven: reading secrets gates the same
+# as any remote/infra path so it folds into `remote-write`; infra-mutation and
+# destructive actions fold into `dangerous`; and the old external-publish overlay is
+# dropped — redaction is now an enforced `gate`-tier narrator handoff in the
+# allowlist (D5), not a taxonomy category.
 RISK_TAXONOMY: dict[str, dict[str, str]] = {
-    "R0": {"guarded": "allow", "strict": "allow"},  # read
-    "R1": {"guarded": "allow", "strict": "allow"},  # local-write
-    "R2": {"guarded": "ask", "strict": "gate"},  # remote-write
-    "R3": {"guarded": "gate", "strict": "deny"},  # infra-mutate
-    "R4": {"guarded": "ask", "strict": "gate"},  # secret-access
-    "R5": {"guarded": "gate", "strict": "deny"},  # destructive
-    "R6": {"guarded": "gate", "strict": "gate"},  # external-publish (overlay)
+    "read": {"guarded": "allow", "strict": "allow"},
+    "local-write": {"guarded": "allow", "strict": "allow"},
+    "remote-write": {"guarded": "ask", "strict": "gate"},  # incl. reading secrets
+    "dangerous": {"guarded": "gate", "strict": "deny"},  # infra-mutate + destructive
 }
 
 # Tool/command -> risk category. Shipped defaults; user-extensible via
-# `policy.tool_risk` in carter.yaml (deep-merged over this map).
+# `policy.tool_risk` in carter.yaml (deep-merged over this map). Secret reads
+# (`vault read`, `read .env`) classify as `remote-write` (they gate identically).
 TOOL_RISK_MAP: dict[str, str] = {
-    "git status": "R0",
-    "git log": "R0",
-    "git diff": "R0",
-    "git add": "R1",
-    "git commit": "R1",
-    "git push": "R2",
-    "git push --force": "R5",
-    "terraform apply": "R3",
-    "terraform destroy": "R3",
-    "kubectl apply": "R3",
-    "helm upgrade": "R3",
-    "rm -rf": "R5",
-    "git reset --hard": "R5",
-    "vault read": "R4",
-    "read .env": "R4",
+    "git status": "read",
+    "git log": "read",
+    "git diff": "read",
+    "git add": "local-write",
+    "git commit": "local-write",
+    "git push": "remote-write",
+    "git push --force": "dangerous",
+    "terraform apply": "dangerous",
+    "terraform destroy": "dangerous",
+    "kubectl apply": "dangerous",
+    "helm upgrade": "dangerous",
+    "rm -rf": "dangerous",
+    "git reset --hard": "dangerous",
+    "vault read": "remote-write",
+    "read .env": "remote-write",
 }
 
-# Per-agent allowlist: agent -> {category: True}. A category absent for an agent is
-# denied for that agent (deny-by-default). dict-of-dicts so user tweaks deep-merge.
-# Encodes the single-pusher invariant: devops is the sole R2 pusher, narrator the
-# sole R6 author (narrator drafts/redacts, devops transmits via R2 on handoff).
+# Per-agent allowlist (ADR-0010 D4): agent -> {category: True}. A category absent
+# for an agent is denied for that agent (deny-by-default). dict-of-dicts so user
+# tweaks deep-merge. Encodes the single-pusher invariant structurally: devops is the
+# sole holder of `remote-write` and `dangerous`. The narrator is first-class —
+# {read, local-write} like pm/engineer — and reaches `remote-write` only via the
+# `gate`-tier redaction handoff to devops (D5), never by holding the category.
 AGENT_ALLOWLIST: dict[str, dict[str, bool]] = {
-    "maestro": {"R0": True},
-    "architect": {"R0": True},
-    "engineer": {"R0": True, "R1": True},
-    "devops": {"R0": True, "R1": True, "R2": True, "R3": True, "R4": True, "R5": True},
-    "pm": {"R0": True, "R1": True},
-    "learner": {"R0": True},
-    "narrator": {"R0": True, "R1": True, "R6": True},
+    "maestro": {"read": True},
+    "architect": {"read": True},
+    "learner": {"read": True},
+    "pm": {"read": True, "local-write": True},
+    "narrator": {"read": True, "local-write": True},
+    "engineer": {"read": True, "local-write": True},
+    "devops": {
+        "read": True,
+        "local-write": True,
+        "remote-write": True,
+        "dangerous": True,
+    },
 }
 
 
@@ -269,7 +279,7 @@ def resolve_action_gate(
     """Resolve the effective gate for an action at ``level``.
 
     An action may match multiple risk categories (e.g. ``git push --force`` is both
-    R2 remote-write and R5 destructive); most-restrictive-wins.
+    ``remote-write`` and ``dangerous``); most-restrictive-wins.
     """
     tax = taxonomy if taxonomy is not None else RISK_TAXONOMY
     return most_restrictive_gate(tax[category][level] for category in categories)
@@ -297,8 +307,9 @@ def effective_allowlist(config: dict[str, Any]) -> dict[str, dict[str, bool]]:
 # the global `configure_mcp_servers` wiring.
 
 # Per-agent MCP server scope, mirroring each static agent's <mcp> block. Drives the
-# copilot/VS Code `tools:` allowlist. maestro (pure orchestrator) and narrator wire
-# no MCP servers directly, so they emit no `tools:` key.
+# copilot/VS Code `tools:` allowlist. An agent that wires no MCP servers (the
+# maestro orchestrator; the narrator, which authors content via skills rather than
+# calling a remote MCP) emits no `tools:` key — a domain fact, not a special case.
 AGENT_MCP_SCOPE: dict[str, list[str]] = {
     "maestro": [],
     "architect": ["github", "terraform"],
@@ -321,30 +332,35 @@ _OPENCODE_GATE: dict[str, str] = {
 # Representative shell commands per shell-risk category, used to gate/deny the
 # OpenCode `bash` path with command globs so it can't bypass the allowlist.
 _BASH_COMMANDS: dict[str, tuple[str, ...]] = {
-    "R2": ("git push*",),
-    "R3": ("terraform apply*", "terraform destroy*", "kubectl apply*", "helm upgrade*"),
-    "R5": ("rm -rf*", "git reset --hard*", "git push --force*"),
+    "remote-write": ("git push*",),
+    "dangerous": (
+        "terraform apply*",
+        "terraform destroy*",
+        "kubectl apply*",
+        "helm upgrade*",
+        "rm -rf*",
+        "git reset --hard*",
+        "git push --force*",
+    ),
 }
 
-# Human-readable label per risk category, for the maestro policy gate table.
+# Human-readable label per risk category, for the maestro policy gate table. With
+# the 4-category taxonomy (ADR-0010 D4) the id IS the label.
 RISK_LABELS: dict[str, str] = {
-    "R0": "read",
-    "R1": "local-write",
-    "R2": "remote-write",
-    "R3": "infra-mutate",
-    "R4": "secret-access",
-    "R5": "destructive",
-    "R6": "external-publish",
+    "read": "read",
+    "local-write": "local-write",
+    "remote-write": "remote-write",
+    "dangerous": "dangerous",
 }
 
 
 def _emit_level(level: str) -> str:
     """The strictness level Carter emits.
 
-    The P2->P3 gate is open (RFC-0002 step 9): ``strict`` emits its real gate map
-    (R3/R5 ``deny``), backed by the `carter check` lint (hard ack on a
-    non-enforcing target) and the single-action override ledger. This is the
-    identity today; it remains a single seam so a future level remap has one home.
+    ``strict`` emits its real gate map (``dangerous`` ``deny``), backed by the
+    `carter check` lint (hard ack on a non-enforcing target) and the single-action
+    override ledger. This is the identity today; it remains a single seam so a
+    future level remap has one home.
     """
     return level
 
@@ -352,13 +368,14 @@ def _emit_level(level: str) -> str:
 def _opencode_permission(allowed: list[str], gates: dict[str, str]) -> dict[str, Any]:
     """Best-effort OpenCode ``permission`` map from an agent's allowlist x gates.
 
-    ``edit`` follows local-write (R1). ``bash`` is a command-glob map: local shell
-    stays available (an R1 agent needs ``pytest``/local ``git``; a read-only agent
-    gets ``ask``), while commands in a shell-risk category the agent does NOT hold
-    are denied — so the bash path can't bypass the declared allowlist. ``webfetch``
-    is always allowed. Carter ``gate`` degrades to ``ask`` (OpenCode has no gate).
+    ``edit`` follows ``local-write``. ``bash`` is a command-glob map: local shell
+    stays available (a ``local-write`` agent needs ``pytest``/local ``git``; a
+    read-only agent gets ``ask``), while commands in a shell-risk category the agent
+    does NOT hold are denied — so the bash path can't bypass the declared allowlist.
+    ``webfetch`` is always allowed. Carter ``gate`` degrades to ``ask`` (OpenCode has
+    no gate).
     """
-    edit = "allow" if "R1" in allowed else "deny"
+    edit = "allow" if "local-write" in allowed else "deny"
     return {
         "edit": edit,
         "bash": _opencode_bash(allowed, gates),
@@ -374,7 +391,7 @@ def _opencode_bash(allowed: list[str], gates: dict[str, str]) -> dict[str, str]:
     read-only one. Each shell-risk command then resolves to its category's gate if
     the agent holds it, or ``deny`` if not.
     """
-    baseline = "allow" if "R1" in allowed else "ask"
+    baseline = "allow" if "local-write" in allowed else "ask"
     rules: dict[str, str] = {"*": baseline}
     for cat, commands in _BASH_COMMANDS.items():
         verdict = _OPENCODE_GATE[gates[cat]] if cat in allowed else "deny"
@@ -451,14 +468,14 @@ def policy_frontmatter(config: dict[str, Any], role: str) -> str:
 def policy_gate_table(config: dict[str, Any]) -> list[dict[str, str]]:
     """Rows for the maestro's always-on risk/gate table at the active level.
 
-    One row per category R0-R6: ``category`` id, human ``label``, and the active
-    level's ``gate`` with any ``policy.overrides`` applied. The P2->P3 gate is open
-    (step 9), so ``strict`` shows the real ``deny`` rows for R3/R5.
+    One row per category (the 4-category taxonomy, ADR-0010 D4): ``category`` id,
+    human ``label``, and the active level's ``gate`` with any ``policy.overrides``
+    applied. ``strict`` shows the real ``deny`` row for ``dangerous``.
     """
     policy = config.get("policy") or {}
     level = _emit_level(policy.get("level", "guarded"))
     overrides = policy.get("overrides") or {}
-    cats = ("R0", "R1", "R2", "R3", "R4", "R5", "R6")
+    cats = ("read", "local-write", "remote-write", "dangerous")
     gates = _gates_for(list(cats), level, overrides)
     return [{"category": cat, "label": RISK_LABELS[cat], "gate": gates[cat]} for cat in cats]
 

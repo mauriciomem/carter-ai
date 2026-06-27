@@ -3,8 +3,8 @@ description: "Learner — explains complex topics, researches documentation, and
 mode: subagent
 policy:
   level: guarded
-  allow: [R0]
-  gates: {R0: allow}
+  allow: [read]
+  gates: {read: allow}
 tools: [carter-atlassian/*]
 ---
 

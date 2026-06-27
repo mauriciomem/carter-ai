@@ -3,8 +3,8 @@ description: "Project Manager — planning, roadmaps, work breakdown, risk manag
 mode: subagent
 policy:
   level: guarded
-  allow: [R0, R1]
-  gates: {R0: allow, R1: allow}
+  allow: [local-write, read]
+  gates: {local-write: allow, read: allow}
 tools: [carter-atlassian/*, carter-github/*]
 ---
 
@@ -46,7 +46,7 @@ You plan and draft locally; the actual remote writes are handed off. Tool scopin
 is enforced by Carter's strictness policy, not this prose:
 - **carter-atlassian**: Read Jira/Confluence for context and draft issue/page
   content locally. Creating or updating Jira issues / Confluence pages is a
-  remote-write (R2) handed off to carter-devops — not done here.
+  `remote-write` handed off to carter-devops — not done here.
 - **carter-github**: Check PR status and review project progress (read).
 
 </mcp>

@@ -176,39 +176,41 @@ policy:
   audit_overrides: true     # log escape-hatch overrides via `carter ops`
   # Optional user extensions — DICT-shaped so they deep-merge over the shipped
   # defaults (a list would replace them wholesale; carter/config.py _deep_merge):
-  tool_risk: {}             # tool/command -> risk category, e.g. {my_tool: R2}
-  allowlist: {}             # agent -> {category: bool}, e.g. {engineer: {R2: true}}
+  tool_risk: {}             # tool/command -> risk category, e.g. {my_tool: remote-write}
+  allowlist: {}             # agent -> {category: bool}, e.g. {engineer: {remote-write: true}}
 ```
 
-**Risk taxonomy (shipped, fixed).** Seven categories; each maps a strictness level
-to a gate (`allow` | `ask` | `gate` | `deny`). An action in multiple categories
-takes the most restrictive gate.
+**Risk taxonomy (shipped, fixed — 4 categories, ADR-0010 D4).** Each maps a
+strictness level to a gate (`allow` | `ask` | `gate` | `deny`). An action in
+multiple categories takes the most restrictive gate.
 
 | Category | Meaning | guarded | strict |
 |----------|---------|---------|--------|
-| R0 read | reads, `git status/log/diff`, MCP GET | allow | allow |
-| R1 local-write | file edit, `git add/commit`, run tests | allow | allow |
-| R2 remote-write | `git push`, PR/issue write, MCP POST/PATCH/DELETE | ask | gate |
-| R3 infra-mutate | `terraform apply/destroy`, `kubectl apply` | gate | deny |
-| R4 secret-access | read `.env`/secret files, vault reads | ask | gate |
-| R5 destructive | `rm -rf`, `git reset --hard`, `--force` | gate | deny |
-| R6 external-publish | outward content (overlay; composes with transport) | gate | gate |
+| read | reads, `git status/log/diff`, MCP GET | allow | allow |
+| local-write | file edit, `git add/commit`, run tests | allow | allow |
+| remote-write | `git push`, PR/issue write, MCP POST/PATCH/DELETE, secret reads (`vault read`, `.env`) | ask | gate |
+| dangerous | `terraform apply/destroy`, `kubectl apply`, `rm -rf`, `git reset --hard`, `--force` | gate | deny |
+
+Secret reads fold into `remote-write` (they gate identically). Outward content is
+**not** a category — it is an enforced `gate`-tier redaction handoff (ADR-0010 D5):
+substantive outward content must pass the narrator's redaction pass before devops
+(the sole `remote-write` holder) transmits it.
 
 **Per-agent allowlist (deny-by-default).** A category absent for an agent is denied
-for that agent. The shipped default keeps `devops` the sole R2 pusher and `narrator`
-the sole R6 author:
+for that agent. The shipped default keeps `devops` the sole holder of `remote-write`
+and `dangerous` (the single pusher); the narrator is first-class (`read` +
+`local-write`) and reaches a remote only via the redaction handoff to devops:
 
 | Agent | Allowed categories |
 |-------|--------------------|
-| maestro, architect, learner | R0 |
-| engineer, pm | R0, R1 |
-| devops | R0, R1, R2, R3, R4, R5 |
-| narrator | R0, R1, R6 |
+| maestro, architect, learner | read |
+| pm, narrator, engineer | read, local-write |
+| devops | read, local-write, remote-write, dangerous |
 
 **Per-agent emitted frontmatter (P2).** Carter emits the allowlist + gates into
 each agent, using the canonical mechanism per target:
 
-- **OpenCode:** `permission` (the `tools` boolean is deprecated ≥ v1.1.1) + per-agent
+- **OpenCode:** `permission` (edit / bash command-globs / webfetch) + per-agent
   MCP scope via tool-name patterns.
 - **VS Code / Copilot:** an enforced `tools:` allowlist + per-agent `mcp-servers`.
 

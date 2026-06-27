@@ -105,9 +105,9 @@ def policy_notice(config: dict[str, Any]) -> str | None:
     """
     level = (config.get("policy") or {}).get("level", "guarded")
     return (
-        f"Strictness policy is '{level}': remote-write, infra-mutate, "
-        "secret-access, destructive, and external-publish actions are gated "
-        "per the risk taxonomy (see the maestro policy table)."
+        f"Strictness policy is '{level}': remote-write and dangerous "
+        "(infra-mutate / destructive) actions are gated per the risk taxonomy "
+        "(see the maestro policy table)."
     )
 
 

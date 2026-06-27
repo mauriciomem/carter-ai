@@ -247,11 +247,11 @@ class TestNoFalseReadOnlyClaim:
 
 
 class TestProseMatchesAllowlist:
-    """The inverse of the read-only bug: an agent whose allowlist lacks R2
-    (remote-write) must not claim 'Full access' in its Tool Access prose. On a
+    """The inverse of the read-only bug: an agent whose allowlist lacks
+    ``remote-write`` must not claim 'Full access' in its Tool Access prose. On a
     non-enforcing target the advisory prose wins, so an over-claim would let a
     non-pusher remote-write — breaking the single-pusher invariant (only devops
-    holds R2). ADR-0005 D1/D4.
+    holds ``remote-write``). ADR-0005 D1/D4; ADR-0010 D4.
     """
 
     def test_non_pusher_agents_dont_claim_full_access(self, static_agents_dir: Path) -> None:
@@ -259,12 +259,12 @@ class TestProseMatchesAllowlist:
         offenders = []
         for agent in sorted(static_agents_dir.glob("carter-*.md")):
             role = agent.stem.removeprefix("carter-")
-            holds_remote_write = allowlist.get(role, {}).get("R2", False)
+            holds_remote_write = allowlist.get(role, {}).get("remote-write", False)
             if not holds_remote_write and "full access" in agent.read_text().lower():
                 offenders.append(agent.name)
         assert not offenders, (
-            "non-R2 agents claim 'Full access' (prose over-claims remote-write the "
-            f"allowlist denies, ADR-0005 D1/D4): {offenders}"
+            "non-pusher agents claim 'Full access' (prose over-claims remote-write the "
+            f"allowlist denies, ADR-0005 D1/D4 / ADR-0010 D4): {offenders}"
         )
 
 
@@ -323,16 +323,26 @@ class TestStrictnessPolicyParity:
             )
 
     def test_static_maestro_carries_policy_gate_table(self, static_agents_dir: Path) -> None:
-        """The global static maestro body must carry the always-on policy gate
-        table (ADR-0005 D6) — frontmatter parity can't catch a body relapse."""
+        """The global static maestro body must carry the always-on policy gate table
+        (ADR-0005 D6) and the enforced `gate`-tier redaction handoff (ADR-0010 D5) —
+        frontmatter parity can't catch a body relapse."""
         body = (static_agents_dir / "carter-maestro.md").read_text()
         assert "Strictness Policy" in body
-        assert "external-publish" in body  # R6 row present
-        assert "narrator→devops handoff" in body  # R6 overlay wired
+        assert "remote-write" in body  # a 4-category taxonomy row is present
+        assert "dangerous" in body
+        # Enforced redaction handoff (no R6 overlay): substantive outward content
+        # routes narrator -> devops as a gate-tier step.
+        assert "gate`-tier redaction handoff" in body
+        assert "carter-narrator" in body and "carter-devops" in body
 
-    def test_static_narrator_carries_r6_handoff(self, static_agents_dir: Path) -> None:
-        """The global static narrator body must wire the R6 author/transmit
-        handoff (ADR-0005 D4) — narrator authors + redacts, devops transmits."""
+    def test_static_narrator_carries_enforced_redaction_handoff(
+        self, static_agents_dir: Path
+    ) -> None:
+        """The global static narrator body must wire the enforced author/transmit
+        handoff (ADR-0010 D5) — narrator authors + redacts (gate-tier), devops
+        transmits as the sole remote-write holder."""
         body = (static_agents_dir / "carter-narrator.md").read_text().lower()
         assert "transmit" in body
         assert "devops" in body
+        assert "remote-write" in body  # narrator does NOT hold it; devops does
+        assert "gate`-tier" in body

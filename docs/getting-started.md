@@ -156,7 +156,7 @@ target: copilot
 policy:
   level: guarded        # guarded | strict
   unknown_tool: ask     # gate for a tool not in the risk map: allow | ask | deny
-  overrides: {}         # category -> gate, e.g. {R2: deny} to tighten remote-write
+  overrides: {}         # category -> gate, e.g. {remote-write: deny} to tighten remote-write
   audit_overrides: true # log escape-hatch overrides via `carter ops`
 
 # Should Carter review your code before you push?

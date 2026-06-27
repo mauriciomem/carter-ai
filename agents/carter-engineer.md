@@ -3,8 +3,8 @@ description: "Software Engineer — code quality, testing, design patterns, and 
 mode: subagent
 policy:
   level: guarded
-  allow: [R0, R1]
-  gates: {R0: allow, R1: allow}
+  allow: [local-write, read]
+  gates: {local-write: allow, read: allow}
 tools: [carter-github/*, carter-terraform/*]
 ---
 
@@ -46,7 +46,7 @@ When the user's request starts with `ops:`, load the `carter-ops` skill and foll
 You read for context and write code/tests locally; remote writes are not yours to
 make. Tool scoping is enforced by Carter's strictness policy, not this prose:
 - **carter-github**: Read PRs, issues, and code for context. Creating/merging PRs
-  or issues is a remote-write (R2) handed off to carter-devops — not done here.
+  or issues is a `remote-write` handed off to carter-devops — not done here.
 - **carter-terraform**: Review Terraform configurations for context.
 
 </mcp>
