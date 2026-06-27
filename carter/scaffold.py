@@ -161,9 +161,7 @@ def _is_failopen_entry(entry: str) -> bool:
     return entry == "*" or "*" in entry
 
 
-def _lint_dispatch_allowlist(
-    config: dict[str, Any], primary_fm: dict[str, Any]
-) -> list[str]:
+def _lint_dispatch_allowlist(config: dict[str, Any], primary_fm: dict[str, Any]) -> list[str]:
     """Fail-closed lint of the primary's native dispatch allowlist (D1.2).
 
     Errors (never warns) when the maestro's emitted ``agents:`` (copilot) or
@@ -206,7 +204,7 @@ def _lint_dispatch_allowlist(
                 "per-specialist allow — found '*'/a glob (failure-open)"
             )
         else:
-            expected_task = {"*": "deny", **{name: "allow" for name in expected}}
+            expected_task = {"*": "deny", **dict.fromkeys(expected, "allow")}
             if task != expected_task:
                 errors.append(
                     f"{PRIMARY_ROLE}: emitted 'permission.task' {task} drifted from "

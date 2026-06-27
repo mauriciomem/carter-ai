@@ -44,18 +44,46 @@ If you're already using Copilot CLI or OpenCode, live evals work out of the box.
 
 ```
 evals/
-├── conftest.py          # Shared fixtures (repo paths, scenario loading)
-├── pytest.ini           # Pytest config (live marker)
-├── judge.py             # LLM-as-judge for qualitative evaluation
-├── test_routing.py      # Offline: routing table completeness & accuracy
-├── test_skills.py       # Offline: skill content correctness
-├── test_live.py         # Live: actual model behavior evaluation
+├── conftest.py            # Shared fixtures (repo paths, scenario loading)
+├── pytest.ini             # Pytest config (live marker)
+├── judge.py               # LLM-as-judge for qualitative evaluation
+├── adherence.py           # Implementer-adherence grader (deterministic, no model call)
+├── test_routing.py        # Offline: routing table completeness & accuracy
+├── test_skills.py         # Offline: skill content correctness
+├── test_adherence.py      # Offline: replay the recorded Sonnet 4.6 adherence fixture
+├── test_live.py           # Live: actual model behavior evaluation
+├── test_adherence_live.py # Live: Sonnet 4.6 vs a thinker plan, graded against the bar
+├── fixtures/
+│   └── implementer_adherence_sonnet.json  # Recorded Sonnet run (offline replay)
 └── scenarios/
-    ├── routing.yaml     # Routing dispatch scenarios
-    ├── carter_ops.yaml  # Carter-ops workflow scenarios
-    ├── skills.yaml      # Skill correctness scenarios
-    └── e2e.yaml         # End-to-end multi-agent scenarios
+    ├── routing.yaml                  # Routing dispatch scenarios
+    ├── carter_ops.yaml               # Carter-ops workflow scenarios
+    ├── skills.yaml                   # Skill correctness scenarios
+    ├── implementer_adherence.yaml    # Thinker plan + must_haves for the P4-eval
+    └── e2e.yaml                      # End-to-end multi-agent scenarios
 ```
+
+### Implementer-adherence eval (P4-eval — ADR-0010 D9)
+
+The reliability backstop for the cheap-tier (Sonnet 4.6) implementer default. It runs
+the implementer against a **thinker-produced plan** carrying real `must_haves` (named
+file paths, acceptance checks, step-level instructions) and grades adherence: the
+fraction of `must_haves` satisfied + whether any **critical** step (a named-file touch,
+an acceptance check, or a load-bearing intent) was missed.
+
+**Pass-bar: ≥ 90% of `must_haves` satisfied AND 0 critical-step failures.** Below the
+bar is a regression in *either* the model tier *or* the doc quality — and the
+documentation-quality contract is fixed: choosing the cheaper model does **not** license
+relaxing doc accuracy/detail (the plan stays at the Opus bar regardless of executor).
+
+- **Per-PR (offline, free):** `test_adherence.py` replays the recorded Sonnet transcript
+  in `fixtures/implementer_adherence_sonnet.json` and grades it deterministically — no
+  API call. Runs in the `ci.yml` offline-eval step (`-m "not live"`).
+- **Nightly/manual (billed):** `test_adherence_live.py` (carries the `live` marker)
+  sends the plan to the live Sonnet 4.6 API and grades the real transcript. Runs only on
+  the `evals-live` cron / `workflow_dispatch` — **never** on the per-PR gate.
+- **Re-record the fixture:** run the live test with `EVAL_RECORD=1` to overwrite the
+  fixture with the fresh transcript + grade.
 
 ## What Each Test Layer Covers
 

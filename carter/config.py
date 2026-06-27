@@ -510,9 +510,7 @@ def dispatch_specialists(config: dict[str, Any]) -> list[str]:
     This is the security boundary the fail-closed lint validates (D1.2).
     """
     return sorted(
-        _suffixed_agent(role, config)
-        for role in config.get("agents", [])
-        if role != PRIMARY_ROLE
+        _suffixed_agent(role, config) for role in config.get("agents", []) if role != PRIMARY_ROLE
     )
 
 
@@ -565,7 +563,7 @@ def policy_native_keys(config: dict[str, Any], role: str) -> dict[str, Any]:
         if is_primary:
             # OpenCode `permission.task`: fail-closed `'*': deny` + an explicit allow
             # per specialist (never a `carter-*` glob — D1.2).
-            permission["task"] = {"*": "deny", **{name: "allow" for name in specialists}}
+            permission["task"] = {"*": "deny", **dict.fromkeys(specialists, "allow")}
         keys["permission"] = permission
     return keys
 

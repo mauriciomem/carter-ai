@@ -105,7 +105,9 @@ class TestNoRunSubagentFiction:
 
     def test_no_runsubagent_in_static_agents(self, static_agents_dir: Path) -> None:
         offenders = [
-            p.name for p in sorted(static_agents_dir.glob("carter-*.md")) if "runSubagent" in p.read_text()
+            p.name
+            for p in sorted(static_agents_dir.glob("carter-*.md"))
+            if "runSubagent" in p.read_text()
         ]
         assert not offenders, f"static agents still cite the runSubagent fiction: {offenders}"
 

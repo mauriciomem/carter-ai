@@ -1285,6 +1285,7 @@ class TestPolicyOpenCodePermission:
             perm = _policy_block(_policy_config(target="opencode"), role)["permission"]
             assert perm["webfetch"] == "allow"
 
+
 class TestPolicyRenderedIntegration:
     """The policy block lands in rendered agent frontmatter as valid YAML."""
 

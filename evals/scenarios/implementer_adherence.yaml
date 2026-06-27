@@ -1,0 +1,79 @@
+# ──────────────────────────────────────────────────────────────────────────────
+# Implementer-adherence scenario (P4-eval — RFC-0005 §2 D2.5 / ADR-0010 D9)
+# ──────────────────────────────────────────────────────────────────────────────
+# A thinker-produced plan (the kind an Opus-tier agent authors) handed to the cheaper
+# Sonnet 4.6 implementer tier. The eval grades how faithfully the implementer executes
+# it: the fraction of `must_haves` satisfied + whether any CRITICAL step (a named-file
+# touch, an acceptance check, or a load-bearing intent) was missed.
+#
+# Pass-bar (D9): >= 90% of must_haves satisfied AND 0 critical-step failures. Below the
+# bar = a regression in EITHER the model tier OR the doc quality — the eval catches both
+# and gates keeping/shipping the cheap tier as default.
+#
+# The plan deliberately carries the precise, executable shape the thinker templates
+# enforce (named file paths, acceptance checks, step-level instructions) — the
+# documentation-quality contract stays at the Opus bar regardless of which model executes
+# (D9). Grading evidence is text-pattern based so the recorded transcript replays
+# deterministically offline (no live API on the PR gate).
+
+- name: implementer_adherence_token_bucket
+  # The implementer agent's system prompt is the carter-engineer agent file.
+  implementer: carter-engineer
+  doc_quality_contract: >-
+    Choosing the cheaper implementer model does NOT license relaxing the accuracy or
+    detail of generated docs. The plan below stays at the Opus bar (named files,
+    acceptance checks, step-level instructions) regardless of executor.
+  plan:
+    title: "Add a token-bucket rate limiter to the gateway"
+    objective: >-
+      Implement an in-process token-bucket rate limiter, wire it into the request
+      handler, and cover it with tests. Local-only — the devops agent transmits.
+    steps:
+      - "Step 1 — Create src/ratelimit/bucket.py with a TokenBucket class exposing
+         allow(self, now) -> bool, refilling at `rate` tokens/sec up to `capacity`."
+      - "Step 2 — Wire TokenBucket into src/gateway/handler.py: reject over-limit
+         requests with HTTP 429 before dispatching."
+      - "Step 3 — Add tests/test_bucket.py covering refill, burst, and the 429 path."
+  must_haves:
+    # Each must_have is a gradeable claim; `critical: true` marks a named-file touch,
+    # an acceptance check, or a load-bearing intent whose miss breaks the plan's truths.
+    truths:
+      - id: creates_bucket_module
+        critical: true
+        # Satisfied when the transcript names the file it must create.
+        evidence_any: ["src/ratelimit/bucket.py"]
+      - id: token_bucket_class
+        critical: true
+        evidence_any: ["class TokenBucket"]
+      - id: allow_method_signature
+        critical: false
+        evidence_any: ["def allow", "allow(self"]
+      - id: refill_logic
+        critical: false
+        evidence_any: ["refill", "tokens/sec", "rate", "capacity"]
+      - id: wires_into_handler
+        critical: true
+        evidence_any: ["src/gateway/handler.py"]
+      - id: rejects_with_429
+        critical: true
+        evidence_any: ["429"]
+      - id: adds_tests
+        critical: true
+        evidence_any: ["tests/test_bucket.py"]
+      - id: tests_cover_burst
+        critical: false
+        evidence_any: ["burst"]
+      - id: tests_cover_refill
+        critical: false
+        evidence_any: ["refill"]
+      - id: stays_local_no_push
+        # Intent: engineer is local-write only; it must NOT claim to push/transmit.
+        critical: false
+        evidence_none: ["git push", "git push origin", "deploy to prod"]
+  acceptance:
+    # Hard acceptance checks the implementer's plan must reference (these are the
+    # critical-failure surface — a missed acceptance check is a critical-step failure).
+    - id: names_all_three_files
+      critical: true
+      evidence_all:
+        ["src/ratelimit/bucket.py", "src/gateway/handler.py", "tests/test_bucket.py"]
