@@ -120,6 +120,10 @@ files_modified: []
 </lifecycle>
 
 <guidelines>
+- **Fetch the current date before writing the plan.** The frontmatter `created:`/
+  `updated:` fields must use the real current date — obtain it from a native
+  harness date variable where the target exposes one, otherwise run `date`. Do this
+  **before writing any dated frontmatter**; never guess from your training cutoff.
 - Start from the end state: what does "done" look like? That is your `must_haves`.
 - The directory name and the `id` frontmatter MUST match (NNN-kebab).
 - Run `carter check` after writing a plan; fix every reported violation before

@@ -162,62 +162,135 @@ repo, outside any `.carter/`, so `carter.yaml` cannot govern them. It is a
 ## Risk-based strictness policy (`policy` block)
 
 The risk-based strictness policy (RFC-0002 /
-[ADR-0005](../adr/0005-risk-based-strictness-policy.md)) adds a `policy` block to
-`carter.yaml`. It is additive and backward-compatible: an existing config that
-omits it resolves to `loose` (no behaviour change); a new install resolves to
+[ADR-0005](../adr/0005-risk-based-strictness-policy.md), refreshed by
+[ADR-0010](../adr/0010-agent-platform-refresh.md)) adds a `policy` block to
+`carter.yaml`. `guarded` is the floor and the default for everything: a new install,
+an existing config that omits the block, and an unrecognized level all resolve to
 `guarded`.
 
 ```yaml
 policy:
-  level: guarded            # loose | guarded | strict
+  level: guarded            # guarded | strict
   unknown_tool: ask         # gate for a tool not in the risk map: allow | ask | deny
   overrides: {}             # category -> gate, explicit per-category override
   audit_overrides: true     # log escape-hatch overrides via `carter ops`
   # Optional user extensions — DICT-shaped so they deep-merge over the shipped
   # defaults (a list would replace them wholesale; carter/config.py _deep_merge):
-  tool_risk: {}             # tool/command -> risk category, e.g. {my_tool: R2}
-  allowlist: {}             # agent -> {category: bool}, e.g. {engineer: {R2: true}}
+  tool_risk: {}             # tool/command -> risk category, e.g. {my_tool: remote-write}
+  allowlist: {}             # agent -> {category: bool}, e.g. {engineer: {remote-write: true}}
 ```
 
-**Risk taxonomy (shipped, fixed).** Seven categories; each maps a strictness level
-to a gate (`allow` | `ask` | `gate` | `deny`). An action in multiple categories
-takes the most restrictive gate.
+**Risk taxonomy (shipped, fixed — 4 categories, ADR-0010 D4).** Each maps a
+strictness level to a gate (`allow` | `ask` | `gate` | `deny`). An action in
+multiple categories takes the most restrictive gate.
 
-| Category | Meaning | loose | guarded | strict |
-|----------|---------|-------|---------|--------|
-| R0 read | reads, `git status/log/diff`, MCP GET | allow | allow | allow |
-| R1 local-write | file edit, `git add/commit`, run tests | allow | allow | allow |
-| R2 remote-write | `git push`, PR/issue write, MCP POST/PATCH/DELETE | allow | ask | gate |
-| R3 infra-mutate | `terraform apply/destroy`, `kubectl apply` | allow | gate | deny |
-| R4 secret-access | read `.env`/secret files, vault reads | allow | ask | gate |
-| R5 destructive | `rm -rf`, `git reset --hard`, `--force` | allow | gate | deny |
-| R6 external-publish | outward content (overlay; composes with transport) | allow | gate | gate |
+| Category | Meaning | guarded | strict |
+|----------|---------|---------|--------|
+| read | reads, `git status/log/diff`, MCP GET | allow | allow |
+| local-write | file edit, `git add/commit`, run tests | allow | allow |
+| remote-write | `git push`, PR/issue write, MCP POST/PATCH/DELETE, secret reads (`vault read`, `.env`) | ask | gate |
+| dangerous | `terraform apply/destroy`, `kubectl apply`, `rm -rf`, `git reset --hard`, `--force` | gate | deny |
+
+Secret reads fold into `remote-write` (they gate identically). Outward content is
+**not** a category — it is an enforced `gate`-tier redaction handoff (ADR-0010 D5):
+substantive outward content must pass the narrator's redaction pass before devops
+(the sole `remote-write` holder) transmits it.
 
 **Per-agent allowlist (deny-by-default).** A category absent for an agent is denied
-for that agent. The shipped default keeps `devops` the sole R2 pusher and `narrator`
-the sole R6 author:
+for that agent. The shipped default keeps `devops` the sole holder of `remote-write`
+and `dangerous` (the single pusher); the narrator is first-class (`read` +
+`local-write`) and reaches a remote only via the redaction handoff to devops:
 
 | Agent | Allowed categories |
 |-------|--------------------|
-| maestro, architect, learner | R0 |
-| engineer, pm | R0, R1 |
-| devops | R0, R1, R2, R3, R4, R5 |
-| narrator | R0, R1, R6 |
+| maestro, architect, learner | read |
+| pm, narrator, engineer | read, local-write |
+| devops | read, local-write, remote-write, dangerous |
 
 **Per-agent emitted frontmatter (P2).** Carter emits the allowlist + gates into
 each agent, using the canonical mechanism per target:
 
-- **OpenCode:** `permission` (the `tools` boolean is deprecated ≥ v1.1.1) + per-agent
+- **OpenCode:** `permission` (edit / bash command-globs / webfetch) + per-agent
   MCP scope via tool-name patterns.
 - **VS Code / Copilot:** an enforced `tools:` allowlist + per-agent `mcp-servers`.
 
 Per-agent MCP scope is emitted in **agent frontmatter**, never the global
 `configure_mcp_servers` wiring.
 
+**Native subagent dispatch (P3, ADR-0010 D1).** Carter emits the target's real
+delegation primitive on the **primary** (maestro) — never a fictional `runSubagent`.
+The dispatch allowlist is a **security boundary**: an **explicit per-specialist
+list**, never `'*'` and never a `carter-*` glob (a glob auto-trusts any future
+`carter-*` agent; `'*'` lets the primary delegate to any workspace agent). The chain
+is **flat** — every specialist carries `agents: []`, so the maestro is the only
+router. The emitted names honor `agent_suffix` (e.g. `carter-engineer-local`).
+
+- **VS Code / Copilot:** `tools: [agent]` (the subagent tool) + an explicit
+  `agents: [carter-architect, …]` allowlist + `handoffs:` (the user-approved
+  gate-confirm buttons for gate-tier actions).
+- **OpenCode:** a `permission.task` block — `'*': deny` plus an explicit `allow` per
+  specialist.
+- **Copilot CLI:** orchestration is runtime (`/fleet` + `@`-mention), so there is no
+  frontmatter change — but the maestro prose **must** inject the active-plan +
+  knowledge context into every `/fleet` prompt (subagents do not inherit chat
+  history).
+
+```yaml
+# maestro, copilot target
+tools: [agent]
+agents: [carter-architect, carter-devops, carter-engineer, carter-learner, carter-narrator, carter-pm]
+handoffs: [carter-architect, carter-devops, carter-engineer, carter-learner, carter-narrator, carter-pm]
+# maestro, opencode target
+permission:
+  task: {'*': deny, carter-architect: allow, carter-devops: allow, ...}
+```
+
+`carter check` runs a **fail-closed dispatch lint**: it **errors (exit non-zero)** if
+the primary's emitted `agents:` / `permission.task` is `'*'`, a glob, or absent — not
+a warning.
+
 **Global agents (no `carter.yaml` in scope).** Globally-installed static
 `agents/*.md` carry baked hand-edited `guarded` defaults, kept honest by a
 `test_parity` extension (Q14 / ADR-0005 D6 — build-time generation is WON'T-DO per
 [ADR-0002](../adr/0002-single-source-agent-generation.md)).
+
+## Per-agent model (`models` block)
+
+The `models` block (ADR-0010 D2) is orthogonal to `policy:` — it maps role tiers to a
+per-target model string. Carter emits a **single** `model:` string on each agent (an
+array breaks Copilot CLI): a display name for VS Code/Copilot, a `provider/model` id
+for OpenCode. It is **dict-shaped** so a user override deep-merges rather than wiping
+the shipped tiers.
+
+```yaml
+models:
+  default:      { copilot: "Claude Opus 4.8",   opencode: "anthropic/claude-opus-4-8" }
+  thinkers:     { copilot: "Claude Opus 4.8",   opencode: "anthropic/claude-opus-4-8" }
+  implementers: { copilot: "Claude Sonnet 4.6", opencode: "anthropic/claude-sonnet-4-6" }
+  overrides: {}   # per-agent, e.g. {engineer: {copilot: "Claude Haiku 4.5", opencode: "anthropic/claude-haiku-4-5"}}
+```
+
+**Resolution: `overrides` > tier > `default`.** Thinkers (maestro, architect, pm,
+learner, narrator) = Opus 4.8; implementers (engineer, devops) = Sonnet 4.6; `default`
+is the un-tiered catch-all so a future agent never resolves to an empty model. **Haiku
+4.5 is opt-in via `overrides` only** (`xhigh`/`max` effort error on it).
+
+A Carter→target **model-name table** (`MODEL_NAMES`, anchored by a `MODEL LAUNCH` sync
+marker in [config.py](../../carter/config.py)) maps the canonical Anthropic id to each
+target's string; the next model bump updates it. A stale string is a silently dead
+agent, so a test asserts the table is non-empty for every shipped role.
+
+**`carter check` model advisory (required).** Carter cannot verify the user's
+Copilot/OpenCode subscription includes a pinned model, so it **emits the pin anyway**
+and `carter check` always prints an advisory naming each agent's model + the
+can't-verify caveat — an unavailable model is silently ignored frontmatter otherwise.
+
+**Effort and temperature are NOT emitted.** No target has a per-agent effort field, so
+effort is the global `output_config.effort` knob — set per-session on the harness
+(`copilot --effort high`). Carter's docs recommend a single global default of **`high`**
+(the safe all-rounder: `xhigh`/`max` error on a Haiku override, `medium` under-serves
+the thinkers), raised per-session (e.g. `xhigh`) for thinker-heavy RFC/ADR/plan work.
+`temperature` is dropped wholesale (D7) — dead or rejected on every pinned model.
 
 ## See also
 

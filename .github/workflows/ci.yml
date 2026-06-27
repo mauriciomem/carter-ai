@@ -66,9 +66,13 @@ jobs:
           python -m pytest tests/ -q
 
       - name: Run offline evals
+        # Offline only — the implementer-adherence replay (test_adherence.py) grades a
+        # RECORDED Sonnet 4.6 transcript fixture deterministically, so the per-PR gate
+        # never hits the billed API. The LIVE adherence run is the weekly evals-live
+        # cron (carries the `live` marker, excluded by -m "not live").
         run: |
           source .venv/bin/activate
-          python -m pytest evals/test_skills.py evals/test_routing.py evals/test_metrics.py -q
+          python -m pytest evals/ -m "not live" -q
 
   install-smoke:
     name: install-smoke (${{ matrix.os }})

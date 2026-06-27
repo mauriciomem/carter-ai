@@ -9,13 +9,16 @@ from typing import Any
 from jinja2 import Environment, FileSystemLoader
 
 from carter.config import (
+    PRIMARY_ROLE,
     ConfigError,
     _emit_level,
     _gates_for,
+    dispatch_specialists,
     effective_allowlist,
     policy_frontmatter,
     policy_gate_table,
     policy_native_keys,
+    resolve_model,
 )
 from carter.resources import templates_dir
 
@@ -86,43 +89,45 @@ def agent_filename(role: str, config: dict[str, Any]) -> str:
 def config_warnings(config: dict[str, Any]) -> list[str]:
     """Return non-fatal configuration warnings for a workspace config.
 
-    Flags the redaction gap: if the narrator is enabled but ``redaction.enabled``
-    is false *at* ``loose``, the scaffolded narrator carries no redaction rules
-    even though Maestro routes external-facing content to it. At ``guarded`` and
-    ``strict`` the redaction pass is forced regardless (the narrator template
-    renders the rules), so the gap does not exist there — the policy lint instead
-    surfaces the ``redaction.enabled: false`` contradiction (Q16).
+    ADR-0010 D3 reduced strictness to two levels, both of which **force** the
+    narrator's redaction pass — the rule-less-narrator gap that this warning once
+    flagged at the dropped advisory level can no longer occur. A
+    ``redaction.enabled: false`` contradiction at an enforcing level is surfaced by
+    the policy lint instead (Q16), not here. Kept as a seam so future non-fatal
+    config warnings have a home.
     """
-    warnings: list[str] = []
-    narrator_on = "narrator" in config.get("agents", [])
-    redaction_on = bool(config.get("redaction", {}).get("enabled", False))
-    level = (config.get("policy") or {}).get("level", "loose")
-    if narrator_on and not redaction_on and level == "loose":
-        warnings.append(
-            "narrator is enabled but redaction.enabled is false — the scaffolded "
-            "narrator will have NO redaction rules, yet Maestro still routes "
-            "external-facing content to it. Enable redaction or remove narrator "
-            "from agents."
-        )
-    return warnings
+    return []
 
 
 def policy_notice(config: dict[str, Any]) -> str | None:
-    """The 'you're guarded now' migration notice, surfaced at init/update (P2).
+    """The 'you're guarded now' notice, surfaced at init/update.
 
-    Returns a one-line message when the active strictness level enforces gates
-    (`guarded` or `strict`), or ``None`` for `loose` (no behaviour change, so no
-    notice). Q6: new installs default to `guarded`; an existing/omitted policy
-    stays `loose` and stays quiet.
+    Both shipped levels (``guarded``/``strict``) enforce gates — ADR-0010 D3
+    reduced strictness to these two — so the notice always fires, naming the active
+    level and the gated categories.
     """
-    level = (config.get("policy") or {}).get("level", "loose")
-    if level == "loose":
-        return None
+    level = (config.get("policy") or {}).get("level", "guarded")
     return (
-        f"Strictness policy is '{level}': remote-write, infra-mutate, "
-        "secret-access, destructive, and external-publish actions are now gated "
-        "per the risk taxonomy (see the maestro policy table). Set "
-        "policy.level: loose in carter.yaml to restore advisory-only behaviour."
+        f"Strictness policy is '{level}': remote-write and dangerous "
+        "(infra-mutate / destructive) actions are gated per the risk taxonomy "
+        "(see the maestro policy table)."
+    )
+
+
+def model_advisory(config: dict[str, Any]) -> str:
+    """The required unverifiable-model advisory `carter check` always prints (D2.3).
+
+    Carter pins a per-agent `model:` but cannot verify the user's Copilot/OpenCode
+    subscription actually includes it — an unavailable model would be silently ignored
+    frontmatter (a broken agent). So it emits the pin anyway and names every agent's
+    pinned model with the can't-verify caveat. Always returns a non-empty string.
+    """
+    pins = ", ".join(f"{role} → {resolve_model(config, role)}" for role in config.get("agents", []))
+    return (
+        f"Agents pin these models: {pins}. Carter cannot verify your "
+        "Copilot/OpenCode subscription includes them — an unavailable model is "
+        "silently ignored at load. Effort is global (`--effort high`, per-session "
+        "overridable); Carter emits no per-agent effort or temperature."
     )
 
 
@@ -137,14 +142,75 @@ def policy_notice(config: dict[str, Any]) -> str | None:
 # target does that, and only at runtime.
 
 # Whether a target natively enforces per-category gates. OpenCode's `permission`
-# block gates/denies per category at runtime; VS Code/Copilot has no declarative
-# per-category gate, so a strict policy degrades to advisory there (verified 2026).
+# block gates/denies per category at runtime. The `copilot` target spans two
+# surfaces (ADR-0010 D8 re-eval): Copilot CLI `hooks` preToolUse *can* now
+# deterministically block, but VS-Code-declarative custom agents still have no
+# per-category gate. Since `copilot` covers both, it resolves to the weaker member
+# — non-enforcing — so a strict policy honestly degrades to advisory there and the
+# hard-ack fires. Flipping it to True would over-promise on the VS Code surface.
 _TARGET_ENFORCES_GATES: dict[str, bool] = {"opencode": True, "copilot": False}
 
 
 def _resolve_policy_targets(target: str) -> list[str]:
     """Resolve a config ``target`` to concrete tool targets (``all`` = both)."""
     return ["copilot", "opencode"] if target == "all" else [target]
+
+
+def _is_failopen_entry(entry: str) -> bool:
+    """A dispatch allowlist entry that breaks deny-by-default: ``'*'`` or any glob."""
+    return entry == "*" or "*" in entry
+
+
+def _lint_dispatch_allowlist(config: dict[str, Any], primary_fm: dict[str, Any]) -> list[str]:
+    """Fail-closed lint of the primary's native dispatch allowlist (D1.2).
+
+    Errors (never warns) when the maestro's emitted ``agents:`` (copilot) or
+    ``permission.task`` (opencode) is ``'*'``, contains a glob, or is absent. Compares
+    against the expected explicit per-specialist list so a *narrowed/tampered* list is
+    also caught. Per target: copilot validates ``agents:``; opencode ``permission.task``.
+    """
+    errors: list[str] = []
+    expected = dispatch_specialists(config)
+    targets = _resolve_policy_targets(config.get("target", "copilot"))
+
+    if "copilot" in targets:
+        agents = primary_fm.get("agents")
+        if agents is None:
+            errors.append(
+                f"{PRIMARY_ROLE}: native dispatch allowlist 'agents:' is absent "
+                "(fail-closed: the primary must emit an explicit per-specialist list)"
+            )
+        elif any(_is_failopen_entry(a) for a in agents):
+            errors.append(
+                f"{PRIMARY_ROLE}: 'agents:' contains '*'/a glob — a failure-open "
+                "dispatch boundary; it must be an explicit per-specialist list"
+            )
+        elif agents != expected:
+            errors.append(
+                f"{PRIMARY_ROLE}: emitted 'agents:' {agents} drifted from the "
+                f"declared dispatch allowlist {expected}"
+            )
+
+    if "opencode" in targets:
+        task = (primary_fm.get("permission") or {}).get("task")
+        if not task:
+            errors.append(
+                f"{PRIMARY_ROLE}: native dispatch 'permission.task' is absent "
+                "(fail-closed: the primary must emit '*': deny + explicit allows)"
+            )
+        elif task.get("*") != "deny" or any(_is_failopen_entry(k) for k in task if k != "*"):
+            errors.append(
+                f"{PRIMARY_ROLE}: 'permission.task' must be '*': deny + an explicit "
+                "per-specialist allow — found '*'/a glob (failure-open)"
+            )
+        else:
+            expected_task = {"*": "deny", **dict.fromkeys(expected, "allow")}
+            if task != expected_task:
+                errors.append(
+                    f"{PRIMARY_ROLE}: emitted 'permission.task' {task} drifted from "
+                    f"the declared dispatch allowlist {expected_task}"
+                )
+    return errors
 
 
 def lint_policy(
@@ -174,7 +240,7 @@ def lint_policy(
     warnings: list[str] = []
 
     policy = config.get("policy") or {}
-    level = policy.get("level", "loose")
+    level = policy.get("level", "guarded")
     emit_level = _emit_level(level)
     allowlist = effective_allowlist(config)
     overrides = policy.get("overrides")
@@ -201,7 +267,7 @@ def lint_policy(
         # the ACTUALLY-enforced surface — drift here matters more than the
         # advisory policy block, so lint them against the same model.
         expected_native = policy_native_keys(config, role)
-        for key in ("tools", "permission"):
+        for key in ("tools", "permission", "model"):
             if (key in expected_native) != (key in (frontmatter or {})):
                 errors.append(
                     f"{role}: emitted {key} presence drifted from the declared target policy"
@@ -211,6 +277,16 @@ def lint_policy(
                     f"{role}: emitted {key} {(frontmatter or {}).get(key)} drifted "
                     f"from declared {expected_native[key]}"
                 )
+
+    # FAIL-CLOSED DISPATCH LINT (D1.2): the primary's native dispatch allowlist is a
+    # security boundary. A `'*'`, a glob, or an absent `agents:`/`permission.task` on
+    # the maestro is a build-breaking ERROR (never a warning) — `'*'` lets the maestro
+    # delegate to any workspace agent (failure-open), and a `carter-*` glob auto-trusts
+    # any future `carter-*` agent. Only checked when the primary is installed and the
+    # target emits that key (copilot → `agents:`; opencode → `permission.task`).
+    primary_fm = installed.get(PRIMARY_ROLE)
+    if primary_fm is not None:
+        errors.extend(_lint_dispatch_allowlist(config, primary_fm))
 
     # Q15 HARD ACK: strict on a non-enforcing target must be explicitly accepted.
     if level == "strict":

@@ -77,10 +77,7 @@ produces**:
 [docs/analysis/implementation-plan.md](../analysis/implementation-plan.md) §8
 specifies almost exactly this: multi-file plans with frontmatter
 (`id/status/must_haves/push_policy/rfc`), per-step `depends_on`, a single-folder
-RFC system, and a note that *"carter-plan SKILL needs updating."* Sibling project
-**yui-soul** ships the richer, *tested* version (`must_haves: {truths, artifacts,
-key_links}`, status folders) — see [taku.md](../../yui-soul/.github/agents/taku.md),
-[scaffold.test.js](../../yui-soul/test/scaffold.test.js).
+RFC system, and a note that *"carter-plan SKILL needs updating."*
 
 ### Problem statement
 
@@ -173,8 +170,7 @@ explores; an accepted RFC yields an ADR; an ADR records. They cross-reference
 (`adr ↔ rfc` ids) but never substitute.
 
 **Deferred (maintainer's request):** the *detailed* RFC design — storage,
-lifecycle/statuses, reviewers, how it links to plans and ADRs, whether it reuses
-yui-soul's `.rfcs/` model — is **its own assessment** (prospective ADR-0004). This
+lifecycle/statuses, reviewers, how it links to plans and ADRs — is **its own assessment** (prospective ADR-0004). This
 ADR records only the *principle* (RFC ≠ ADR, both kept) and leaves the design to
 that assessment.
 
@@ -237,8 +233,7 @@ plan).
 
 ### D6 — Frontmatter schema (merged, Carter-tuned)
 
-Merge yui-soul's tested richness with §8's lighter shape. The **canonical schemas
-live in [docs/reference/frontmatter.md](../../docs/reference/frontmatter.md)** —
+The **canonical schemas live in [docs/reference/frontmatter.md](../../docs/reference/frontmatter.md)** —
 one source; duplicating them here would invite the drift this ADR fights. The
 keystone is the plan `README.md`:
 
@@ -261,7 +256,7 @@ must_haves:                   # objective, verifiable completion criteria
 
 Step files (`step-NN.md`), ADR frontmatter, and the `checkpoint.md` cursor follow
 the same standard (see the reference). Rationale for `must_haves: {truths,
-artifacts, key_links}` (yui-soul) over §8's flat list: the sub-structure maps to
+artifacts, key_links}` over §8's flat list: the sub-structure maps to
 how the quality gate reasons (verify a *state*, confirm an *artifact*, follow a
 *link*), and it has existing test coverage to copy.
 
@@ -285,7 +280,7 @@ how the quality gate reasons (verify a *state*, confirm an *artifact*, follow a
 
 | Axis | Chosen | Rejected alternatives |
 |------|--------|-----------------------|
-| **A — Metadata format** | A2 YAML frontmatter (greppable, used by skills, tested in yui-soul) | A1 plain MD (not machine-parseable); A3 sidecar JSON/TOML (two files to sync) |
+| **A — Metadata format** | A2 YAML frontmatter (greppable, used by skills) | A1 plain MD (not machine-parseable); A3 sidecar JSON/TOML (two files to sync) |
 | **B — Plan splitting** | B3 tiered by size (≤3 steps inline, dir+steps beyond) | B1 single file (steps can't carry status); B2 always dir+steps (ceremony for small tasks) |
 | **C — RFC vs ADR** | C2 distinct, linked artifacts | C1 collapse to "Proposed ADR" (pre-commits framing); C3 design full RFC now (deferred to ADR-0004) |
 | **D — ADR header** | D-2 frontmatter + human status block | D-1 bold fields only (not machine-readable) |
@@ -320,7 +315,7 @@ how the quality gate reasons (verify a *state*, confirm an *artifact*, follow a
 - Deletion-recovery becomes real: ongoing auto-commit in `.carter/.git` means a
   deleted plan/session/folder is restorable without any off-machine copy.
 - RFC and ADR stay cleanly separated (D3); no framing pre-commitment.
-- Reuses yui-soul's *tested* schema — low design risk.
+
 
 ### Costs / risks
 - **`carter-plan` rewrite** is the biggest piece — it changes a skill from
@@ -386,5 +381,5 @@ implementation may proceed.
 ## References
 
 - ADR-0001 ([0001-narrator-content-suite.md](0001-narrator-content-suite.md)) — labeled-sub-decision + anti-drift pattern; ADR-0002 ([0002-single-source-agent-generation.md](0002-single-source-agent-generation.md)) — status-block + superseded-marker convention
-- Carter design (unbuilt) — [docs/analysis/implementation-plan.md](../analysis/implementation-plan.md) §8 + Q5; yui-soul (tested) — [taku.md](../../yui-soul/.github/agents/taku.md), [scaffold.test.js](../../yui-soul/test/scaffold.test.js)
+- Carter design (unbuilt) — [docs/analysis/implementation-plan.md](../analysis/implementation-plan.md) §8 + Q5
 - Source: [carter/state.py](../../carter/state.py), [skills/carter-plan/SKILL.md](../../skills/carter-plan/SKILL.md), [skills/carter-adr/SKILL.md](../../skills/carter-adr/SKILL.md), [templates/agents/carter-maestro.md.j2](../../templates/agents/carter-maestro.md.j2), [templates/agents/carter-pm.md.j2](../../templates/agents/carter-pm.md.j2)

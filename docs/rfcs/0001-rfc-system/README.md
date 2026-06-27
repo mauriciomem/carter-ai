@@ -59,7 +59,6 @@ A `carter-rfc` skill and a `docs/rfcs/` home:
 |--------|------|------|
 | **Directory-per-RFC, frontmatter status (chosen)** | first-class per-agent reviews; no folder ceremony | slightly heavier than a flat file |
 | Bare single file + inline reviews | simplest | loses attribution and independent re-review |
-| yui-soul 4 status folders + dir moves | full lifecycle | over-engineered for one user; move ceremony |
 | Fold into `carter-adr` | one skill | conflates propose (explore) with record (decide) |
 
 ## Trade-offs / Impact

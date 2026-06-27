@@ -49,8 +49,7 @@ shippable; commit per phase with the quality gate.
 
 ## Phase 5 — Tests & docs
 
-12. **Tests:** plan-file rendering + frontmatter presence (mirror yui-soul's
-    `scaffold.test.js`), the validator (accept/reject cases), ADR frontmatter, and
+12. **Tests:** plan-file rendering + frontmatter presence, the validator (accept/reject cases), ADR frontmatter, and
     an auto-commit/recovery test (delete → restore from `.carter/.git`).
 13. **Docs:** getting-started (`.carter/state/` tree), memory-and-knowledge, and a
     short "plans & decisions" reference page.

@@ -14,11 +14,10 @@ does, and how to customize, audit, and override it.
 
 Three ideas work together:
 
-1. **Risk categories (R0–R6)** — every tool or command maps to a risk band, from
-   harmless reads to irreversible/destructive actions.
-2. **A strictness level** — one knob (`loose` / `guarded` / `strict`) decides
-   whether each category is allowed, asks for confirmation, gates behind a
-   handoff, or is denied.
+1. **Risk categories (4)** — every tool or command maps to a risk band:
+   `read`, `local-write`, `remote-write`, `dangerous` (ADR-0010 D4).
+2. **A strictness level** — one knob (`guarded` / `strict`) decides whether each
+   category is allowed, asks for confirmation, gates behind a handoff, or is denied.
 3. **A per-agent allowlist** — independent of level, each agent may only act in
    categories it's allowed. A category not on an agent's list is **denied** for
    that agent, always (deny-by-default).
@@ -30,13 +29,13 @@ and the agent's allowlist.
 
 | Category | Meaning | Examples |
 |----------|---------|----------|
-| **R0** read | reads, never mutates | file read, `git status/log/diff`, MCP GET |
-| **R1** local-write | local-only changes | file edit, `git add/commit`, run tests |
-| **R2** remote-write | publishes to a remote | `git push`, PR/issue create·merge, MCP POST/PATCH/DELETE |
-| **R3** infra-mutate | changes live infrastructure | `terraform apply/destroy`, `kubectl apply`, `helm upgrade` |
-| **R4** secret-access | reads secrets | `.env`/secret files, vault reads |
-| **R5** destructive | irreversible | `rm -rf`, `git reset --hard`, `git push --force` |
-| **R6** external-publish | outward content (overlay) | Slack, PR descriptions, release notes, Jira comments |
+| **read** | reads, never mutates | file read, `git status/log/diff`, MCP GET |
+| **local-write** | local-only changes | file edit, `git add/commit`, run tests |
+| **remote-write** | publishes to a remote / reads secrets | `git push`, PR/issue create·merge, MCP POST/PATCH/DELETE, `vault read`, `.env` reads |
+| **dangerous** | infra-mutating or irreversible | `terraform apply/destroy`, `kubectl apply`, `helm upgrade`, `rm -rf`, `git reset --hard`, `git push --force` |
+
+Secret reads fold into `remote-write` (they gate identically). Outward content is
+**not** a category — it is an enforced redaction handoff (see Step 5).
 
 ### The gate vocabulary
 
@@ -47,29 +46,28 @@ and the agent's allowlist.
 
 ### How the levels map categories to gates
 
-| Category | `loose` | `guarded` | `strict` |
-|----------|---------|-----------|----------|
-| R0 read | allow | allow | allow |
-| R1 local-write | allow | allow | allow |
-| R2 remote-write | allow | ask | gate |
-| R3 infra-mutate | allow | gate | **deny** |
-| R4 secret-access | allow | ask | gate |
-| R5 destructive | allow | gate | **deny** |
-| R6 external-publish | allow | gate | gate |
+| Category | `guarded` | `strict` |
+|----------|-----------|----------|
+| read | allow | allow |
+| local-write | allow | allow |
+| remote-write | ask | gate |
+| dangerous | gate | **deny** |
 
-`loose` is exactly today's behaviour — advisory only, nothing blocks.
+`guarded` is the floor — in-scope risky actions pause for you; nothing is silently
+allowed past `read`/`local-write`.
 
 ### Who can do what (the shipped allowlist)
 
 | Agent | Allowed categories | In plain terms |
 |-------|--------------------|----------------|
-| maestro, architect, learner | R0 | read only |
-| engineer, pm | R0, R1 | read + local work |
-| **devops** | R0, R1, R2, R3, R4, R5 | the **only** pusher / infra-mutator |
-| **narrator** | R0, R1, R6 | the **only** external author |
+| maestro, architect, learner | read | read only |
+| pm, narrator, engineer | read, local-write | read + local work |
+| **devops** | read, local-write, remote-write, dangerous | the **only** pusher / infra-mutator |
 
-So even at `loose`, an engineer asking to `terraform apply` is out of scope — that
-is devops's category. The level tunes *how hard* the in-scope gates bite.
+So an engineer asking to `terraform apply` is out of scope at any level — that is
+devops's category. The narrator authors outward content locally but does **not**
+hold `remote-write`; it reaches a remote only via the redaction handoff to devops
+(Step 5). The level tunes *how hard* the in-scope gates bite.
 
 ---
 
@@ -79,25 +77,24 @@ The policy lives in a `policy` block in `carter.yaml`:
 
 ```yaml
 policy:
-  level: guarded        # loose | guarded | strict
+  level: guarded        # guarded | strict
   unknown_tool: ask     # gate for a tool not in the risk map: allow | ask | deny
-  overrides: {}         # category -> gate, e.g. {R2: deny}
+  overrides: {}         # category -> gate, e.g. {remote-write: deny}
   audit_overrides: true # log escape-hatch overrides via `carter ops`
 ```
 
 **Defaults (no surprises):**
 
-- A **new** install (`carter init`) defaults to **`guarded`**.
-- An **existing** config that omits the `policy` block resolves to **`loose`** —
-  so upgrading Carter never changes your behaviour until you opt in.
+- `guarded` is the floor and the default for **everything** — a new install, an
+  existing config that omits the `policy` block, and any unrecognized level all
+  resolve to `guarded`.
 
 Pick by context:
 
 | Level | Use it when |
 |-------|-------------|
-| `loose` | You want advice, not gates (or you're preserving legacy behaviour). |
 | `guarded` | Day-to-day default — remote/infra/destructive actions pause for you. |
-| `strict` | Regulated or prod-critical work — infra-mutate and destructive are denied outright. |
+| `strict` | Regulated or prod-critical work — `dangerous` (infra-mutate / destructive) actions are denied outright. |
 
 After editing `carter.yaml`, re-emit the agents:
 
@@ -105,11 +102,11 @@ After editing `carter.yaml`, re-emit the agents:
 carter update .
 ```
 
-You'll see the migration notice when enforcement is real:
+You'll see the policy notice (both levels enforce gates):
 
 ```
-ℹ  Strictness policy is 'guarded': remote-write, infra-mutate, secret-access,
-   destructive, and external-publish actions are now gated per the risk taxonomy.
+ℹ  Strictness policy is 'guarded': remote-write and dangerous (infra-mutate /
+   destructive) actions are gated per the risk taxonomy.
 ```
 
 ---
@@ -132,8 +129,8 @@ A guarded devops agent on OpenCode, for example, emits:
 ```yaml
 policy:
   level: guarded
-  allow: [R0, R1, R2, R3, R4, R5]
-  gates: {R0: allow, R1: allow, R2: ask, R3: gate, R4: ask, R5: gate}
+  allow: [dangerous, local-write, read, remote-write]
+  gates: {dangerous: gate, local-write: allow, read: allow, remote-write: ask}
 permission:
   edit: allow
   bash: {"*": allow, "git push*": ask, "terraform apply*": ask, "rm -rf*": ask}
@@ -186,7 +183,7 @@ Everything is dict-shaped so your overrides **merge** with the shipped defaults
 policy:
   level: guarded
   overrides:
-    R2: deny      # make every remote-write a hard deny, beyond guarded's `ask`
+    remote-write: deny   # make every remote-write a hard deny, beyond guarded's `ask`
 ```
 
 **Add a custom tool to the risk map** with `tool_risk`:
@@ -194,7 +191,7 @@ policy:
 ```yaml
 policy:
   tool_risk:
-    my_deploy_script: R3   # treat it as infra-mutate
+    my_deploy_script: dangerous   # treat it as infra-mutating / destructive
 ```
 
 **Adjust an agent's allowlist** with `allowlist` (use with care — it can break the
@@ -204,30 +201,33 @@ single-pusher invariant):
 policy:
   allowlist:
     engineer:
-      R2: true     # let engineer remote-write directly (normally a devops handoff)
+      remote-write: true   # let engineer remote-write directly (normally a devops handoff)
 ```
 
-Invalid values fail fast: an unknown `level`, an override gate that isn't
-`allow|ask|gate|deny`, or an override category outside `R0–R6` raises a clear
-config error.
+Invalid values fail fast: an override gate that isn't `allow|ask|gate|deny`, or an
+override category outside `read|local-write|remote-write|dangerous`, raises a clear
+config error. (An unrecognized `level` resolves to `guarded` silently.)
 
 ---
 
-## Step 5 — External content & redaction (R6)
+## Step 5 — External content & redaction (enforced handoff)
 
-R6 is special: it's a **content overlay** that composes with whatever transport
-carries it. A `gh pr comment` is both R2 (remote-write transport) and R6 (outward
-content) — they compose, they don't collide.
+Outward content is **not** a risk category — it is an **enforced `gate`-tier
+redaction handoff** (ADR-0010 D5). The narrator is the external-content specialist
+(first-class, like the architect for design); it holds `read` + `local-write` only.
 
-- **narrator authors and redacts** the content (R6); **devops transmits** it
-  (R2). This keeps the single-pusher invariant: narrator never pushes directly.
-- **Short-form, low-risk** outward content (a one-line PR comment) needs only an
-  inline redaction check; **substantive** content (release notes, Jira bodies, PR
-  descriptions) goes through the full narrator gate.
-- At **`guarded` and `strict`**, the narrator's redaction rules are rendered
-  **regardless of `redaction.enabled`** — disabling redaction at an enforcing
-  level can't silently ship a rule-less narrator. (At `loose`, disabling redaction
-  with the narrator enabled prints a setup warning instead.)
+- **narrator authors and redacts** the content locally; **devops transmits** it (it
+  is the sole `remote-write` holder). The single-pusher invariant is structural:
+  narrator never pushes directly.
+- **Substantive** outward content (release notes, Jira bodies, PR descriptions,
+  announcements) **must** pass the narrator's full redaction pass before that
+  handoff — a `gate`-tier step encoded in the allowlist, not a convention.
+  **Short-form, low-risk** content (a one-line PR comment) needs only an inline
+  redaction check.
+- At **`guarded` and `strict`** (both shipped levels), the narrator's redaction
+  rules are rendered **regardless of `redaction.enabled`** — disabling redaction
+  can't silently ship a rule-less narrator; `carter check` flags the
+  `redaction.enabled: false` contradiction instead.
 
 ---
 
@@ -239,7 +239,7 @@ decision; it cannot lift a platform `deny`.
 
 ```bash
 carter ops policy-override \
-  --category R3 \
+  --category dangerous \
   --action "terraform apply -target=module.network" \
   --tier native-deny \
   --reason "approved exception, change ticket OPS-1234"
@@ -257,13 +257,15 @@ carter ops policy-override \
 
 | Task | Command / setting |
 |------|-------------------|
-| Set the level | `policy.level: loose\|guarded\|strict` in `carter.yaml` |
+| Set the level | `policy.level: guarded\|strict` in `carter.yaml` |
 | Re-emit agents after a change | `carter update .` |
 | Validate the install | `carter check .` |
 | Accept a degraded `strict` target | `carter check . --accept-degraded` |
-| Tighten/loosen a category | `policy.overrides: {R3: deny}` |
-| Map a custom tool | `policy.tool_risk: {tool: R2}` |
+| Tighten/loosen a category | `policy.overrides: {dangerous: deny}` |
+| Map a custom tool | `policy.tool_risk: {tool: remote-write}` |
 | Record an override | `carter ops policy-override --category … --action … --tier …` |
+| Pin a per-agent model | `models.overrides: {engineer: {copilot: "Claude Haiku 4.5"}}` |
+| Set reasoning effort | global on the harness (`copilot --effort high`); default `high`, raise to `xhigh` for thinker-heavy work — Carter emits no per-agent effort |
 
 ## See also
 

@@ -79,6 +79,11 @@ tags: []
 </template>
 
 <guidelines>
+- **Fetch the current date before writing the ADR.** The frontmatter `created:`/
+  `decided:` fields and the human **Date:** line must use the real current date —
+  obtain it from a native harness date variable where the target exposes one,
+  otherwise run `date`. Do this **before writing any dated frontmatter**; never
+  guess from your training cutoff.
 - Always check `~/.copilot/knowledge/decisions.md` for related past decisions.
 - After creating an ADR, offer to record the decision in `~/.copilot/knowledge/decisions.md` via carter-distill.
 - ADRs should be stored in the project repository (e.g., `docs/adr/` or `adr/`).

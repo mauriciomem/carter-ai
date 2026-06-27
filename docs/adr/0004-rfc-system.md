@@ -23,25 +23,7 @@ principle: RFC ≠ ADR, both retained and linked).
 
 ADR-0003 §D3 settled the *principle* — an RFC (explore "should we?") and an ADR
 (record "we decided") are distinct, linked artifacts — and explicitly deferred
-the **detailed design** (storage, lifecycle, reviewers, linkage, whether to reuse
-yui-soul's `.rfcs/` model) to this ADR.
-
-### Two prior models exist (verified)
-
-| Aspect | yui-soul `.rfcs/` | implementation-plan §8 / Q5 |
-|--------|-------------------|------------------------------|
-| Location | `.rfcs/` (private local git) | `docs/rfcs/` (main repo) |
-| Unit | **directory** per RFC + sibling `review-*.md` | **single file** `RFC-NNN-title.md` |
-| Status | **four folders** draft/review/approved/rejected (dir moves) | **frontmatter** only, no folders |
-| Reviewers | Sho always + Ei/Rin/Shin by domain (crew) | carter-architect always + carter-engineer if code |
-| Owner | Taku | (unassigned) |
-| Ceremony | high (multi-agent crew) | low (single user) |
-
-The implementation-plan already reasoned (Q5): *"Yui's 4-folder hierarchy is
-over-engineered for one user … a single folder with frontmatter status is
-sufficient."* The yui-soul crew agents (`taku`, `sho`, `ei`, …) now sit untracked
-in this repo's `.github/agents/` — they are a *different product's* scaffolding,
-not Carter's agent set (`carter-{maestro,architect,engineer,devops,pm,learner,narrator}`).
+the **detailed design** (storage, lifecycle, reviewers, linkage) to this ADR.
 
 ### The precedent ADR-0003 just set
 
@@ -57,11 +39,11 @@ This gives a sharp decision rule for RFCs: **which is an RFC more like — an AD
 a plan?** An RFC is a *design document* (problem / proposal / alternatives), not
 execution state with steps. It is reviewed and either yields an ADR or is dropped.
 It is therefore **an ADR-shaped artifact**, and consistency says model it on the
-ADR, not the plan/yui-soul folder machinery.
+ADR, not the plan folder machinery.
 
 ### Problem statement
 
-1. Pick the RFC **storage + shape** (ADR-like single file vs. plan/yui-soul folders).
+1. Pick the RFC **storage + shape** (ADR-like single file vs. plan-style folders).
 2. Define **frontmatter, lifecycle, statuses**.
 3. Define the **reviewer model** against Carter's *actual* agent set.
 4. Define **RFC ↔ ADR ↔ plan linkage**.
@@ -84,8 +66,7 @@ An RFC borrows the ADR's regime (main repo, frontmatter status, freeze-on-decide
 supersede-don't-edit) but is **not** a bare single file: it is a directory holding
 the proposal **and** one review file per reviewing agent. The directory exists so
 that *any* Carter subagent can contrast the idea from its expertise — the value of
-an RFC. This is **not** yui-soul's status-folder machinery: there are no
-draft/review/approved/rejected folders and the RFC directory never moves; only
+an RFC. There are no draft/review/approved/rejected folders and the RFC directory never moves; only
 frontmatter status changes. (Plans get folders + a Python validator because they
 are churning machine-recovered runtime state; an RFC is human-reviewed prose.)
 
@@ -102,9 +83,9 @@ docs/rfcs/
 
 - **Main repo** — reviewable in PRs, shared, recoverable from the project remote;
   the same regime as ADRs. **Rejected:** `.carter/` private state (RFCs are shared
-  design artifacts, not per-workspace runtime) and yui-soul's `.rfcs/` local repo.
+  design artifacts, not per-workspace runtime).
 - **No status folders.** Status lives in frontmatter; the directory never moves.
-- The index `README.md` lists RFCs by status (icons like the yui-soul index).
+- The index `README.md` lists RFCs by status.
 
 ### D3 — Frontmatter schema (+ human status block)
 
@@ -227,10 +208,10 @@ implementation-plan Q5; mirrors the plan-vs-just-do pragmatism.)
 
 | Axis | Chosen | Rejected |
 |------|--------|----------|
-| **A — Shape** | A2 ADR lifecycle + **directory-per-RFC** (no status folders) | A1 yui-soul 4 status folders + dir moves (ceremony); A3 bare single file (can't hold first-class per-agent reviews) |
-| **B — Location/regime** | B1 `docs/rfcs/` main repo (reviewable like ADRs) | B2 `.carter/` private state (RFCs are shared, not per-workspace); B3 `.rfcs/` local-only (yui-soul) |
+| **A — Shape** | A2 ADR lifecycle + **directory-per-RFC** (no status folders) | A1 status folders + dir moves (ceremony); A3 bare single file (can't hold first-class per-agent reviews) |
+| **B — Location/regime** | B1 `docs/rfcs/` main repo (reviewable like ADRs) | B2 `.carter/` private state (RFCs are shared, not per-workspace); B3 `.rfcs/` local-only |
 | **C — Status tracking** | C1 frontmatter only, dir never moves | C2 four status folders with dir moves (over-engineered) |
-| **D — Reviews** | D1 **per-agent `review-{agent}.md` + appended rounds** (attributable multi-perspective) | D2 inline-only `## Reviews` (loses attribution + first-class re-review); D3 yui-soul status-folder ceremony |
+| **D — Reviews** | D1 **per-agent `review-{agent}.md` + appended rounds** (attributable multi-perspective) | D2 inline-only `## Reviews` (loses attribution + first-class re-review); D3 status-folder ceremony |
 | **E — Authoring** | E1 new `carter-rfc` skill | E2 extend `carter-adr` (conflates propose vs. record) |
 | **F — Validation** | F1 skill-governed (like ADR) | F2 Python `carter check` (RFCs aren't `.carter/` state) |
 | **G — Review discipline** | G1 template + fail-safe default + synthesis gate + git (D8) | G2 Python revision-marker check (re-adds the ceremony we avoided) |
@@ -315,7 +296,6 @@ implementation-plan Q5; mirrors the plan-vs-just-do pragmatism.)
 
 - ADR-0003 §D3 ([0003-knowledge-adr-rfc-plan-storage.md](0003-knowledge-adr-rfc-plan-storage.md)) — deferred this design; RFC ≠ ADR principle
 - implementation-plan §8.7 + Q5 ([docs/analysis/implementation-plan.md](../analysis/implementation-plan.md)) — the lightweight `docs/rfcs/` sketch + single-user rationale
-- yui-soul RFC model — `.github/agents/taku.md` (foldered `.rfcs/`), the heavier alternative
 - Rust RFC process (git-as-history, pre-FCP sign-off) — <https://rust-lang.github.io/rfcs/>
 - Python PEP 1 (Post-History + 2026 newest-first Change History, status enum) — <https://peps.python.org/pep-0001/>
 - [docs/reference/frontmatter.md](../reference/frontmatter.md) — canonical schema home

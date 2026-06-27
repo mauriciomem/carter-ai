@@ -182,7 +182,7 @@ def _handle_policy_override(params: dict[str, Any]) -> int:
     """
     category = params.get("category", "")
     if not category:
-        emit_error("--category is required for policy-override (e.g. R2)")
+        emit_error("--category is required for policy-override (e.g. remote-write)")
         return 1
 
     action = params.get("action", "")

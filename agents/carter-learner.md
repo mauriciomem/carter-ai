@@ -1,12 +1,13 @@
 ---
 description: "Learner — explains complex topics, researches documentation, and tracks mistakes to learn from them."
 mode: subagent
-temperature: 0.3
 policy:
   level: guarded
-  allow: [R0]
-  gates: {R0: allow}
+  allow: [read]
+  gates: {read: allow}
+model: Claude Opus 4.8
 tools: [carter-atlassian/*]
+agents: []
 ---
 
 <role>

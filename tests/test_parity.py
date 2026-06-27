@@ -7,9 +7,10 @@ of the bodies is intentionally NOT asserted here.
 
 Instead these tests lock the *invariants* that must never drift between the two
 sources — the security- and structure-critical contracts, including the YAML
-frontmatter (``description``/``mode``/``temperature``) which both sources must now
-emit identically (ADR-0002). This is the phase-1 guardrail from
-docs/adr/0002-single-source-agent-generation.md.
+frontmatter (``description``/``mode``) which both sources must emit identically
+(ADR-0002). ``temperature`` is NOT emitted (ADR-0010 D7 — dead-or-rejected on every
+model Carter pins; effort/temperature are runtime-owned). This is the phase-1
+guardrail from docs/adr/0002-single-source-agent-generation.md.
 """
 
 from __future__ import annotations
@@ -24,6 +25,7 @@ from carter.config import (
     RISK_TAXONOMY,
     effective_allowlist,
     generate_default_config,
+    resolve_model,
 )
 from carter.scaffold import create_env, render_agents
 
@@ -93,6 +95,77 @@ class TestAgentSourceParity:
             )
 
 
+class TestNoRunSubagentFiction:
+    """ADR-0010 D1/D8: ``runSubagent`` is a fiction — it exists on no target. It
+    drifted back once before (the static maestro said ``runSubagent`` while the
+    template said "chain sequentially", S3), so lock its absence across BOTH
+    sources and the routing skill. Native dispatch (``agent``/``agents:``/
+    ``permission.task``) is P3; here we only assert the fiction is gone.
+    """
+
+    def test_no_runsubagent_in_static_agents(self, static_agents_dir: Path) -> None:
+        offenders = [
+            p.name
+            for p in sorted(static_agents_dir.glob("carter-*.md"))
+            if "runSubagent" in p.read_text()
+        ]
+        assert not offenders, f"static agents still cite the runSubagent fiction: {offenders}"
+
+    def test_no_runsubagent_in_agent_templates(self, template_agents_dir: Path) -> None:
+        offenders = [
+            p.name
+            for p in sorted(template_agents_dir.glob("carter-*.md.j2"))
+            if "runSubagent" in p.read_text()
+        ]
+        assert not offenders, f"agent templates still cite the runSubagent fiction: {offenders}"
+
+
+class TestNoTemperatureEmission:
+    """ADR-0010 D7: ``temperature`` is dropped wholesale — VS Code ignores it,
+    OpenCode accepts it syntactically but every pinned Anthropic model rejects it
+    at the API. Neither static source nor template may emit it in frontmatter.
+    """
+
+    def test_no_temperature_in_static_frontmatter(self, static_agents_dir: Path) -> None:
+        offenders = [
+            p.name
+            for p in sorted(static_agents_dir.glob("carter-*.md"))
+            if "temperature" in _parse_frontmatter(p.read_text())
+        ]
+        assert not offenders, f"static agents still emit temperature (ADR-0010 D7): {offenders}"
+
+    def test_no_temperature_in_agent_templates(self, template_agents_dir: Path) -> None:
+        offenders = [
+            p.name
+            for p in sorted(template_agents_dir.glob("carter-*.md.j2"))
+            if "temperature:" in p.read_text()
+        ]
+        assert not offenders, f"agent templates still emit temperature (ADR-0010 D7): {offenders}"
+
+
+class TestFleetContextRule:
+    """ADR-0010 D1.D2: Copilot CLI ``/fleet`` subagents do NOT inherit chat history,
+    so the maestro prose MUST instruct injecting the active-plan + knowledge context
+    into every ``/fleet`` prompt — otherwise cross-domain runs silently lose Carter's
+    state. Both the template and the static maestro must carry the rule.
+    """
+
+    def test_template_maestro_has_fleet_context_rule(self, template_agents_dir: Path) -> None:
+        body = (template_agents_dir / "carter-maestro.md.j2").read_text()
+        assert "/fleet" in body, "maestro template missing the /fleet orchestration rule"
+        lower = body.lower()
+        assert "do not inherit" in lower or "don't inherit" in lower or "inherit" in lower
+        assert "active plan" in lower or "active-plan" in lower or "plan" in lower
+        assert "knowledge" in lower
+
+    def test_static_maestro_has_fleet_context_rule(self, static_agents_dir: Path) -> None:
+        body = (static_agents_dir / "carter-maestro.md").read_text()
+        assert "/fleet" in body, "static maestro missing the /fleet orchestration rule"
+        lower = body.lower()
+        assert "inherit" in lower
+        assert "knowledge" in lower
+
+
 class TestNarratorParity:
     """The narrator's security contract must be identical in spirit across sources."""
 
@@ -127,7 +200,8 @@ class TestRenderedFrontmatterParity:
 
     This is the ADR-0002 scaffold-bug fix: ``carter init`` previously produced
     agents with no frontmatter, dropping the ``description`` OpenCode requires and
-    the ``mode``/``temperature`` the runtimes honor.
+    the ``mode`` the runtimes honor. ``temperature`` is dropped entirely (ADR-0010
+    D7) — it must NOT appear in any emitted frontmatter.
     """
 
     def test_rendered_agents_have_valid_frontmatter(self) -> None:
@@ -138,8 +212,8 @@ class TestRenderedFrontmatterParity:
             fm = _parse_frontmatter(content)
             assert fm.get("description"), f"{name}: rendered without a description"
             assert fm.get("mode"), f"{name}: rendered without a mode"
-            assert isinstance(fm.get("temperature"), int | float), (
-                f"{name}: rendered without a numeric temperature"
+            assert "temperature" not in fm, (
+                f"{name}: emits temperature (dropped wholesale, ADR-0010 D7)"
             )
 
     def test_rendered_frontmatter_matches_static(self, static_agents_dir: Path) -> None:
@@ -199,11 +273,11 @@ class TestNoFalseReadOnlyClaim:
 
 
 class TestProseMatchesAllowlist:
-    """The inverse of the read-only bug: an agent whose allowlist lacks R2
-    (remote-write) must not claim 'Full access' in its Tool Access prose. On a
+    """The inverse of the read-only bug: an agent whose allowlist lacks
+    ``remote-write`` must not claim 'Full access' in its Tool Access prose. On a
     non-enforcing target the advisory prose wins, so an over-claim would let a
     non-pusher remote-write — breaking the single-pusher invariant (only devops
-    holds R2). ADR-0005 D1/D4.
+    holds ``remote-write``). ADR-0005 D1/D4; ADR-0010 D4.
     """
 
     def test_non_pusher_agents_dont_claim_full_access(self, static_agents_dir: Path) -> None:
@@ -211,12 +285,12 @@ class TestProseMatchesAllowlist:
         offenders = []
         for agent in sorted(static_agents_dir.glob("carter-*.md")):
             role = agent.stem.removeprefix("carter-")
-            holds_remote_write = allowlist.get(role, {}).get("R2", False)
+            holds_remote_write = allowlist.get(role, {}).get("remote-write", False)
             if not holds_remote_write and "full access" in agent.read_text().lower():
                 offenders.append(agent.name)
         assert not offenders, (
-            "non-R2 agents claim 'Full access' (prose over-claims remote-write the "
-            f"allowlist denies, ADR-0005 D1/D4): {offenders}"
+            "non-pusher agents claim 'Full access' (prose over-claims remote-write the "
+            f"allowlist denies, ADR-0005 D1/D4 / ADR-0010 D4): {offenders}"
         )
 
 
@@ -258,14 +332,17 @@ class TestStrictnessPolicyParity:
 
     def test_static_tools_match_mcp_scope(self, static_agents_dir: Path) -> None:
         """Copilot is the default target, so statics carry ``tools`` (MCP scope)
-        and never the OpenCode ``permission`` map.
+        and never the OpenCode ``permission`` map. The maestro (primary) additionally
+        carries the ``agent`` native-dispatch tool ahead of its MCP scope (ADR-0010 D1).
         """
         for agent in sorted(static_agents_dir.glob("carter-*.md")):
             role = self._role(agent)
             fm = _parse_frontmatter(agent.read_text())
-            scope = AGENT_MCP_SCOPE.get(role, [])
-            if scope:
-                assert fm.get("tools") == [f"carter-{s}/*" for s in sorted(scope)], (
+            expected = [f"carter-{s}/*" for s in sorted(AGENT_MCP_SCOPE.get(role, []))]
+            if role == "maestro":
+                expected = ["agent", *expected]
+            if expected:
+                assert fm.get("tools") == expected, (
                     f"{agent.name}: baked tools drifted from the MCP scope"
                 )
             else:
@@ -274,17 +351,44 @@ class TestStrictnessPolicyParity:
                 f"{agent.name}: static (copilot default) must not bake opencode permission"
             )
 
+    def test_static_agents_carry_resolved_model(self, static_agents_dir: Path) -> None:
+        """ADR-0010 D2: every static agent bakes a single per-target ``model:`` string
+        matching the shipped resolution (overrides > tier > default) at the copilot
+        default. A re-bake gap (e.g. a tier rename not propagated to statics) fails
+        here. Thinkers = Opus 4.8; implementers = Sonnet 4.6. Never an array; no effort.
+        """
+        cfg = generate_default_config()
+        cfg["agent_suffix"] = ""  # copilot default, canonical names
+        for agent in sorted(static_agents_dir.glob("carter-*.md")):
+            role = self._role(agent)
+            fm = _parse_frontmatter(agent.read_text())
+            assert "model" in fm, f"{agent.name}: missing baked model"
+            assert isinstance(fm["model"], str), f"{agent.name}: model must be a single string"
+            assert fm["model"] == resolve_model(cfg, role), (
+                f"{agent.name}: baked model drifted from the resolved tier model"
+            )
+
     def test_static_maestro_carries_policy_gate_table(self, static_agents_dir: Path) -> None:
-        """The global static maestro body must carry the always-on policy gate
-        table (ADR-0005 D6) — frontmatter parity can't catch a body relapse."""
+        """The global static maestro body must carry the always-on policy gate table
+        (ADR-0005 D6) and the enforced `gate`-tier redaction handoff (ADR-0010 D5) —
+        frontmatter parity can't catch a body relapse."""
         body = (static_agents_dir / "carter-maestro.md").read_text()
         assert "Strictness Policy" in body
-        assert "external-publish" in body  # R6 row present
-        assert "narrator→devops handoff" in body  # R6 overlay wired
+        assert "remote-write" in body  # a 4-category taxonomy row is present
+        assert "dangerous" in body
+        # Enforced redaction handoff (no R6 overlay): substantive outward content
+        # routes narrator -> devops as a gate-tier step.
+        assert "gate`-tier redaction handoff" in body
+        assert "carter-narrator" in body and "carter-devops" in body
 
-    def test_static_narrator_carries_r6_handoff(self, static_agents_dir: Path) -> None:
-        """The global static narrator body must wire the R6 author/transmit
-        handoff (ADR-0005 D4) — narrator authors + redacts, devops transmits."""
+    def test_static_narrator_carries_enforced_redaction_handoff(
+        self, static_agents_dir: Path
+    ) -> None:
+        """The global static narrator body must wire the enforced author/transmit
+        handoff (ADR-0010 D5) — narrator authors + redacts (gate-tier), devops
+        transmits as the sole remote-write holder."""
         body = (static_agents_dir / "carter-narrator.md").read_text().lower()
         assert "transmit" in body
         assert "devops" in body
+        assert "remote-write" in body  # narrator does NOT hold it; devops does
+        assert "gate`-tier" in body

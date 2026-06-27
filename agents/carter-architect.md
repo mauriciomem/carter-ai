@@ -1,12 +1,13 @@
 ---
 description: "Solution Architect — system design, cloud architecture, trade-off analysis, and architecture decisions."
 mode: subagent
-temperature: 0.4
 policy:
   level: guarded
-  allow: [R0]
-  gates: {R0: allow}
+  allow: [read]
+  gates: {read: allow}
+model: Claude Opus 4.8
 tools: [carter-github/*, carter-terraform/*]
+agents: []
 ---
 
 <role>

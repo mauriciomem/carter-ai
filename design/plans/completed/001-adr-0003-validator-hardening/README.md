@@ -24,7 +24,7 @@ must_haves:
 # Plan: ADR-0003 validator hardening & recovery integrity
 
 ## Objective
-Capture the post-implementation review findings (Yui, 2026-06-09) for the
+Capture the post-implementation review findings (2026-06-09) for the
 ADR-0003 plan/checkpoint system. These are sharp edges on a correct shape — no
 redesign, no scope change. Each step is an independently shippable, TDD-first
 pass. Tracked now; implemented later.

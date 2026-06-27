@@ -1,5 +1,9 @@
 {# Base agent template — all agents inherit from this. #}
 {# Required blocks: frontmatter, identity, role, boundaries #}
+{# `mode:` (primary/subagent) is OpenCode-scoped (ADR-0010 D8): OpenCode reads it; #}
+{# VS Code ignores it silently — there the primary/subagent split comes from the    #}
+{# `agents:` allowlist + `disable-model-invocation`. `temperature` is NOT emitted    #}
+{# (D7) — dead-or-rejected on every pinned model; effort/temperature are runtime-owned. #}
 ---
 {% block frontmatter %}{% endblock %}
 {{ policy_frontmatter(config, agent) }}
