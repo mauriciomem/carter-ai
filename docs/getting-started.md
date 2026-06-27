@@ -159,6 +159,15 @@ policy:
   overrides: {}         # category -> gate, e.g. {remote-write: deny} to tighten remote-write
   audit_overrides: true # log escape-hatch overrides via `carter ops`
 
+# Per-agent model (ADR-0010 D2). Thinkers run on Opus, implementers on a cheaper
+# Sonnet; resolved overrides > tier > default. One model: string per agent (never an
+# array). Haiku is opt-in via overrides only.
+models:
+  default:      { copilot: "Claude Opus 4.8",   opencode: "anthropic/claude-opus-4-8" }
+  thinkers:     { copilot: "Claude Opus 4.8",   opencode: "anthropic/claude-opus-4-8" }
+  implementers: { copilot: "Claude Sonnet 4.6", opencode: "anthropic/claude-sonnet-4-6" }
+  overrides: {}         # per-agent, e.g. {engineer: {copilot: "Claude Haiku 4.5", opencode: "anthropic/claude-haiku-4-5"}}
+
 # Should Carter review your code before you push?
 quality_gate:
   enabled: true
@@ -175,6 +184,13 @@ When you change `carter.yaml`, regenerate with:
 ```bash
 carter update .
 ```
+
+> **Reasoning effort is global, not per-agent.** No target exposes a per-agent effort
+> field, so Carter emits none — effort is the harness's global knob
+> (`copilot --effort high`, a VS Code/OpenCode setting). Default to **`high`** (the safe
+> all-rounder), and raise it per-session to `xhigh` for thinker-heavy work (RFC/ADR/plan
+> authoring). `carter check` prints which model each agent pins, with the caveat that
+> Carter can't verify your subscription includes it.
 
 ---
 

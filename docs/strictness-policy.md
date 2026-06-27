@@ -264,6 +264,8 @@ carter ops policy-override \
 | Tighten/loosen a category | `policy.overrides: {dangerous: deny}` |
 | Map a custom tool | `policy.tool_risk: {tool: remote-write}` |
 | Record an override | `carter ops policy-override --category … --action … --tier …` |
+| Pin a per-agent model | `models.overrides: {engineer: {copilot: "Claude Haiku 4.5"}}` |
+| Set reasoning effort | global on the harness (`copilot --effort high`); default `high`, raise to `xhigh` for thinker-heavy work — Carter emits no per-agent effort |
 
 ## See also
 

@@ -5,6 +5,7 @@ policy:
   level: guarded
   allow: [local-write, read]
   gates: {local-write: allow, read: allow}
+model: Claude Sonnet 4.6
 tools: [carter-github/*, carter-terraform/*]
 agents: []
 ---

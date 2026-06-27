@@ -25,6 +25,7 @@ from carter.config import (
     RISK_TAXONOMY,
     effective_allowlist,
     generate_default_config,
+    resolve_model,
 )
 from carter.scaffold import create_env, render_agents
 
@@ -346,6 +347,23 @@ class TestStrictnessPolicyParity:
                 assert "tools" not in fm, f"{agent.name}: unexpected tools for empty scope"
             assert "permission" not in fm, (
                 f"{agent.name}: static (copilot default) must not bake opencode permission"
+            )
+
+    def test_static_agents_carry_resolved_model(self, static_agents_dir: Path) -> None:
+        """ADR-0010 D2: every static agent bakes a single per-target ``model:`` string
+        matching the shipped resolution (overrides > tier > default) at the copilot
+        default. A re-bake gap (e.g. a tier rename not propagated to statics) fails
+        here. Thinkers = Opus 4.8; implementers = Sonnet 4.6. Never an array; no effort.
+        """
+        cfg = generate_default_config()
+        cfg["agent_suffix"] = ""  # copilot default, canonical names
+        for agent in sorted(static_agents_dir.glob("carter-*.md")):
+            role = self._role(agent)
+            fm = _parse_frontmatter(agent.read_text())
+            assert "model" in fm, f"{agent.name}: missing baked model"
+            assert isinstance(fm["model"], str), f"{agent.name}: model must be a single string"
+            assert fm["model"] == resolve_model(cfg, role), (
+                f"{agent.name}: baked model drifted from the resolved tier model"
             )
 
     def test_static_maestro_carries_policy_gate_table(self, static_agents_dir: Path) -> None:

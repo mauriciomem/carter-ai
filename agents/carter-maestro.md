@@ -5,6 +5,7 @@ policy:
   level: guarded
   allow: [read]
   gates: {read: allow}
+model: Claude Opus 4.8
 tools: [agent]
 agents: [carter-architect, carter-devops, carter-engineer, carter-learner, carter-narrator, carter-pm]
 handoffs: [carter-architect, carter-devops, carter-engineer, carter-learner, carter-narrator, carter-pm]

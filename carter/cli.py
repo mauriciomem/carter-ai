@@ -16,6 +16,7 @@ from carter.scaffold import (
     config_warnings,
     create_env,
     lint_policy,
+    model_advisory,
     policy_notice,
     render_agents,
     render_instructions,
@@ -264,6 +265,9 @@ def check(target_dir: str, accept_degraded: bool) -> None:
 
     for warning in [*config_warnings(config), *policy_warnings]:
         click.echo(f"⚠  {warning}", err=True)
+
+    # Required unverifiable-model advisory (ADR-0010 D2.3) — always printed.
+    click.echo(f"ℹ  {model_advisory(config)}")
 
     click.echo("Workspace OK")
 

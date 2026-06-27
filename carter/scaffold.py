@@ -18,6 +18,7 @@ from carter.config import (
     policy_frontmatter,
     policy_gate_table,
     policy_native_keys,
+    resolve_model,
 )
 from carter.resources import templates_dir
 
@@ -110,6 +111,23 @@ def policy_notice(config: dict[str, Any]) -> str | None:
         f"Strictness policy is '{level}': remote-write and dangerous "
         "(infra-mutate / destructive) actions are gated per the risk taxonomy "
         "(see the maestro policy table)."
+    )
+
+
+def model_advisory(config: dict[str, Any]) -> str:
+    """The required unverifiable-model advisory `carter check` always prints (D2.3).
+
+    Carter pins a per-agent `model:` but cannot verify the user's Copilot/OpenCode
+    subscription actually includes it — an unavailable model would be silently ignored
+    frontmatter (a broken agent). So it emits the pin anyway and names every agent's
+    pinned model with the can't-verify caveat. Always returns a non-empty string.
+    """
+    pins = ", ".join(f"{role} → {resolve_model(config, role)}" for role in config.get("agents", []))
+    return (
+        f"Agents pin these models: {pins}. Carter cannot verify your "
+        "Copilot/OpenCode subscription includes them — an unavailable model is "
+        "silently ignored at load. Effort is global (`--effort high`, per-session "
+        "overridable); Carter emits no per-agent effort or temperature."
     )
 
 
@@ -251,7 +269,7 @@ def lint_policy(
         # the ACTUALLY-enforced surface — drift here matters more than the
         # advisory policy block, so lint them against the same model.
         expected_native = policy_native_keys(config, role)
-        for key in ("tools", "permission"):
+        for key in ("tools", "permission", "model"):
             if (key in expected_native) != (key in (frontmatter or {})):
                 errors.append(
                     f"{role}: emitted {key} presence drifted from the declared target policy"

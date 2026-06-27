@@ -90,6 +90,22 @@ DEFAULT_CONFIG: dict[str, Any] = {
         "overrides": {},  # category -> gate, explicit per-category override
         "audit_overrides": True,  # log escape-hatch overrides via carter ops
     },
+    # Per-agent model (ADR-0010 D2). Dict-shaped per tier (so `_deep_merge` doesn't
+    # wipe it — same footgun the taxonomy maps avoid). Each tier maps a target to a
+    # single model string: a display name for VS Code/Copilot, a `provider/model` ID
+    # for OpenCode. Resolved `overrides > tier > default` (see `resolve_model`).
+    # Thinkers = Opus 4.8; implementers = Sonnet 4.6; Haiku is opt-in via `overrides`.
+    # Effort is NOT here — no target has a per-agent effort field; it is the global
+    # `--effort high` knob (D2.D1). `temperature` is dropped wholesale (D7).
+    "models": {
+        "default": {"copilot": "Claude Opus 4.8", "opencode": "anthropic/claude-opus-4-8"},
+        "thinkers": {"copilot": "Claude Opus 4.8", "opencode": "anthropic/claude-opus-4-8"},
+        "implementers": {
+            "copilot": "Claude Sonnet 4.6",
+            "opencode": "anthropic/claude-sonnet-4-6",
+        },
+        "overrides": {},  # per-agent, e.g. {engineer: {copilot: "Claude Haiku 4.5", ...}}
+    },
     "target": "copilot",
 }
 
@@ -257,6 +273,62 @@ AGENT_ALLOWLIST: dict[str, dict[str, bool]] = {
         "dangerous": True,
     },
 }
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Per-agent model (ADR-0010 D2 / RFC-0005 §2)
+# ──────────────────────────────────────────────────────────────────────────────
+# MODEL LAUNCH — KEEP IN SYNC. The Carter→target model-name table: one home for the
+# canonical Anthropic model id ⇄ the per-target string Carter emits (display name for
+# VS Code/Copilot, `provider/model` id for OpenCode). When a model is bumped, update
+# this table AND the `models:` tiers in DEFAULT_CONFIG above. Model ids verified
+# against the bundled `claude-api` skill (cached 2026-06-04): a stale string here is a
+# silently dead agent (test_models.py asserts the table is non-empty per shipped role).
+MODEL_NAMES: dict[str, dict[str, str]] = {
+    "claude-opus-4-8": {"copilot": "Claude Opus 4.8", "opencode": "anthropic/claude-opus-4-8"},
+    "claude-sonnet-4-6": {
+        "copilot": "Claude Sonnet 4.6",
+        "opencode": "anthropic/claude-sonnet-4-6",
+    },
+    # Haiku 4.5 is an opt-in implementer override only (xhigh/max effort error on it).
+    "claude-haiku-4-5": {"copilot": "Claude Haiku 4.5", "opencode": "anthropic/claude-haiku-4-5"},
+}
+
+# Role → model tier (ADR-0010 D2). Thinkers run the documentation-authoring agents on
+# the high-reasoning model; implementers run the cheaper one. A role in no tier
+# resolves to `models.default` (the un-tiered catch-all) so it never resolves empty.
+MODEL_TIERS: dict[str, str] = {
+    "maestro": "thinkers",
+    "architect": "thinkers",
+    "pm": "thinkers",
+    "learner": "thinkers",
+    "narrator": "thinkers",
+    "engineer": "implementers",
+    "devops": "implementers",
+}
+
+
+def resolve_model(config: dict[str, Any], role: str) -> str:
+    """The per-target ``model:`` string for ``role``, resolved ``overrides > tier > default``.
+
+    (1) ``models.overrides[role]`` if present; else (2) the role's tier
+    (``thinkers``/``implementers``); else (3) ``models.default`` (the un-tiered
+    catch-all). The value is a SINGLE string — a display name for VS Code/Copilot, a
+    ``provider/model`` id for OpenCode (never an array, which breaks Copilot CLI).
+    """
+    models = config.get("models") or DEFAULT_CONFIG["models"]
+    target = config.get("target", "copilot")
+    # OpenCode shares the `opencode` key; `all` and any other target map to copilot's
+    # display name (the default emission surface).
+    key = "opencode" if target == "opencode" else "copilot"
+
+    override = (models.get("overrides") or {}).get(role)
+    if override and override.get(key):
+        return override[key]
+    tier = MODEL_TIERS.get(role)
+    if tier and (models.get(tier) or {}).get(key):
+        return models[tier][key]
+    return (models.get("default") or {}).get(key, "")
 
 
 def most_restrictive_gate(gates: Iterable[str]) -> str:
@@ -465,6 +537,12 @@ def policy_native_keys(config: dict[str, Any], role: str) -> dict[str, Any]:
     specialists = dispatch_specialists(config)
 
     keys: dict[str, Any] = {}
+    # Per-agent model (D2): a SINGLE per-target string on every agent, resolved
+    # overrides > tier > default. Emitted for all targets (the value's shape is
+    # target-specific). `carter check` prints the unverifiable-model advisory.
+    model = resolve_model(config, role)
+    if model:
+        keys["model"] = model
     if target in ("copilot", "all"):
         scope = [f"carter-{server}/*" for server in sorted(AGENT_MCP_SCOPE.get(role, []))]
         # The primary enables the `agent` subagent tool (first, ahead of any MCP

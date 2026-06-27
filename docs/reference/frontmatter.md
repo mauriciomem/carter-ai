@@ -254,6 +254,44 @@ a warning.
 `test_parity` extension (Q14 / ADR-0005 D6 — build-time generation is WON'T-DO per
 [ADR-0002](../adr/0002-single-source-agent-generation.md)).
 
+## Per-agent model (`models` block)
+
+The `models` block (ADR-0010 D2) is orthogonal to `policy:` — it maps role tiers to a
+per-target model string. Carter emits a **single** `model:` string on each agent (an
+array breaks Copilot CLI): a display name for VS Code/Copilot, a `provider/model` id
+for OpenCode. It is **dict-shaped** so a user override deep-merges rather than wiping
+the shipped tiers.
+
+```yaml
+models:
+  default:      { copilot: "Claude Opus 4.8",   opencode: "anthropic/claude-opus-4-8" }
+  thinkers:     { copilot: "Claude Opus 4.8",   opencode: "anthropic/claude-opus-4-8" }
+  implementers: { copilot: "Claude Sonnet 4.6", opencode: "anthropic/claude-sonnet-4-6" }
+  overrides: {}   # per-agent, e.g. {engineer: {copilot: "Claude Haiku 4.5", opencode: "anthropic/claude-haiku-4-5"}}
+```
+
+**Resolution: `overrides` > tier > `default`.** Thinkers (maestro, architect, pm,
+learner, narrator) = Opus 4.8; implementers (engineer, devops) = Sonnet 4.6; `default`
+is the un-tiered catch-all so a future agent never resolves to an empty model. **Haiku
+4.5 is opt-in via `overrides` only** (`xhigh`/`max` effort error on it).
+
+A Carter→target **model-name table** (`MODEL_NAMES`, anchored by a `MODEL LAUNCH` sync
+marker in [config.py](../../carter/config.py)) maps the canonical Anthropic id to each
+target's string; the next model bump updates it. A stale string is a silently dead
+agent, so a test asserts the table is non-empty for every shipped role.
+
+**`carter check` model advisory (required).** Carter cannot verify the user's
+Copilot/OpenCode subscription includes a pinned model, so it **emits the pin anyway**
+and `carter check` always prints an advisory naming each agent's model + the
+can't-verify caveat — an unavailable model is silently ignored frontmatter otherwise.
+
+**Effort and temperature are NOT emitted.** No target has a per-agent effort field, so
+effort is the global `output_config.effort` knob — set per-session on the harness
+(`copilot --effort high`). Carter's docs recommend a single global default of **`high`**
+(the safe all-rounder: `xhigh`/`max` error on a Haiku override, `medium` under-serves
+the thinkers), raised per-session (e.g. `xhigh`) for thinker-heavy RFC/ADR/plan work.
+`temperature` is dropped wholesale (D7) — dead or rejected on every pinned model.
+
 ## See also
 
 - [ADR-0003](../adr/0003-knowledge-adr-rfc-plan-storage.md) — the decision of record
