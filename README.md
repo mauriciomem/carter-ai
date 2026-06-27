@@ -126,6 +126,7 @@ workspace.
 | Config key | Effect |
 |------------|--------|
 | `policy.level` | Risk-based strictness: `guarded` / `strict` (pre-action gates) |
+| `models` | Per-agent model by tier (thinkers = Opus, implementers = Sonnet; `overrides > tier > default`) |
 | `personality.skepticism` | How much Carter challenges your decisions |
 | `quality_gate.enabled` | Multi-agent review before push |
 | `tdd.strict` | Force test-first workflow |
@@ -139,20 +140,24 @@ workspace.
 ## Strictness policy
 
 Carter's safety posture is **enforced**, not just described. A **risk-based
-strictness policy** ([ADR-0005](docs/adr/0005-risk-based-strictness-policy.md))
-gives each agent a deny-by-default tool allowlist and gates actions by risk
-category (read → local-write → remote-write → infra-mutate → secret-access →
-destructive → external-publish). One `policy.level` knob sets how strict:
+strictness policy** ([ADR-0010](docs/adr/0010-agent-platform-refresh.md),
+superseding [ADR-0005](docs/adr/0005-risk-based-strictness-policy.md)) gives each
+agent a deny-by-default tool allowlist and gates actions across four risk
+categories — **read → local-write → remote-write → dangerous** (secret reads fold
+into `remote-write`; outward content is an enforced redaction handoff, not a
+category). One `policy.level` knob sets how strict:
 
 | Level | Behaviour |
 |-------|-----------|
-| `guarded` | The floor and the default — remote/infra/destructive actions are gated |
-| `strict` | Regulated / prod-critical — infra-mutate and destructive actions are denied |
+| `guarded` | The floor and the default — remote-write is `ask`, dangerous is `gate` |
+| `strict` | Regulated / prod-critical — remote-write is `gate`, dangerous is `deny` |
 
 Where the target runtime supports it (OpenCode `permission`, Copilot CLI `hooks`),
 Carter **emits native enforcement**; elsewhere it degrades to honestly-labelled
-prose and `carter check` flags the gap. `devops` is the only agent that can push
-or mutate infra; `narrator` is the only one that can publish outward content.
+prose and `carter check` flags the gap. `devops` is the **sole pusher** — the only
+agent holding `remote-write`/`dangerous`. Substantive outward content is forced
+through `narrator` for redaction (a `gate`-tier handoff), then handed to `devops`
+to transmit.
 
 → Tutorial: **[docs/strictness-policy.md](docs/strictness-policy.md)** · schema: **[docs/reference/frontmatter.md](docs/reference/frontmatter.md)**
 
