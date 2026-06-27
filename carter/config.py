@@ -78,13 +78,14 @@ DEFAULT_CONFIG: dict[str, Any] = {
         "step_max_lines": 80,  # step-file split budget
         "git_regime": "private",  # private | workspace (umbrella mode only)
     },
-    # Risk-based strictness policy (RFC-0002 / ADR-0005). Control keys only; the
-    # shipped taxonomy / tool->risk map / allowlist live as module constants below
-    # (user-extensible via carter.yaml policy.tool_risk / policy.allowlist).
-    # Default level is `loose` here so an existing config that omits `policy` keeps
-    # today's behaviour (Q6); generate_default_config() bumps NEW installs to guarded.
+    # Risk-based strictness policy (RFC-0002 / ADR-0005; refreshed by ADR-0010).
+    # Control keys only; the shipped taxonomy / tool->risk map / allowlist live as
+    # module constants below (user-extensible via carter.yaml policy.tool_risk /
+    # policy.allowlist). `guarded` is the floor and the default for everything (new
+    # and existing/omitted) — ADR-0010 D3 reduced strictness to two levels, so an
+    # absent or unrecognized level resolves to `guarded` through this default.
     "policy": {
-        "level": "loose",  # loose | guarded | strict
+        "level": "guarded",  # guarded | strict
         "unknown_tool": "ask",  # gate for tools not in the risk map: allow | ask | deny
         "overrides": {},  # category -> gate, explicit per-category override
         "audit_overrides": True,  # log escape-hatch overrides via carter ops
@@ -109,18 +110,21 @@ def _validate_agent_suffix(suffix: Any) -> None:
 def _validate_policy(policy: Any) -> None:
     """Validate the ``policy`` block at the config boundary.
 
-    Catches an unknown ``policy.level`` and an override gate that isn't a known
-    gate keyword, so a typo fails fast with a clear ``ConfigError`` instead of a
-    raw ``KeyError`` deep in rendering. ``GATE_SEVERITY``/``POLICY_LEVELS`` are
-    defined below in the policy-model section.
+    Normalizes an out-of-vocabulary ``policy.level`` to the ``guarded`` default
+    (ADR-0010 D3) and catches an override category/gate that isn't a known keyword,
+    so a typo there fails fast with a clear ``ConfigError`` instead of a raw
+    ``KeyError`` deep in rendering. ``GATE_SEVERITY``/``POLICY_LEVELS`` are defined
+    below in the policy-model section.
     """
     if not isinstance(policy, dict):
         raise ConfigError(f"Invalid policy block: {policy!r} (must be a mapping)")
-    level = policy.get("level", "loose")
+    level = policy.get("level", "guarded")
+    # ADR-0010 D3: strictness is now `guarded`/`strict` only. Any level outside that
+    # set — a stale value from a prior install, or anything unrecognized — normalizes
+    # to the `guarded` default in-place, silently (no notice, no dedicated migration
+    # branch) so it resolves via the normal default path everywhere downstream.
     if level not in POLICY_LEVELS:
-        raise ConfigError(
-            f"Invalid policy.level: {level!r}. Must be one of: {', '.join(POLICY_LEVELS)}."
-        )
+        policy["level"] = level = "guarded"
     for cat, gate in (policy.get("overrides") or {}).items():
         if cat not in RISK_TAXONOMY:
             raise ConfigError(
@@ -195,18 +199,19 @@ def _deep_merge(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any
 # Gate vocabulary, least -> most restrictive.
 GATE_SEVERITY: dict[str, int] = {"allow": 0, "ask": 1, "gate": 2, "deny": 3}
 
-# Valid strictness levels (validated at the config boundary).
-POLICY_LEVELS: tuple[str, ...] = ("loose", "guarded", "strict")
+# Valid strictness levels (validated at the config boundary). ADR-0010 D3 reduced
+# these to two; `guarded` is the floor and default.
+POLICY_LEVELS: tuple[str, ...] = ("guarded", "strict")
 
 # R0-R6 risk taxonomy: category -> {level -> gate}. Fixed, shipped with Carter.
 RISK_TAXONOMY: dict[str, dict[str, str]] = {
-    "R0": {"loose": "allow", "guarded": "allow", "strict": "allow"},  # read
-    "R1": {"loose": "allow", "guarded": "allow", "strict": "allow"},  # local-write
-    "R2": {"loose": "allow", "guarded": "ask", "strict": "gate"},  # remote-write
-    "R3": {"loose": "allow", "guarded": "gate", "strict": "deny"},  # infra-mutate
-    "R4": {"loose": "allow", "guarded": "ask", "strict": "gate"},  # secret-access
-    "R5": {"loose": "allow", "guarded": "gate", "strict": "deny"},  # destructive
-    "R6": {"loose": "allow", "guarded": "gate", "strict": "gate"},  # external-publish (overlay)
+    "R0": {"guarded": "allow", "strict": "allow"},  # read
+    "R1": {"guarded": "allow", "strict": "allow"},  # local-write
+    "R2": {"guarded": "ask", "strict": "gate"},  # remote-write
+    "R3": {"guarded": "gate", "strict": "deny"},  # infra-mutate
+    "R4": {"guarded": "ask", "strict": "gate"},  # secret-access
+    "R5": {"guarded": "gate", "strict": "deny"},  # destructive
+    "R6": {"guarded": "gate", "strict": "gate"},  # external-publish (overlay)
 }
 
 # Tool/command -> risk category. Shipped defaults; user-extensible via
@@ -399,7 +404,7 @@ def policy_native_keys(config: dict[str, Any], role: str) -> dict[str, Any]:
     """
     target = config.get("target", "copilot")
     policy = config.get("policy") or {}
-    emit_level = _emit_level(policy.get("level", "loose"))
+    emit_level = _emit_level(policy.get("level", "guarded"))
     allowed = [cat for cat, on in sorted(effective_allowlist(config).get(role, {}).items()) if on]
     gates = _gates_for(allowed, emit_level, policy.get("overrides"))
 
@@ -428,7 +433,7 @@ def policy_frontmatter(config: dict[str, Any], role: str) -> str:
     operationally by the `carter check` hard ack on a non-enforcing target.
     """
     policy = config.get("policy") or {}
-    level = policy.get("level", "loose")
+    level = policy.get("level", "guarded")
     emit_level = _emit_level(level)
 
     allowed = [cat for cat, on in sorted(effective_allowlist(config).get(role, {}).items()) if on]
@@ -451,7 +456,7 @@ def policy_gate_table(config: dict[str, Any]) -> list[dict[str, str]]:
     (step 9), so ``strict`` shows the real ``deny`` rows for R3/R5.
     """
     policy = config.get("policy") or {}
-    level = _emit_level(policy.get("level", "loose"))
+    level = _emit_level(policy.get("level", "guarded"))
     overrides = policy.get("overrides") or {}
     cats = ("R0", "R1", "R2", "R3", "R4", "R5", "R6")
     gates = _gates_for(list(cats), level, overrides)
@@ -469,9 +474,8 @@ def generate_default_config(
         "description": "",
         "mode": mode,
     }
-    # Q6: new installs default to `guarded`; an existing config that omits the
-    # policy block keeps `loose` (the DEFAULT_CONFIG value) for no behaviour change.
-    config["policy"]["level"] = "guarded"
+    # ADR-0010 D3: `guarded` is the floor and the DEFAULT_CONFIG value, so new
+    # installs and existing/omitted configs both resolve to it — no per-install bump.
     return config
 
 

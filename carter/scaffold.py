@@ -86,43 +86,28 @@ def agent_filename(role: str, config: dict[str, Any]) -> str:
 def config_warnings(config: dict[str, Any]) -> list[str]:
     """Return non-fatal configuration warnings for a workspace config.
 
-    Flags the redaction gap: if the narrator is enabled but ``redaction.enabled``
-    is false *at* ``loose``, the scaffolded narrator carries no redaction rules
-    even though Maestro routes external-facing content to it. At ``guarded`` and
-    ``strict`` the redaction pass is forced regardless (the narrator template
-    renders the rules), so the gap does not exist there — the policy lint instead
-    surfaces the ``redaction.enabled: false`` contradiction (Q16).
+    ADR-0010 D3 reduced strictness to two levels, both of which **force** the
+    narrator's redaction pass — the rule-less-narrator gap that this warning once
+    flagged at the dropped advisory level can no longer occur. A
+    ``redaction.enabled: false`` contradiction at an enforcing level is surfaced by
+    the policy lint instead (Q16), not here. Kept as a seam so future non-fatal
+    config warnings have a home.
     """
-    warnings: list[str] = []
-    narrator_on = "narrator" in config.get("agents", [])
-    redaction_on = bool(config.get("redaction", {}).get("enabled", False))
-    level = (config.get("policy") or {}).get("level", "loose")
-    if narrator_on and not redaction_on and level == "loose":
-        warnings.append(
-            "narrator is enabled but redaction.enabled is false — the scaffolded "
-            "narrator will have NO redaction rules, yet Maestro still routes "
-            "external-facing content to it. Enable redaction or remove narrator "
-            "from agents."
-        )
-    return warnings
+    return []
 
 
 def policy_notice(config: dict[str, Any]) -> str | None:
-    """The 'you're guarded now' migration notice, surfaced at init/update (P2).
+    """The 'you're guarded now' notice, surfaced at init/update.
 
-    Returns a one-line message when the active strictness level enforces gates
-    (`guarded` or `strict`), or ``None`` for `loose` (no behaviour change, so no
-    notice). Q6: new installs default to `guarded`; an existing/omitted policy
-    stays `loose` and stays quiet.
+    Both shipped levels (``guarded``/``strict``) enforce gates — ADR-0010 D3
+    reduced strictness to these two — so the notice always fires, naming the active
+    level and the gated categories.
     """
-    level = (config.get("policy") or {}).get("level", "loose")
-    if level == "loose":
-        return None
+    level = (config.get("policy") or {}).get("level", "guarded")
     return (
         f"Strictness policy is '{level}': remote-write, infra-mutate, "
-        "secret-access, destructive, and external-publish actions are now gated "
-        "per the risk taxonomy (see the maestro policy table). Set "
-        "policy.level: loose in carter.yaml to restore advisory-only behaviour."
+        "secret-access, destructive, and external-publish actions are gated "
+        "per the risk taxonomy (see the maestro policy table)."
     )
 
 
@@ -178,7 +163,7 @@ def lint_policy(
     warnings: list[str] = []
 
     policy = config.get("policy") or {}
-    level = policy.get("level", "loose")
+    level = policy.get("level", "guarded")
     emit_level = _emit_level(level)
     allowlist = effective_allowlist(config)
     overrides = policy.get("overrides")

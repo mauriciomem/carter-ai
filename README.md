@@ -126,7 +126,7 @@ workspace.
 
 | Config key | Effect |
 |------------|--------|
-| `policy.level` | Risk-based strictness: `loose` / `guarded` / `strict` (pre-action gates) |
+| `policy.level` | Risk-based strictness: `guarded` / `strict` (pre-action gates) |
 | `personality.skepticism` | How much Carter challenges your decisions |
 | `quality_gate.enabled` | Multi-agent review before push |
 | `tdd.strict` | Force test-first workflow |
@@ -147,8 +147,7 @@ destructive → external-publish). One `policy.level` knob sets how strict:
 
 | Level | Behaviour |
 |-------|-----------|
-| `loose` | Advisory only — today's behaviour, nothing blocks (default for existing configs) |
-| `guarded` | Recommended default for new installs — remote/infra/destructive actions are gated |
+| `guarded` | The floor and the default — remote/infra/destructive actions are gated |
 | `strict` | Regulated / prod-critical — infra-mutate and destructive actions are denied |
 
 Where the target runtime supports it (OpenCode `permission`, Copilot CLI `hooks`),

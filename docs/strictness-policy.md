@@ -16,9 +16,8 @@ Three ideas work together:
 
 1. **Risk categories (R0–R6)** — every tool or command maps to a risk band, from
    harmless reads to irreversible/destructive actions.
-2. **A strictness level** — one knob (`loose` / `guarded` / `strict`) decides
-   whether each category is allowed, asks for confirmation, gates behind a
-   handoff, or is denied.
+2. **A strictness level** — one knob (`guarded` / `strict`) decides whether each
+   category is allowed, asks for confirmation, gates behind a handoff, or is denied.
 3. **A per-agent allowlist** — independent of level, each agent may only act in
    categories it's allowed. A category not on an agent's list is **denied** for
    that agent, always (deny-by-default).
@@ -47,17 +46,18 @@ and the agent's allowlist.
 
 ### How the levels map categories to gates
 
-| Category | `loose` | `guarded` | `strict` |
-|----------|---------|-----------|----------|
-| R0 read | allow | allow | allow |
-| R1 local-write | allow | allow | allow |
-| R2 remote-write | allow | ask | gate |
-| R3 infra-mutate | allow | gate | **deny** |
-| R4 secret-access | allow | ask | gate |
-| R5 destructive | allow | gate | **deny** |
-| R6 external-publish | allow | gate | gate |
+| Category | `guarded` | `strict` |
+|----------|-----------|----------|
+| R0 read | allow | allow |
+| R1 local-write | allow | allow |
+| R2 remote-write | ask | gate |
+| R3 infra-mutate | gate | **deny** |
+| R4 secret-access | ask | gate |
+| R5 destructive | gate | **deny** |
+| R6 external-publish | gate | gate |
 
-`loose` is exactly today's behaviour — advisory only, nothing blocks.
+`guarded` is the floor — in-scope risky actions pause for you; nothing is silently
+allowed past `read`/`local-write`.
 
 ### Who can do what (the shipped allowlist)
 
@@ -68,8 +68,8 @@ and the agent's allowlist.
 | **devops** | R0, R1, R2, R3, R4, R5 | the **only** pusher / infra-mutator |
 | **narrator** | R0, R1, R6 | the **only** external author |
 
-So even at `loose`, an engineer asking to `terraform apply` is out of scope — that
-is devops's category. The level tunes *how hard* the in-scope gates bite.
+So an engineer asking to `terraform apply` is out of scope at any level — that is
+devops's category. The level tunes *how hard* the in-scope gates bite.
 
 ---
 
@@ -79,7 +79,7 @@ The policy lives in a `policy` block in `carter.yaml`:
 
 ```yaml
 policy:
-  level: guarded        # loose | guarded | strict
+  level: guarded        # guarded | strict
   unknown_tool: ask     # gate for a tool not in the risk map: allow | ask | deny
   overrides: {}         # category -> gate, e.g. {R2: deny}
   audit_overrides: true # log escape-hatch overrides via `carter ops`
@@ -87,15 +87,14 @@ policy:
 
 **Defaults (no surprises):**
 
-- A **new** install (`carter init`) defaults to **`guarded`**.
-- An **existing** config that omits the `policy` block resolves to **`loose`** —
-  so upgrading Carter never changes your behaviour until you opt in.
+- `guarded` is the floor and the default for **everything** — a new install, an
+  existing config that omits the `policy` block, and any unrecognized level all
+  resolve to `guarded`.
 
 Pick by context:
 
 | Level | Use it when |
 |-------|-------------|
-| `loose` | You want advice, not gates (or you're preserving legacy behaviour). |
 | `guarded` | Day-to-day default — remote/infra/destructive actions pause for you. |
 | `strict` | Regulated or prod-critical work — infra-mutate and destructive are denied outright. |
 
@@ -105,11 +104,11 @@ After editing `carter.yaml`, re-emit the agents:
 carter update .
 ```
 
-You'll see the migration notice when enforcement is real:
+You'll see the policy notice (both levels enforce gates):
 
 ```
 ℹ  Strictness policy is 'guarded': remote-write, infra-mutate, secret-access,
-   destructive, and external-publish actions are now gated per the risk taxonomy.
+   destructive, and external-publish actions are gated per the risk taxonomy.
 ```
 
 ---
@@ -224,10 +223,10 @@ content) — they compose, they don't collide.
 - **Short-form, low-risk** outward content (a one-line PR comment) needs only an
   inline redaction check; **substantive** content (release notes, Jira bodies, PR
   descriptions) goes through the full narrator gate.
-- At **`guarded` and `strict`**, the narrator's redaction rules are rendered
-  **regardless of `redaction.enabled`** — disabling redaction at an enforcing
-  level can't silently ship a rule-less narrator. (At `loose`, disabling redaction
-  with the narrator enabled prints a setup warning instead.)
+- At **`guarded` and `strict`** (both shipped levels), the narrator's redaction
+  rules are rendered **regardless of `redaction.enabled`** — disabling redaction
+  can't silently ship a rule-less narrator; `carter check` flags the
+  `redaction.enabled: false` contradiction instead.
 
 ---
 
@@ -257,7 +256,7 @@ carter ops policy-override \
 
 | Task | Command / setting |
 |------|-------------------|
-| Set the level | `policy.level: loose\|guarded\|strict` in `carter.yaml` |
+| Set the level | `policy.level: guarded\|strict` in `carter.yaml` |
 | Re-emit agents after a change | `carter update .` |
 | Validate the install | `carter check .` |
 | Accept a degraded `strict` target | `carter check . --accept-degraded` |

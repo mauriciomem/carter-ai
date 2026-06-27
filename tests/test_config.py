@@ -37,22 +37,35 @@ def _minimal_existing_config() -> dict:
 
 class TestPolicyBlock:
     def test_default_config_has_policy_control_keys(self):
-        """DEFAULT_CONFIG ships the four policy control keys."""
+        """DEFAULT_CONFIG ships the four policy control keys; `guarded` is the floor."""
         policy = DEFAULT_CONFIG["policy"]
-        assert policy["level"] == "loose"
+        assert policy["level"] == "guarded"
         assert policy["unknown_tool"] == "ask"
         assert policy["overrides"] == {}
         assert policy["audit_overrides"] is True
 
-    def test_existing_config_omitting_policy_resolves_loose(self, tmp_path):
-        """Q6: an existing config with no policy block defaults to loose (no behaviour change)."""
+    def test_existing_config_omitting_policy_resolves_guarded(self, tmp_path):
+        """ADR-0010 D3: an existing config with no policy block resolves to `guarded`
+        (the floor and default for everything)."""
         cfg_path = tmp_path / "carter.yaml"
         cfg_path.write_text(yaml.dump(_minimal_existing_config()))
         merged = load_config(cfg_path)
-        assert merged["policy"]["level"] == "loose"
+        assert merged["policy"]["level"] == "guarded"
+
+    def test_stale_loose_level_resolves_guarded_silently(self, tmp_path):
+        """ADR-0010 D3: a stale `level: loose` from a prior install loads as
+        `guarded` — no error, no migration notice, via the normal default path
+        (no dedicated `loose` coercion branch). Any unrecognized level does the same.
+        """
+        cfg = _minimal_existing_config()
+        cfg["policy"] = {"level": "loose"}
+        cfg_path = tmp_path / "carter.yaml"
+        cfg_path.write_text(yaml.dump(cfg))
+        merged = load_config(cfg_path)  # must NOT raise
+        assert merged["policy"]["level"] == "guarded"
 
     def test_new_install_defaults_guarded(self):
-        """Q6: a freshly generated config (new install) defaults to guarded."""
+        """A freshly generated config (new install) defaults to guarded."""
         cfg = generate_default_config()
         assert cfg["policy"]["level"] == "guarded"
 
@@ -103,13 +116,15 @@ class TestPolicyOverridesAreHonored:
 
 
 class TestPolicyLevelValidation:
-    """`load_config` must reject an unknown policy.level at the boundary rather
-    than crashing with a KeyError deep in rendering (audit medium)."""
+    """ADR-0010 D3: `guarded`/`strict` are the only levels; an out-of-vocabulary
+    `policy.level` (a stale `loose`, a typo) normalizes to the `guarded` default at
+    the boundary rather than raising — no dedicated migration branch. Override
+    category/gate typos still fail fast."""
 
-    def test_invalid_level_raises_config_error(self, tmp_path):
+    def test_unknown_level_normalizes_to_guarded(self, tmp_path):
         import yaml as _yaml
 
-        from carter.config import ConfigError, load_config
+        from carter.config import load_config
 
         cfg = {
             "version": "2",
@@ -120,15 +135,15 @@ class TestPolicyLevelValidation:
         }
         path = tmp_path / "carter.yaml"
         path.write_text(_yaml.dump(cfg))
-        with pytest.raises(ConfigError, match="policy.level"):
-            load_config(path)
+        # Unknown level resolves to guarded via the default path (no raise).
+        assert load_config(path)["policy"]["level"] == "guarded"
 
     def test_valid_levels_accepted(self, tmp_path):
         import yaml as _yaml
 
         from carter.config import load_config
 
-        for level in ("loose", "guarded", "strict"):
+        for level in ("guarded", "strict"):
             cfg = {
                 "version": "2",
                 "workspace": {"name": "x", "mode": "umbrella"},
@@ -171,11 +186,11 @@ class TestPolicyLevelValidation:
 
 class TestShippedMapsAreDictShaped:
     def test_taxonomy_is_dict_with_all_levels(self):
-        """The R0-R6 taxonomy is a dict; every category maps all three levels."""
+        """The R0-R6 taxonomy is a dict; every category maps both levels."""
         assert isinstance(RISK_TAXONOMY, dict)
         assert set(RISK_TAXONOMY) == {"R0", "R1", "R2", "R3", "R4", "R5", "R6"}
         for gates in RISK_TAXONOMY.values():
-            assert {"loose", "guarded", "strict"} <= set(gates)
+            assert {"guarded", "strict"} <= set(gates)
 
     def test_tool_risk_map_is_dict(self):
         """The tool->risk map is dict-shaped (tool -> category), never a list."""

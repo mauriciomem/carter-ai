@@ -47,8 +47,10 @@ class TestLintClean:
         _, warnings = lint_policy(cfg, _installed(cfg))
         assert warnings == []
 
-    def test_loose_install_is_clean(self):
-        cfg = _config(level="loose", target="opencode")
+    def test_guarded_opencode_install_is_clean(self):
+        # guarded on an enforcing target (opencode) with redaction on: no hard-ack,
+        # no redaction contradiction → clean.
+        cfg = _config(level="guarded", target="opencode")
         errors, warnings = lint_policy(cfg, _installed(cfg))
         assert errors == []
         assert warnings == []
@@ -175,11 +177,6 @@ class TestRedactionWarn:
         _, warnings = lint_policy(cfg, _installed(cfg))
         assert any("redaction.enabled is false" in w and w.startswith("strict") for w in warnings)
 
-    def test_loose_redaction_off_does_not_warn(self):
-        cfg = _config(level="loose", redaction=False)
-        _, warnings = lint_policy(cfg, _installed(cfg))
-        assert not any("redaction" in w for w in warnings)
-
 
 # ─── N2: no false "server not wired" warning ─────────────────────────────────
 
@@ -252,22 +249,26 @@ class TestCheckCliIntegration:
         assert result.exit_code == 0, result.output
         assert "redaction.enabled is false" in result.output
 
-    def test_init_surfaces_guarded_migration_notice(self, tmp_path):
+    def test_init_surfaces_guarded_policy_notice(self, tmp_path):
         from carter.cli import main
 
         runner = CliRunner()
         result = runner.invoke(main, ["init", str(tmp_path), "--no-git-state"])
         assert result.exit_code == 0, result.output
-        # New installs default to guarded → the migration notice surfaces.
+        # New installs default to guarded → the policy notice surfaces.
         assert "Strictness policy is 'guarded'" in result.output
 
-    def test_update_to_loose_is_quiet(self, tmp_path):
+    def test_stale_loose_resolves_guarded_on_update(self, tmp_path):
+        # ADR-0010 D3: a stale `level: loose` in carter.yaml resolves to guarded
+        # silently (no error, no migration message). On update the guarded notice
+        # then fires like any guarded workspace.
         runner, main = self._init(tmp_path)
         cfg_path = tmp_path / ".carter" / "carter.yaml"
-        config = load_config(cfg_path)
-        config["policy"]["level"] = "loose"
-        write_config(cfg_path, config)
+        # Write a stale loose level directly (bypassing validation) as a prior
+        # install would have left it.
+        raw = cfg_path.read_text().replace("level: guarded", "level: loose")
+        cfg_path.write_text(raw)
         result = runner.invoke(main, ["update", str(tmp_path)])
         assert result.exit_code == 0, result.output
-        # loose restores advisory-only behaviour → no migration notice.
-        assert "Strictness policy is" not in result.output
+        assert "Strictness policy is 'guarded'" in result.output
+        assert load_config(cfg_path)["policy"]["level"] == "guarded"

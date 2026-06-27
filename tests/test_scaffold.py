@@ -581,14 +581,6 @@ class TestNarrator:
         content = results["carter-narrator.md"]
         assert "<redaction_rules>" in content
 
-    def test_redaction_rules_absent_when_disabled_and_loose(self, default_config, env):
-        """At `loose`, redaction rules are absent when redaction is disabled."""
-        default_config["redaction"]["enabled"] = False
-        default_config["policy"]["level"] = "loose"
-        results = render_agents(default_config, env)
-        content = results["carter-narrator.md"]
-        assert "<redaction_rules>" not in content
-
     def test_redaction_forced_at_guarded_despite_disabled(self, default_config, env):
         """must_have #5: `guarded` forces a redaction pass even with redaction off."""
         default_config["redaction"]["enabled"] = False
@@ -843,25 +835,13 @@ class TestAgentSuffix:
 
 
 class TestConfigWarnings:
-    """`config_warnings` flags the redaction gap: narrator enabled but redaction
-    disabled means the scaffolded narrator has no redaction rules even though
-    Maestro routes external content to it.
+    """ADR-0010 D3: with `loose` gone, every shipped level forces the narrator's
+    redaction pass, so the rule-less-narrator gap `config_warnings` once flagged can
+    no longer occur — it returns no redaction warning. A `redaction.enabled: false`
+    contradiction at an enforcing level is surfaced by the policy lint instead.
     """
 
-    def test_warns_when_narrator_on_redaction_off(self):
-        from carter.scaffold import config_warnings
-
-        cfg = generate_default_config()
-        cfg["redaction"]["enabled"] = False
-        cfg["policy"]["level"] = "loose"  # only loose leaves the narrator ruleless
-        warnings = config_warnings(cfg)
-        assert len(warnings) == 1
-        assert "redaction" in warnings[0].lower()
-        assert "narrator" in warnings[0].lower()
-
-    def test_no_config_warning_at_guarded_redaction_off(self):
-        # At guarded the redaction pass is forced, so the narrator DOES carry
-        # rules — config_warnings stays quiet (the lint surfaces the contradiction).
+    def test_no_warning_at_guarded_redaction_off(self):
         from carter.scaffold import config_warnings
 
         cfg = generate_default_config()  # guarded
@@ -912,12 +892,6 @@ class TestPolicyGateTable:
             "R6": "gate",
         }
 
-    def test_loose_table_is_all_allow(self):
-        from carter.config import policy_gate_table
-
-        gates = {r["gate"] for r in policy_gate_table({"policy": {"level": "loose"}})}
-        assert gates == {"allow"}
-
     def test_strict_table_emits_deny(self):
         """P2->P3 gate is open (step 9): strict now emits deny for R3/R5."""
         from carter.config import policy_gate_table
@@ -929,11 +903,13 @@ class TestPolicyGateTable:
         assert gates["R5"] == "deny"
         assert gates["R2"] == "gate"
 
-    def test_missing_policy_defaults_loose(self):
+    def test_missing_policy_defaults_guarded(self):
         from carter.config import policy_gate_table
 
-        gates = {r["gate"] for r in policy_gate_table({})}
-        assert gates == {"allow"}
+        # ADR-0010 D3: an absent policy block resolves to guarded (the floor).
+        gates = {r["category"]: r["gate"] for r in policy_gate_table({})}
+        assert gates["R2"] == "ask"
+        assert gates["R3"] == "gate"
 
 
 class TestMaestroPolicyTable:
@@ -963,7 +939,8 @@ class TestMaestroPolicyTable:
 
 
 class TestPolicyNotice:
-    """`policy_notice` surfaces the 'you're guarded now' migration message at P2."""
+    """`policy_notice` surfaces the active-level notice. ADR-0010 D3: both shipped
+    levels enforce gates, so the notice always fires (no quiet advisory level)."""
 
     def test_notice_fires_for_guarded(self):
         from carter.scaffold import policy_notice
@@ -972,12 +949,14 @@ class TestPolicyNotice:
         assert msg is not None
         assert "guarded" in msg.lower()
 
-    def test_no_notice_for_loose(self):
+    def test_notice_fires_for_strict(self):
         from carter.scaffold import policy_notice
 
         cfg = generate_default_config()
-        cfg["policy"]["level"] = "loose"
-        assert policy_notice(cfg) is None
+        cfg["policy"]["level"] = "strict"
+        msg = policy_notice(cfg)
+        assert msg is not None
+        assert "strict" in msg.lower()
 
 
 class TestNarratorR6Handoff:
@@ -1107,9 +1086,12 @@ class TestPolicyFrontmatterModel:
         assert gates["R3"] == "gate"
         assert gates["R5"] == "gate"
 
-    def test_loose_emits_all_allow(self):
-        gates = _policy_block(_policy_config(level="loose"), "devops")["policy"]["gates"]
-        assert set(gates.values()) == {"allow"}
+    def test_guarded_emits_concrete_gates(self):
+        gates = _policy_block(_policy_config(level="guarded"), "devops")["policy"]["gates"]
+        # guarded is the floor: read/local-write allow, risky categories gated.
+        assert gates["R0"] == "allow"
+        assert gates["R2"] == "ask"
+        assert gates["R3"] == "gate"
 
     def test_policy_block_emitted_for_every_target(self):
         for target in ("copilot", "opencode", "all"):
@@ -1267,15 +1249,6 @@ class TestPolicyOpenCodePermission:
         for role in _ALL_ROLES:
             perm = _policy_block(_policy_config(target="opencode"), role)["permission"]
             assert perm["webfetch"] == "allow"
-
-    def test_loose_bash_allowed_for_pusher(self):
-        perm = _policy_block(_policy_config(level="loose", target="opencode"), "devops")[
-            "permission"
-        ]
-        # loose: every gate is allow, so even remote/destructive shell is allowed.
-        assert perm["bash"]["*"] == "allow"
-        assert perm["bash"]["git push*"] == "allow"
-
 
 class TestPolicyRenderedIntegration:
     """The policy block lands in rendered agent frontmatter as valid YAML."""

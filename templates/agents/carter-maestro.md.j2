@@ -168,7 +168,7 @@ Never auto-record. Suggest, let user confirm. If "no", move on.
 {% block extra %}
 <interaction_rules>
 
-## Strictness Policy — {{ config.policy.level | default("loose") }}
+## Strictness Policy — {{ config.policy.level | default("guarded") }}
 
 Pre-action gates by risk category, always in force and **independent of**
 `personality.skepticism` (skepticism shapes tone; the policy authorizes actions).

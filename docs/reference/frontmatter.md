@@ -162,14 +162,15 @@ repo, outside any `.carter/`, so `carter.yaml` cannot govern them. It is a
 ## Risk-based strictness policy (`policy` block)
 
 The risk-based strictness policy (RFC-0002 /
-[ADR-0005](../adr/0005-risk-based-strictness-policy.md)) adds a `policy` block to
-`carter.yaml`. It is additive and backward-compatible: an existing config that
-omits it resolves to `loose` (no behaviour change); a new install resolves to
+[ADR-0005](../adr/0005-risk-based-strictness-policy.md), refreshed by
+[ADR-0010](../adr/0010-agent-platform-refresh.md)) adds a `policy` block to
+`carter.yaml`. `guarded` is the floor and the default for everything: a new install,
+an existing config that omits the block, and an unrecognized level all resolve to
 `guarded`.
 
 ```yaml
 policy:
-  level: guarded            # loose | guarded | strict
+  level: guarded            # guarded | strict
   unknown_tool: ask         # gate for a tool not in the risk map: allow | ask | deny
   overrides: {}             # category -> gate, explicit per-category override
   audit_overrides: true     # log escape-hatch overrides via `carter ops`
@@ -183,15 +184,15 @@ policy:
 to a gate (`allow` | `ask` | `gate` | `deny`). An action in multiple categories
 takes the most restrictive gate.
 
-| Category | Meaning | loose | guarded | strict |
-|----------|---------|-------|---------|--------|
-| R0 read | reads, `git status/log/diff`, MCP GET | allow | allow | allow |
-| R1 local-write | file edit, `git add/commit`, run tests | allow | allow | allow |
-| R2 remote-write | `git push`, PR/issue write, MCP POST/PATCH/DELETE | allow | ask | gate |
-| R3 infra-mutate | `terraform apply/destroy`, `kubectl apply` | allow | gate | deny |
-| R4 secret-access | read `.env`/secret files, vault reads | allow | ask | gate |
-| R5 destructive | `rm -rf`, `git reset --hard`, `--force` | allow | gate | deny |
-| R6 external-publish | outward content (overlay; composes with transport) | allow | gate | gate |
+| Category | Meaning | guarded | strict |
+|----------|---------|---------|--------|
+| R0 read | reads, `git status/log/diff`, MCP GET | allow | allow |
+| R1 local-write | file edit, `git add/commit`, run tests | allow | allow |
+| R2 remote-write | `git push`, PR/issue write, MCP POST/PATCH/DELETE | ask | gate |
+| R3 infra-mutate | `terraform apply/destroy`, `kubectl apply` | gate | deny |
+| R4 secret-access | read `.env`/secret files, vault reads | ask | gate |
+| R5 destructive | `rm -rf`, `git reset --hard`, `--force` | gate | deny |
+| R6 external-publish | outward content (overlay; composes with transport) | gate | gate |
 
 **Per-agent allowlist (deny-by-default).** A category absent for an agent is denied
 for that agent. The shipped default keeps `devops` the sole R2 pusher and `narrator`

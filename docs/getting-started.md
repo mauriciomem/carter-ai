@@ -25,8 +25,8 @@ Before diving in, here's the mental model:
 
 **Strictness policy** is Carter's enforced safety posture. Each agent has a
 deny-by-default tool allowlist, and actions are gated by risk category. One
-`policy.level` setting (`loose` / `guarded` / `strict`) decides how much is gated
-versus merely advised — see [strictness-policy.md](strictness-policy.md).
+`policy.level` setting (`guarded` / `strict`) decides how hard the in-scope gates
+bite — see [strictness-policy.md](strictness-policy.md).
 
 ---
 
@@ -78,12 +78,9 @@ carter init ~/my-workspace --target all --agent-suffix local
 #   --agent-suffix <suffix>         (default local; "" for none)
 ```
 
-> At `policy.level: loose`, if you enable the `narrator` agent but turn
-> `redaction.enabled` off, `carter init`/`update`/`check` print a warning: the
-> narrator would ship with no redaction rules even though Maestro routes external
-> content to it. At `guarded` and `strict` the redaction pass is **forced**
-> regardless of `redaction.enabled`, so instead `carter check` flags the
-> `redaction.enabled: false` contradiction.
+> At both levels (`guarded`/`strict`) the narrator's redaction pass is **forced**
+> regardless of `redaction.enabled`, so a rule-less narrator can never ship. If you
+> set `redaction.enabled: false`, `carter check` flags the contradiction.
 
 **What `carter init` creates** (agent/instruction locations depend on `target` in
 `carter.yaml`; the tree below shows the default `target: copilot`):
@@ -155,9 +152,9 @@ agent_suffix: local
 # Where to write agents/instructions: copilot | opencode | all
 target: copilot
 
-# Risk-based strictness policy (ADR-0005). One knob; deny-by-default per agent.
+# Risk-based strictness policy (ADR-0005 / ADR-0010). One knob; deny-by-default per agent.
 policy:
-  level: guarded        # loose | guarded | strict
+  level: guarded        # guarded | strict
   unknown_tool: ask     # gate for a tool not in the risk map: allow | ask | deny
   overrides: {}         # category -> gate, e.g. {R2: deny} to tighten remote-write
   audit_overrides: true # log escape-hatch overrides via `carter ops`
