@@ -6,6 +6,7 @@ policy:
   allow: [dangerous, local-write, read, remote-write]
   gates: {dangerous: gate, local-write: allow, read: allow, remote-write: ask}
 tools: [carter-github/*, carter-terraform/*]
+agents: []
 ---
 
 <role>

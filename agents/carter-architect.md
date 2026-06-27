@@ -6,6 +6,7 @@ policy:
   allow: [read]
   gates: {read: allow}
 tools: [carter-github/*, carter-terraform/*]
+agents: []
 ---
 
 <role>

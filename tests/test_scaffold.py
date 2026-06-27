@@ -1221,17 +1221,29 @@ class TestPolicyTargetShaping:
         ]
         assert _policy_block(_policy_config(), "learner")["tools"] == ["carter-atlassian/*"]
 
-    def test_agents_without_mcp_scope_omit_tools(self):
-        for role in ("maestro", "narrator"):
-            block = _policy_block(_policy_config(target="copilot"), role)
-            assert "tools" not in block
+    def test_specialist_without_mcp_scope_omits_tools(self):
+        # A specialist (non-primary) with no MCP scope emits no `tools` key. The
+        # primary is the exception — it carries `tools: [agent]` for native dispatch
+        # even with an empty MCP scope (covered by test_dispatch.py).
+        block = _policy_block(_policy_config(target="copilot"), "narrator")
+        assert "tools" not in block
+
+    def test_primary_emits_agent_tool_despite_empty_scope(self):
+        # ADR-0010 D1: the maestro has no MCP scope but still carries `tools: [agent]`
+        # to enable the native subagent primitive.
+        block = _policy_block(_policy_config(target="copilot"), "maestro")
+        assert block["tools"] == ["agent"]
 
     def test_tools_track_the_scope_constant(self):
-        # Guard the role->servers map from drifting out of the emitted tools.
+        # Guard the role->servers map from drifting out of the emitted tools. The
+        # maestro (primary) prepends the `agent` dispatch tool ahead of its MCP scope.
         for role, servers in AGENT_MCP_SCOPE.items():
             block = _policy_block(_policy_config(target="copilot"), role)
-            if servers:
-                assert block["tools"] == [f"carter-{s}/*" for s in sorted(servers)]
+            expected = [f"carter-{s}/*" for s in sorted(servers)]
+            if role == "maestro":
+                expected = ["agent", *expected]
+            if expected:
+                assert block["tools"] == expected
             else:
                 assert "tools" not in block
 

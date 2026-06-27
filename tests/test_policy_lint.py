@@ -178,6 +178,94 @@ class TestRedactionWarn:
         assert any("redaction.enabled is false" in w and w.startswith("strict") for w in warnings)
 
 
+# ─── Fail-closed dispatch lint (P3, RFC-0005 §1 D1.2 / ADR-0010 D1) ──────────
+
+
+class TestDispatchLint:
+    """The primary's dispatch allowlist is a security boundary: a ``'*'``, a glob,
+    or an absent ``agents:``/``permission.task`` on the maestro is a fail-closed
+    ERROR (exit non-zero), never a warning. An explicit per-specialist list passes.
+    """
+
+    def test_explicit_copilot_dispatch_is_clean(self):
+        cfg = _config(level="guarded", target="copilot")
+        errors, _ = lint_policy(cfg, _installed(cfg))
+        assert not any("dispatch" in e.lower() for e in errors)
+
+    def test_explicit_opencode_dispatch_is_clean(self):
+        cfg = _config(level="guarded", target="opencode")
+        errors, _ = lint_policy(cfg, _installed(cfg))
+        assert not any("dispatch" in e.lower() for e in errors)
+
+    def test_star_agents_is_error(self):
+        cfg = _config(level="guarded", target="copilot")
+        installed = _installed(cfg)
+        installed["maestro"]["agents"] = ["*"]  # failure-open glob
+        errors, _ = lint_policy(cfg, installed)
+        assert any("maestro" in e and "agents" in e for e in errors)
+
+    def test_glob_agents_is_error(self):
+        cfg = _config(level="guarded", target="copilot")
+        installed = _installed(cfg)
+        installed["maestro"]["agents"] = ["carter-*"]  # auto-trusts future agents
+        errors, _ = lint_policy(cfg, installed)
+        assert any("maestro" in e and "agents" in e for e in errors)
+
+    def test_absent_agents_is_error(self):
+        cfg = _config(level="guarded", target="copilot")
+        installed = _installed(cfg)
+        del installed["maestro"]["agents"]
+        errors, _ = lint_policy(cfg, installed)
+        assert any("maestro" in e and "agents" in e for e in errors)
+
+    def test_star_permission_task_is_error(self):
+        cfg = _config(level="guarded", target="opencode")
+        installed = _installed(cfg)
+        installed["maestro"]["permission"]["task"] = {"*": "allow"}  # failure-open
+        errors, _ = lint_policy(cfg, installed)
+        assert any("maestro" in e and "task" in e for e in errors)
+
+    def test_glob_permission_task_is_error(self):
+        cfg = _config(level="guarded", target="opencode")
+        installed = _installed(cfg)
+        installed["maestro"]["permission"]["task"] = {"*": "deny", "carter-*": "allow"}
+        errors, _ = lint_policy(cfg, installed)
+        assert any("maestro" in e and "task" in e for e in errors)
+
+    def test_absent_permission_task_is_error(self):
+        cfg = _config(level="guarded", target="opencode")
+        installed = _installed(cfg)
+        installed["maestro"]["permission"].pop("task", None)
+        errors, _ = lint_policy(cfg, installed)
+        assert any("maestro" in e and "task" in e for e in errors)
+
+    def test_dispatch_violation_is_error_not_warning(self):
+        cfg = _config(level="guarded", target="copilot")
+        installed = _installed(cfg)
+        installed["maestro"]["agents"] = ["*"]
+        errors, warnings = lint_policy(cfg, installed)
+        assert any("dispatch" in e.lower() or "agents" in e for e in errors)
+        assert not any("*" in w for w in warnings), "must be an error, never a warning"
+
+    def test_check_fails_on_star_dispatch(self, tmp_path):
+        from carter.cli import main
+
+        runner = CliRunner()
+        result = runner.invoke(main, ["init", str(tmp_path), "--no-git-state"])
+        assert result.exit_code == 0, result.output
+        maestro = next((tmp_path / ".github" / "agents").glob("carter-maestro*.md"))
+        # Rewrite the maestro frontmatter so its dispatch allowlist is the
+        # failure-open glob `'*'` — parse, tamper, re-emit (robust to flow-style).
+        text = maestro.read_text()
+        _, fm_raw, body = text.split("---", 2)
+        fm = yaml.safe_load(fm_raw)
+        fm["agents"] = ["*"]
+        maestro.write_text(f"---\n{yaml.safe_dump(fm, sort_keys=False)}---{body}")
+        result = runner.invoke(main, ["check", str(tmp_path)])
+        assert result.exit_code == 1, result.output
+        assert "maestro" in result.output
+
+
 # ─── N2: no false "server not wired" warning ─────────────────────────────────
 
 

@@ -6,6 +6,7 @@ policy:
   allow: [local-write, read]
   gates: {local-write: allow, read: allow}
 tools: [carter-github/*, carter-terraform/*]
+agents: []
 ---
 
 <role>

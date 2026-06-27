@@ -140,6 +140,29 @@ class TestNoTemperatureEmission:
         assert not offenders, f"agent templates still emit temperature (ADR-0010 D7): {offenders}"
 
 
+class TestFleetContextRule:
+    """ADR-0010 D1.D2: Copilot CLI ``/fleet`` subagents do NOT inherit chat history,
+    so the maestro prose MUST instruct injecting the active-plan + knowledge context
+    into every ``/fleet`` prompt — otherwise cross-domain runs silently lose Carter's
+    state. Both the template and the static maestro must carry the rule.
+    """
+
+    def test_template_maestro_has_fleet_context_rule(self, template_agents_dir: Path) -> None:
+        body = (template_agents_dir / "carter-maestro.md.j2").read_text()
+        assert "/fleet" in body, "maestro template missing the /fleet orchestration rule"
+        lower = body.lower()
+        assert "do not inherit" in lower or "don't inherit" in lower or "inherit" in lower
+        assert "active plan" in lower or "active-plan" in lower or "plan" in lower
+        assert "knowledge" in lower
+
+    def test_static_maestro_has_fleet_context_rule(self, static_agents_dir: Path) -> None:
+        body = (static_agents_dir / "carter-maestro.md").read_text()
+        assert "/fleet" in body, "static maestro missing the /fleet orchestration rule"
+        lower = body.lower()
+        assert "inherit" in lower
+        assert "knowledge" in lower
+
+
 class TestNarratorParity:
     """The narrator's security contract must be identical in spirit across sources."""
 
@@ -306,14 +329,17 @@ class TestStrictnessPolicyParity:
 
     def test_static_tools_match_mcp_scope(self, static_agents_dir: Path) -> None:
         """Copilot is the default target, so statics carry ``tools`` (MCP scope)
-        and never the OpenCode ``permission`` map.
+        and never the OpenCode ``permission`` map. The maestro (primary) additionally
+        carries the ``agent`` native-dispatch tool ahead of its MCP scope (ADR-0010 D1).
         """
         for agent in sorted(static_agents_dir.glob("carter-*.md")):
             role = self._role(agent)
             fm = _parse_frontmatter(agent.read_text())
-            scope = AGENT_MCP_SCOPE.get(role, [])
-            if scope:
-                assert fm.get("tools") == [f"carter-{s}/*" for s in sorted(scope)], (
+            expected = [f"carter-{s}/*" for s in sorted(AGENT_MCP_SCOPE.get(role, []))]
+            if role == "maestro":
+                expected = ["agent", *expected]
+            if expected:
+                assert fm.get("tools") == expected, (
                     f"{agent.name}: baked tools drifted from the MCP scope"
                 )
             else:

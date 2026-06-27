@@ -410,28 +410,85 @@ def _gates_for(
     return {cat: overrides.get(cat, RISK_TAXONOMY[cat][emit_level]) for cat in allowed}
 
 
+# The primary orchestrator (the only router) and the subagent dispatch primitive.
+# Native subagent dispatch (ADR-0010 D1) is emitted ONLY on the primary, as an
+# EXPLICIT per-specialist allowlist — never `'*'` and never a `carter-*` glob (D1.2,
+# a security boundary: a glob auto-trusts any future `carter-*` agent; `'*'` lets the
+# maestro delegate to any workspace agent, failure-open). The chain is flat — every
+# specialist carries `agents: []` (D1.3) so the maestro is the only router.
+PRIMARY_ROLE = "maestro"
+
+
+def _suffixed_agent(role: str, config: dict[str, Any]) -> str:
+    """``carter-<role>`` honoring ``agent_suffix`` (e.g. ``carter-engineer-local``).
+
+    The dispatch allowlist must reference the same suffixed files the rest of the
+    rendered agent body does, and the lint recomputes against already-suffixed
+    installed frontmatter — so emission carries the suffix here rather than relying
+    on the post-render rewrite (which is idempotent over these names anyway).
+    """
+    raw = (config.get("agent_suffix") or "").strip()
+    return f"carter-{role}{('-' + raw) if raw else ''}"
+
+
+def dispatch_specialists(config: dict[str, Any]) -> list[str]:
+    """The explicit per-specialist dispatch allowlist for the primary (sorted).
+
+    Every configured agent except the primary, as suffixed ``carter-<role>`` names.
+    This is the security boundary the fail-closed lint validates (D1.2).
+    """
+    return sorted(
+        _suffixed_agent(role, config)
+        for role in config.get("agents", [])
+        if role != PRIMARY_ROLE
+    )
+
+
 def policy_native_keys(config: dict[str, Any], role: str) -> dict[str, Any]:
     """The target-native enforcement keys Carter emits for ``role``.
 
-    ``tools`` (copilot/all): the per-agent MCP server scope, when any.
-    ``permission`` (opencode/all): the best-effort native gate map.
-    Pure function of the model + target — the single source both
-    ``policy_frontmatter`` (emission) and ``lint_policy`` (drift detection) derive
-    these enforced keys from.
+    ``tools`` (copilot/all): the per-agent MCP server scope, when any; the primary
+    additionally carries the ``agent`` subagent tool. ``agents``/``handoffs``
+    (copilot/all): native subagent dispatch — an EXPLICIT per-specialist allowlist on
+    the primary, ``[]`` on every specialist (flat chain, D1.3). ``permission``
+    (opencode/all): the best-effort native gate map; the primary's also carries a
+    ``task`` allowlist (``'*': deny`` + explicit per-specialist ``allow``). Pure
+    function of the model + target — the single source both ``policy_frontmatter``
+    (emission) and ``lint_policy`` (drift detection) derive these enforced keys from.
     """
     target = config.get("target", "copilot")
     policy = config.get("policy") or {}
     emit_level = _emit_level(policy.get("level", "guarded"))
     allowed = [cat for cat, on in sorted(effective_allowlist(config).get(role, {}).items()) if on]
     gates = _gates_for(allowed, emit_level, policy.get("overrides"))
+    is_primary = role == PRIMARY_ROLE
+    specialists = dispatch_specialists(config)
 
     keys: dict[str, Any] = {}
     if target in ("copilot", "all"):
-        scope = AGENT_MCP_SCOPE.get(role, [])
-        if scope:
-            keys["tools"] = [f"carter-{server}/*" for server in sorted(scope)]
+        scope = [f"carter-{server}/*" for server in sorted(AGENT_MCP_SCOPE.get(role, []))]
+        # The primary enables the `agent` subagent tool (first, ahead of any MCP
+        # scope); specialists only ever carry their MCP scope.
+        tools = (["agent"] + scope) if is_primary else scope
+        if tools:
+            keys["tools"] = tools
+        # Native dispatch allowlist (VS Code/Copilot): explicit on the primary, empty
+        # on every specialist (flat one-level chain). `handoffs:` is the user-approved
+        # confirm surface for the same delegation set (D1.1).
+        if is_primary:
+            # Independent list copies so YAML emits each inline (no &anchor/*alias
+            # that a downstream parser/editor might choke on).
+            keys["agents"] = list(specialists)
+            keys["handoffs"] = list(specialists)
+        else:
+            keys["agents"] = []
     if target in ("opencode", "all"):
-        keys["permission"] = _opencode_permission(allowed, gates)
+        permission = _opencode_permission(allowed, gates)
+        if is_primary:
+            # OpenCode `permission.task`: fail-closed `'*': deny` + an explicit allow
+            # per specialist (never a `carter-*` glob — D1.2).
+            permission["task"] = {"*": "deny", **{name: "allow" for name in specialists}}
+        keys["permission"] = permission
     return keys
 
 

@@ -9,9 +9,11 @@ from typing import Any
 from jinja2 import Environment, FileSystemLoader
 
 from carter.config import (
+    PRIMARY_ROLE,
     ConfigError,
     _emit_level,
     _gates_for,
+    dispatch_specialists,
     effective_allowlist,
     policy_frontmatter,
     policy_gate_table,
@@ -136,6 +138,65 @@ def _resolve_policy_targets(target: str) -> list[str]:
     return ["copilot", "opencode"] if target == "all" else [target]
 
 
+def _is_failopen_entry(entry: str) -> bool:
+    """A dispatch allowlist entry that breaks deny-by-default: ``'*'`` or any glob."""
+    return entry == "*" or "*" in entry
+
+
+def _lint_dispatch_allowlist(
+    config: dict[str, Any], primary_fm: dict[str, Any]
+) -> list[str]:
+    """Fail-closed lint of the primary's native dispatch allowlist (D1.2).
+
+    Errors (never warns) when the maestro's emitted ``agents:`` (copilot) or
+    ``permission.task`` (opencode) is ``'*'``, contains a glob, or is absent. Compares
+    against the expected explicit per-specialist list so a *narrowed/tampered* list is
+    also caught. Per target: copilot validates ``agents:``; opencode ``permission.task``.
+    """
+    errors: list[str] = []
+    expected = dispatch_specialists(config)
+    targets = _resolve_policy_targets(config.get("target", "copilot"))
+
+    if "copilot" in targets:
+        agents = primary_fm.get("agents")
+        if agents is None:
+            errors.append(
+                f"{PRIMARY_ROLE}: native dispatch allowlist 'agents:' is absent "
+                "(fail-closed: the primary must emit an explicit per-specialist list)"
+            )
+        elif any(_is_failopen_entry(a) for a in agents):
+            errors.append(
+                f"{PRIMARY_ROLE}: 'agents:' contains '*'/a glob — a failure-open "
+                "dispatch boundary; it must be an explicit per-specialist list"
+            )
+        elif agents != expected:
+            errors.append(
+                f"{PRIMARY_ROLE}: emitted 'agents:' {agents} drifted from the "
+                f"declared dispatch allowlist {expected}"
+            )
+
+    if "opencode" in targets:
+        task = (primary_fm.get("permission") or {}).get("task")
+        if not task:
+            errors.append(
+                f"{PRIMARY_ROLE}: native dispatch 'permission.task' is absent "
+                "(fail-closed: the primary must emit '*': deny + explicit allows)"
+            )
+        elif task.get("*") != "deny" or any(_is_failopen_entry(k) for k in task if k != "*"):
+            errors.append(
+                f"{PRIMARY_ROLE}: 'permission.task' must be '*': deny + an explicit "
+                "per-specialist allow — found '*'/a glob (failure-open)"
+            )
+        else:
+            expected_task = {"*": "deny", **{name: "allow" for name in expected}}
+            if task != expected_task:
+                errors.append(
+                    f"{PRIMARY_ROLE}: emitted 'permission.task' {task} drifted from "
+                    f"the declared dispatch allowlist {expected_task}"
+                )
+    return errors
+
+
 def lint_policy(
     config: dict[str, Any],
     installed: dict[str, dict[str, Any]],
@@ -200,6 +261,16 @@ def lint_policy(
                     f"{role}: emitted {key} {(frontmatter or {}).get(key)} drifted "
                     f"from declared {expected_native[key]}"
                 )
+
+    # FAIL-CLOSED DISPATCH LINT (D1.2): the primary's native dispatch allowlist is a
+    # security boundary. A `'*'`, a glob, or an absent `agents:`/`permission.task` on
+    # the maestro is a build-breaking ERROR (never a warning) — `'*'` lets the maestro
+    # delegate to any workspace agent (failure-open), and a `carter-*` glob auto-trusts
+    # any future `carter-*` agent. Only checked when the primary is installed and the
+    # target emits that key (copilot → `agents:`; opencode → `permission.task`).
+    primary_fm = installed.get(PRIMARY_ROLE)
+    if primary_fm is not None:
+        errors.extend(_lint_dispatch_allowlist(config, primary_fm))
 
     # Q15 HARD ACK: strict on a non-enforcing target must be explicitly accepted.
     if level == "strict":

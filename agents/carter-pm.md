@@ -6,6 +6,7 @@ policy:
   allow: [local-write, read]
   gates: {local-write: allow, read: allow}
 tools: [carter-atlassian/*, carter-github/*]
+agents: []
 ---
 
 <role>

@@ -217,6 +217,38 @@ each agent, using the canonical mechanism per target:
 Per-agent MCP scope is emitted in **agent frontmatter**, never the global
 `configure_mcp_servers` wiring.
 
+**Native subagent dispatch (P3, ADR-0010 D1).** Carter emits the target's real
+delegation primitive on the **primary** (maestro) — never a fictional `runSubagent`.
+The dispatch allowlist is a **security boundary**: an **explicit per-specialist
+list**, never `'*'` and never a `carter-*` glob (a glob auto-trusts any future
+`carter-*` agent; `'*'` lets the primary delegate to any workspace agent). The chain
+is **flat** — every specialist carries `agents: []`, so the maestro is the only
+router. The emitted names honor `agent_suffix` (e.g. `carter-engineer-local`).
+
+- **VS Code / Copilot:** `tools: [agent]` (the subagent tool) + an explicit
+  `agents: [carter-architect, …]` allowlist + `handoffs:` (the user-approved
+  gate-confirm buttons for gate-tier actions).
+- **OpenCode:** a `permission.task` block — `'*': deny` plus an explicit `allow` per
+  specialist.
+- **Copilot CLI:** orchestration is runtime (`/fleet` + `@`-mention), so there is no
+  frontmatter change — but the maestro prose **must** inject the active-plan +
+  knowledge context into every `/fleet` prompt (subagents do not inherit chat
+  history).
+
+```yaml
+# maestro, copilot target
+tools: [agent]
+agents: [carter-architect, carter-devops, carter-engineer, carter-learner, carter-narrator, carter-pm]
+handoffs: [carter-architect, carter-devops, carter-engineer, carter-learner, carter-narrator, carter-pm]
+# maestro, opencode target
+permission:
+  task: {'*': deny, carter-architect: allow, carter-devops: allow, ...}
+```
+
+`carter check` runs a **fail-closed dispatch lint**: it **errors (exit non-zero)** if
+the primary's emitted `agents:` / `permission.task` is `'*'`, a glob, or absent — not
+a warning.
+
 **Global agents (no `carter.yaml` in scope).** Globally-installed static
 `agents/*.md` carry baked hand-edited `guarded` defaults, kept honest by a
 `test_parity` extension (Q14 / ADR-0005 D6 — build-time generation is WON'T-DO per
