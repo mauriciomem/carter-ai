@@ -9,6 +9,7 @@ import pytest
 import yaml
 
 from carter.config import (
+    _CATEGORY_TOOLS,
     AGENT_MCP_SCOPE,
     RISK_TAXONOMY,
     ConfigError,
@@ -20,6 +21,10 @@ from carter.config import (
 )
 from carter.scaffold import create_env, render_agents, render_instructions, write_rendered_files
 from carter.state import KNOWLEDGE_FILES, add_to_gitignore, init_workspace
+
+# Built-in file tools every agent's `read` policy grants (ADR-0011), in emission
+# order — derived from the code's own map so the assertions can't drift from it.
+_READ_TOOLS = _CATEGORY_TOOLS["read"]
 
 # ─── Fixtures ────────────────────────────────────────────────────────────────
 
@@ -1210,42 +1215,48 @@ class TestPolicyTargetShaping:
         assert "tools" in block
         assert "permission" in block
 
-    def test_tools_are_per_agent_mcp_scope(self):
+    def test_tools_are_policy_file_tools_plus_mcp_scope(self):
+        # ADR-0011: tools = policy-derived file tools (read/local-write) + MCP scope.
+        # devops holds read + local-write, so read tools then editFiles then its scope.
         assert _policy_block(_policy_config(), "devops")["tools"] == [
+            *_READ_TOOLS,
+            "editFiles",
             "carter-github/*",
             "carter-terraform/*",
         ]
-        assert _policy_block(_policy_config(), "pm")["tools"] == [
+        # learner holds read only -> read tools + its single MCP server, no editFiles.
+        assert _policy_block(_policy_config(), "learner")["tools"] == [
+            *_READ_TOOLS,
             "carter-atlassian/*",
-            "carter-github/*",
         ]
-        assert _policy_block(_policy_config(), "learner")["tools"] == ["carter-atlassian/*"]
 
-    def test_specialist_without_mcp_scope_omits_tools(self):
-        # A specialist (non-primary) with no MCP scope emits no `tools` key. The
-        # primary is the exception — it carries `tools: [agent]` for native dispatch
-        # even with an empty MCP scope (covered by test_dispatch.py).
+    def test_specialist_without_mcp_scope_still_emits_file_tools(self):
+        # ADR-0011: a specialist with no MCP scope still emits a `tools` key for the
+        # file tools its policy implies — narrator (read + local-write) gets read
+        # tools + editFiles, so it can read/edit despite wiring no MCP server.
         block = _policy_block(_policy_config(target="copilot"), "narrator")
-        assert "tools" not in block
+        assert block["tools"] == [*_READ_TOOLS, "editFiles"]
 
-    def test_primary_emits_agent_tool_despite_empty_scope(self):
-        # ADR-0010 D1: the maestro has no MCP scope but still carries `tools: [agent]`
-        # to enable the native subagent primitive.
+    def test_primary_emits_agent_tool_ahead_of_file_tools(self):
+        # ADR-0010 D1 + ADR-0011: the maestro has no MCP scope but carries `agent`
+        # (native dispatch) ahead of its policy read tools (so it can read to route).
         block = _policy_block(_policy_config(target="copilot"), "maestro")
-        assert block["tools"] == ["agent"]
+        assert block["tools"] == ["agent", *_READ_TOOLS]
 
     def test_tools_track_the_scope_constant(self):
-        # Guard the role->servers map from drifting out of the emitted tools. The
-        # maestro (primary) prepends the `agent` dispatch tool ahead of its MCP scope.
+        # Guard the role->servers map from drifting out of the emitted tools, on top
+        # of the policy-derived file tools (read tools always; editFiles iff the agent
+        # holds local-write). The maestro prepends the `agent` dispatch tool.
+        allowlist = effective_allowlist(_policy_config())
         for role, servers in AGENT_MCP_SCOPE.items():
             block = _policy_block(_policy_config(target="copilot"), role)
-            expected = [f"carter-{s}/*" for s in sorted(servers)]
+            file_tools = list(_READ_TOOLS)
+            if allowlist[role].get("local-write"):
+                file_tools.append("editFiles")
+            expected = file_tools + [f"carter-{s}/*" for s in sorted(servers)]
             if role == "maestro":
                 expected = ["agent", *expected]
-            if expected:
-                assert block["tools"] == expected
-            else:
-                assert "tools" not in block
+            assert block["tools"] == expected
 
 
 class TestPolicyOpenCodePermission:
@@ -1306,7 +1317,12 @@ class TestPolicyRenderedIntegration:
         _, fm, _ = content.split("---", 2)
         data = yaml.safe_load(fm)
         assert data["policy"]["allow"] == ["dangerous", "local-write", "read", "remote-write"]
-        assert data["tools"] == ["carter-github/*", "carter-terraform/*"]
+        assert data["tools"] == [
+            *_READ_TOOLS,
+            "editFiles",
+            "carter-github/*",
+            "carter-terraform/*",
+        ]
 
 
 class TestConfigureMcpServersUnchanged:

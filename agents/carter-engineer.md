@@ -6,7 +6,7 @@ policy:
   allow: [local-write, read]
   gates: {local-write: allow, read: allow}
 model: Claude Sonnet 4.6
-tools: [carter-github/*, carter-terraform/*]
+tools: [codebase, search, usages, fetch, editFiles, carter-github/*, carter-terraform/*]
 agents: []
 ---
 

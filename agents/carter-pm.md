@@ -6,7 +6,7 @@ policy:
   allow: [local-write, read]
   gates: {local-write: allow, read: allow}
 model: Claude Opus 4.8
-tools: [carter-atlassian/*, carter-github/*]
+tools: [codebase, search, usages, fetch, editFiles, carter-atlassian/*, carter-github/*]
 agents: []
 ---
 

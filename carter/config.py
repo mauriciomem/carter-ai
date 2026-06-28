@@ -378,10 +378,10 @@ def effective_allowlist(config: dict[str, Any]) -> dict[str, dict[str, bool]]:
 # P3 lint validates. Per-agent MCP scope lives here (agent frontmatter), never in
 # the global `configure_mcp_servers` wiring.
 
-# Per-agent MCP server scope, mirroring each static agent's <mcp> block. Drives the
-# copilot/VS Code `tools:` allowlist. An agent that wires no MCP servers (the
-# maestro orchestrator; the narrator, which authors content via skills rather than
-# calling a remote MCP) emits no `tools:` key — a domain fact, not a special case.
+# Per-agent MCP server scope, mirroring each static agent's <mcp> block. Feeds the
+# copilot/VS Code `tools:` allowlist alongside the policy-derived file tools below.
+# An agent may wire no MCP servers (the maestro orchestrator; the narrator, which
+# authors via skills) — it still emits a `tools:` key for its policy file tools.
 AGENT_MCP_SCOPE: dict[str, list[str]] = {
     "maestro": [],
     "architect": ["github", "terraform"],
@@ -390,6 +390,18 @@ AGENT_MCP_SCOPE: dict[str, list[str]] = {
     "pm": ["atlassian", "github"],
     "learner": ["atlassian"],
     "narrator": [],
+}
+
+# Built-in VS Code / Copilot tools each policy category grants (ADR-0011). The
+# copilot `tools:` key is a REPLACING allowlist — the host's default file tools are
+# available only if listed — so Carter must enumerate the file tools the agent's
+# policy implies, or the agent (and the chain it delegates to) loses the filesystem.
+# Flat names, consistent with the `agent` / `carter-<server>/*` Carter already emits.
+# `remote-write`/`dangerous` add no *file* tool here (they govern push/shell, gated
+# via `policy:`/`handoffs:`); this map is the single home for a future tool rename.
+_CATEGORY_TOOLS: dict[str, list[str]] = {
+    "read": ["codebase", "search", "usages", "fetch"],
+    "local-write": ["editFiles"],
 }
 
 # OpenCode's permission model has no `gate` tier, so Carter's `gate` degrades to
@@ -517,8 +529,12 @@ def dispatch_specialists(config: dict[str, Any]) -> list[str]:
 def policy_native_keys(config: dict[str, Any], role: str) -> dict[str, Any]:
     """The target-native enforcement keys Carter emits for ``role``.
 
-    ``tools`` (copilot/all): the per-agent MCP server scope, when any; the primary
-    additionally carries the ``agent`` subagent tool. ``agents``/``handoffs``
+    ``tools`` (copilot/all): the policy-derived file tools (``read`` →
+    ``codebase``/``search``/``usages``/``fetch``; ``local-write`` → ``editFiles``)
+    plus the per-agent MCP server scope; the primary additionally carries the
+    ``agent`` subagent tool (ADR-0011 — ``tools`` is a replacing allowlist, so the
+    file tools the policy implies MUST be listed or the agent loses the filesystem).
+    ``agents``/``handoffs``
     (copilot/all): native subagent dispatch — an EXPLICIT per-specialist allowlist on
     the primary, ``[]`` on every specialist (flat chain, D1.3). ``permission``
     (opencode/all): the best-effort native gate map; the primary's also carries a
@@ -543,9 +559,13 @@ def policy_native_keys(config: dict[str, Any], role: str) -> dict[str, Any]:
         keys["model"] = model
     if target in ("copilot", "all"):
         scope = [f"carter-{server}/*" for server in sorted(AGENT_MCP_SCOPE.get(role, []))]
-        # The primary enables the `agent` subagent tool (first, ahead of any MCP
-        # scope); specialists only ever carry their MCP scope.
-        tools = (["agent"] + scope) if is_primary else scope
+        # Policy-derived file tools (ADR-0011): `tools:` is a replacing allowlist, so
+        # the file tools the agent's policy implies MUST be listed or the agent — and
+        # the chain the maestro delegates to — loses the filesystem. Order: `agent`
+        # (primary dispatch) → file tools (policy order: read, local-write) → MCP scope.
+        held = set(allowed)
+        file_tools = [t for cat, tools_ in _CATEGORY_TOOLS.items() if cat in held for t in tools_]
+        tools = (["agent"] if is_primary else []) + file_tools + scope
         if tools:
             keys["tools"] = tools
         # Native dispatch allowlist (VS Code/Copilot): explicit on the primary, empty

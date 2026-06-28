@@ -6,7 +6,7 @@ policy:
   allow: [read]
   gates: {read: allow}
 model: Claude Opus 4.8
-tools: [carter-atlassian/*]
+tools: [codebase, search, usages, fetch, carter-atlassian/*]
 agents: []
 ---
 

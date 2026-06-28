@@ -16,7 +16,13 @@ from __future__ import annotations
 
 import yaml
 
-from carter.config import generate_default_config, policy_frontmatter, policy_native_keys
+from carter.config import (
+    _CATEGORY_TOOLS,
+    effective_allowlist,
+    generate_default_config,
+    policy_frontmatter,
+    policy_native_keys,
+)
 from carter.scaffold import create_env, render_agents
 
 
@@ -148,3 +154,54 @@ class TestPolicyFrontmatterCarriesDispatch:
         fm = yaml.safe_load(policy_frontmatter(cfg, "maestro"))
         assert "agents" in fm and "handoffs" in fm
         assert "agent" in fm["tools"]
+
+
+# ─── ADR-0011: the delegation chain is filesystem-capable end-to-end ─────────
+
+
+class TestDelegationChainIsFilesystemCapable:
+    """The defect ADR-0011 fixes: ``tools:`` is a *replacing* allowlist, so emitting
+    only MCP scope (+ ``agent``) silently stripped file access from EVERY agent. The
+    maestro could not read an input it needed to route on, and the specialists it
+    delegated to could not read/edit the files the task was about — the whole chain
+    lost the filesystem on the VS Code target. These tests lock the fix: the maestro
+    reads to route, and every specialist's emitted ``tools:`` carries the file tools
+    its policy implies (read everywhere; ``editFiles`` where it holds ``local-write``).
+    """
+
+    def test_maestro_can_read_to_route(self):
+        # The Session-2 failure: the maestro must hold read tools so it can open the
+        # file it's asked to route on (e.g. an RFC named in the request).
+        cfg = _config(target="copilot")
+        tools = policy_native_keys(cfg, "maestro").get("tools", [])
+        assert "agent" in tools, "maestro must keep the dispatch tool"
+        for read_tool in _CATEGORY_TOOLS["read"]:
+            assert read_tool in tools, f"maestro missing read tool {read_tool!r}"
+
+    def test_every_agent_can_read(self):
+        # Every Carter agent holds `read` (ADR-0010 D4), so every emitted tools list
+        # must carry the read file tools — no agent in the chain loses the filesystem.
+        cfg = _config(target="copilot")
+        for role in cfg["agents"]:
+            tools = policy_native_keys(cfg, role).get("tools", [])
+            for read_tool in _CATEGORY_TOOLS["read"]:
+                assert read_tool in tools, f"{role} missing read tool {read_tool!r}"
+
+    def test_local_write_specialists_can_edit(self):
+        # An agent that holds `local-write` (engineer, pm, narrator, devops) must emit
+        # `editFiles` — an engineer that can't edit code is the latent half of the bug.
+        cfg = _config(target="copilot")
+        allowlist = effective_allowlist(cfg)
+        for role in cfg["agents"]:
+            tools = policy_native_keys(cfg, role).get("tools", [])
+            if allowlist[role].get("local-write"):
+                assert "editFiles" in tools, f"{role} holds local-write but cannot editFiles"
+            else:
+                assert "editFiles" not in tools, f"{role} lacks local-write but emits editFiles"
+
+    def test_opencode_target_unaffected(self):
+        # ADR-0011 is copilot-scoped: OpenCode governs read/edit via `permission`, not
+        # `tools:`, so the opencode emission must carry NO `tools:` key (no regression).
+        cfg = _config(target="opencode")
+        for role in cfg["agents"]:
+            assert "tools" not in policy_native_keys(cfg, role)
