@@ -2,6 +2,19 @@
 
 <!-- version list -->
 
+## v0.2.1 (2026-06-28)
+
+### Bug Fixes
+
+- **adr-0011**: Derive VS Code tools: from policy so the agent chain keeps filesystem access
+  ([`2521337`](https://github.com/mauriciomem/carter-ai/commit/25213373f6787e660b26261710a83b69511f6741))
+
+### Documentation
+
+- **plans**: Archive completed plan 005 + reconcile README to the refresh
+  ([`ae2c3e6`](https://github.com/mauriciomem/carter-ai/commit/ae2c3e6ce5b39904f679fbbb54ec7c02cedf0b0a))
+
+
 ## v0.2.0 (2026-06-27)
 
 ### Chores
