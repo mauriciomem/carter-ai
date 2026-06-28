@@ -6,7 +6,7 @@ policy:
   allow: [read]
   gates: {read: allow}
 model: Claude Opus 4.8
-tools: [carter-github/*, carter-terraform/*]
+tools: [codebase, search, usages, fetch, carter-github/*, carter-terraform/*]
 agents: []
 ---
 

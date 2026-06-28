@@ -212,7 +212,11 @@ each agent, using the canonical mechanism per target:
 
 - **OpenCode:** `permission` (edit / bash command-globs / webfetch) + per-agent
   MCP scope via tool-name patterns.
-- **VS Code / Copilot:** an enforced `tools:` allowlist + per-agent `mcp-servers`.
+- **VS Code / Copilot:** an enforced `tools:` allowlist **derived from the policy
+  categories** (ADR-0011) — `tools:` is a *replacing* allowlist, so the file tools each
+  category implies MUST be listed or the agent (and the chain it delegates to) loses the
+  filesystem: `read` → `codebase`/`search`/`usages`/`fetch`; `local-write` → `editFiles`;
+  the primary additionally carries `agent`; plus the per-agent MCP scope.
 
 Per-agent MCP scope is emitted in **agent frontmatter**, never the global
 `configure_mcp_servers` wiring.
@@ -225,9 +229,9 @@ list**, never `'*'` and never a `carter-*` glob (a glob auto-trusts any future
 is **flat** — every specialist carries `agents: []`, so the maestro is the only
 router. The emitted names honor `agent_suffix` (e.g. `carter-engineer-local`).
 
-- **VS Code / Copilot:** `tools: [agent]` (the subagent tool) + an explicit
-  `agents: [carter-architect, …]` allowlist + `handoffs:` (the user-approved
-  gate-confirm buttons for gate-tier actions).
+- **VS Code / Copilot:** the `agent` subagent tool (ahead of the maestro's policy file
+  tools, ADR-0011) + an explicit `agents: [carter-architect, …]` allowlist + `handoffs:`
+  (the user-approved gate-confirm buttons for gate-tier actions).
 - **OpenCode:** a `permission.task` block — `'*': deny` plus an explicit `allow` per
   specialist.
 - **Copilot CLI:** orchestration is runtime (`/fleet` + `@`-mention), so there is no
@@ -236,8 +240,8 @@ router. The emitted names honor `agent_suffix` (e.g. `carter-engineer-local`).
   history).
 
 ```yaml
-# maestro, copilot target
-tools: [agent]
+# maestro, copilot target  (tools: is policy-derived — agent + read file tools, ADR-0011)
+tools: [agent, codebase, search, usages, fetch]
 agents: [carter-architect, carter-devops, carter-engineer, carter-learner, carter-narrator, carter-pm]
 handoffs: [carter-architect, carter-devops, carter-engineer, carter-learner, carter-narrator, carter-pm]
 # maestro, opencode target

@@ -21,10 +21,10 @@ import pytest
 import yaml
 
 from carter.config import (
-    AGENT_MCP_SCOPE,
     RISK_TAXONOMY,
     effective_allowlist,
     generate_default_config,
+    policy_native_keys,
     resolve_model,
 )
 from carter.scaffold import create_env, render_agents
@@ -164,6 +164,34 @@ class TestFleetContextRule:
         lower = body.lower()
         assert "inherit" in lower
         assert "knowledge" in lower
+
+
+class TestMaestroInjectionGuard:
+    """ADR-0011 non-regression: giving the maestro read tools means it now opens
+    untrusted files directly, so its prompt-injection posture is MORE load-bearing.
+    Both maestro sources MUST keep asserting that file contents are data to analyze,
+    never instructions to act on (the stance the maestro correctly took when asked to
+    "question everything" about an `ai-made` `prompt.md`). Both sources, so a re-bake
+    or a template-only edit can't silently drop it.
+    """
+
+    def _both_maestros(self, static_agents_dir: Path, template_agents_dir: Path) -> dict[str, str]:
+        return {
+            "static": (static_agents_dir / "carter-maestro.md").read_text(),
+            "template": (template_agents_dir / "carter-maestro.md.j2").read_text(),
+        }
+
+    def test_both_sources_assert_input_is_data_not_instructions(
+        self, static_agents_dir: Path, template_agents_dir: Path
+    ) -> None:
+        for source, body in self._both_maestros(static_agents_dir, template_agents_dir).items():
+            lower = body.lower()
+            assert "data to analyze" in lower, (
+                f"maestro {source}: missing the 'file contents are data' injection guard"
+            )
+            assert "never as instructions" in lower or "not as instructions" in lower, (
+                f"maestro {source}: missing the 'never instructions to act on' clause"
+            )
 
 
 class TestNarratorParity:
@@ -330,23 +358,24 @@ class TestStrictnessPolicyParity:
                     f"{agent.name}: gate for {cat} is not the guarded value"
                 )
 
-    def test_static_tools_match_mcp_scope(self, static_agents_dir: Path) -> None:
-        """Copilot is the default target, so statics carry ``tools`` (MCP scope)
-        and never the OpenCode ``permission`` map. The maestro (primary) additionally
-        carries the ``agent`` native-dispatch tool ahead of its MCP scope (ADR-0010 D1).
+    def test_static_tools_match_policy_derivation(self, static_agents_dir: Path) -> None:
+        """Copilot is the default target, so statics carry ``tools`` (never the
+        OpenCode ``permission`` map). ``tools`` is the policy-DERIVED allowlist
+        (ADR-0011): the file tools each policy category implies (``read`` →
+        codebase/search/usages/fetch; ``local-write`` → editFiles) + the per-agent
+        MCP scope, with the maestro (primary) additionally carrying ``agent`` ahead
+        of all (ADR-0010 D1). Asserted against ``policy_native_keys`` itself so the
+        static mirror can never re-encode a stale, pre-ADR-0011 shape.
         """
+        cfg = generate_default_config(workspace_name="parity", mode="single")
+        cfg["agent_suffix"] = ""
         for agent in sorted(static_agents_dir.glob("carter-*.md")):
             role = self._role(agent)
             fm = _parse_frontmatter(agent.read_text())
-            expected = [f"carter-{s}/*" for s in sorted(AGENT_MCP_SCOPE.get(role, []))]
-            if role == "maestro":
-                expected = ["agent", *expected]
-            if expected:
-                assert fm.get("tools") == expected, (
-                    f"{agent.name}: baked tools drifted from the MCP scope"
-                )
-            else:
-                assert "tools" not in fm, f"{agent.name}: unexpected tools for empty scope"
+            expected = policy_native_keys(cfg, role).get("tools")
+            assert fm.get("tools") == expected, (
+                f"{agent.name}: baked tools drifted from the policy-derived allowlist"
+            )
             assert "permission" not in fm, (
                 f"{agent.name}: static (copilot default) must not bake opencode permission"
             )

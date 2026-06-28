@@ -6,6 +6,7 @@ policy:
   allow: [local-write, read]
   gates: {local-write: allow, read: allow}
 model: Claude Opus 4.8
+tools: [codebase, search, usages, fetch, editFiles]
 agents: []
 ---
 
