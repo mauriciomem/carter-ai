@@ -2,6 +2,19 @@
 
 <!-- version list -->
 
+## v0.2.2 (2026-06-29)
+
+### Bug Fixes
+
+- **adr-0012**: Render OpenCode-shaped agents on install so the opencode CLI accepts them
+  ([`c4fef37`](https://github.com/mauriciomem/carter-ai/commit/c4fef370038ddd396dfb7431ff73f15abbf7a1ef))
+
+### Documentation
+
+- **testing**: Document the editable-install carter/_data shadowing gotcha
+  ([`94dc7ca`](https://github.com/mauriciomem/carter-ai/commit/94dc7ca638648100358b9efcd1116ea3e1e37a19))
+
+
 ## v0.2.1 (2026-06-28)
 
 ### Bug Fixes
