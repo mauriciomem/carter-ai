@@ -30,6 +30,24 @@ uv venv && source .venv/bin/activate
 uv pip install -e ".[dev]"
 ```
 
+> **Troubleshooting — `carter` CLI crashes with `ModuleNotFoundError: No module
+> named 'carter.cli'`.** This affects the **editable dev install only** (a shipped
+> `uv tool install` wheel is unaffected). The wheel bundles static content under
+> `carter/_data/` via `force-include` (see `pyproject.toml`); in an editable
+> install that materializes `carter/_data` as a real directory in `site-packages`,
+> which **shadows** the `.pth` redirect to your source — `import carter` then finds
+> the stub (only `_data`, no `cli`). Running `pytest` from the repo root can
+> re-trigger it. Fix by symlinking the source package over the shadow:
+>
+> ```bash
+> SP=.venv/lib/python3.13/site-packages   # adjust the python3.13 for your version
+> rm -rf "$SP/carter" && ln -s "$PWD/carter" "$SP/carter"
+> carter --version                        # verify
+> ```
+>
+> The symlink survives the editable-rebuild trigger. `carter/resources.py`
+> `data_dir()` still resolves bundled content from the repo root in a checkout.
+
 ### Run everything
 
 ```bash
