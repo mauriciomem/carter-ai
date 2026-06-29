@@ -43,6 +43,49 @@ class TestInstallAgents:
         actual = sorted(f.name for f in agents_dir.glob("carter-*.md"))
         assert len(actual) == 7
 
+    def test_opencode_agents_are_permission_shaped_not_tools_array(self, base_dir: Path) -> None:
+        """OpenCode rejects the copilot ``tools:`` ARRAY ("Expected object | undefined,
+        got [...]"). The installer must render OpenCode-shaped frontmatter for the
+        opencode target — a ``permission`` block, a ``provider/model`` id, and NO
+        ``tools`` array — never copy the copilot static file verbatim (ADR-0012). This
+        is the regression that broke ``opencode`` CLI on a fresh global install.
+        """
+        import yaml
+
+        manifest = {"files": [], "file_hashes": {}}
+        backup = base_dir / "backup"
+        install.install_agents(["opencode"], base_dir, manifest, backup)
+
+        agents_dir = base_dir / "opencode" / "agents"
+        for agent in sorted(agents_dir.glob("carter-*.md")):
+            fm = yaml.safe_load(agent.read_text().split("---")[1])
+            assert "tools" not in fm, (
+                f"{agent.name}: opencode agent carries a copilot 'tools' key "
+                "(OpenCode rejects the array)"
+            )
+            assert "permission" in fm, f"{agent.name}: opencode agent missing 'permission' block"
+            model = fm.get("model", "")
+            assert str(model).startswith("anthropic/"), (
+                f"{agent.name}: opencode agent must use a provider/model id, got {model!r}"
+            )
+
+    def test_copilot_agents_keep_tools_array(self, base_dir: Path) -> None:
+        """The opencode fix must NOT change the copilot install — its agents still
+        carry the policy-derived ``tools:`` array (ADR-0011), not a permission block.
+        """
+        import yaml
+
+        manifest = {"files": [], "file_hashes": {}}
+        backup = base_dir / "backup"
+        install.install_agents(["copilot"], base_dir, manifest, backup)
+
+        for agent in sorted((base_dir / "copilot" / "agents").glob("carter-*.md")):
+            fm = yaml.safe_load(agent.read_text().split("---")[1])
+            assert isinstance(fm.get("tools"), list), (
+                f"{agent.name}: copilot agent lost its tools array"
+            )
+            assert "permission" not in fm, f"{agent.name}: copilot agent must not carry permission"
+
     def test_creates_both_targets(self, base_dir: Path) -> None:
         manifest = {"files": [], "file_hashes": {}}
         backup = base_dir / "backup"
