@@ -110,6 +110,43 @@ def _install_templated_file(
     return "created"
 
 
+def _install_rendered_file(
+    content: str,
+    dst: Path,
+    manifest: dict,
+    backup_root: Path,
+) -> str:
+    """Write already-rendered ``content`` to ``dst`` (no source file to copy).
+
+    Used to install per-target-rendered output — e.g. OpenCode-shaped agent
+    frontmatter, which differs from the copilot static ``agents/*.md`` (OpenCode
+    rejects the copilot ``tools:`` array; it wants a ``permission`` block). Mirrors
+    ``_install_file``'s backup/manifest/hash semantics; the hash carries the same
+    ``sha256:`` prefix as ``_sha256`` so the unchanged-check matches on re-install.
+    """
+    dst.parent.mkdir(parents=True, exist_ok=True)
+    content_hash = f"sha256:{hashlib.sha256(content.encode()).hexdigest()}"
+
+    if dst.exists():
+        if _sha256(dst) == content_hash:
+            log_skip(str(dst).replace(str(_home()), "~"))
+            manifest["files"].append(str(dst))
+            manifest["file_hashes"][str(dst)] = content_hash
+            return "unchanged"
+        _backup_file(dst, backup_root)
+        dst.write_text(content)
+        log_ok(f"{str(dst).replace(str(_home()), '~')}", "updated")
+        manifest["files"].append(str(dst))
+        manifest["file_hashes"][str(dst)] = content_hash
+        return "updated"
+
+    dst.write_text(content)
+    log_ok(str(dst).replace(str(_home()), "~"))
+    manifest["files"].append(str(dst))
+    manifest["file_hashes"][str(dst)] = content_hash
+    return "created"
+
+
 def _install_file(
     src: Path,
     dst: Path,

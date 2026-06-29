@@ -12,7 +12,12 @@ import subprocess
 from pathlib import Path
 
 from carter.install.console import log_ok, log_skip, log_step
-from carter.install.files import _get_template_vars, _install_file, _install_templated_file
+from carter.install.files import (
+    _get_template_vars,
+    _install_file,
+    _install_rendered_file,
+    _install_templated_file,
+)
 from carter.install.paths import (
     REPO_ROOT,
     _carter_base,
@@ -32,6 +37,12 @@ def install_agents(
     src_dir = REPO_ROOT / "agents"
     stats: dict[str, int] = {"created": 0, "updated": 0, "unchanged": 0}
 
+    # The static `agents/*.md` are copilot-shaped (a `tools:` allowlist array).
+    # OpenCode rejects that array — it wants a `permission` block and `provider/model`
+    # ids — so for the opencode target we render the OpenCode-shaped frontmatter from
+    # the guarded defaults rather than copying the copilot file verbatim (ADR-0012).
+    opencode_rendered = _render_opencode_agents() if "opencode" in targets else {}
+
     for agent_file in sorted(src_dir.glob("carter-*.md")):
         if "copilot" in targets:
             dst = _copilot_base(base_dir) / "agents" / agent_file.name
@@ -40,10 +51,27 @@ def install_agents(
 
         if "opencode" in targets:
             dst = _opencode_base(base_dir) / "agents" / agent_file.name
-            status = _install_file(agent_file, dst, manifest, backup_root)
+            content = opencode_rendered[agent_file.name]
+            status = _install_rendered_file(content, dst, manifest, backup_root)
             stats[status] += 1
 
     return stats
+
+
+def _render_opencode_agents() -> dict[str, str]:
+    """Render the OpenCode-shaped agent files from the shipped guarded defaults.
+
+    Returns ``{filename: content}`` keyed by ``carter-<role>.md`` (no agent suffix —
+    global installs use canonical names). Imported lazily so the install path does
+    not pull in the scaffold/Jinja stack unless an opencode target is requested.
+    """
+    from carter.config import generate_default_config
+    from carter.scaffold import create_env, render_agents
+
+    cfg = generate_default_config(workspace_name="carter", mode="single")
+    cfg["target"] = "opencode"
+    cfg["agent_suffix"] = ""
+    return render_agents(cfg, create_env())
 
 
 def install_skills(
