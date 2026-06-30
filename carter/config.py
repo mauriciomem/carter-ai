@@ -41,6 +41,7 @@ DEFAULT_CONFIG: dict[str, Any] = {
         "pm",
         "learner",
         "narrator",
+        "security",
     ],
     # Suffix distinguishing workspace-scaffolded agents from globally installed
     # ones (e.g. carter-engineer-local). Empty string = same names as global.
@@ -266,6 +267,7 @@ AGENT_ALLOWLIST: dict[str, dict[str, bool]] = {
     "pm": {"read": True, "local-write": True},
     "narrator": {"read": True, "local-write": True},
     "engineer": {"read": True, "local-write": True},
+    "security": {"read": True, "local-write": True},
     "devops": {
         "read": True,
         "local-write": True,
@@ -303,6 +305,7 @@ MODEL_TIERS: dict[str, str] = {
     "pm": "thinkers",
     "learner": "thinkers",
     "narrator": "thinkers",
+    "security": "thinkers",
     "engineer": "implementers",
     "devops": "implementers",
 }
@@ -390,6 +393,7 @@ AGENT_MCP_SCOPE: dict[str, list[str]] = {
     "pm": ["atlassian", "github"],
     "learner": ["atlassian"],
     "narrator": [],
+    "security": ["github"],
 }
 
 # Built-in VS Code / Copilot tools each policy category grants. The
