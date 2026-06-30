@@ -1,8 +1,8 @@
-"""Plan validation — the ADR-0003 frontmatter contract, enforced in Python.
+"""Plan validation — the plan frontmatter contract, enforced in Python.
 
-This is the deterministic gate behind ADR-0003 (O3): plans are only useful as a
+This is the deterministic gate behind the contract: plans are only useful as a
 recovery/quality-gate substrate if their metadata is machine-checkable. The
-canonical schema lives in ``docs/reference/frontmatter.md`` (D6); this module is
+canonical schema lives in ``docs/reference/frontmatter.md``; this module is
 its executable form. ``carter check`` runs ``validate_plans_dir`` over a
 workspace's ``.carter/state/plans/``.
 
@@ -181,7 +181,7 @@ def _validate_step_file(step_file: Path, plan_name: str, thresholds: dict[str, A
 
 
 def validate_plan_dir(plan_dir: Path, thresholds: dict[str, Any] | None = None) -> list[str]:
-    """Validate one plan directory against the ADR-0003 contract.
+    """Validate one plan directory against the plan frontmatter contract.
 
     Returns a list of human-readable error strings (empty = valid).
     """
@@ -267,7 +267,7 @@ def _validate_plan_dir(
                 else:
                     mh_count += len(val)
 
-    # O6: an active plan must declare at least one must_haves entry
+    # An active plan must declare at least one must_haves entry
     if status == "active" and mh_count == 0:
         errors.append(
             f"{name}/README.md: an 'active' plan must declare at least one "
@@ -343,7 +343,7 @@ def _check_bucket_status(name: str, status: Any, bucket: str) -> list[str]:
 
 
 def validate_checkpoint(checkpoint_file: Path, plans_root: Path | None = None) -> list[str]:
-    """Validate the session ``checkpoint.md`` recovery cursor (ADR-0003 D7.2).
+    """Validate the session ``checkpoint.md`` recovery cursor.
 
     The checkpoint is optional: its absence is clean. If present, it must carry
     valid frontmatter with ``updated`` and, when set, an ``active_plan`` string

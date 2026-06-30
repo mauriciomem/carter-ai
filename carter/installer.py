@@ -5,7 +5,7 @@ configurations for VS Code Copilot, Copilot CLI, and OpenCode.
 
 This module backs the ``carter install`` command (and the legacy ``install.sh`` /
 ``install.py`` bootstrap). The implementation was split into the ``carter.install``
-package (plan 004 step 8); this module re-exports those leaves and keeps the
+package; this module re-exports those leaves and keeps the
 orchestration plus the few helpers that tests monkeypatch through this namespace
 (``_vscode_detected``, ``_vscode_settings_path``, ``check_prerequisites``,
 ``configure_mcp_servers`` — each resolves a patched dependency from this module's

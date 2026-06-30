@@ -36,7 +36,7 @@ def create_env(templates_dir: Path = TEMPLATES_DIR) -> Environment:
         lstrip_blocks=True,
         keep_trailing_newline=True,
     )
-    # Strictness-policy emitters used by base_agent.md.j2 (RFC-0002 / ADR-0005).
+    # Strictness-policy emitters used by base_agent.md.j2.
     env.globals["policy_frontmatter"] = policy_frontmatter
     env.globals["policy_gate_table"] = policy_gate_table
     return env
@@ -89,12 +89,11 @@ def agent_filename(role: str, config: dict[str, Any]) -> str:
 def config_warnings(config: dict[str, Any]) -> list[str]:
     """Return non-fatal configuration warnings for a workspace config.
 
-    ADR-0010 D3 reduced strictness to two levels, both of which **force** the
-    narrator's redaction pass — the rule-less-narrator gap that this warning once
-    flagged at the dropped advisory level can no longer occur. A
-    ``redaction.enabled: false`` contradiction at an enforcing level is surfaced by
-    the policy lint instead (Q16), not here. Kept as a seam so future non-fatal
-    config warnings have a home.
+    Both shipped strictness levels **force** the narrator's redaction pass — the
+    rule-less-narrator gap that this warning once flagged at a since-dropped advisory
+    level can no longer occur. A ``redaction.enabled: false`` contradiction at an
+    enforcing level is surfaced by the policy lint instead, not here. Kept as a seam
+    so future non-fatal config warnings have a home.
     """
     return []
 
@@ -102,9 +101,8 @@ def config_warnings(config: dict[str, Any]) -> list[str]:
 def policy_notice(config: dict[str, Any]) -> str | None:
     """The 'you're guarded now' notice, surfaced at init/update.
 
-    Both shipped levels (``guarded``/``strict``) enforce gates — ADR-0010 D3
-    reduced strictness to these two — so the notice always fires, naming the active
-    level and the gated categories.
+    Both shipped levels (``guarded``/``strict``) enforce gates, so the notice always
+    fires, naming the active level and the gated categories.
     """
     level = (config.get("policy") or {}).get("level", "guarded")
     return (
@@ -115,7 +113,7 @@ def policy_notice(config: dict[str, Any]) -> str | None:
 
 
 def model_advisory(config: dict[str, Any]) -> str:
-    """The required unverifiable-model advisory `carter check` always prints (D2.3).
+    """The required unverifiable-model advisory `carter check` always prints.
 
     Carter pins a per-agent `model:` but cannot verify the user's Copilot/OpenCode
     subscription actually includes it — an unavailable model would be silently ignored
@@ -132,18 +130,18 @@ def model_advisory(config: dict[str, Any]) -> str:
 
 
 # ──────────────────────────────────────────────────────────────────────────────
-# Policy lint (RFC-0002 / ADR-0005, P3)
+# Policy lint
 # ──────────────────────────────────────────────────────────────────────────────
 # `carter check` runs `lint_policy` to verify the emitted agent frontmatter still
 # matches the declared policy model (the per-agent allowlist x the active level's
 # gate map). This is a *config* lint: it proves what Carter wrote equals what Carter
 # declared. It deliberately CANNOT verify runtime denial — that a platform actually
-# refuses a gated action at execution time is out of scope (Q17); only an enforcing
+# refuses a gated action at execution time is out of scope; only an enforcing
 # target does that, and only at runtime.
 
 # Whether a target natively enforces per-category gates. OpenCode's `permission`
 # block gates/denies per category at runtime. The `copilot` target spans two
-# surfaces (ADR-0010 D8 re-eval): Copilot CLI `hooks` preToolUse *can* now
+# surfaces: Copilot CLI `hooks` preToolUse *can* now
 # deterministically block, but VS-Code-declarative custom agents still have no
 # per-category gate. Since `copilot` covers both, it resolves to the weaker member
 # — non-enforcing — so a strict policy honestly degrades to advisory there and the
@@ -162,7 +160,7 @@ def _is_failopen_entry(entry: str) -> bool:
 
 
 def _lint_dispatch_allowlist(config: dict[str, Any], primary_fm: dict[str, Any]) -> list[str]:
-    """Fail-closed lint of the primary's native dispatch allowlist (D1.2).
+    """Fail-closed lint of the primary's native dispatch allowlist.
 
     Errors (never warns) when the maestro's emitted ``agents:`` (copilot) or
     ``permission.task`` (opencode) is ``'*'``, contains a glob, or is absent. Compares
@@ -226,14 +224,14 @@ def lint_policy(
     the expected allowlist + gate map from the model and reports drift as an error;
     a role absent from ``installed`` is not lint's concern (missing files are handled
     by ``carter check`` itself). It also enforces the strict-on-non-enforcing-target
-    acknowledgement (Q15, fail-closed) and the redaction contradiction (Q16).
+    acknowledgement (fail-closed) and the redaction contradiction.
 
     Returns ``(errors, warnings)``. Scope notes:
 
     - Per-agent MCP scope is read from frontmatter only; global MCP server wiring is
-      ``configure_mcp_servers``' job and is NOT linted here (N2 — no false
+      ``configure_mcp_servers``' job and is NOT linted here (no false
       "server not wired" warning).
-    - Runtime denial is out of scope (Q17): this verifies that emitted config matches
+    - Runtime denial is out of scope: this verifies that emitted config matches
       declared policy, not that the platform refuses a gated action at runtime.
     """
     errors: list[str] = []
@@ -278,7 +276,7 @@ def lint_policy(
                     f"from declared {expected_native[key]}"
                 )
 
-    # FAIL-CLOSED DISPATCH LINT (D1.2): the primary's native dispatch allowlist is a
+    # FAIL-CLOSED DISPATCH LINT: the primary's native dispatch allowlist is a
     # security boundary. A `'*'`, a glob, or an absent `agents:`/`permission.task` on
     # the maestro is a build-breaking ERROR (never a warning) — `'*'` lets the maestro
     # delegate to any workspace agent (failure-open), and a `carter-*` glob auto-trusts
@@ -288,7 +286,7 @@ def lint_policy(
     if primary_fm is not None:
         errors.extend(_lint_dispatch_allowlist(config, primary_fm))
 
-    # Q15 HARD ACK: strict on a non-enforcing target must be explicitly accepted.
+    # HARD ACK: strict on a non-enforcing target must be explicitly accepted.
     if level == "strict":
         non_enforcing = [
             t
@@ -308,7 +306,7 @@ def lint_policy(
                     "explicit --accept-degraded"
                 )
 
-    # Q16 redaction WARN: guarded|strict forces a redaction pass at runtime, so a
+    # REDACTION WARN: guarded|strict forces a redaction pass at runtime, so a
     # disabled redaction config is a contradiction worth surfacing.
     if level in ("guarded", "strict") and not (config.get("redaction") or {}).get("enabled", False):
         warnings.append(
