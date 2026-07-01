@@ -14,7 +14,7 @@ from carter.install.files import _backup_file
 from carter.install.jsonc import _load_jsonc, _write_json_preserving
 
 # The MCP servers Carter wires into every target. Single source of truth so the
-# install and uninstall paths can never diverge (RFC-0002 / ADR-0005 D5).
+# install and uninstall paths can never diverge.
 MCP_SERVERS = ("github", "terraform", "atlassian")
 
 

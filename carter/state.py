@@ -124,7 +124,7 @@ def _run_git(args: list[str], cwd: Path) -> subprocess.CompletedProcess[str]:
 
 
 def commit_state(carter_dir: Path, message: str, *, allow_empty: bool = False) -> bool:
-    """Commit the ``.carter/`` state repo — the ADR-0003 recovery primitive.
+    """Commit the ``.carter/`` state repo — the workspace recovery primitive.
 
     Stages everything and commits to the nested ``.carter/.git`` so deleted
     plans/sessions are recoverable from history. Returns ``True`` if a commit was

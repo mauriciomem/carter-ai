@@ -172,10 +172,10 @@ _OVERRIDE_TIERS = ("native-deny", "native-ask", "prose-backstop")
 def _handle_policy_override(params: dict[str, Any]) -> int:
     """Record a single-action strictness-policy override in the audit ledger.
 
-    RFC-0002 / ADR-0005 §6: **override ≠ authorization**. This RECORDS a deliberate
-    override of a policy gate for one action; it cannot lift a platform ``deny``
-    (the emitted native config does that). One entry per action — there is no
-    blanket/session-wide override (avoids override fatigue, Q11). The per-tier
+    **Override ≠ authorization.** This RECORDS a deliberate override of a policy
+    gate for one action; it cannot lift a platform ``deny`` (the emitted native
+    config does that). One entry per action — there is no blanket/session-wide
+    override (a deliberate choice, to avoid override fatigue). The per-tier
     meaning: ``native-deny`` the user relaxed the emitted config (logged);
     ``native-ask`` confirmed the interactive prompt; ``prose-backstop`` proceeded
     on trust (logged only).

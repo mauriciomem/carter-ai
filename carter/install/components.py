@@ -40,7 +40,7 @@ def install_agents(
     # The static `agents/*.md` are copilot-shaped (a `tools:` allowlist array).
     # OpenCode rejects that array — it wants a `permission` block and `provider/model`
     # ids — so for the opencode target we render the OpenCode-shaped frontmatter from
-    # the guarded defaults rather than copying the copilot file verbatim (ADR-0012).
+    # the guarded defaults rather than copying the copilot file verbatim.
     opencode_rendered = _render_opencode_agents() if "opencode" in targets else {}
 
     for agent_file in sorted(src_dir.glob("carter-*.md")):

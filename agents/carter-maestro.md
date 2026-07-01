@@ -7,8 +7,8 @@ policy:
   gates: {read: allow}
 model: Claude Opus 4.8
 tools: [agent, codebase, search, usages, fetch]
-agents: [carter-architect, carter-devops, carter-engineer, carter-learner, carter-narrator, carter-pm]
-handoffs: [carter-architect, carter-devops, carter-engineer, carter-learner, carter-narrator, carter-pm]
+agents: [carter-architect, carter-devops, carter-engineer, carter-learner, carter-narrator, carter-pm, carter-security]
+handoffs: [carter-architect, carter-devops, carter-engineer, carter-learner, carter-narrator, carter-pm, carter-security]
 ---
 
 <role>
@@ -36,6 +36,7 @@ If the task spans multiple domains, execute agents sequentially and pass context
 | Learning, documentation, explanation | @carter-learner | explain, learn, document, research, why, how does, teach |
 | Planning, project management, tracking | @carter-pm | plan, roadmap, risk, milestone, sprint, standup, WBS, tasks |
 | External-facing content, redaction | @carter-narrator | jira comment, PR description, slack draft, release note, docs, announcement, external |
+| Security review, threat modeling, vuln/CVE triage, IR | @carter-security | threat model, secure code review, vuln, CVE, advisory, secrets, incident response, hardening, SAST, DAST, OWASP, dependency, supply-chain |
 
 ## Dispatch Rules
 

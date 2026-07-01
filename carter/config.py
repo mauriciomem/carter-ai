@@ -41,6 +41,7 @@ DEFAULT_CONFIG: dict[str, Any] = {
         "pm",
         "learner",
         "narrator",
+        "security",
     ],
     # Suffix distinguishing workspace-scaffolded agents from globally installed
     # ones (e.g. carter-engineer-local). Empty string = same names as global.
@@ -69,7 +70,7 @@ DEFAULT_CONFIG: dict[str, Any] = {
     "state": {
         "git_tracked": True,
     },
-    # Plan-splitting thresholds (ADR-0003 §D2). Numeric budgets are tunable per
+    # Plan-splitting thresholds. Numeric budgets are tunable per
     # workspace; the structural rules (every plan is a directory, status in
     # frontmatter) are invariant and not configurable.
     "plans": {
@@ -78,25 +79,25 @@ DEFAULT_CONFIG: dict[str, Any] = {
         "step_max_lines": 80,  # step-file split budget
         "git_regime": "private",  # private | workspace (umbrella mode only)
     },
-    # Risk-based strictness policy (RFC-0002 / ADR-0005; refreshed by ADR-0010).
-    # Control keys only; the shipped taxonomy / tool->risk map / allowlist live as
-    # module constants below (user-extensible via carter.yaml policy.tool_risk /
-    # policy.allowlist). `guarded` is the floor and the default for everything (new
-    # and existing/omitted) — ADR-0010 D3 reduced strictness to two levels, so an
-    # absent or unrecognized level resolves to `guarded` through this default.
+    # Risk-based strictness policy. Control keys only; the shipped taxonomy /
+    # tool->risk map / allowlist live as module constants below (user-extensible
+    # via carter.yaml policy.tool_risk / policy.allowlist). `guarded` is the floor
+    # and the default for everything (new and existing/omitted) — strictness is two
+    # levels only, so an absent or unrecognized level resolves to `guarded` through
+    # this default.
     "policy": {
         "level": "guarded",  # guarded | strict
         "unknown_tool": "ask",  # gate for tools not in the risk map: allow | ask | deny
         "overrides": {},  # category -> gate, explicit per-category override
         "audit_overrides": True,  # log escape-hatch overrides via carter ops
     },
-    # Per-agent model (ADR-0010 D2). Dict-shaped per tier (so `_deep_merge` doesn't
+    # Per-agent model. Dict-shaped per tier (so `_deep_merge` doesn't
     # wipe it — same footgun the taxonomy maps avoid). Each tier maps a target to a
     # single model string: a display name for VS Code/Copilot, a `provider/model` ID
     # for OpenCode. Resolved `overrides > tier > default` (see `resolve_model`).
     # Thinkers = Opus 4.8; implementers = Sonnet 4.6; Haiku is opt-in via `overrides`.
     # Effort is NOT here — no target has a per-agent effort field; it is the global
-    # `--effort high` knob (D2.D1). `temperature` is dropped wholesale (D7).
+    # `--effort high` knob. `temperature` is dropped wholesale.
     "models": {
         "default": {"copilot": "Claude Opus 4.8", "opencode": "anthropic/claude-opus-4-8"},
         "thinkers": {"copilot": "Claude Opus 4.8", "opencode": "anthropic/claude-opus-4-8"},
@@ -127,7 +128,7 @@ def _validate_policy(policy: Any) -> None:
     """Validate the ``policy`` block at the config boundary.
 
     Normalizes an out-of-vocabulary ``policy.level`` to the ``guarded`` default
-    (ADR-0010 D3) and catches an override category/gate that isn't a known keyword,
+    and catches an override category/gate that isn't a known keyword,
     so a typo there fails fast with a clear ``ConfigError`` instead of a raw
     ``KeyError`` deep in rendering. ``GATE_SEVERITY``/``POLICY_LEVELS`` are defined
     below in the policy-model section.
@@ -135,7 +136,7 @@ def _validate_policy(policy: Any) -> None:
     if not isinstance(policy, dict):
         raise ConfigError(f"Invalid policy block: {policy!r} (must be a mapping)")
     level = policy.get("level", "guarded")
-    # ADR-0010 D3: strictness is now `guarded`/`strict` only. Any level outside that
+    # Strictness is `guarded`/`strict` only. Any level outside that
     # set — a stale value from a prior install, or anything unrecognized — normalizes
     # to the `guarded` default in-place, silently (no notice, no dedicated migration
     # branch) so it resolves via the normal default path everywhere downstream.
@@ -205,7 +206,7 @@ def _deep_merge(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any
 
 
 # ──────────────────────────────────────────────────────────────────────────────
-# Risk-based strictness policy model (RFC-0002 / ADR-0005)
+# Risk-based strictness policy model
 # ──────────────────────────────────────────────────────────────────────────────
 # The taxonomy, tool->risk map, and per-agent allowlist are shipped with Carter and
 # user-extensible via carter.yaml. They are dict-shaped on purpose: `_deep_merge`
@@ -215,16 +216,16 @@ def _deep_merge(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any
 # Gate vocabulary, least -> most restrictive.
 GATE_SEVERITY: dict[str, int] = {"allow": 0, "ask": 1, "gate": 2, "deny": 3}
 
-# Valid strictness levels (validated at the config boundary). ADR-0010 D3 reduced
-# these to two; `guarded` is the floor and default.
+# Valid strictness levels (validated at the config boundary). There are two;
+# `guarded` is the floor and default.
 POLICY_LEVELS: tuple[str, ...] = ("guarded", "strict")
 
-# 4-category risk taxonomy (ADR-0010 D4): category -> {level -> gate}. Fixed,
-# shipped with Carter. Collapsed from the old seven: reading secrets gates the same
-# as any remote/infra path so it folds into `remote-write`; infra-mutation and
-# destructive actions fold into `dangerous`; and the old external-publish overlay is
-# dropped — redaction is now an enforced `gate`-tier narrator handoff in the
-# allowlist (D5), not a taxonomy category.
+# 4-category risk taxonomy: category -> {level -> gate}. Fixed, shipped with
+# Carter. Collapsed from an earlier seven: reading secrets gates the same as any
+# remote/infra path so it folds into `remote-write`; infra-mutation and destructive
+# actions fold into `dangerous`; and the old external-publish overlay is dropped —
+# redaction is an enforced `gate`-tier narrator handoff in the allowlist, not a
+# taxonomy category.
 RISK_TAXONOMY: dict[str, dict[str, str]] = {
     "read": {"guarded": "allow", "strict": "allow"},
     "local-write": {"guarded": "allow", "strict": "allow"},
@@ -253,12 +254,12 @@ TOOL_RISK_MAP: dict[str, str] = {
     "read .env": "remote-write",
 }
 
-# Per-agent allowlist (ADR-0010 D4): agent -> {category: True}. A category absent
+# Per-agent allowlist: agent -> {category: True}. A category absent
 # for an agent is denied for that agent (deny-by-default). dict-of-dicts so user
 # tweaks deep-merge. Encodes the single-pusher invariant structurally: devops is the
 # sole holder of `remote-write` and `dangerous`. The narrator is first-class —
 # {read, local-write} like pm/engineer — and reaches `remote-write` only via the
-# `gate`-tier redaction handoff to devops (D5), never by holding the category.
+# `gate`-tier redaction handoff to devops, never by holding the category.
 AGENT_ALLOWLIST: dict[str, dict[str, bool]] = {
     "maestro": {"read": True},
     "architect": {"read": True},
@@ -266,6 +267,7 @@ AGENT_ALLOWLIST: dict[str, dict[str, bool]] = {
     "pm": {"read": True, "local-write": True},
     "narrator": {"read": True, "local-write": True},
     "engineer": {"read": True, "local-write": True},
+    "security": {"read": True, "local-write": True},
     "devops": {
         "read": True,
         "local-write": True,
@@ -276,7 +278,7 @@ AGENT_ALLOWLIST: dict[str, dict[str, bool]] = {
 
 
 # ──────────────────────────────────────────────────────────────────────────────
-# Per-agent model (ADR-0010 D2 / RFC-0005 §2)
+# Per-agent model
 # ──────────────────────────────────────────────────────────────────────────────
 # MODEL LAUNCH — KEEP IN SYNC. The Carter→target model-name table: one home for the
 # canonical Anthropic model id ⇄ the per-target string Carter emits (display name for
@@ -294,7 +296,7 @@ MODEL_NAMES: dict[str, dict[str, str]] = {
     "claude-haiku-4-5": {"copilot": "Claude Haiku 4.5", "opencode": "anthropic/claude-haiku-4-5"},
 }
 
-# Role → model tier (ADR-0010 D2). Thinkers run the documentation-authoring agents on
+# Role → model tier. Thinkers run the documentation-authoring agents on
 # the high-reasoning model; implementers run the cheaper one. A role in no tier
 # resolves to `models.default` (the un-tiered catch-all) so it never resolves empty.
 MODEL_TIERS: dict[str, str] = {
@@ -303,6 +305,7 @@ MODEL_TIERS: dict[str, str] = {
     "pm": "thinkers",
     "learner": "thinkers",
     "narrator": "thinkers",
+    "security": "thinkers",
     "engineer": "implementers",
     "devops": "implementers",
 }
@@ -370,13 +373,13 @@ def effective_allowlist(config: dict[str, Any]) -> dict[str, dict[str, bool]]:
 
 
 # ──────────────────────────────────────────────────────────────────────────────
-# Per-target frontmatter emission (RFC-0002 / ADR-0005, P2)
+# Per-target frontmatter emission
 # ──────────────────────────────────────────────────────────────────────────────
 # Carter is a scaffolder, not a runtime: it emits the per-agent allowlist + gates
 # into agent frontmatter using the most authoritative native primitive per target,
 # with a deterministic, target-agnostic `policy:` block as the source of truth the
-# P3 lint validates. Per-agent MCP scope lives here (agent frontmatter), never in
-# the global `configure_mcp_servers` wiring.
+# policy lint validates. Per-agent MCP scope lives here (agent frontmatter), never
+# in the global `configure_mcp_servers` wiring.
 
 # Per-agent MCP server scope, mirroring each static agent's <mcp> block. Feeds the
 # copilot/VS Code `tools:` allowlist alongside the policy-derived file tools below.
@@ -390,9 +393,10 @@ AGENT_MCP_SCOPE: dict[str, list[str]] = {
     "pm": ["atlassian", "github"],
     "learner": ["atlassian"],
     "narrator": [],
+    "security": ["github"],
 }
 
-# Built-in VS Code / Copilot tools each policy category grants (ADR-0011). The
+# Built-in VS Code / Copilot tools each policy category grants. The
 # copilot `tools:` key is a REPLACING allowlist — the host's default file tools are
 # available only if listed — so Carter must enumerate the file tools the agent's
 # policy implies, or the agent (and the chain it delegates to) loses the filesystem.
@@ -429,7 +433,7 @@ _BASH_COMMANDS: dict[str, tuple[str, ...]] = {
 }
 
 # Human-readable label per risk category, for the maestro policy gate table. With
-# the 4-category taxonomy (ADR-0010 D4) the id IS the label.
+# the 4-category taxonomy the id IS the label.
 RISK_LABELS: dict[str, str] = {
     "read": "read",
     "local-write": "local-write",
@@ -495,11 +499,11 @@ def _gates_for(
 
 
 # The primary orchestrator (the only router) and the subagent dispatch primitive.
-# Native subagent dispatch (ADR-0010 D1) is emitted ONLY on the primary, as an
-# EXPLICIT per-specialist allowlist — never `'*'` and never a `carter-*` glob (D1.2,
-# a security boundary: a glob auto-trusts any future `carter-*` agent; `'*'` lets the
-# maestro delegate to any workspace agent, failure-open). The chain is flat — every
-# specialist carries `agents: []` (D1.3) so the maestro is the only router.
+# Native subagent dispatch is emitted ONLY on the primary, as an
+# EXPLICIT per-specialist allowlist — never `'*'` and never a `carter-*` glob
+# (a security boundary: a glob auto-trusts any future `carter-*` agent; `'*'` lets
+# the maestro delegate to any workspace agent, failure-open). The chain is flat —
+# every specialist carries `agents: []` so the maestro is the only router.
 PRIMARY_ROLE = "maestro"
 
 
@@ -519,7 +523,7 @@ def dispatch_specialists(config: dict[str, Any]) -> list[str]:
     """The explicit per-specialist dispatch allowlist for the primary (sorted).
 
     Every configured agent except the primary, as suffixed ``carter-<role>`` names.
-    This is the security boundary the fail-closed lint validates (D1.2).
+    This is the security boundary the fail-closed lint validates.
     """
     return sorted(
         _suffixed_agent(role, config) for role in config.get("agents", []) if role != PRIMARY_ROLE
@@ -532,11 +536,11 @@ def policy_native_keys(config: dict[str, Any], role: str) -> dict[str, Any]:
     ``tools`` (copilot/all): the policy-derived file tools (``read`` →
     ``codebase``/``search``/``usages``/``fetch``; ``local-write`` → ``editFiles``)
     plus the per-agent MCP server scope; the primary additionally carries the
-    ``agent`` subagent tool (ADR-0011 — ``tools`` is a replacing allowlist, so the
+    ``agent`` subagent tool (``tools`` is a replacing allowlist, so the
     file tools the policy implies MUST be listed or the agent loses the filesystem).
     ``agents``/``handoffs``
     (copilot/all): native subagent dispatch — an EXPLICIT per-specialist allowlist on
-    the primary, ``[]`` on every specialist (flat chain, D1.3). ``permission``
+    the primary, ``[]`` on every specialist (flat chain). ``permission``
     (opencode/all): the best-effort native gate map; the primary's also carries a
     ``task`` allowlist (``'*': deny`` + explicit per-specialist ``allow``). Pure
     function of the model + target — the single source both ``policy_frontmatter``
@@ -551,7 +555,7 @@ def policy_native_keys(config: dict[str, Any], role: str) -> dict[str, Any]:
     specialists = dispatch_specialists(config)
 
     keys: dict[str, Any] = {}
-    # Per-agent model (D2): a SINGLE per-target string on every agent, resolved
+    # Per-agent model: a SINGLE per-target string on every agent, resolved
     # overrides > tier > default. Emitted for all targets (the value's shape is
     # target-specific). `carter check` prints the unverifiable-model advisory.
     model = resolve_model(config, role)
@@ -559,7 +563,7 @@ def policy_native_keys(config: dict[str, Any], role: str) -> dict[str, Any]:
         keys["model"] = model
     if target in ("copilot", "all"):
         scope = [f"carter-{server}/*" for server in sorted(AGENT_MCP_SCOPE.get(role, []))]
-        # Policy-derived file tools (ADR-0011): `tools:` is a replacing allowlist, so
+        # Policy-derived file tools: `tools:` is a replacing allowlist, so
         # the file tools the agent's policy implies MUST be listed or the agent — and
         # the chain the maestro delegates to — loses the filesystem. Order: `agent`
         # (primary dispatch) → file tools (policy order: read, local-write) → MCP scope.
@@ -570,7 +574,7 @@ def policy_native_keys(config: dict[str, Any], role: str) -> dict[str, Any]:
             keys["tools"] = tools
         # Native dispatch allowlist (VS Code/Copilot): explicit on the primary, empty
         # on every specialist (flat one-level chain). `handoffs:` is the user-approved
-        # confirm surface for the same delegation set (D1.1).
+        # confirm surface for the same delegation set.
         if is_primary:
             # Independent list copies so YAML emits each inline (no &anchor/*alias
             # that a downstream parser/editor might choke on).
@@ -582,7 +586,7 @@ def policy_native_keys(config: dict[str, Any], role: str) -> dict[str, Any]:
         permission = _opencode_permission(allowed, gates)
         if is_primary:
             # OpenCode `permission.task`: fail-closed `'*': deny` + an explicit allow
-            # per specialist (never a `carter-*` glob — D1.2).
+            # per specialist (never a `carter-*` glob).
             permission["task"] = {"*": "deny", **dict.fromkeys(specialists, "allow")}
         keys["permission"] = permission
     return keys
@@ -595,12 +599,12 @@ def policy_frontmatter(config: dict[str, Any], role: str) -> str:
 
     - ``policy``: the deterministic, target-agnostic source of truth — the agent's
       allowed risk categories and the active level's gate per allowed category.
-      Always emitted; this is what the P3 lint validates.
+      Always emitted; this is what the policy lint validates.
     - ``tools`` (copilot/all targets): the per-agent MCP server scope, when any.
     - ``permission`` (opencode/all targets): the best-effort native map.
 
-    The P2->P3 gate is open (step 9): ``strict`` emits its real gate map, gated
-    operationally by the `carter check` hard ack on a non-enforcing target.
+    ``strict`` emits its real gate map, gated operationally by the `carter check`
+    hard ack on a non-enforcing target.
     """
     policy = config.get("policy") or {}
     level = policy.get("level", "guarded")
@@ -621,7 +625,7 @@ def policy_frontmatter(config: dict[str, Any], role: str) -> str:
 def policy_gate_table(config: dict[str, Any]) -> list[dict[str, str]]:
     """Rows for the maestro's always-on risk/gate table at the active level.
 
-    One row per category (the 4-category taxonomy, ADR-0010 D4): ``category`` id,
+    One row per category (the 4-category taxonomy): ``category`` id,
     human ``label``, and the active level's ``gate`` with any ``policy.overrides``
     applied. ``strict`` shows the real ``deny`` row for ``dangerous``.
     """
@@ -644,7 +648,7 @@ def generate_default_config(
         "description": "",
         "mode": mode,
     }
-    # ADR-0010 D3: `guarded` is the floor and the DEFAULT_CONFIG value, so new
+    # `guarded` is the floor and the DEFAULT_CONFIG value, so new
     # installs and existing/omitted configs both resolve to it — no per-install bump.
     return config
 

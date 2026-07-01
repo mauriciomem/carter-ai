@@ -204,7 +204,7 @@ and `dangerous` (the single pusher); the narrator is first-class (`read` +
 | Agent | Allowed categories |
 |-------|--------------------|
 | maestro, architect, learner | read |
-| pm, narrator, engineer | read, local-write |
+| pm, narrator, engineer, security | read, local-write |
 | devops | read, local-write, remote-write, dangerous |
 
 **Per-agent emitted frontmatter (P2).** Carter emits the allowlist + gates into
@@ -242,8 +242,8 @@ router. The emitted names honor `agent_suffix` (e.g. `carter-engineer-local`).
 ```yaml
 # maestro, copilot target  (tools: is policy-derived — agent + read file tools, ADR-0011)
 tools: [agent, codebase, search, usages, fetch]
-agents: [carter-architect, carter-devops, carter-engineer, carter-learner, carter-narrator, carter-pm]
-handoffs: [carter-architect, carter-devops, carter-engineer, carter-learner, carter-narrator, carter-pm]
+agents: [carter-architect, carter-devops, carter-engineer, carter-learner, carter-narrator, carter-pm, carter-security]
+handoffs: [carter-architect, carter-devops, carter-engineer, carter-learner, carter-narrator, carter-pm, carter-security]
 # maestro, opencode target
 permission:
   task: {'*': deny, carter-architect: allow, carter-devops: allow, ...}

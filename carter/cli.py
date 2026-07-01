@@ -244,7 +244,7 @@ def check(target_dir: str, accept_degraded: bool) -> None:
         if not (knowledge_dir / filename).exists():
             errors.append(f"Missing knowledge file: .carter/knowledge/{filename}")
 
-    # Validate plan frontmatter contract (ADR-0003); thresholds from config
+    # Validate plan frontmatter contract; thresholds from config
     plans_root = target / ".carter" / "state" / "plans"
     errors.extend(validate_plans_dir(plans_root, config.get("plans")))
 
@@ -253,7 +253,7 @@ def check(target_dir: str, accept_degraded: bool) -> None:
     checkpoint = target / ".carter" / "state" / "sessions" / "checkpoint.md"
     errors.extend(validate_checkpoint(checkpoint, plans_root))
 
-    # Lint emitted policy frontmatter against the declared model (P3, ADR-0005).
+    # Lint emitted policy frontmatter against the declared model.
     policy_errors, policy_warnings = lint_policy(config, installed, accept_degraded=accept_degraded)
     errors.extend(policy_errors)
 
@@ -266,7 +266,7 @@ def check(target_dir: str, accept_degraded: bool) -> None:
     for warning in [*config_warnings(config), *policy_warnings]:
         click.echo(f"⚠  {warning}", err=True)
 
-    # Required unverifiable-model advisory (ADR-0010 D2.3) — always printed.
+    # Required unverifiable-model advisory — always printed.
     click.echo(f"ℹ  {model_advisory(config)}")
 
     click.echo("Workspace OK")

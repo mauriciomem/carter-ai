@@ -300,10 +300,11 @@ class TestAgentValidation:
             "pm",
             "learner",
             "narrator",
+            "security",
         ]
         # Should not raise
         results = render_agents(default_config, env)
-        assert len(results) == 7
+        assert len(results) == 8
 
 
 # ─── Scaffold Tests ──────────────────────────────────────────────────────────
@@ -1060,7 +1061,7 @@ class TestInitFlags:
 # ─── Risk-Based Strictness Policy Frontmatter (P2 / ADR-0005) ────────────────
 
 
-_ALL_ROLES = ["maestro", "architect", "engineer", "devops", "pm", "learner", "narrator"]
+_ALL_ROLES = ["maestro", "architect", "engineer", "devops", "pm", "learner", "narrator", "security"]
 
 
 def _policy_config(level: str = "guarded", target: str = "copilot") -> dict:

@@ -194,6 +194,38 @@ class TestMaestroInjectionGuard:
             )
 
 
+class TestSecurityAgentBoundaries:
+    """The security agent reads the most attacker-controlled text, so its
+    authorization posture and untrusted-input boundary are asserted over BOTH
+    sources (static + template) as fixed-phrase greps — brittle-but-precise."""
+
+    def _both(self, static_agents_dir: Path, template_agents_dir: Path) -> dict[str, str]:
+        return {
+            "static": (static_agents_dir / "carter-security.md").read_text(),
+            "template": (template_agents_dir / "carter-security.md.j2").read_text(),
+        }
+
+    def test_authorization_posture_in_both_sources(
+        self, static_agents_dir: Path, template_agents_dir: Path
+    ) -> None:
+        for source, body in self._both(static_agents_dir, template_agents_dir).items():
+            lower = body.lower()
+            assert "authorized" in lower, f"security {source}: missing 'authorized'"
+            assert "refuse" in lower or "decline" in lower, f"security {source}: no refuse/decline"
+            assert "destructive" in lower, f"security {source}: missing 'destructive'"
+            assert "mass targeting" in lower, f"security {source}: missing 'mass targeting'"
+
+    def test_untrusted_input_in_both_sources(
+        self, static_agents_dir: Path, template_agents_dir: Path
+    ) -> None:
+        for source, body in self._both(static_agents_dir, template_agents_dir).items():
+            lower = body.lower()
+            assert "data to analyze" in lower, f"security {source}: missing untrusted-input guard"
+            assert "never as instructions" in lower or "not as instructions" in lower, (
+                f"security {source}: missing 'never instructions to act on'"
+            )
+
+
 class TestNarratorParity:
     """The narrator's security contract must be identical in spirit across sources."""
 
