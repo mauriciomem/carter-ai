@@ -2,6 +2,33 @@
 
 <!-- version list -->
 
+## v0.3.0 (2026-07-01)
+
+### Chores
+
+- Make source comments plan-agnostic (drop ADR/RFC/plan citations)
+  ([`6334c19`](https://github.com/mauriciomem/carter-ai/commit/6334c196971e26c73aa5e2627e8107c10f87632b))
+
+### Documentation
+
+- Add ADR-0013, RFC-0006, withdraw RFC-0003
+  ([`b8fd3a0`](https://github.com/mauriciomem/carter-ai/commit/b8fd3a041740eed807d058551c7a7aee2ba77fd8))
+
+- Update frontmatter.md and README for 8th agent (M5)
+  ([`30e38d4`](https://github.com/mauriciomem/carter-ai/commit/30e38d455dacde556ed923009d6605ba725e1ccb))
+
+### Features
+
+- Add 5-skill security bundle (M4)
+  ([`1cd9e49`](https://github.com/mauriciomem/carter-ai/commit/1cd9e49d30c315e8a462c87997390864417fdd3e))
+
+- Add boundary tests + per-agent roster rows (M3)
+  ([`9f09da6`](https://github.com/mauriciomem/carter-ai/commit/9f09da67b517619ee314079201d61255a1b84231))
+
+- Add carter-security as 8th first-class agent (M1+M2)
+  ([`b319ed7`](https://github.com/mauriciomem/carter-ai/commit/b319ed739e58abd41d673612ffd86e5ca84c6ae1))
+
+
 ## v0.2.2 (2026-06-29)
 
 ### Bug Fixes
