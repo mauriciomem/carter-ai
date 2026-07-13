@@ -29,6 +29,7 @@ class TestInstallAgents:
             "carter-maestro.md",
             "carter-narrator.md",
             "carter-pm.md",
+            "carter-security.md",
         ]
         actual = sorted(f.name for f in agents_dir.glob("carter-*.md"))
         assert actual == expected
@@ -41,7 +42,7 @@ class TestInstallAgents:
         agents_dir = base_dir / "opencode" / "agents"
         assert agents_dir.exists()
         actual = sorted(f.name for f in agents_dir.glob("carter-*.md"))
-        assert len(actual) == 7
+        assert len(actual) == 8
 
     def test_opencode_agents_are_permission_shaped_not_tools_array(self, base_dir: Path) -> None:
         """OpenCode rejects the copilot ``tools:`` ARRAY ("Expected object | undefined,
@@ -93,16 +94,16 @@ class TestInstallAgents:
 
         copilot_agents = list((base_dir / "copilot" / "agents").glob("carter-*.md"))
         opencode_agents = list((base_dir / "opencode" / "agents").glob("carter-*.md"))
-        assert len(copilot_agents) == 7
-        assert len(opencode_agents) == 7
+        assert len(copilot_agents) == 8
+        assert len(opencode_agents) == 8
 
     def test_manifest_tracks_files(self, base_dir: Path) -> None:
         manifest = {"files": [], "file_hashes": {}}
         backup = base_dir / "backup"
         install.install_agents(["copilot"], base_dir, manifest, backup)
 
-        assert len(manifest["files"]) == 7
-        assert len(manifest["file_hashes"]) == 7
+        assert len(manifest["files"]) == 8
+        assert len(manifest["file_hashes"]) == 8
         for h in manifest["file_hashes"].values():
             assert h.startswith("sha256:")
 
@@ -117,7 +118,7 @@ class TestInstallSkills:
         assert skills_dir.exists()
 
         skill_dirs = sorted(d.name for d in skills_dir.iterdir() if d.is_dir())
-        assert len(skill_dirs) == 23
+        assert len(skill_dirs) == 28
         for d in skill_dirs:
             assert d.startswith("carter-")
             assert (skills_dir / d / "SKILL.md").exists()
@@ -144,7 +145,7 @@ class TestInstallSkills:
 
         skills_dir = base_dir / "opencode" / "skills"
         skill_dirs = sorted(d.name for d in skills_dir.iterdir() if d.is_dir())
-        assert len(skill_dirs) == 23
+        assert len(skill_dirs) == 28
 
 
 class TestInstallInstructions:
@@ -210,7 +211,7 @@ class TestIdempotency:
         manifest2 = {"files": [], "file_hashes": {}}
         stats = install.install_agents(["copilot"], base_dir, manifest2, backup)
 
-        assert stats["unchanged"] == 7
+        assert stats["unchanged"] == 8
         assert stats["created"] == 0
         assert stats["updated"] == 0
 
@@ -501,7 +502,7 @@ class TestUninstall:
 
         # Verify files exist
         agents_dir = base_dir / "copilot" / "agents"
-        assert len(list(agents_dir.glob("carter-*.md"))) == 7
+        assert len(list(agents_dir.glob("carter-*.md"))) == 8
 
         # Uninstall
         install.uninstall(["copilot"], base_dir, {})
