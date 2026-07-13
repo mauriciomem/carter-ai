@@ -50,13 +50,31 @@ def load_scenario(path: Path, name: str) -> dict:
     raise KeyError(f"scenario {name!r} not found in {path}")
 
 
+def _scoped(transcript: str, marker: str) -> str:
+    """The transcript slice AFTER the last occurrence of ``marker`` (case-insensitive).
+
+    Used to grade an item against only the delimited FINAL artifact (e.g. the outward
+    release note the narrator emits) rather than the whole transcript, so an agent's
+    internal reasoning — a redaction audit that legitimately restates original values —
+    does not count against an ``evidence_none`` leak check. If the marker is absent, the
+    slice is empty: the artifact wasn't produced in the required delimited form, so an
+    ``evidence_any`` fails and an ``evidence_none`` trivially holds over empty text — the
+    caller pairs the scoped leak check with an unscoped "marker present" must_have.
+    """
+    idx = transcript.lower().rfind(marker.lower())
+    return "" if idx == -1 else transcript[idx + len(marker) :]
+
+
 def _satisfied(item: dict, transcript: str) -> bool:
     """Whether a single gradeable item's evidence condition holds against ``transcript``.
 
     Case-insensitive substring matching. Exactly one of ``evidence_any`` /
-    ``evidence_all`` / ``evidence_none`` is expected per item.
+    ``evidence_all`` / ``evidence_none`` is expected per item. An optional ``scope``
+    marker restricts matching to the transcript slice after that marker's last occurrence
+    (grade only the delimited final artifact).
     """
-    hay = transcript.lower()
+    text = _scoped(transcript, item["scope"]) if "scope" in item else transcript
+    hay = text.lower()
     if "evidence_any" in item:
         return any(p.lower() in hay for p in item["evidence_any"])
     if "evidence_all" in item:

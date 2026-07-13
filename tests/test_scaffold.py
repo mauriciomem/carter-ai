@@ -1350,3 +1350,40 @@ class TestConfigureMcpServersUnchanged:
         opencode_cfg = json.loads((tmp_path / "opencode" / "opencode.json").read_text())
         for role in _ALL_ROLES:
             assert role not in opencode_cfg["mcp"]
+
+
+class TestInitProfileFlag:
+    """`carter init --profile` seeds the cost profile into the scaffolded carter.yaml and
+    it flows through to the rendered agent models (RFC-0004 lever 1 / plan 007).
+    """
+
+    def _run(self, tmp_path, *args):
+        from click.testing import CliRunner
+
+        from carter.cli import main
+
+        return CliRunner().invoke(main, ["init", str(tmp_path), *args])
+
+    def test_quality_profile_seeds_key_and_renders_opus(self, tmp_path):
+        result = self._run(tmp_path, "--profile", "quality")
+        assert result.exit_code == 0, result.output
+        cfg = load_config(tmp_path / ".carter" / "carter.yaml")
+        assert cfg["profile"] == "quality"
+        # narrator (default Sonnet) is lifted to Opus under quality in the rendered file.
+        narrator = (tmp_path / ".github" / "agents" / "carter-narrator-local.md").read_text()
+        assert "model: Claude Opus 4.8" in narrator
+
+    def test_default_init_has_no_profile_key(self, tmp_path):
+        result = self._run(tmp_path)
+        assert result.exit_code == 0, result.output
+        cfg = load_config(tmp_path / ".carter" / "carter.yaml")
+        assert cfg.get("profile") is None
+        # narrator ships on Sonnet by default.
+        narrator = (tmp_path / ".github" / "agents" / "carter-narrator-local.md").read_text()
+        assert "model: Claude Sonnet 4.6" in narrator
+
+    def test_invalid_profile_is_rejected(self, tmp_path):
+        result = self._run(tmp_path, "--profile", "cheapest")
+        assert result.exit_code != 0
+        # click.Choice rejects it before any scaffolding happens.
+        assert not (tmp_path / ".carter").exists()

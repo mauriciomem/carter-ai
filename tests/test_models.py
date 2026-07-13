@@ -2,8 +2,11 @@
 
 Carter pins a per-target `model:` string on each agent, resolved from a dedicated
 `models:` block by `overrides > tier > default` (D2.1). Thinkers (maestro, architect,
-pm, learner, narrator) = Opus 4.8; implementers (engineer, devops) = Sonnet 4.6; Haiku
-is opt-in via `overrides` only. The emitted value is a SINGLE string (an array breaks
+learner, security) = Opus 4.8; implementers (engineer, devops, pm, narrator) = Sonnet
+4.6 — pm + narrator moved off Opus by default per RFC-0004 lever 1 / plan 007 (both
+cleared the adherence gate on Sonnet). Haiku is opt-in via `overrides` only. The
+`profile:` key (quality|budget) can re-tier at resolve time. The emitted value is a
+SINGLE string (an array breaks
 Copilot CLI): a display name for VS Code/Copilot, a `provider/model` ID for OpenCode.
 A Carter→target model-name table (with a `MODEL LAUNCH` sync marker + a non-empty-per-role
 test) prevents a model rename from silently producing a dead agent. `carter check`
@@ -26,8 +29,9 @@ from carter.config import (
     resolve_model,
 )
 
-THINKERS = ("maestro", "architect", "pm", "learner", "narrator")
-IMPLEMENTERS = ("engineer", "devops")
+# Default tiers after RFC-0004 lever 1 / plan 007: pm + narrator ship on Sonnet.
+THINKERS = ("maestro", "architect", "learner", "security")
+IMPLEMENTERS = ("engineer", "devops", "pm", "narrator")
 
 
 def _config(target: str = "copilot") -> dict:
@@ -95,6 +99,17 @@ class TestResolveModel:
         for role in IMPLEMENTERS:
             assert resolve_model(cfg, role) == "Claude Sonnet 4.6", role
 
+    def test_narrator_and_pm_default_to_sonnet(self):
+        # RFC-0004 lever 1 / plan 007: pm + narrator ship on Sonnet by DEFAULT (both
+        # cleared the adherence gate). A regression here re-inflates the Opus bill.
+        for target, sonnet in (
+            ("copilot", "Claude Sonnet 4.6"),
+            ("opencode", "anthropic/claude-sonnet-4-6"),
+        ):
+            cfg = _config(target=target)
+            assert resolve_model(cfg, "narrator") == sonnet, f"narrator/{target}"
+            assert resolve_model(cfg, "pm") == sonnet, f"pm/{target}"
+
     def test_opencode_resolves_provider_id(self):
         cfg = _config(target="opencode")
         assert resolve_model(cfg, "maestro") == "anthropic/claude-opus-4-8"
@@ -119,6 +134,61 @@ class TestResolveModel:
         # Override beats tier.
         cfg["models"]["overrides"] = {"engineer": {"copilot": "Claude Haiku 4.5"}}
         assert resolve_model(cfg, "engineer") == "Claude Haiku 4.5"
+
+
+# ─── Cost profiles: overrides > profile > tier > default (plan 007 / OQ10) ────
+
+
+class TestProfileResolution:
+    OPUS = "Claude Opus 4.8"
+    SONNET = "Claude Sonnet 4.6"
+
+    def test_quality_profile_puts_everyone_on_opus(self):
+        # `quality` restores the pre-RFC-0004 default: all agents, incl. the now-cheap
+        # narrator/pm, resolve to Opus.
+        cfg = _config(target="copilot")
+        cfg["profile"] = "quality"
+        for role in (
+            "maestro",
+            "architect",
+            "engineer",
+            "devops",
+            "pm",
+            "narrator",
+            "learner",
+            "security",
+        ):
+            assert resolve_model(cfg, role) == self.OPUS, role
+
+    def test_budget_profile_moves_learner_to_sonnet(self):
+        # `budget` = the cheaper default PLUS learner → Sonnet. narrator/pm are already
+        # Sonnet by default; maestro/architect/security stay Opus.
+        cfg = _config(target="copilot")
+        cfg["profile"] = "budget"
+        assert resolve_model(cfg, "learner") == self.SONNET
+        assert resolve_model(cfg, "narrator") == self.SONNET
+        assert resolve_model(cfg, "pm") == self.SONNET
+        assert resolve_model(cfg, "maestro") == self.OPUS
+        assert resolve_model(cfg, "security") == self.OPUS
+
+    def test_absent_profile_uses_default_tiers(self):
+        cfg = _config(target="copilot")  # no profile key
+        assert resolve_model(cfg, "narrator") == self.SONNET  # default: implementer
+        assert resolve_model(cfg, "maestro") == self.OPUS  # default: thinker
+
+    def test_precedence_overrides_beats_profile_beats_tier(self):
+        cfg = _config(target="copilot")
+        # profile beats base tier: quality lifts narrator (default Sonnet) to Opus.
+        cfg["profile"] = "quality"
+        assert resolve_model(cfg, "narrator") == self.OPUS
+        # an explicit override beats the profile.
+        cfg["models"]["overrides"] = {"narrator": {"copilot": "Claude Haiku 4.5"}}
+        assert resolve_model(cfg, "narrator") == "Claude Haiku 4.5"
+
+    def test_profile_resolves_on_opencode_target_too(self):
+        cfg = _config(target="opencode")
+        cfg["profile"] = "quality"
+        assert resolve_model(cfg, "narrator") == "anthropic/claude-opus-4-8"
 
 
 # ─── The Carter→target model-name table (MODEL LAUNCH sync marker) ────────────

@@ -128,7 +128,8 @@ workspace.
 | Config key | Effect |
 |------------|--------|
 | `policy.level` | Risk-based strictness: `guarded` / `strict` (pre-action gates) |
-| `models` | Per-agent model by tier (thinkers = Opus, implementers = Sonnet; `overrides > tier > default`) |
+| `models` | Per-agent model by tier (thinkers = Opus; implementers = Sonnet, incl. pm + narrator; `overrides > profile > tier > default`) |
+| `profile` | Cost profile: `quality` (all Opus) or `budget` (Sonnet where safe). See [docs/reference/cost-and-models.md](docs/reference/cost-and-models.md) |
 | `personality.skepticism` | How much Carter challenges your decisions |
 | `quality_gate.enabled` | Multi-agent review before push |
 | `tdd.strict` | Force test-first workflow |
