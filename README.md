@@ -64,6 +64,13 @@ code, architect for design) that report findings by severity — 🚨 Blocking,
 copilot --agent carter-maestro -p "@carter-devops write a Terraform module for S3" --allow-all
 ```
 
+**Spend fewer tokens per task.** Each maestro hand-off re-sends context, so when you
+already know the domain, **`@`-mention the specialist directly** (e.g. `@carter-engineer`)
+to skip the routing hop. Give complete context up front — Carter's spec/TDD-first posture
+exists to avoid ambiguous → wrong → redo loops — and ask an agent to **read the files it
+needs in one batch** rather than one-at-a-time round-trips. See
+[docs/reference/cost-and-models.md](docs/reference/cost-and-models.md).
+
 ## Architecture
 
 ```
@@ -192,9 +199,33 @@ Configured by `carter install --mcp` into VS Code, Copilot CLI, and OpenCode:
 
 | Server | Purpose |
 |--------|---------|
-| `carter-github` | Repos, PRs, issues, Actions |
+| `carter-github` | Repos, PRs, issues (read-only) |
 | `carter-terraform` | Terraform configs, state, plans |
 | `carter-atlassian` | Jira issues, Confluence pages |
+
+**Install only what you use.** MCP tool schemas are the largest per-request token
+surface, so a workspace should wire only the servers it needs:
+
+```bash
+carter install --mcp --mcp-servers github          # just GitHub
+carter install --mcp --mcp-servers github,terraform # GitHub + Terraform
+carter install --mcp                                 # all three (default)
+```
+
+An unused server adds **zero** tool-schema tokens.
+
+**GitHub server — official, Docker, read-only.** `carter-github` runs the official
+[`github/github-mcp-server`](https://github.com/github/github-mcp-server) via Docker
+(digest-pinned), in **read-only** mode with a surgical tool allowlist. This needs a
+running **Docker daemon** (the no-Docker alternative is the server's remote-HTTP
+transport at `https://api.githubcopilot.com/mcp/`, not wired by default). Set
+`GITHUB_TOKEN` before use.
+
+> **"Read-only" is MCP-surface only.** It removes GitHub *write tools* from the model's
+> MCP surface — it does **not** mean Carter can't write to GitHub. Shell `gh`/`git`
+> writes use the same token and remain governed by the risk-based strictness policy
+> ([RFC-0002](docs/rfcs/0002-risk-based-strictness-policy/README.md)): devops is the sole
+> pusher, gated per its allowlist. "Read-only" ≠ "cannot write."
 
 ## Development
 
@@ -202,7 +233,7 @@ Configured by `carter install --mcp` into VS Code, Copilot CLI, and OpenCode:
 git clone https://github.com/mauriciomem/carter-ai.git && cd carter-ai
 uv venv && source .venv/bin/activate
 uv pip install -e ".[dev]"
-python -m pytest tests/ -q          # 467 tests
+python -m pytest tests/ -q          # unit tests (offline)
 ```
 
 The suite (installer, scaffold, parity, carter-ops) runs on every push and PR via
