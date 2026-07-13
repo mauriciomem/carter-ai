@@ -7,6 +7,14 @@ dist/
 build/
 *.egg
 
+# Build artifact: the wheel's force-include (pyproject [tool.hatch.build.targets.wheel])
+# maps the top-level agents/skills/templates/... into carter/_data/ AT BUILD TIME, and a
+# dev editable-install populates it locally. It must NOT be tracked — a committed
+# carter/_data/ shadows the force-include (wheel-build path collision) AND makes
+# resources.py resolve to a half-populated dir on a clean checkout (ADR-0006 / the
+# editable-install gotcha).
+/carter/_data/
+
 # Virtual environments
 .venv/
 venv/
