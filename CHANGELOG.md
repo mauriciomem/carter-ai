@@ -2,6 +2,29 @@
 
 <!-- version list -->
 
+## v0.4.0 (2026-07-13)
+
+### Bug Fixes
+
+- **build**: Stop tracking carter/_data/ — it shadows the wheel force-include
+  ([`2769c89`](https://github.com/mauriciomem/carter-ai/commit/2769c89a75c156abbdb20a2c346adf2f309bfd56))
+
+### Code Style
+
+- **007**: Apply ruff format to eval + test files
+  ([`da7d4d4`](https://github.com/mauriciomem/carter-ai/commit/da7d4d47791829b903f7804ca610f71e2797fec8))
+
+### Features
+
+- **007**: Model-tier discipline — narrator+pm to Sonnet + profile knob
+  ([`a21289c`](https://github.com/mauriciomem/carter-ai/commit/a21289c3b8f8591896ea4a212cad12c2f24204b5))
+
+### Testing
+
+- **install**: Update stale agent/skill counts (7→8, 23→28)
+  ([`41ee8aa`](https://github.com/mauriciomem/carter-ai/commit/41ee8aa5b2b82777d1990a89c70544152dcdb648))
+
+
 ## v0.3.0 (2026-07-01)
 
 ### Chores
