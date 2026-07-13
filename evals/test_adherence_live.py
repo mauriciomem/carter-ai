@@ -35,12 +35,17 @@ _FIXTURES = Path(__file__).resolve().parent / "fixtures"
 # (scenario_file, scenario_name, fixture_file) — the downgrade-gate registry, mirroring
 # evals/test_adherence.py. Each agent moving to Sonnet by default records one fixture.
 _DOWNGRADE_SCENARIOS = [
-    ("implementer_adherence.yaml", "implementer_adherence_token_bucket",
-     "implementer_adherence_sonnet.json"),
-    ("narrator_adherence.yaml", "narrator_adherence_release_note",
-     "narrator_adherence_sonnet.json"),
-    ("pm_adherence.yaml", "pm_adherence_project_plan",
-     "pm_adherence_sonnet.json"),
+    (
+        "implementer_adherence.yaml",
+        "implementer_adherence_token_bucket",
+        "implementer_adherence_sonnet.json",
+    ),
+    (
+        "narrator_adherence.yaml",
+        "narrator_adherence_release_note",
+        "narrator_adherence_sonnet.json",
+    ),
+    ("pm_adherence.yaml", "pm_adherence_project_plan", "pm_adherence_sonnet.json"),
 ]
 
 
@@ -102,14 +107,11 @@ class TestLiveDowngradeAdherence:
             f"bar; missed: {result.failed_ids}"
         )
         assert result.critical_failures == 0, (
-            f"{scenario_name}: live Sonnet run has critical-step failures: "
-            f"{result.failed_ids}"
+            f"{scenario_name}: live Sonnet run has critical-step failures: {result.failed_ids}"
         )
 
 
-def _record_fixture(
-    scenario_name: str, fixture_file: str, transcript: str, result
-) -> None:  # noqa: ANN001 — AdherenceResult
+def _record_fixture(scenario_name: str, fixture_file: str, transcript: str, result) -> None:  # noqa: ANN001 — AdherenceResult
     """Overwrite a scenario's recorded fixture with the fresh live transcript + grade.
 
     The stored ``model`` is the CANONICAL Carter id (``claude-sonnet-4-6``, hyphen), which

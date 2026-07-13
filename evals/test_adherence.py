@@ -31,12 +31,17 @@ _SCENARIO_NAME = "implementer_adherence_token_bucket"
 # fixture. `(scenario_file, scenario_name, fixture_file)`. The engineer entry is the
 # pre-existing implementer eval; narrator/pm are added by plan 007.
 _DOWNGRADE_SCENARIOS = [
-    ("implementer_adherence.yaml", "implementer_adherence_token_bucket",
-     "implementer_adherence_sonnet.json"),
-    ("narrator_adherence.yaml", "narrator_adherence_release_note",
-     "narrator_adherence_sonnet.json"),
-    ("pm_adherence.yaml", "pm_adherence_project_plan",
-     "pm_adherence_sonnet.json"),
+    (
+        "implementer_adherence.yaml",
+        "implementer_adherence_token_bucket",
+        "implementer_adherence_sonnet.json",
+    ),
+    (
+        "narrator_adherence.yaml",
+        "narrator_adherence_release_note",
+        "narrator_adherence_sonnet.json",
+    ),
+    ("pm_adherence.yaml", "pm_adherence_project_plan", "pm_adherence_sonnet.json"),
 ]
 
 
@@ -216,10 +221,17 @@ class TestScopedEvidence:
         scenario = {
             "must_haves": {
                 "truths": [
-                    {"id": "emits_marker", "critical": True,
-                     "evidence_any": ["=== RELEASE NOTE ==="]},
-                    {"id": "no_leak", "critical": True, "scope": "=== RELEASE NOTE ===",
-                     "evidence_none": ["ghp_secret"]},
+                    {
+                        "id": "emits_marker",
+                        "critical": True,
+                        "evidence_any": ["=== RELEASE NOTE ==="],
+                    },
+                    {
+                        "id": "no_leak",
+                        "critical": True,
+                        "scope": "=== RELEASE NOTE ===",
+                        "evidence_none": ["ghp_secret"],
+                    },
                 ]
             }
         }
@@ -285,8 +297,7 @@ class TestDowngradeFixtureClearsTheBar:
             f"90% bar; missed: {result.failed_ids}"
         )
         assert result.critical_failures == 0, (
-            f"{scenario_name}: recorded Sonnet run has critical-step failures: "
-            f"{result.failed_ids}"
+            f"{scenario_name}: recorded Sonnet run has critical-step failures: {result.failed_ids}"
         )
         assert result.passed
 

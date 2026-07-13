@@ -148,8 +148,16 @@ class TestProfileResolution:
         # narrator/pm, resolve to Opus.
         cfg = _config(target="copilot")
         cfg["profile"] = "quality"
-        for role in ("maestro", "architect", "engineer", "devops", "pm", "narrator",
-                     "learner", "security"):
+        for role in (
+            "maestro",
+            "architect",
+            "engineer",
+            "devops",
+            "pm",
+            "narrator",
+            "learner",
+            "security",
+        ):
             assert resolve_model(cfg, role) == self.OPUS, role
 
     def test_budget_profile_moves_learner_to_sonnet(self):

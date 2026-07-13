@@ -62,7 +62,7 @@ def _scoped(transcript: str, marker: str) -> str:
     caller pairs the scoped leak check with an unscoped "marker present" must_have.
     """
     idx = transcript.lower().rfind(marker.lower())
-    return "" if idx == -1 else transcript[idx + len(marker):]
+    return "" if idx == -1 else transcript[idx + len(marker) :]
 
 
 def _satisfied(item: dict, transcript: str) -> bool:
