@@ -26,6 +26,19 @@ _FIXTURES = Path(__file__).resolve().parent / "fixtures"
 _SCENARIO_FILE = "implementer_adherence.yaml"
 _SCENARIO_NAME = "implementer_adherence_token_bucket"
 
+# Downgrade-gate registry (plan 007 / RFC-0004 lever 1). Each agent moving off Opus →
+# Sonnet by default carries one recorded adherence scenario; the per-PR gate replays its
+# fixture. `(scenario_file, scenario_name, fixture_file)`. The engineer entry is the
+# pre-existing implementer eval; narrator/pm are added by plan 007.
+_DOWNGRADE_SCENARIOS = [
+    ("implementer_adherence.yaml", "implementer_adherence_token_bucket",
+     "implementer_adherence_sonnet.json"),
+    ("narrator_adherence.yaml", "narrator_adherence_release_note",
+     "narrator_adherence_sonnet.json"),
+    ("pm_adherence.yaml", "pm_adherence_project_plan",
+     "pm_adherence_sonnet.json"),
+]
+
 
 @pytest.fixture
 def scenario(scenarios_dir: Path) -> dict:
@@ -141,3 +154,149 @@ class TestNoLiveMarker:
         import evals.test_adherence as mod
 
         assert not hasattr(mod, "pytestmark"), "adherence replay must not be a live test"
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Downgrade-gate scenarios (plan 007 / RFC-0004 lever 1): narrator + pm alongside
+# the engineer. One recorded Sonnet fixture per agent; the per-PR gate replays it.
+# ──────────────────────────────────────────────────────────────────────────────
+
+
+class TestScopedEvidence:
+    """The `scope` marker restricts an item's matching to the text after the marker's
+    last occurrence — so an internal redaction audit that restates original values does
+    NOT count as a leak in the shipped artifact (plan 007 narrator scenario).
+    """
+
+    def test_scoped_evidence_none_ignores_text_before_marker(self) -> None:
+        scenario = {
+            "must_haves": {
+                "truths": [
+                    {
+                        "id": "no_leak_in_artifact",
+                        "critical": True,
+                        "scope": "=== RELEASE NOTE ===",
+                        "evidence_none": ["ghp_secret"],
+                    }
+                ]
+            }
+        }
+        # Secret appears ONLY in the audit table above the marker → artifact is clean.
+        transcript = (
+            "Audit: redacted ghp_secret -> [REDACTED].\n"
+            "=== RELEASE NOTE ===\nWe shipped billing sync. [REDACTED] applied."
+        )
+        result = grade_transcript(scenario, transcript)
+        assert result.passed
+        assert result.critical_failures == 0
+
+    def test_scoped_evidence_none_catches_leak_after_marker(self) -> None:
+        scenario = {
+            "must_haves": {
+                "truths": [
+                    {
+                        "id": "no_leak_in_artifact",
+                        "critical": True,
+                        "scope": "=== RELEASE NOTE ===",
+                        "evidence_none": ["ghp_secret"],
+                    }
+                ]
+            }
+        }
+        # Secret leaks INTO the shipped artifact → critical failure.
+        transcript = "=== RELEASE NOTE ===\nDeploy used ghp_secret. Oops."
+        result = grade_transcript(scenario, transcript)
+        assert not result.passed
+        assert result.critical_failures == 1
+
+    def test_absent_marker_fails_the_paired_presence_check(self) -> None:
+        # Without the marker, the scoped slice is empty: evidence_none holds vacuously,
+        # but the paired unscoped "marker present" must_have fails — so the scenario as a
+        # whole still catches a missing artifact.
+        scenario = {
+            "must_haves": {
+                "truths": [
+                    {"id": "emits_marker", "critical": True,
+                     "evidence_any": ["=== RELEASE NOTE ==="]},
+                    {"id": "no_leak", "critical": True, "scope": "=== RELEASE NOTE ===",
+                     "evidence_none": ["ghp_secret"]},
+                ]
+            }
+        }
+        result = grade_transcript(scenario, "No delimited artifact here. ghp_secret shown.")
+        assert not result.passed  # the missing-marker must_have fails
+        assert "emits_marker" in result.failed_ids
+
+
+@pytest.mark.parametrize(
+    "scenario_file,scenario_name,fixture_file",
+    _DOWNGRADE_SCENARIOS,
+    ids=[s[1] for s in _DOWNGRADE_SCENARIOS],
+)
+class TestDowngradeScenarioShape:
+    """Every downgrade scenario must carry the executable shape the gate grades against:
+    a plan with steps, at least one critical must_have, an acceptance surface, and the
+    doc-quality contract that keeps output at the Opus bar regardless of executor.
+    """
+
+    def test_scenario_has_plan_and_must_haves(
+        self, scenarios_dir: Path, scenario_file: str, scenario_name: str, fixture_file: str
+    ) -> None:
+        scenario = load_scenario(scenarios_dir / scenario_file, scenario_name)
+        assert scenario["plan"]["objective"]
+        assert scenario["plan"]["steps"], "plan must carry step-level instructions"
+        truths = scenario["must_haves"]["truths"]
+        assert truths
+        assert any(t.get("critical") for t in truths), "at least one critical must_have"
+        assert scenario.get("acceptance"), "plan must carry a hard acceptance surface"
+        assert "Opus bar" in scenario["doc_quality_contract"]
+
+
+@pytest.mark.parametrize(
+    "scenario_file,scenario_name,fixture_file",
+    _DOWNGRADE_SCENARIOS,
+    ids=[s[1] for s in _DOWNGRADE_SCENARIOS],
+)
+class TestDowngradeFixtureClearsTheBar:
+    """The recorded Sonnet run for each downgraded agent must clear the pass-bar — the
+    empirical evidence the cheaper default is shippable for that agent (RFC-0004 lever 1).
+
+    Until a fixture is recorded (plan 007 step 2, live on Sonnet), its case is SKIPPED,
+    not failed — the scenario wiring is correct; only the billed transcript is pending.
+    A recorded fixture that does NOT clear the bar is a hard failure (the gate).
+    """
+
+    def _load_fixture(self, fixture_file: str) -> dict | None:
+        path = _FIXTURES / fixture_file
+        if not path.exists():
+            return None
+        return json.loads(path.read_text())
+
+    def test_recorded_run_passes(
+        self, scenarios_dir: Path, scenario_file: str, scenario_name: str, fixture_file: str
+    ) -> None:
+        data = self._load_fixture(fixture_file)
+        if data is None:
+            pytest.skip(f"fixture {fixture_file} not recorded yet (plan 007 step 2)")
+        scenario = load_scenario(scenarios_dir / scenario_file, scenario_name)
+        result = grade_transcript(scenario, data["transcript"])
+        assert result.adherence >= PASS_BAR_MIN_ADHERENCE, (
+            f"{scenario_name}: recorded Sonnet adherence {result.adherence:.2%} below the "
+            f"90% bar; missed: {result.failed_ids}"
+        )
+        assert result.critical_failures == 0, (
+            f"{scenario_name}: recorded Sonnet run has critical-step failures: "
+            f"{result.failed_ids}"
+        )
+        assert result.passed
+
+    def test_fixture_records_model_and_result(
+        self, scenarios_dir: Path, scenario_file: str, scenario_name: str, fixture_file: str
+    ) -> None:
+        data = self._load_fixture(fixture_file)
+        if data is None:
+            pytest.skip(f"fixture {fixture_file} not recorded yet (plan 007 step 2)")
+        assert data["model"] == "claude-sonnet-4-6"
+        assert data["passed"] is True
+        assert data["adherence"] >= 0.90
+        assert data["critical_failures"] == 0

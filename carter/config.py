@@ -124,6 +124,22 @@ def _validate_agent_suffix(suffix: Any) -> None:
         )
 
 
+def _validate_profile(profile: Any) -> None:
+    """Validate the optional ``profile`` key: unset/None, or a known profile name.
+
+    Rejects a typo loudly at the config boundary (a clear ``ConfigError`` instead of a
+    silently-ignored profile that leaves everyone on the default tiers). ``PROFILES`` is
+    defined below in the per-agent-model section.
+    """
+    if profile is None:
+        return
+    if not isinstance(profile, str) or profile not in PROFILES:
+        raise ConfigError(
+            f"Invalid profile: {profile!r}. Must be one of: {', '.join(sorted(PROFILES))} "
+            "(or omit the key)."
+        )
+
+
 def _validate_policy(policy: Any) -> None:
     """Validate the ``policy`` block at the config boundary.
 
@@ -177,6 +193,7 @@ def load_config(config_path: Path) -> dict[str, Any]:
     merged = _merge_with_defaults(config)
     _validate_agent_suffix(merged.get("agent_suffix", ""))
     _validate_policy(merged.get("policy", {}))
+    _validate_profile(merged.get("profile"))
     return merged
 
 
@@ -296,28 +313,66 @@ MODEL_NAMES: dict[str, dict[str, str]] = {
     "claude-haiku-4-5": {"copilot": "Claude Haiku 4.5", "opencode": "anthropic/claude-haiku-4-5"},
 }
 
-# Role → model tier. Thinkers run the documentation-authoring agents on
-# the high-reasoning model; implementers run the cheaper one. A role in no tier
-# resolves to `models.default` (the un-tiered catch-all) so it never resolves empty.
+# Role → model tier. Thinkers run on the high-reasoning model; implementers run the
+# cheaper one. A role in no tier resolves to `models.default` (the un-tiered catch-all)
+# so it never resolves empty.
+#
+# narrator + pm are `implementers` (Sonnet) by DEFAULT (RFC-0004 lever 1 / plan 007):
+# their work is structured — narrator's redaction is rule-bound, pm's planning follows
+# carter-plan's schema — and both cleared the adherence gate on Sonnet 4.6 (>=0.90, 0
+# critical). `profile: quality` restores them (and everyone) to Opus; `profile: budget`
+# additionally moves learner. maestro/architect/learner/security stay `thinkers`
+# (routing quality-gates everything; deep reasoning).
 MODEL_TIERS: dict[str, str] = {
     "maestro": "thinkers",
     "architect": "thinkers",
-    "pm": "thinkers",
     "learner": "thinkers",
-    "narrator": "thinkers",
     "security": "thinkers",
+    "pm": "implementers",
+    "narrator": "implementers",
     "engineer": "implementers",
     "devops": "implementers",
 }
 
 
-def resolve_model(config: dict[str, Any], role: str) -> str:
-    """The per-target ``model:`` string for ``role``, resolved ``overrides > tier > default``.
+# Cost profiles (RFC-0004 lever 1 / plan 007, OQ10 — resolved lazily at render, NOT
+# written as concrete overrides). A `profile:` key in carter.yaml re-tiers roles at
+# resolution time, layered BETWEEN explicit per-agent overrides and the base tier:
+# `models.overrides > profile > tier > default`. The value maps role → tier name, so a
+# profile reuses the same `models:` tier model strings (no per-profile model literals to
+# keep in sync). An absent/unset profile uses the shipped default tiers (MODEL_TIERS).
+#
+#   quality — every agent on the `thinkers` (Opus) tier: restores the pre-RFC-0004
+#             default for users who prefer max quality over cost.
+#   budget  — the cheaper default PLUS learner → implementers (Sonnet); the furthest
+#             push that still cleared review. (narrator/pm are already implementers by
+#             default, so budget's marginal move is learner.)
+PROFILES: dict[str, dict[str, str]] = {
+    "quality": dict.fromkeys(MODEL_TIERS, "thinkers"),
+    "budget": {**MODEL_TIERS, "learner": "implementers"},
+}
 
-    (1) ``models.overrides[role]`` if present; else (2) the role's tier
-    (``thinkers``/``implementers``); else (3) ``models.default`` (the un-tiered
-    catch-all). The value is a SINGLE string — a display name for VS Code/Copilot, a
-    ``provider/model`` id for OpenCode (never an array, which breaks Copilot CLI).
+
+def _profile_tier(config: dict[str, Any], role: str) -> str | None:
+    """The tier ``role`` maps to under the active ``profile:``, or ``None`` if no profile.
+
+    An unset/absent profile returns ``None`` (fall through to the base ``MODEL_TIERS``).
+    An unknown profile value is treated as unset here — the config boundary
+    (``_validate_profile``) is what rejects it loudly; resolution stays fail-soft.
+    """
+    profile = config.get("profile")
+    if not profile:
+        return None
+    return PROFILES.get(profile, {}).get(role)
+
+
+def resolve_model(config: dict[str, Any], role: str) -> str:
+    """The per-target ``model:`` string for ``role``.
+
+    Resolution order: ``models.overrides[role]`` > active ``profile:`` tier > the role's
+    base tier (``MODEL_TIERS``) > ``models.default`` (the un-tiered catch-all). The value
+    is a SINGLE string — a display name for VS Code/Copilot, a ``provider/model`` id for
+    OpenCode (never an array, which breaks Copilot CLI).
     """
     models = config.get("models") or DEFAULT_CONFIG["models"]
     target = config.get("target", "copilot")
@@ -328,7 +383,9 @@ def resolve_model(config: dict[str, Any], role: str) -> str:
     override = (models.get("overrides") or {}).get(role)
     if override and override.get(key):
         return override[key]
-    tier = MODEL_TIERS.get(role)
+    # A `profile:` re-tiers the role; it wins over the base tier but not an explicit
+    # per-agent override above.
+    tier = _profile_tier(config, role) or MODEL_TIERS.get(role)
     if tier and (models.get(tier) or {}).get(key):
         return models[tier][key]
     return (models.get("default") or {}).get(key, "")

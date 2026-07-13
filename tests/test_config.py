@@ -188,6 +188,52 @@ class TestPolicyLevelValidation:
             load_config(path)
 
 
+class TestProfileValidation:
+    """The optional cost `profile:` key (RFC-0004 lever 1 / plan 007) is validated at the
+    config boundary: unset/None or a known profile name, else a loud ConfigError.
+    """
+
+    def _write(self, tmp_path, profile):
+        cfg = {
+            "version": "2",
+            "workspace": {"name": "x", "mode": "umbrella"},
+            "identity": {"git_account": "y"},
+            "agents": ["maestro"],
+            "profile": profile,
+        }
+        path = tmp_path / "carter.yaml"
+        path.write_text(yaml.dump(cfg))
+        return path
+
+    def test_valid_profiles_accepted(self, tmp_path):
+        from carter.config import load_config
+
+        for profile in ("quality", "budget"):
+            path = self._write(tmp_path, profile)
+            assert load_config(path)["profile"] == profile
+
+    def test_unknown_profile_raises(self, tmp_path):
+        from carter.config import ConfigError, load_config
+
+        path = self._write(tmp_path, "cheapest")
+        with pytest.raises(ConfigError, match="profile"):
+            load_config(path)
+
+    def test_absent_profile_is_fine(self, tmp_path):
+        # No `profile:` key at all → resolves to the shipped default tiers, no error.
+        from carter.config import load_config
+
+        cfg = {
+            "version": "2",
+            "workspace": {"name": "x", "mode": "umbrella"},
+            "identity": {"git_account": "y"},
+            "agents": ["maestro"],
+        }
+        path = tmp_path / "carter.yaml"
+        path.write_text(yaml.dump(cfg))
+        assert load_config(path).get("profile") is None
+
+
 class TestShippedMapsAreDictShaped:
     def test_taxonomy_is_dict_with_all_levels(self):
         """The 4-category taxonomy (ADR-0010 D4) is a dict; every category maps both

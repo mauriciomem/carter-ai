@@ -5,7 +5,7 @@ policy:
   level: guarded
   allow: [local-write, read]
   gates: {local-write: allow, read: allow}
-model: Claude Opus 4.8
+model: Claude Sonnet 4.6
 tools: [codebase, search, usages, fetch, editFiles]
 agents: []
 ---

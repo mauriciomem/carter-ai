@@ -9,7 +9,13 @@ import click
 import yaml
 from jinja2 import Environment
 
-from carter.config import ConfigError, _validate_agent_suffix, generate_default_config, load_config
+from carter.config import (
+    PROFILES,
+    ConfigError,
+    _validate_agent_suffix,
+    generate_default_config,
+    load_config,
+)
 from carter.plans import validate_checkpoint, validate_plans_dir
 from carter.scaffold import (
     agent_filename,
@@ -103,6 +109,14 @@ def install(
     default=None,
     help="Suffix for scaffolded agent names (default: local; '' for none).",
 )
+@click.option(
+    "--profile",
+    "profile",
+    type=click.Choice(sorted(PROFILES)),
+    default=None,
+    help="Cost profile: 'quality' (all agents on Opus) or 'budget' (Sonnet where safe). "
+    "Default: the shipped per-agent tiers.",
+)
 def init(
     target_dir: str,
     single: bool,
@@ -110,6 +124,7 @@ def init(
     name: str | None,
     target_tool: str | None,
     agent_suffix: str | None,
+    profile: str | None,
 ) -> None:
     """Initialize a Carter workspace."""
     target = Path(target_dir).resolve()
@@ -128,6 +143,10 @@ def init(
         except ConfigError as e:
             raise click.BadParameter(str(e), param_hint="--agent-suffix") from e
         config["agent_suffix"] = agent_suffix
+    # `profile:` is seeded only when chosen — an absent key keeps carter.yaml minimal and
+    # resolves to the shipped default tiers (click.Choice already rejects a bad value).
+    if profile is not None:
+        config["profile"] = profile
 
     # Create .carter/ structure
     init_workspace(
