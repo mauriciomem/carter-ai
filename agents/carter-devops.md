@@ -38,7 +38,7 @@ When the user's request starts with `ops:`, load the `carter-ops` skill and foll
 - `carter-terraform` — Write and review Terraform configurations
 - `carter-packer` — Build machine images with HashiCorp Packer
 - `carter-python` — Python coding standards (for Lambda functions, scripts, CLI tools)
-- `carter-golang` — Go coding standards (for CLI tools, Terraform providers)
+- `carter-golang` — Go standards for CLI tools, network tools, and services: net/http hardening, graceful shutdown, concurrency, APIs, test-first QA, and performance
 
 </skills>
 

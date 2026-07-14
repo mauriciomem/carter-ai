@@ -1,230 +1,112 @@
 ---
 name: carter-golang
-description: Go coding standards, best practices, and enforcement checklist
-argument-hint: "[Go code or project to review]"
+description: Go standards for backend services — CLI tools, REST/gRPC APIs, and network tools over the stack (HTTP, TCP, UDP, QUIC, SSH, long-polling). Covers project layout, error handling, concurrency & context, net/http server/client hardening, graceful shutdown, API design, test-first QA (table tests, fuzzing, goleak, race), and performance profiling. Use when writing or reviewing Go, or when you see goroutine leaks, missing timeouts, unbounded reads, races, or panics in library code.
+argument-hint: "[Go code, service, or project to write/review]"
 ---
 
 <objective>
-Enforce Go coding standards focused on maintainability, extensibility, testability, and security. This skill serves as both a reference guide and an active checklist for code review.
+Enforce Go standards for maintainable, testable, safe backend code. This skill is both a reference and an active review checklist. Bias: stdlib-first, minimal dependencies, test-first, explicit error handling, and code the next teammate can read. The lean core below covers universal standards; domain depth lives in sibling files loaded on demand via the routing table.
 </objective>
+
+<routing>
+
+## Specialized References
+
+This file covers core Go conventions. For depth in a specific domain, use `read_file` to load the appropriate sibling from the **same directory** as this SKILL.md before proceeding.
+
+| File | Load when the request involves |
+|------|-------------------------------|
+| `networking.md` | `net/http` server/client hardening, all server timeouts, `http.Transport` pooling, graceful shutdown, TCP/UDP with `net.Conn`, deadlines, QUIC, SSH, long-polling/SSE/streaming, retries + backoff |
+| `concurrency.md` | goroutines, goroutine-leak prevention, channels vs mutex vs atomic, worker pools, `errgroup` + `SetLimit`, `singleflight`, context deadline propagation, `sync` primitives, `testing/synctest` |
+| `apis.md` | REST handlers, `ServeMux` (1.22) routing, middleware chains, request/JSON validation, `MaxBytesReader`, `DisallowUnknownFields`, error→HTTP status mapping, gRPC/protobuf + interceptors + streaming |
+| `testing-qa.md` | test-first workflow, table tests + subtests, `t.Helper()`, fuzzing + seed corpus, `goleak`, `httptest`, parallel tests, coverage, golden files, integration tests via build tags, interface mocking |
+| `performance.md` | `pprof` (cpu/mem/block/mutex), `benchstat`, `b.Loop()`, allocation reduction, `sync.Pool`, `GOGC`/`GOMEMLIMIT`, escape analysis, and when NOT to optimize |
+| `errors-safety.md` | error wrapping (`%w`), sentinels, custom error types, `errors.Join`, `context.Cause`, nil/slice-aliasing/overflow safety, panic/recover boundaries, safety linters |
+
+**How to load:** derive the directory path from this SKILL.md's location and read the sibling file. For example, if this file is at `~/.copilot/skills/carter-golang/SKILL.md`, read `~/.copilot/skills/carter-golang/networking.md`.
+
+If the request does not match any specialized topic, use the core standards below without loading additional files.
+
+</routing>
 
 <standards>
 
 ## Project Structure
 
-Follow the standard Go project layout:
+Standard Go layout for a backend service or CLI:
 ```
 project/
-├── cmd/
-│   └── appname/
-│       └── main.go         # Entry point, minimal logic
-├── internal/               # Private packages (not importable externally)
-│   ├── handler/
-│   ├── service/
-│   └── repository/
-├── pkg/                    # Public reusable packages (use sparingly)
-├── go.mod
-├── go.sum
-├── Makefile
-└── README.md
+├── cmd/appname/main.go   # Entry point — parse config, wire deps, start server. Minimal logic.
+├── internal/             # Private packages; compiler forbids external import
+│   ├── handler/          # transport (HTTP/gRPC) → calls service
+│   ├── service/          # business logic; no transport or DB types leak here
+│   └── repository/       # data access behind an interface
+├── pkg/                  # genuinely reusable libraries only (most projects skip this)
+├── go.mod / go.sum       # both committed
+└── Makefile / README.md
 ```
 
-- `cmd/` — Entry points. Each subdirectory is a binary. Keep `main.go` minimal (wire dependencies, start server).
-- `internal/` — Business logic. The Go compiler enforces that these packages can't be imported by other modules.
-- `pkg/` — Only for genuinely reusable libraries. Most projects don't need this.
+- Keep `main.go` thin: it wires dependencies and starts the server; logic lives in `internal/`.
+- Put interfaces at the **consumer** (`service` defines the `Repository` it needs), not the implementer.
+- Reach for `pkg/` only when another module genuinely imports it. When in doubt, use `internal/`.
 
-**Source:** [Standard Go Project Layout](https://github.com/golang-standards/project-layout), [Effective Go](https://go.dev/doc/effective_go)
+**Source:** [Effective Go](https://go.dev/doc/effective_go), [Organizing a Go module](https://go.dev/doc/modules/layout)
 
-## Design Patterns
+## Naming & Documentation
 
-### Interfaces Are Contracts
-```go
-// Define interfaces where they are USED, not where they are implemented.
-type UserRepository interface {
-    Get(ctx context.Context, id string) (*User, error)
-    Save(ctx context.Context, user *User) error
-}
-```
-Keep interfaces small (1-3 methods). The Go standard library's `io.Reader` (1 method) is the gold standard.
-
-### Functional Options
-```go
-type Option func(*Server)
-
-func WithPort(port int) Option {
-    return func(s *Server) { s.port = port }
-}
-
-func WithTimeout(d time.Duration) Option {
-    return func(s *Server) { s.timeout = d }
-}
-
-func NewServer(opts ...Option) *Server {
-    s := &Server{port: 8080, timeout: 30 * time.Second}
-    for _, opt := range opts {
-        opt(s)
-    }
-    return s
-}
-```
-Use functional options for constructors with many optional parameters.
-
-### Dependency Injection
-```go
-// Pass dependencies as constructor arguments.
-func NewOrderService(repo OrderRepository, notifier Notifier) *OrderService {
-    return &OrderService{repo: repo, notifier: notifier}
-}
-```
-No DI frameworks — Go's explicit wiring in `main.go` is the convention.
-
-### Embedding for Composition
-```go
-type LoggingRepository struct {
-    inner Repository
-    log   *slog.Logger
-}
-```
-Use struct embedding for composition, not inheritance. Embed interfaces in structs to implement decorator/wrapper patterns.
-
-**Source:** [Effective Go](https://go.dev/doc/effective_go), [Go Code Review Comments](https://go.dev/wiki/CodeReviewComments)
-
-## Error Handling
-
-### Wrap Errors with Context
-```go
-if err != nil {
-    return fmt.Errorf("failed to fetch user %s: %w", id, err)
-}
-```
-Always use `%w` to wrap errors so callers can use `errors.Is()` and `errors.As()`.
-
-### Sentinel Errors
-```go
-var (
-    ErrNotFound     = errors.New("not found")
-    ErrUnauthorized = errors.New("unauthorized")
-)
-```
-
-### Custom Error Types
-```go
-type ValidationError struct {
-    Field   string
-    Message string
-}
-
-func (e *ValidationError) Error() string {
-    return fmt.Sprintf("validation failed on %s: %s", e.Field, e.Message)
-}
-```
-
-### Rules
-- Check errors immediately. Never ignore with `_`.
-- Wrap with context at each level.
-- Don't log AND return an error — do one or the other.
-- Use `errors.Is()` and `errors.As()` for error inspection.
-- Don't panic in library code. Reserve `panic` for truly unrecoverable situations.
-
-**Source:** [Go Blog — Error handling](https://go.dev/blog/go1.13-errors), [Go Proverbs](https://go-proverbs.github.io/)
-
-## Testing
-
-- **Framework:** Built-in `testing` package.
-- **Table-driven tests:**
+- Exported `PascalCase`, unexported `camelCase`. Initialisms stay uppercase: `HTTPServer`, `ID`, `URL` — not `HttpServer`.
+- Short receiver names (`func (s *Server) Start()`), consistent per type. No `this`/`self`.
+- Godoc on every exported symbol; the comment starts with the symbol's name and is a full sentence.
   ```go
-  func TestAdd(t *testing.T) {
-      tests := []struct {
-          name     string
-          a, b     int
-          expected int
-      }{
-          {"positive", 1, 2, 3},
-          {"zero", 0, 0, 0},
-          {"negative", -1, 1, 0},
-      }
-      for _, tt := range tests {
-          t.Run(tt.name, func(t *testing.T) {
-              got := Add(tt.a, tt.b)
-              assert.Equal(t, tt.expected, got)
-          })
-      }
-  }
+  // Server routes incoming HTTP requests to their handlers.
+  // The zero value is not usable; construct one with NewServer.
+  type Server struct{ /* ... */ }
   ```
-- **Test helpers:** Use `t.Helper()` in helper functions so failure locations are correct.
-- **Mocking:** Define interfaces, create mock implementations. Use `testify/mock` or hand-written mocks.
-- **Subtests:** Use `t.Run()` for test organization and selective execution.
-- **Benchmarks:** Use `func BenchmarkX(b *testing.B)` for performance-critical code.
+- Package names are short, lower-case, no underscores; avoid stutter (`http.Server`, not `http.HTTPServer`).
 
-**Source:** [Go testing docs](https://pkg.go.dev/testing), [testify](https://github.com/stretchr/testify)
+**Source:** [Go Code Review Comments](https://go.dev/wiki/CodeReviewComments), [Go Doc Comments](https://go.dev/doc/comment)
 
-## Security
+## Design Idioms
 
-- **Input validation:** Validate at API boundaries. Use struct tags with a validation library or manual checks.
-- **Secrets:** Never hardcode. Use environment variables or secret managers.
-- **Dependencies:** Scan with `govulncheck` regularly.
-- **Static analysis:** Run `gosec` for security-focused linting.
-- **SQL injection:** Use parameterized queries (`db.Query("SELECT ... WHERE id = $1", id)`).
-- **Path traversal:** Use `filepath.Clean()` and validate paths.
-- **HTTP:** Set timeouts on all HTTP clients and servers. Never use `http.DefaultClient` in production.
-  ```go
-  client := &http.Client{Timeout: 10 * time.Second}
-  ```
+- **Small interfaces (1-3 methods)** defined where used. `io.Reader` is the gold standard.
+- **Constructor injection** — pass dependencies as arguments; wire explicitly in `main.go`. No DI frameworks.
+- **Functional options** for constructors with many optional params (`NewServer(WithPort(8080), WithTimeout(d))`).
+- **Composition via embedding**, not inheritance; embed an interface to build decorators/wrappers.
+- **Accept interfaces, return concrete types.** Let callers depend on behavior, not implementations.
 
-**Source:** [OWASP Go Security](https://cheatsheetseries.owasp.org/cheatsheets/Go_Security_Cheat_Sheet.html), [gosec](https://github.com/securego/gosec)
+**Source:** [Effective Go](https://go.dev/doc/effective_go)
 
-## Code Quality
+## Error Handling (core — see `errors-safety.md` for depth)
 
-- **Formatting:** `gofmt` / `goimports` — non-negotiable, enforced by tooling.
-- **Linting:** `golangci-lint` with a curated set of linters:
-  ```yaml
-  # .golangci.yml
-  linters:
-    enable:
-      - errcheck
-      - govet
-      - staticcheck
-      - gosec
-      - ineffassign
-      - unused
-      - gocritic
-  ```
-- **Naming:** Follow Go conventions:
-  - Exported: `PascalCase`
-  - Unexported: `camelCase`
-  - Acronyms: `HTTPServer`, not `HttpServer`
-  - Single-letter receivers for simple types: `func (s *Server) Start()`
-- **Documentation:** Godoc comments on all exported types and functions:
-  ```go
-  // Server handles incoming HTTP requests and routes them
-  // to the appropriate handler.
-  type Server struct { ... }
-  ```
+- Wrap with context using `%w` so callers can `errors.Is`/`errors.As`: `fmt.Errorf("fetch user %s: %w", id, err)`.
+- Sentinels (`var ErrNotFound = errors.New("not found")`) and custom error types for structured cases.
+- Check errors immediately; never discard with `_`. Do **not** both log *and* return the same error.
+- Don't `panic` in library code — return an error. Reserve panic for truly unrecoverable programmer bugs.
 
-**Source:** [Effective Go](https://go.dev/doc/effective_go), [Go Code Review Comments](https://go.dev/wiki/CodeReviewComments)
+## Concurrency & Context (core — see `concurrency.md` for depth)
 
-## Concurrency
+- `context.Context` is the **first** parameter of any function that does I/O or may be cancelled.
+- **Every goroutine must have a guaranteed exit** — bound it by `ctx.Done()`, a done channel, or a `WaitGroup`.
+- Channels for handing off ownership of data; mutex/atomic for protecting shared state. Pick one per datum.
+- Use `errgroup` (with `SetLimit` for bounded fan-out) for parallel work with error propagation.
+- Run tests with `-race`. Zero tolerance for data races.
 
-- **Context propagation:** Pass `context.Context` as the first parameter to all functions that do I/O or may be cancelled.
-  ```go
-  func (s *Service) GetUser(ctx context.Context, id string) (*User, error)
-  ```
-- **Goroutines:** Always ensure goroutines can be stopped (via context, done channel, or WaitGroup).
-- **Channels:** Prefer channels for communication, mutexes for state protection.
-- **sync package:** Use `sync.Mutex`, `sync.RWMutex`, `sync.WaitGroup`, `sync.Once` appropriately.
-- **errgroup:** Use `golang.org/x/sync/errgroup` for parallel tasks with error propagation.
-- **Data races:** Run tests with `-race` flag. Zero tolerance for data races.
+## Networking, APIs & Performance (see sibling files)
 
-**Source:** [Go Concurrency Patterns](https://go.dev/blog/pipelines), [errgroup docs](https://pkg.go.dev/golang.org/x/sync/errgroup)
+- **Never** use `http.DefaultClient`/`http.DefaultServeMux` in production. Construct an `http.Server` with
+  `ReadHeaderTimeout`, `ReadTimeout`, `WriteTimeout`, and `IdleTimeout` set; give clients an explicit `Transport`.
+- Implement **graceful shutdown**: trap `SIGINT`/`SIGTERM` and call `Server.Shutdown(ctx)`.
+- Validate all input at the boundary; cap request bodies with `http.MaxBytesReader`; map errors to HTTP status.
+- Profile before optimizing — `pprof` + `benchstat` prove a hotspot before you spend effort on it.
 
-## Dependency Management
+## Tooling & Dependencies
 
-- **Go modules:** Always use `go mod`. Commit both `go.mod` and `go.sum`.
-- **Minimal dependencies:** Go's standard library is extensive. Check if stdlib covers your need before adding a dependency.
-- **Version updates:** Use `go get -u` carefully. Review changelogs.
-- **Vendoring:** Use `go mod vendor` if reproducibility is critical or for air-gapped builds.
+- `gofmt`/`goimports` are non-negotiable. Lint with `golangci-lint` (`errcheck`, `govet`, `staticcheck`, `gosec`, `ineffassign`, `unused`, `gocritic`).
+- Scan with `govulncheck` (known CVEs) and `gosec` (security smells) in CI.
+- Use `go mod`; commit `go.mod` and `go.sum`. Prefer stdlib; add a dependency only when it clearly beats it.
+- Modern Go you should reach for: `slog` structured logging, `min`/`max`/`clear` (1.21), `ServeMux` method+wildcard routing (1.22), iterators (1.23), `b.Loop` (1.24), `testing/synctest` (1.25).
 
-**Source:** [Go Modules Reference](https://go.dev/ref/mod)
+**Source:** [Go Modules Reference](https://go.dev/ref/mod), [govulncheck](https://pkg.go.dev/golang.org/x/vuln/cmd/govulncheck)
 
 </standards>
 
@@ -232,23 +114,38 @@ func (e *ValidationError) Error() string {
 
 ## Enforcement Checklist
 
-When reviewing Go code, verify each item:
+Verify each item when writing or reviewing Go:
 
-- [ ] Project follows standard layout (`cmd/`, `internal/`)
-- [ ] `go.mod` and `go.sum` committed
-- [ ] `gofmt` / `goimports` passes
-- [ ] `golangci-lint` passes
-- [ ] `gosec` passes (no security findings)
-- [ ] `govulncheck` passes (no known vulnerabilities)
-- [ ] All errors checked and wrapped with context (`%w`)
-- [ ] Interfaces defined where used, not where implemented
-- [ ] Interfaces are small (1-3 methods)
-- [ ] Context propagated through all I/O functions
-- [ ] Tests exist with table-driven pattern
-- [ ] Tests pass with `-race` flag
-- [ ] No hardcoded secrets
-- [ ] HTTP clients have explicit timeouts
-- [ ] Godoc comments on exported types and functions
-- [ ] Dependencies are minimal
+**Structure & style**
+- [ ] Standard layout (`cmd/`, `internal/`); `main.go` is thin
+- [ ] `go.mod` and `go.sum` committed; dependencies minimal
+- [ ] `gofmt`/`goimports`, `golangci-lint`, `gosec`, `govulncheck` all pass
+- [ ] Godoc on exported symbols; interfaces small and defined where used
+
+**Errors & safety**
+- [ ] Every error checked and wrapped with `%w`; no `_`-discarded errors
+- [ ] No `panic` in library code; panics recovered at goroutine boundaries
+- [ ] Nil, slice-aliasing, and integer-overflow hazards considered
+
+**Concurrency**
+- [ ] `context.Context` propagated through all I/O functions
+- [ ] Every goroutine has a guaranteed exit; no leaks
+- [ ] Tests pass with `-race`
+
+**Networking**
+- [ ] `http.Server` sets `ReadHeaderTimeout`/`ReadTimeout`/`WriteTimeout`/`IdleTimeout`
+- [ ] HTTP clients use an explicit `Transport` with a timeout; no `http.DefaultClient`
+- [ ] Graceful shutdown via signal handling + `Server.Shutdown(ctx)`
+- [ ] Connection deadlines set on raw `net.Conn` I/O
+
+**APIs**
+- [ ] Input validated at the boundary; request bodies capped (`MaxBytesReader`)
+- [ ] JSON decoded with `DisallowUnknownFields` where strictness matters
+- [ ] Errors mapped to correct HTTP status codes / gRPC codes
+
+**QA & performance**
+- [ ] Test-first; table-driven tests with subtests and `t.Helper()`
+- [ ] Fuzzing on parsers/boundaries; `goleak` guards goroutine leaks
+- [ ] Hotspots proven with `pprof`/`benchstat` before optimizing
 
 </checklist>

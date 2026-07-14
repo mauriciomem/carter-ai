@@ -170,7 +170,7 @@ Severity levels:
 <guidelines>
 - Pick the Review Register first (default Standard); match format to the change size.
 - For Python code, also invoke `carter-python` checklist.
-- For Go code, also invoke `carter-golang` checklist.
+- For Go code, also invoke the `carter-golang` checklist (covers networking/timeouts, API validation & status mapping, concurrency/goroutine leaks, test-first QA, and performance).
 - Establish the Scope Gate before reviewing. Context-gathering may range wider than the change, but every *finding* must stay attributable to the PR.
 - Prioritize findings by what's blocking — don't bury real issues among nitpicks.
 - Follow the Voice rules: comment on the code, explain why, praise only when genuine.

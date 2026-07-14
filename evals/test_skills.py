@@ -174,6 +174,30 @@ class TestSkillPatternCoverage:
         assert "func" in skill
         assert "test" in skill.lower()
 
+    def test_golang_skill_covers_networking(self, skills_dir: Path) -> None:
+        # Networking is the deepest focus area; content lives in sibling files.
+        content = "".join(
+            f.read_text() for f in (skills_dir / "carter-golang").glob("**/*.md")
+        )
+        assert "ReadHeaderTimeout" in content  # full server timeout set
+        assert "Shutdown" in content  # graceful shutdown
+        assert "context" in content  # request context propagation
+        assert "Transport" in content  # client connection pooling
+
+    def test_golang_skill_covers_focus_areas(self, skills_dir: Path) -> None:
+        # Concurrency, APIs, QA, and performance each have substantive coverage.
+        content = "".join(
+            f.read_text() for f in (skills_dir / "carter-golang").glob("**/*.md")
+        )
+        assert "errgroup" in content  # concurrency
+        assert "goroutine" in content  # concurrency / leak prevention
+        assert "MaxBytesReader" in content  # API JSON safety
+        assert "DisallowUnknownFields" in content  # API JSON safety
+        assert "goleak" in content  # test-first QA
+        assert "fuzz" in content.lower()  # fuzzing
+        assert "pprof" in content  # performance profiling
+        assert "benchstat" in content  # benchmark comparison
+
     def test_pipeline_skill_covers_github_actions(self, skills_dir: Path) -> None:
         # Pipeline skill may have sub-files
         skill_dir = skills_dir / "carter-pipeline"
