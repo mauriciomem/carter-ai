@@ -2,6 +2,17 @@
 
 <!-- version list -->
 
+## v0.5.0 (2026-07-14)
+
+### Features
+
+- **003**: MCP server opt-in — install only selected servers
+  ([`0894fd2`](https://github.com/mauriciomem/carter-ai/commit/0894fd206d89f34ada3b83fee9ce7df98425cba0))
+
+- **003**: Official read-only Docker GitHub MCP server + docs (steps 2-6)
+  ([`a8e76df`](https://github.com/mauriciomem/carter-ai/commit/a8e76dfbc528eca70065c3b0dc18cc005f8d6df1))
+
+
 ## v0.4.0 (2026-07-13)
 
 ### Bug Fixes
