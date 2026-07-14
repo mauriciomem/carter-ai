@@ -1352,6 +1352,103 @@ class TestConfigureMcpServersUnchanged:
             assert role not in opencode_cfg["mcp"]
 
 
+class TestMcpServerOptIn:
+    """RFC-0004 lever 1 / plan 003 step 1: `configure_mcp_servers` installs only the
+    servers a workspace selects; an unused server adds zero tool-schema tokens. Omitting
+    the selection preserves today's behaviour (all shipped servers).
+    """
+
+    def test_subset_wires_only_selected_opencode(self, tmp_path):
+        from carter import installer
+
+        manifest = {"files": [], "file_hashes": {}, "mcp_servers": []}
+        installer.configure_mcp_servers(
+            ["opencode"], tmp_path, manifest, {}, tmp_path / "backup", servers=["github"]
+        )
+        opencode_cfg = json.loads((tmp_path / "opencode" / "opencode.json").read_text())
+        wired = set(opencode_cfg["mcp"])
+        # Only the selected server's schema is present; the others contribute nothing.
+        assert "carter-github" in wired
+        assert "carter-terraform" not in wired
+        assert "carter-atlassian" not in wired
+        assert manifest["mcp_servers"] == ["carter-github"]
+
+    def test_subset_wires_only_selected_copilot_vscode(self, tmp_path):
+        from carter import installer
+
+        # A VS Code settings.json must exist for the copilot path to write to it.
+        (tmp_path / ".vscode").mkdir(parents=True, exist_ok=True)
+        (tmp_path / ".vscode" / "settings.json").write_text("{}")
+        manifest = {"files": [], "file_hashes": {}, "mcp_servers": []}
+        installer.configure_mcp_servers(
+            ["copilot"],
+            tmp_path,
+            manifest,
+            {},
+            tmp_path / "backup",
+            servers=["github", "terraform"],
+        )
+        assert manifest["mcp_servers"] == ["carter-github", "carter-terraform"]
+
+    def test_default_is_all_servers_backward_compatible(self, tmp_path):
+        from carter import installer
+
+        manifest = {"files": [], "file_hashes": {}, "mcp_servers": []}
+        # No `servers=` arg → today's behaviour: the full shipped set.
+        installer.configure_mcp_servers(["opencode"], tmp_path, manifest, {}, tmp_path / "backup")
+        assert manifest["mcp_servers"] == [
+            "carter-github",
+            "carter-terraform",
+            "carter-atlassian",
+        ]
+
+    def test_unknown_server_is_rejected(self, tmp_path):
+        from carter import installer
+
+        manifest = {"files": [], "file_hashes": {}, "mcp_servers": []}
+        with pytest.raises(ValueError, match="bogus"):
+            installer.configure_mcp_servers(
+                ["opencode"], tmp_path, manifest, {}, tmp_path / "backup", servers=["bogus"]
+            )
+
+    def test_cli_mcp_servers_subset(self, tmp_path):
+        from click.testing import CliRunner
+
+        from carter.cli import main
+
+        result = CliRunner().invoke(
+            main,
+            [
+                "install",
+                "--target",
+                "opencode",
+                "--mcp",
+                "--mcp-servers",
+                "github",
+                "--base-dir",
+                str(tmp_path),
+            ],
+        )
+        assert result.exit_code == 0, result.output
+        opencode_cfg = json.loads((tmp_path / "opencode" / "opencode.json").read_text())
+        wired = set(opencode_cfg["mcp"])
+        assert "carter-github" in wired
+        assert "carter-terraform" not in wired
+        assert "carter-atlassian" not in wired
+
+    def test_cli_mcp_servers_rejects_unknown(self, tmp_path):
+        from click.testing import CliRunner
+
+        from carter.cli import main
+
+        result = CliRunner().invoke(
+            main,
+            ["install", "--mcp", "--mcp-servers", "bogus", "--base-dir", str(tmp_path)],
+        )
+        assert result.exit_code != 0
+        assert "bogus" in result.output
+
+
 class TestInitProfileFlag:
     """`carter init --profile` seeds the cost profile into the scaffolded carter.yaml and
     it flows through to the rendered agent models (RFC-0004 lever 1 / plan 007).

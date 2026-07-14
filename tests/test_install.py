@@ -393,6 +393,75 @@ class TestMCPServerSingleSource:
         assert '["github", "terraform", "atlassian"]' not in src
 
 
+class TestOfficialGitHubServer:
+    """ADR-0008 D2 / plan 003 step 2: the shipped GitHub MCP server is the official
+    github/github-mcp-server via Docker, digest-pinned, read-only, with a surgical tool
+    allowlist. The archived @modelcontextprotocol/server-github must be gone from the
+    shipped configs (grep-clean over mcp/).
+    """
+
+    # The surgical read-only tool set (RFC-0004 V3; ~6,650 tok, +68% over archived).
+    EXPECTED_TOOLS = {
+        "get_me",
+        "get_file_contents",
+        "search_code",
+        "search_repositories",
+        "list_commits",
+        "get_commit",
+        "pull_request_read",
+        "issue_read",
+        "list_issues",
+        "list_pull_requests",
+    }
+
+    def _github_cfg(self, target: str) -> dict:
+        path = install.REPO_ROOT / "mcp" / target / "github.json"
+        return json.loads(path.read_text())["carter-github"]
+
+    def _command_str(self, entry: dict) -> str:
+        # copilot shape: command=str + args=list; opencode shape: command=list.
+        cmd = entry["command"]
+        parts = [cmd, *entry.get("args", [])] if isinstance(cmd, str) else list(cmd)
+        return " ".join(parts)
+
+    def test_no_archived_server_in_shipped_configs(self) -> None:
+        mcp_dir = install.REPO_ROOT / "mcp"
+        for cfg in mcp_dir.rglob("*.json"):
+            assert "@modelcontextprotocol/server-github" not in cfg.read_text(), (
+                f"{cfg}: still references the archived GitHub MCP server"
+            )
+
+    def test_both_targets_use_official_docker_image(self) -> None:
+        for target in ("copilot", "opencode"):
+            cmd = self._command_str(self._github_cfg(target))
+            assert "docker" in cmd, f"{target}: not a docker invocation"
+            assert "ghcr.io/github/github-mcp-server@sha256:" in cmd, (
+                f"{target}: official image must be pinned by digest, not a tag"
+            )
+            assert ":latest" not in cmd, f"{target}: must not use :latest"
+
+    def test_both_targets_are_read_only(self) -> None:
+        for target in ("copilot", "opencode"):
+            cmd = self._command_str(self._github_cfg(target))
+            assert "--read-only" in cmd, f"{target}: missing --read-only"
+
+    def test_both_targets_carry_surgical_tool_allowlist(self) -> None:
+        for target in ("copilot", "opencode"):
+            cmd = self._command_str(self._github_cfg(target))
+            assert "--tools" in cmd, f"{target}: missing --tools allowlist"
+            for tool in self.EXPECTED_TOOLS:
+                assert tool in cmd, f"{target}: surgical tool {tool!r} absent"
+
+    def test_token_is_env_placeholder_not_literal(self) -> None:
+        for target in ("copilot", "opencode"):
+            entry = self._github_cfg(target)
+            env = entry.get("env", {})
+            # The PAT is passed by env placeholder, never a baked literal.
+            assert any("${" in str(v) for v in env.values()), (
+                f"{target}: GitHub token must be an env placeholder"
+            )
+
+
 # ──────────────────────────────────────────────────────────────────────────────
 # JSONC parsing
 # ──────────────────────────────────────────────────────────────────────────────

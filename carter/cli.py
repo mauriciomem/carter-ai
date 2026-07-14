@@ -46,6 +46,13 @@ def main() -> None:
 )
 @click.option("--mcp", is_flag=True, help="Install and configure MCP servers.")
 @click.option(
+    "--mcp-servers",
+    "mcp_servers",
+    default=None,
+    help="Comma-separated subset of MCP servers to install (e.g. 'github,terraform'). "
+    "Default: all. Only meaningful with --mcp.",
+)
+@click.option(
     "--bot-name",
     default="carter-bot",
     help="Git commit author name for carter-ops attribution.",
@@ -63,6 +70,7 @@ def main() -> None:
 def install(
     target: str,
     mcp: bool,
+    mcp_servers: str | None,
     bot_name: str,
     uninstall_flag: bool,
     base_dir: Path | None,
@@ -71,6 +79,7 @@ def install(
     debug: bool,
 ) -> None:
     """Install Carter agents, skills, and MCP servers system-wide (~/.copilot/)."""
+    from carter.install.mcp import MCP_SERVERS
     from carter.installer import run as run_install
 
     if quiet:
@@ -82,6 +91,18 @@ def install(
     else:
         verbosity = 1
 
+    # Parse + validate the opt-in subset here so a bad name fails fast as a CLI error.
+    servers: list[str] | None = None
+    if mcp_servers is not None:
+        servers = [s.strip() for s in mcp_servers.split(",") if s.strip()]
+        unknown = [s for s in servers if s not in MCP_SERVERS]
+        if unknown:
+            raise click.BadParameter(
+                f"Unknown MCP server(s): {', '.join(unknown)}. "
+                f"Choose from: {', '.join(MCP_SERVERS)}.",
+                param_hint="--mcp-servers",
+            )
+
     run_install(
         target=target,
         mcp=mcp,
@@ -89,6 +110,7 @@ def install(
         uninstall_flag=uninstall_flag,
         base_dir=base_dir,
         verbosity=verbosity,
+        mcp_servers=servers,
     )
 
 

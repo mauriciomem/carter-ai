@@ -146,10 +146,27 @@ def configure_mcp_servers(
     manifest: dict,
     prereqs: dict[str, bool],
     backup_root: Path | None = None,
+    servers: list[str] | None = None,
 ) -> int:
+    """Wire the selected MCP servers into each target's config.
+
+    ``servers`` is the opt-in selection (RFC-0004 lever 1): a subset of ``MCP_SERVERS``.
+    ``None`` (the default) means the full shipped set — today's backward-compatible
+    behaviour, so an unused server can be dropped per workspace without adding its
+    tool-schema tokens. An unknown server name is a ``ValueError``.
+    """
     log_step("Configuring MCP servers...")
     count = 0
-    servers = list(MCP_SERVERS)
+    if servers is None:
+        servers = list(MCP_SERVERS)
+    else:
+        unknown = [s for s in servers if s not in MCP_SERVERS]
+        if unknown:
+            raise ValueError(
+                f"Unknown MCP server(s): {', '.join(unknown)}. "
+                f"Choose from: {', '.join(MCP_SERVERS)}."
+            )
+        servers = list(servers)
 
     if "copilot" in targets:
         # VS Code settings.json — only when a VS Code config dir actually exists,
@@ -284,11 +301,13 @@ def run(
     uninstall_flag: bool = False,
     base_dir: Path | None = None,
     verbosity: int = 1,
+    mcp_servers: list[str] | None = None,
 ) -> None:
     """Run the Carter system-level install (or uninstall).
 
     This is the programmatic entry point used by the ``carter install``
-    command. Parameters mirror the CLI options.
+    command. Parameters mirror the CLI options. ``mcp_servers`` is the opt-in
+    subset (RFC-0004 lever 1); ``None`` installs the full shipped set.
     """
     set_verbosity(verbosity)
 
@@ -297,7 +316,10 @@ def run(
     _log(f"\n {bold('Carter Installer')}")
     _log(f" Target: {', '.join(targets)}")
     _log(f" Bot name: {bot_name}")
-    _log(f" MCP servers: {'yes' if mcp else 'no (use --mcp to install)'}")
+    _mcp_label = "no (use --mcp to install)"
+    if mcp:
+        _mcp_label = "yes" + (f" ({', '.join(mcp_servers)})" if mcp_servers else " (all)")
+    _log(f" MCP servers: {_mcp_label}")
 
     detect_environment()
     prereqs = check_prerequisites(targets)
@@ -340,7 +362,9 @@ def run(
     ops_stats = install_ops(base_dir, manifest, backup_root, bot_name=bot_name)
 
     if mcp:
-        mcp_count = configure_mcp_servers(targets, base_dir, manifest, prereqs, backup_root)
+        mcp_count = configure_mcp_servers(
+            targets, base_dir, manifest, prereqs, backup_root, servers=mcp_servers
+        )
     else:
         log_step("Skipping MCP servers (no --mcp flag)")
         mcp_count = 0

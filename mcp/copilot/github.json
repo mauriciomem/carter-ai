@@ -1,9 +1,20 @@
 {
   "carter-github": {
-    "command": "npx",
-    "args": ["-y", "@modelcontextprotocol/server-github"],
+    "command": "docker",
+    "args": [
+      "run",
+      "-i",
+      "--rm",
+      "-e",
+      "GITHUB_PERSONAL_ACCESS_TOKEN",
+      "ghcr.io/github/github-mcp-server@sha256:e25564dccc9110a70a77b9df560cbde11aa392fcb5f08b9abe5c4ebc6d146ea4",
+      "stdio",
+      "--read-only",
+      "--tools",
+      "get_me,get_file_contents,search_code,search_repositories,list_commits,get_commit,pull_request_read,issue_read,list_issues,list_pull_requests"
+    ],
     "env": {
-      "GITHUB_TOKEN": "${GITHUB_TOKEN}"
+      "GITHUB_PERSONAL_ACCESS_TOKEN": "${GITHUB_TOKEN}"
     }
   }
 }

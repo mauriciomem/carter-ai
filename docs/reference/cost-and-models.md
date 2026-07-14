@@ -77,15 +77,21 @@ adherence eval on Sonnet** before the default moved (see below). The four remain
 thinkers stay on Opus because their work is open-ended: maestro routes everything,
 architect and security reason deeply, learner writes free-form explanation.
 
-**MCP servers.** `carter install --mcp` currently wires **all three** servers
-(GitHub, Terraform, Atlassian) into every workspace, whether you use them or not. If you
-never touch Terraform, you're still paying for its tool schema on requests that trigger
-it.
+**MCP servers.** `carter install --mcp` wires the three servers (GitHub, Terraform,
+Atlassian). MCP tool schemas are the **largest per-request token surface** — larger than
+all of Carter's prose combined — so shipping one you never use is pure waste. As of
+RFC-0004 lever 1 you can install a **subset**:
 
-> **Heads-up:** the plan to make MCP servers opt-in and to harden the GitHub server is
-> *designed but not yet built* (see [RFC-0004 r4](../rfcs/0004-cost-context-optimization/README.md)
-> and plan `003-mcp-cost-and-security`). The knobs below that exist **today** are the
-> model overrides; the MCP opt-in is on the roadmap.
+```bash
+carter install --mcp --mcp-servers github          # just GitHub — skips terraform+atlassian
+carter install --mcp --mcp-servers github,terraform
+carter install --mcp                                 # all three (default)
+```
+
+The GitHub server is the official `github/github-mcp-server` run **read-only** via Docker
+(a security hardening that costs ~68% more GitHub tokens than the old server, accepted
+deliberately — see RFC-0004 §C). "Read-only" removes the MCP *write* surface only; shell
+`gh`/`git` writes still work, governed by the strictness policy.
 
 ## Choosing a cost profile
 
@@ -154,9 +160,9 @@ it still passes.
 
 ### Don't install MCP servers you won't use
 
-Until per-workspace opt-in lands, the simplest lever is: **only run `--mcp` if you
-actually need those servers**, and only set the tokens (`GITHUB_TOKEN`, `TF_TOKEN`,
-`ATLASSIAN_*`) for the ones you use. A server with no token wired is effectively dormant.
+Install the **subset** you need with `--mcp-servers` (e.g. `--mcp-servers github`), and
+only set the tokens (`GITHUB_TOKEN`, `TF_TOKEN`, `ATLASSIAN_*`) for the servers you wire.
+An unused server adds zero tool-schema tokens.
 
 ### Cut round-trips
 
