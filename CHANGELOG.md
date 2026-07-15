@@ -2,6 +2,21 @@
 
 <!-- version list -->
 
+## v0.6.0 (2026-07-15)
+
+### Code Style
+
+- **008**: Apply ruff format to test_skills.py
+  ([#17](https://github.com/mauriciomem/carter-ai/pull/17),
+  [`fece586`](https://github.com/mauriciomem/carter-ai/commit/fece586fd9081f61702cf35ad8478311da39b924))
+
+### Features
+
+- **008**: Deepen carter-golang into a curated multi-file skill set
+  ([#17](https://github.com/mauriciomem/carter-ai/pull/17),
+  [`fece586`](https://github.com/mauriciomem/carter-ai/commit/fece586fd9081f61702cf35ad8478311da39b924))
+
+
 ## v0.5.0 (2026-07-14)
 
 ### Features
