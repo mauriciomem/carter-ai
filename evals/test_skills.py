@@ -176,9 +176,7 @@ class TestSkillPatternCoverage:
 
     def test_golang_skill_covers_networking(self, skills_dir: Path) -> None:
         # Networking is the deepest focus area; content lives in sibling files.
-        content = "".join(
-            f.read_text() for f in (skills_dir / "carter-golang").glob("**/*.md")
-        )
+        content = "".join(f.read_text() for f in (skills_dir / "carter-golang").glob("**/*.md"))
         assert "ReadHeaderTimeout" in content  # full server timeout set
         assert "Shutdown" in content  # graceful shutdown
         assert "context" in content  # request context propagation
@@ -186,9 +184,7 @@ class TestSkillPatternCoverage:
 
     def test_golang_skill_covers_focus_areas(self, skills_dir: Path) -> None:
         # Concurrency, APIs, QA, and performance each have substantive coverage.
-        content = "".join(
-            f.read_text() for f in (skills_dir / "carter-golang").glob("**/*.md")
-        )
+        content = "".join(f.read_text() for f in (skills_dir / "carter-golang").glob("**/*.md"))
         assert "errgroup" in content  # concurrency
         assert "goroutine" in content  # concurrency / leak prevention
         assert "MaxBytesReader" in content  # API JSON safety
