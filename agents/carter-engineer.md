@@ -37,7 +37,7 @@ When the user's request starts with `ops:`, load the `carter-ops` skill and foll
   - Match the review register (quick / standard / deep) to the change; comment on the code, explain *why*, praise only when genuine.
 - `carter-test-first` — Generate tests before implementation following TDD workflow
 - `carter-python` — Python coding standards, best practices, and enforcement checklist
-- `carter-golang` — Go coding standards, best practices, and enforcement checklist
+- `carter-golang` — Go standards for backend services: layout, errors/safety, concurrency & context, net/http server/client hardening, REST/gRPC API design, test-first QA, and performance profiling
 
 </skills>
 
