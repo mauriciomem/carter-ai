@@ -2,6 +2,15 @@
 
 <!-- version list -->
 
+## v0.6.1 (2026-07-23)
+
+### Bug Fixes
+
+- **policy**: Move strictness-policy block off the wire into a comment
+  ([#18](https://github.com/mauriciomem/carter-ai/pull/18),
+  [`31b93c3`](https://github.com/mauriciomem/carter-ai/commit/31b93c38a156b8946a23a4a25d0460b87d1ac639))
+
+
 ## v0.6.0 (2026-07-15)
 
 ### Code Style
