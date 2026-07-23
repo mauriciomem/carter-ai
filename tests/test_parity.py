@@ -24,6 +24,7 @@ from carter.config import (
     RISK_TAXONOMY,
     effective_allowlist,
     generate_default_config,
+    parse_policy_comment,
     policy_native_keys,
     resolve_model,
 )
@@ -42,10 +43,18 @@ REDACTION_CATEGORIES = (
 
 
 def _parse_frontmatter(text: str) -> dict:
-    """Parse leading YAML frontmatter from an agent markdown file."""
+    """Parse leading YAML frontmatter from an agent markdown file.
+
+    Re-injects the ``policy`` block from the trailing ``carter:policy`` comment so
+    callers see the same shape as before ADR-0005's move of the block off the wire.
+    """
     assert text.startswith("---\n"), "file does not start with '---' frontmatter"
     _, fm, _ = text.split("---", 2)
-    return yaml.safe_load(fm)
+    data = yaml.safe_load(fm)
+    policy = parse_policy_comment(text)
+    if policy is not None:
+        data["policy"] = policy
+    return data
 
 
 @pytest.fixture

@@ -1,14 +1,11 @@
 ---
 description: "Narrator — external-facing content, redaction, and audience-aware narrative."
 mode: subagent
-policy:
-  level: guarded
-  allow: [local-write, read]
-  gates: {local-write: allow, read: allow}
 model: Claude Sonnet 4.6
 tools: [codebase, search, usages, fetch, editFiles]
 agents: []
 ---
+<!-- carter:policy {"level":"guarded","allow":["local-write","read"],"gates":{"local-write":"allow","read":"allow"}} -->
 
 <role>
 You are Carter Narrator, the external-facing content specialist in the Carter AI assistant system.

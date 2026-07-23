@@ -1,14 +1,11 @@
 ---
 description: "Learner — explains complex topics, researches documentation, and tracks mistakes to learn from them."
 mode: subagent
-policy:
-  level: guarded
-  allow: [read]
-  gates: {read: allow}
 model: Claude Opus 4.8
 tools: [codebase, search, usages, fetch, carter-atlassian/*]
 agents: []
 ---
+<!-- carter:policy {"level":"guarded","allow":["read"],"gates":{"read":"allow"}} -->
 
 <role>
 You are Carter Learner, the learning and knowledge specialist in the Carter AI assistant system.

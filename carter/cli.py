@@ -15,6 +15,7 @@ from carter.config import (
     _validate_agent_suffix,
     generate_default_config,
     load_config,
+    parse_policy_comment,
 )
 from carter.plans import validate_checkpoint, validate_plans_dir
 from carter.scaffold import (
@@ -389,7 +390,15 @@ def _parse_agent_frontmatter(text: str) -> dict | None:
         data = yaml.safe_load(parts[1])
     except yaml.YAMLError:
         return None
-    return data if isinstance(data, dict) else None
+    if not isinstance(data, dict):
+        return None
+    # The advisory policy block lives in a `carter:policy` HTML comment after the
+    # frontmatter (kept off the wire, ADR-0005); re-inject it under `policy` so the
+    # lint sees the same shape it always did.
+    policy = parse_policy_comment(text)
+    if policy is not None:
+        data["policy"] = policy
+    return data
 
 
 def _write_if_absent(path: Path, content: str) -> bool:

@@ -81,16 +81,15 @@ class TestPolicyOverridesAreHonored:
     gate map and the gate table — not silently no-op (audit HIGH-1)."""
 
     def test_override_tightens_emitted_gate(self):
-        import yaml as _yaml
-
-        from carter.config import policy_frontmatter
+        from carter.config import parse_policy_comment, policy_comment
 
         cfg = generate_default_config()
         cfg["agent_suffix"] = ""
         cfg["policy"]["level"] = "guarded"
         cfg["policy"]["overrides"] = {"remote-write": "deny"}  # tighten ask -> deny
-        block = _yaml.safe_load(policy_frontmatter(cfg, "devops"))
-        assert block["policy"]["gates"]["remote-write"] == "deny"
+        # The policy block lives in the carter:policy comment (off the wire, ADR-0005).
+        policy = parse_policy_comment(policy_comment(cfg, "devops"))
+        assert policy["gates"]["remote-write"] == "deny"
 
     def test_override_reflected_in_gate_table(self):
         from carter.config import policy_gate_table

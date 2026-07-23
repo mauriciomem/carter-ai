@@ -16,6 +16,8 @@ from carter.config import (
     effective_allowlist,
     generate_default_config,
     load_config,
+    parse_policy_comment,
+    policy_comment,
     policy_frontmatter,
     write_config,
 )
@@ -1074,8 +1076,11 @@ def _policy_config(level: str = "guarded", target: str = "copilot") -> dict:
 
 
 def _policy_block(config: dict, role: str) -> dict:
-    """Parse the emitted policy frontmatter for a role into a dict."""
-    return yaml.safe_load(policy_frontmatter(config, role))
+    """Parse a role's native frontmatter and re-inject the ``policy`` block from
+    its ``carter:policy`` comment (the block now lives off the wire, ADR-0005)."""
+    block = yaml.safe_load(policy_frontmatter(config, role)) or {}
+    block["policy"] = parse_policy_comment(policy_comment(config, role))
+    return block
 
 
 class TestPolicyFrontmatterModel:
@@ -1165,7 +1170,12 @@ class TestStrictGateMatrix:
     Runtime denial itself is out of scope (Q17) — we prove emission + lint."""
 
     def _installed(self, config: dict) -> dict:
-        return {role: yaml.safe_load(policy_frontmatter(config, role)) for role in _ALL_ROLES}
+        installed = {}
+        for role in _ALL_ROLES:
+            fm = yaml.safe_load(policy_frontmatter(config, role)) or {}
+            fm["policy"] = parse_policy_comment(policy_comment(config, role))
+            installed[role] = fm
+        return installed
 
     def test_strict_on_opencode_lints_clean(self):
         from carter.scaffold import lint_policy
@@ -1299,9 +1309,10 @@ class TestPolicyOpenCodePermission:
 
 
 class TestPolicyRenderedIntegration:
-    """The policy block lands in rendered agent frontmatter as valid YAML."""
+    """The policy block lands in a ``carter:policy`` comment (off the wire), while
+    the frontmatter carries only the target-native enforcement keys."""
 
-    def test_rendered_frontmatter_parses_with_policy(self, env):
+    def test_rendered_frontmatter_parses_without_policy(self, env):
         rendered = render_agents(_policy_config(), env)
         assert rendered
         for name, content in rendered.items():
@@ -1310,14 +1321,18 @@ class TestPolicyRenderedIntegration:
             data = yaml.safe_load(fm)
             assert data["description"], f"{name}: lost description"
             assert data["mode"], f"{name}: lost mode"
-            assert "policy" in data, f"{name}: missing policy block"
-            assert "allow" in data["policy"] and "gates" in data["policy"]
+            # The advisory block must NOT leak into the wire-facing frontmatter.
+            assert "policy" not in data, f"{name}: policy leaked into frontmatter"
+            policy = parse_policy_comment(content)
+            assert policy is not None, f"{name}: missing carter:policy comment"
+            assert "allow" in policy and "gates" in policy
 
     def test_rendered_devops_policy_matches_model(self, env):
         content = render_agents(_policy_config(), env)["carter-devops.md"]
+        policy = parse_policy_comment(content)
+        assert policy["allow"] == ["dangerous", "local-write", "read", "remote-write"]
         _, fm, _ = content.split("---", 2)
         data = yaml.safe_load(fm)
-        assert data["policy"]["allow"] == ["dangerous", "local-write", "read", "remote-write"]
         assert data["tools"] == [
             *_READ_TOOLS,
             "editFiles",

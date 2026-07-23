@@ -15,6 +15,7 @@ from carter.config import (
     _gates_for,
     dispatch_specialists,
     effective_allowlist,
+    policy_comment,
     policy_frontmatter,
     policy_gate_table,
     policy_native_keys,
@@ -38,6 +39,7 @@ def create_env(templates_dir: Path = TEMPLATES_DIR) -> Environment:
     )
     # Strictness-policy emitters used by base_agent.md.j2.
     env.globals["policy_frontmatter"] = policy_frontmatter
+    env.globals["policy_comment"] = policy_comment
     env.globals["policy_gate_table"] = policy_gate_table
     return env
 
