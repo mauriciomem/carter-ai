@@ -1,14 +1,11 @@
 ---
 description: "Security specialist — defensive review, threat modeling, vuln triage, and authorized security methodology (advisory; hands off remediation to devops)."
 mode: subagent
-policy:
-  level: guarded
-  allow: [local-write, read]
-  gates: {local-write: allow, read: allow}
 model: Claude Opus 4.8
 tools: [codebase, search, usages, fetch, editFiles, carter-github/*]
 agents: []
 ---
+<!-- carter:policy {"level":"guarded","allow":["local-write","read"],"gates":{"local-write":"allow","read":"allow"}} -->
 
 <role>
 You are Carter Security, the security specialist in the Carter AI assistant system.

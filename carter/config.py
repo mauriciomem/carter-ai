@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import copy
+import json
 import re
 from collections.abc import Iterable
 from pathlib import Path
@@ -649,34 +650,72 @@ def policy_native_keys(config: dict[str, Any], role: str) -> dict[str, Any]:
     return keys
 
 
+def _policy_block(config: dict[str, Any], role: str) -> dict[str, Any]:
+    """The deterministic, target-agnostic policy source of truth for ``role``.
+
+    The agent's allowed risk categories and the active level's gate per allowed
+    category. Emitted as an HTML comment (see :func:`policy_comment`) rather than
+    a frontmatter key so it never reaches a model request body — some strict
+    provider gateways (e.g. IBM Bob) 422 on unknown top-level body properties, and
+    OpenCode forwards non-schema frontmatter keys onto the wire. This is what the
+    policy lint validates.
+    """
+    policy = config.get("policy") or {}
+    emit_level = _emit_level(policy.get("level", "guarded"))
+    allowed = [cat for cat, on in sorted(effective_allowlist(config).get(role, {}).items()) if on]
+    gates = _gates_for(allowed, emit_level, policy.get("overrides"))
+    return {"level": emit_level, "allow": allowed, "gates": gates}
+
+
+# Machine-readable marker carrying the policy block outside the wire-facing
+# frontmatter. Compact JSON on a single line; parsed back by ``parse_policy_comment``.
+_POLICY_COMMENT_RE = re.compile(r"<!--\s*carter:policy\s+(.+?)\s*-->")
+
+
+def policy_comment(config: dict[str, Any], role: str) -> str:
+    """Render the policy block as a one-line HTML comment for ``role``.
+
+    Placed just after an agent's frontmatter. Kept out of the YAML frontmatter so
+    it is not forwarded into the model request body by OpenCode (which would 422 on
+    strict gateways); still a visible, machine-parseable source of truth + lint anchor.
+    """
+    payload = json.dumps(_policy_block(config, role), separators=(",", ":"))
+    return f"<!-- carter:policy {payload} -->"
+
+
+def parse_policy_comment(text: str) -> dict[str, Any] | None:
+    """Extract the policy block from an agent file's ``carter:policy`` comment.
+
+    Returns the parsed mapping, or ``None`` when the marker is absent or malformed.
+    The inverse of :func:`policy_comment`; used by ``carter check`` and the parity
+    tests to feed the lint the same ``policy`` dict that used to live in frontmatter.
+    """
+    match = _POLICY_COMMENT_RE.search(text)
+    if not match:
+        return None
+    try:
+        parsed = json.loads(match.group(1))
+    except (ValueError, TypeError):
+        return None
+    return parsed if isinstance(parsed, dict) else None
+
+
 def policy_frontmatter(config: dict[str, Any], role: str) -> str:
-    """Render the per-agent strictness-policy frontmatter for ``role``.
+    """Render the per-agent target-native enforcement frontmatter for ``role``.
 
-    Returns YAML lines (no surrounding ``---``, no trailing newline) carrying:
-
-    - ``policy``: the deterministic, target-agnostic source of truth — the agent's
-      allowed risk categories and the active level's gate per allowed category.
-      Always emitted; this is what the policy lint validates.
-    - ``tools`` (copilot/all targets): the per-agent MCP server scope, when any.
-    - ``permission`` (opencode/all targets): the best-effort native map.
+    Returns YAML lines (no surrounding ``---``, no trailing newline) carrying the
+    ACTUALLY-enforced keys — ``model``, ``tools``/``agents``/``handoffs`` (copilot)
+    and ``permission`` (opencode). The advisory ``policy`` block is emitted
+    separately as an HTML comment (:func:`policy_comment`) so it never lands on the
+    wire. Empty string when a role has no native keys.
 
     ``strict`` emits its real gate map, gated operationally by the `carter check`
     hard ack on a non-enforcing target.
     """
-    policy = config.get("policy") or {}
-    level = policy.get("level", "guarded")
-    emit_level = _emit_level(level)
-
-    allowed = [cat for cat, on in sorted(effective_allowlist(config).get(role, {}).items()) if on]
-    gates = _gates_for(allowed, emit_level, policy.get("overrides"))
-
-    block: dict[str, Any] = {
-        "policy": {"level": emit_level, "allow": allowed, "gates": gates},
-    }
-    block.update(policy_native_keys(config, role))
-
-    text = yaml.dump(block, sort_keys=False, default_flow_style=None).rstrip("\n")
-    return text
+    block = policy_native_keys(config, role)
+    if not block:
+        return ""
+    return yaml.dump(block, sort_keys=False, default_flow_style=None).rstrip("\n")
 
 
 def policy_gate_table(config: dict[str, Any]) -> list[dict[str, str]]:

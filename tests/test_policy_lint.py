@@ -10,7 +10,14 @@ from __future__ import annotations
 import yaml
 from click.testing import CliRunner
 
-from carter.config import generate_default_config, load_config, policy_frontmatter, write_config
+from carter.config import (
+    generate_default_config,
+    load_config,
+    parse_policy_comment,
+    policy_comment,
+    policy_frontmatter,
+    write_config,
+)
 from carter.scaffold import lint_policy
 
 
@@ -26,9 +33,15 @@ def _config(level: str = "guarded", target: str = "copilot", redaction: bool = T
 
 def _installed(config: dict) -> dict[str, dict]:
     """Build the {role: parsed frontmatter} map the way ``carter check`` does:
-    parse each role's emitted policy frontmatter into a dict.
+    parse each role's native frontmatter and re-inject the ``policy`` block from
+    its ``carter:policy`` comment (which is where the block now lives, off the wire).
     """
-    return {role: yaml.safe_load(policy_frontmatter(config, role)) for role in config["agents"]}
+    installed = {}
+    for role in config["agents"]:
+        fm = yaml.safe_load(policy_frontmatter(config, role)) or {}
+        fm["policy"] = parse_policy_comment(policy_comment(config, role))
+        installed[role] = fm
+    return installed
 
 
 # ─── Drift detection (emitted frontmatter ↔ declared model) ──────────────────
@@ -294,7 +307,9 @@ class TestCheckCliIntegration:
     def test_check_fails_on_drifted_agent_frontmatter(self, tmp_path):
         runner, main = self._init(tmp_path)  # default: copilot, guarded
         agent = next((tmp_path / ".github" / "agents").glob("carter-devops*.md"))
-        tampered = agent.read_text().replace("remote-write: ask", "remote-write: allow", 1)
+        # The policy block now lives in the carter:policy comment (compact JSON),
+        # off the wire; tamper it there to simulate drift.
+        tampered = agent.read_text().replace('"remote-write":"ask"', '"remote-write":"allow"', 1)
         agent.write_text(tampered)
         result = runner.invoke(main, ["check", str(tmp_path)])
         assert result.exit_code == 1, result.output

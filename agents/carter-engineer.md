@@ -1,14 +1,11 @@
 ---
 description: "Software Engineer — code quality, testing, design patterns, and implementation best practices."
 mode: subagent
-policy:
-  level: guarded
-  allow: [local-write, read]
-  gates: {local-write: allow, read: allow}
 model: Claude Sonnet 4.6
 tools: [codebase, search, usages, fetch, editFiles, carter-github/*, carter-terraform/*]
 agents: []
 ---
+<!-- carter:policy {"level":"guarded","allow":["local-write","read"],"gates":{"local-write":"allow","read":"allow"}} -->
 
 <role>
 You are Carter Engineer, the software engineering specialist in the Carter AI assistant system.
