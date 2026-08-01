@@ -11,7 +11,7 @@ import json
 import subprocess
 from pathlib import Path
 
-from carter.install.console import log_ok, log_skip, log_step
+from carter.install.console import log_ok, log_skip, log_step, log_warn
 from carter.install.files import (
     _get_template_vars,
     _install_file,
@@ -145,7 +145,7 @@ def install_instructions(
         _install_file(src, dst, manifest, backup_root)
 
 
-_OPENCODE_AGENTS_MD = """\
+_OPENCODE_AGENTS_MD_LEGACY = """\
 # Carter — Global Rules
 
 When the user's request starts with `ops:`, load the `carter-ops` skill and follow
@@ -160,6 +160,23 @@ its instructions exactly.
   solutions to check for past decisions and lessons.
 """
 
+# Ported verbatim from instructions/copilot-instructions.md §Communication (D2: only
+# this section — AGENTS.md loads every session, so token cost is disciplined). Written
+# as implicit concatenation purely to satisfy the line-length lint; the emitted bytes
+# match the instructions file exactly.
+_OPENCODE_COMMUNICATION = (
+    "\n## Communication\n"
+    "- Be concise and clear. Explain so a junior developer or solution architect"
+    " understands.\n"
+    "- Cite sources. State which documentation, standards, or references inform your"
+    " answers.\n"
+    "- When reviewing, match detail to the change (quick vs deep), comment on the code"
+    " not the author, and explain *why* behind each finding. See `carter-code-review`.\n"
+    "- At any doubt, ask for clarification before proceeding.\n"
+)
+
+_OPENCODE_AGENTS_MD = _OPENCODE_AGENTS_MD_LEGACY + _OPENCODE_COMMUNICATION
+
 
 def install_opencode_rules(
     targets: list[str],
@@ -173,13 +190,25 @@ def install_opencode_rules(
     log_step("Installing OpenCode global rules...")
     dst = _opencode_base(base_dir) / "AGENTS.md"
     dst.parent.mkdir(parents=True, exist_ok=True)
-    if dst.exists():
-        log_skip(f"{str(dst).replace(str(_home()), '~')} (exists, not overwriting)")
-        manifest["files"].append(str(dst))
-    else:
+    shown = str(dst).replace(str(_home()), "~")
+    if not dst.exists():
         dst.write_text(_OPENCODE_AGENTS_MD)
-        log_ok(str(dst).replace(str(_home()), "~"))
-        manifest["files"].append(str(dst))
+        log_ok(shown)
+    elif dst.read_text() == _OPENCODE_AGENTS_MD_LEGACY:
+        # Unmodified legacy content (hash-idempotency philosophy): safe to upgrade.
+        dst.write_text(_OPENCODE_AGENTS_MD)
+        log_ok(f"{shown} (upgraded: added Communication section)")
+    elif dst.read_text() == _OPENCODE_AGENTS_MD:
+        log_skip(f"{shown} (already current)")
+    else:
+        # User-modified — NEVER clobber.
+        log_warn(
+            f"{shown} (user-modified, skipping)", hint="merge the Communication section manually"
+        )
+        manifest.setdefault("notes", []).append(
+            f"{shown}: user-modified, Communication section not installed"
+        )
+    manifest["files"].append(str(dst))
 
 
 def install_memories(

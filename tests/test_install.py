@@ -5,7 +5,10 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
+
 from carter import installer as install
+from carter.install.components import _OPENCODE_AGENTS_MD, _OPENCODE_AGENTS_MD_LEGACY
 
 # ──────────────────────────────────────────────────────────────────────────────
 # File operations
@@ -893,6 +896,52 @@ class TestOpenCodeRules:
 
         install.install_opencode_rules(["opencode"], base_dir, manifest, backup)
         assert agents_md.read_text() == "# Custom rules\n"
+
+
+class TestOpenCodeRulesUpgrade:
+    """D3 upgrade path: ``install_opencode_rules`` used to skip whenever the file
+    existed, so every legacy install would never receive a content fix. Now it
+    content-hashes: byte-identical legacy content is upgraded, user-modified
+    content is never clobbered (matching the installer's SHA-256 idempotency
+    philosophy).
+    """
+
+    def test_fresh_install_has_communication_section(self, base_dir: Path) -> None:
+        manifest = {"files": [], "file_hashes": {}}
+        install.install_opencode_rules(["opencode"], base_dir, manifest, base_dir / "backup")
+
+        content = (base_dir / "opencode" / "AGENTS.md").read_text()
+        assert "## Communication" in content
+        assert "Be concise and clear" in content
+        assert "## Memory" in content  # legacy content retained
+
+    def test_legacy_file_is_upgraded(self, base_dir: Path) -> None:
+        agents_md = base_dir / "opencode" / "AGENTS.md"
+        agents_md.parent.mkdir(parents=True, exist_ok=True)
+        agents_md.write_text(_OPENCODE_AGENTS_MD_LEGACY)
+
+        manifest = {"files": [], "file_hashes": {}}
+        install.install_opencode_rules(["opencode"], base_dir, manifest, base_dir / "backup")
+
+        content = agents_md.read_text()
+        assert "## Communication" in content
+        assert content == _OPENCODE_AGENTS_MD
+
+    def test_user_modified_file_is_skipped_with_warning(
+        self, base_dir: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        agents_md = base_dir / "opencode" / "AGENTS.md"
+        agents_md.parent.mkdir(parents=True, exist_ok=True)
+        custom = _OPENCODE_AGENTS_MD_LEGACY + "\n## My own rules\n"
+        agents_md.write_text(custom)
+
+        manifest = {"files": [], "file_hashes": {}}
+        install.install_opencode_rules(["opencode"], base_dir, manifest, base_dir / "backup")
+
+        assert agents_md.read_text() == custom, "user-modified AGENTS.md was clobbered"
+        out = capsys.readouterr().out
+        assert "user-modified" in out
+        assert any("user-modified" in note for note in manifest.get("notes", []))
 
 
 class TestOpsOneLiner:

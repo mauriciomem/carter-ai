@@ -405,12 +405,15 @@ class TestQualityGate:
         assert "must_haves" in maestro
 
     def test_must_haves_absent_without_spec_handoff(self, default_config, env):
-        """must_haves not mentioned when spec_handoff is false."""
+        """The quality-gate must_haves directive is omitted when spec_handoff is
+        false. Scoped to the <quality_gate> block: the <communication> block
+        legitimately names must_haves as Carter protocol vocabulary."""
         default_config["quality_gate"]["enabled"] = True
         default_config["tdd"]["spec_handoff"] = False
         results = render_agents(default_config, env)
         maestro = results["carter-maestro.md"]
-        assert "must_haves" not in maestro
+        gate = maestro.split("<quality_gate>")[1].split("</quality_gate>")[0]
+        assert "must_haves" not in gate
 
     def test_iteration_count_in_quality_gate(self, default_config, env):
         """Iteration count from config appears in rendered quality gate."""

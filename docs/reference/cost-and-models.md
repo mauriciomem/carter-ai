@@ -48,8 +48,14 @@ Rough sizes (they drift as the project grows — see [RFC-0004 §P2](../rfcs/000
 for the measured baseline):
 
 - **Always loaded, every request:** global instructions + all skill *descriptions* ≈
-  **~1.3k tokens**. Small, and deliberately so.
-- **Loaded when an agent is used:** that one agent's prompt ≈ **0.4k–1.3k tokens**.
+  **~1.4k tokens**, plus the primary orchestrator's own prompt — Maestro ≈ **3.2k
+  tokens**, since it carries the routing table *and* the human-facing protocol blocks
+  (session bootstrap, quality gate, knowledge capture, and the two communication
+  registers). Everything else is paid for only when it's used.
+- **Loaded when an agent is used:** that one agent's prompt ≈ **0.4k–1.4k tokens**.
+  Specialists deliberately do *not* carry the communication registers — they inherit
+  the concise / cite-sources / junior-clarity baseline from the global instructions,
+  which costs nothing extra per dispatch.
 - **Loaded on demand:** a skill's full body (only when that skill fires), and its
   reference files (only when needed). This is "progressive disclosure" — Carter doesn't
   pay for a skill you don't use.

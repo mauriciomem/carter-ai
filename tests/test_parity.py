@@ -462,3 +462,63 @@ class TestStrictnessPolicyParity:
         assert "devops" in body
         assert "remote-write" in body  # narrator does NOT hold it; devops does
         assert "gate`-tier" in body
+
+
+class TestTemplateStaticBlockParity:
+    """Every named content block a template defines must exist in the matching
+    static file (ADR-0002 dual-source drift guard). Byte-equality is NOT asserted
+    — section presence is. Drift class: static maestro shipped without
+    session_bootstrap/quality_gate/knowledge_capture and static engineer without
+    tdd_workflow while the templates had them (found 2026-08-01)."""
+
+    # block name -> a literal marker string that must appear in the static file
+    MAESTRO_BLOCKS = {
+        "session_bootstrap": "<session_bootstrap>",
+        "quality_gate": "<quality_gate>",
+        "knowledge_capture": "<knowledge_capture>",
+    }
+    ENGINEER_BLOCKS = {"quality_gate": "<tdd_workflow>"}
+
+    def test_static_maestro_carries_template_blocks(self, static_agents_dir):
+        text = (static_agents_dir / "carter-maestro.md").read_text()
+        for block, marker in self.MAESTRO_BLOCKS.items():
+            assert marker in text, f"static maestro missing template block {block}"
+
+    def test_static_engineer_carries_template_blocks(self, static_agents_dir):
+        text = (static_agents_dir / "carter-engineer.md").read_text()
+        for block, marker in self.ENGINEER_BLOCKS.items():
+            assert marker in text, f"static engineer missing template block {block}"
+
+    def test_static_maestro_carries_communication_block(self, static_agents_dir):
+        """The dual-register communication block is MAESTRO-ONLY (maintainer
+        decision D8, superseding D1-amended): the human-facing registers matter
+        where a human is actually talking, and subagents keep the global baseline
+        from instructions/copilot-instructions.md + AGENTS.md §Communication."""
+        text = (static_agents_dir / "carter-maestro.md").read_text()
+        assert "<communication>" in text, "static maestro missing the communication block"
+
+    def test_static_subagents_do_not_carry_communication_block(self, static_agents_dir):
+        """Inverse of the above — locks D8 so the block cannot silently drift back
+        into the 7 subagents (it would cost ~570 tokens per subagent invocation)."""
+        offenders = [
+            p.name
+            for p in sorted(static_agents_dir.glob("carter-*.md"))
+            if p.stem != "carter-maestro" and "<communication>" in p.read_text()
+        ]
+        assert not offenders, f"communication block leaked into subagents (D8): {offenders}"
+
+    def test_rendered_communication_block_is_maestro_only(self):
+        """Same invariant over rendered output, both targets."""
+        from carter.config import generate_default_config
+        from carter.scaffold import create_env, render_agents
+
+        cfg = generate_default_config(workspace_name="t", mode="single")
+        cfg["agent_suffix"] = ""
+        for target in ("copilot", "opencode"):
+            cfg["target"] = target
+            for name, content in render_agents(cfg, create_env()).items():
+                has_block = "<communication>" in content
+                if name == "carter-maestro.md":
+                    assert has_block, f"{target}/{name}: maestro rendered without the block"
+                else:
+                    assert not has_block, f"{target}/{name}: block leaked into a subagent (D8)"

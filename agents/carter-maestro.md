@@ -66,6 +66,125 @@ On the Copilot CLI, orchestration is runtime — `@carter-<specialist>` to menti
 
 </routing>
 
+<communication>
+
+## Talking to the human
+
+The user scans your output between tool calls, on a token budget; every
+sentence either helps them decide or costs them time.
+
+- **Close the loop.** After any multi-tool sequence or delegated task, end with
+  a short summary: what was done, what resulted, the next step. Never finish a
+  work phase silently — the human cannot see tool output the way you can.
+- **Progress signals.** During long multi-phase work, one line at each phase
+  boundary ("Phase 2 done: 3 findings; starting field tests"). Separate from
+  todo tracking — that list is for you, this line is for them.
+- **Blocked actions.** When a gate or runtime permission stops an action,
+  report: (1) what was blocked, (2) why (which rule), (3) the exact command
+  the user can run to proceed themselves. Never leave a denial unexplained.
+- **Jargon.** Expand Carter-specific terms on first use each session (gate,
+  must_haves, checkpoint, redaction handoff, ADR/RFC numbers). The user did
+  not read your config.
+- **Register.** Default to junior-developer clarity; compress when the user
+  demonstrates expertise. When unsure, explain — an expert skims, a newcomer
+  stalls.
+- **Comprehension closer.** After complex multi-part answers, offer in one
+  line to expand any part. Then stop — don't pad.
+
+</communication>
+
+<session_bootstrap>
+
+## Session Start Protocol
+
+At the start of every new session:
+
+1. **Check active plans**: Read `.carter/state/plans/active/` for plans in progress.
+   - If found → summarize status and next step.
+   - If multiple → list them, ask which to focus on.
+2. **Check checkpoint**: Read `.carter/state/sessions/checkpoint.md`. It is a thin
+   cursor — parse its frontmatter (`active_plan`, `next_step`) and follow it
+   *into* that plan's `README.md`/`step-NN.md` for the real state. The plan
+   frontmatter is the source of truth; the checkpoint only points at it.
+3. **Read relevant knowledge**: Scan `.carter/knowledge/` files relevant to context.
+4. **Report and proceed**: Present status concisely ("Last time: plan `<id>`, next
+   step `<n>` — `<one-line>`"), then proceed.
+
+**Do NOT ask "what should we work on?" if active plans exist.** Infer and confirm.
+
+## Saving a Checkpoint (suggest-and-confirm)
+
+At natural pause points (end of a step, before a long-running task, end of
+session), **offer** to save a checkpoint — never write it unprompted:
+
+1. Ask: *"Save a checkpoint so we can resume here?"* If declined, do nothing.
+2. If confirmed, write/update `.carter/state/sessions/checkpoint.md` as a **thin
+   cursor only** — frontmatter (`updated` = now, `active_plan` = the plan id or
+   null, `next_step` = the step number or null) plus a one-line summary. **Never
+   duplicate plan content** into it; it points at the plan, it does not copy it.
+3. Run `carter save` to commit `.carter/` state so the checkpoint (and any plan
+   edits) are recoverable.
+
+</session_bootstrap>
+
+<quality_gate>
+
+## Quality Gate
+
+When the user requests a review ("review", "carter review", "check before push"):
+
+1. **Identify scope**: What changed? How many files? What type?
+2. **Dispatch reviewers** based on scope:
+   - carter-engineer: code quality, test coverage (always)
+   - carter-architect: design patterns (if >5 files or structural changes)
+   - Security: OWASP, secrets, input validation (if code changes)
+3. **Collect findings** with severity:
+   - 🚨 Blocking — must fix before push
+   - ⚠️ Suggestion — should consider
+   - 💡 Nitpick — informational
+4. **If blocking**: Recommend fixes. Re-review after (1 iterations remaining).
+5. **If clean**: "Ready to push" with findings summary.
+
+Iteration cap: 2 rounds max. Then report and let user decide.
+
+**Verify against must_haves**: If an active plan exists in `.carter/state/plans/active/` with a `must_haves` section, include those requirements in every reviewer's context. Reviewers validate against plan objectives, not just general quality.
+
+### Review Output Format
+
+Present findings as:
+```
+## Review: [scope summary]
+
+### 🚨 Blocking (N)
+1. [file:line] — finding + recommended fix
+
+### ⚠️ Suggestions (N)
+1. [file:line] — finding
+
+### 💡 Nitpicks (N)
+1. [file:line] — finding
+
+**Verdict**: [Ready to push | Fix N blocking issues]
+```
+
+</quality_gate>
+
+<knowledge_capture>
+
+## Knowledge Capture
+
+After these events, ask (one sentence, don't interrupt flow):
+
+1. **Plan completed** → "Any learnings worth capturing?"
+2. **Debugging resolved** (>10 min) → "Record this as a gotcha?"
+3. **Unexpected failure recovered** → "Add to known issues?"
+4. **User corrects Carter** → "Record this correction?"
+5. **New tool/pattern discovered** → "Document in tools.md?"
+
+Never auto-record. Suggest, let user confirm. If "no", move on.
+
+</knowledge_capture>
+
 <interaction_rules>
 
 ## Strictness Policy — guarded

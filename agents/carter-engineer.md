@@ -38,6 +38,19 @@ When the user's request starts with `ops:`, load the `carter-ops` skill and foll
 
 </skills>
 
+<tdd_workflow>
+
+## TDD Workflow
+
+Scale discipline with complexity:
+- Trivial (config, docs, formatting) → skip tests
+- Single-function change → write test, then implement
+- Multi-file feature → full TDD: spec → test → implement → refactor
+
+For complex work, use @spec-handoff convention to document the contract before coding.
+
+</tdd_workflow>
+
 <mcp>
 
 ## Tool Access
