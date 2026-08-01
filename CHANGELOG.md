@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v0.7.0 (2026-08-01)
+
+### Features
+
+- **models**: Bump implementer tier from Sonnet 4.6 to Sonnet 5
+  ([`44e8d24`](https://github.com/mauriciomem/carter-ai/commit/44e8d243cc73d1d777b44c4f9e3b8fed4f36feb1))
+
+
 ## v0.6.1 (2026-07-23)
 
 ### Bug Fixes
