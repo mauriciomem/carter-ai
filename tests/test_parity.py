@@ -425,7 +425,7 @@ class TestStrictnessPolicyParity:
         """ADR-0010 D2: every static agent bakes a single per-target ``model:`` string
         matching the shipped resolution (overrides > tier > default) at the copilot
         default. A re-bake gap (e.g. a tier rename not propagated to statics) fails
-        here. Thinkers = Opus 4.8; implementers = Sonnet 4.6. Never an array; no effort.
+        here. Thinkers = Opus 4.8; implementers = Sonnet 5. Never an array; no effort.
         """
         cfg = generate_default_config()
         cfg["agent_suffix"] = ""  # copilot default, canonical names

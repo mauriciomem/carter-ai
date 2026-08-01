@@ -1,7 +1,7 @@
 ---
 description: "Software Engineer — code quality, testing, design patterns, and implementation best practices."
 mode: subagent
-model: Claude Sonnet 4.6
+model: Claude Sonnet 5
 tools: [codebase, search, usages, fetch, editFiles, carter-github/*, carter-terraform/*]
 agents: []
 ---

@@ -1492,7 +1492,7 @@ class TestInitProfileFlag:
         assert cfg.get("profile") is None
         # narrator ships on Sonnet by default.
         narrator = (tmp_path / ".github" / "agents" / "carter-narrator-local.md").read_text()
-        assert "model: Claude Sonnet 4.6" in narrator
+        assert "model: Claude Sonnet 5" in narrator
 
     def test_invalid_profile_is_rejected(self, tmp_path):
         result = self._run(tmp_path, "--profile", "cheapest")

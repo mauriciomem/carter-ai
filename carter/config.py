@@ -96,15 +96,15 @@ DEFAULT_CONFIG: dict[str, Any] = {
     # wipe it — same footgun the taxonomy maps avoid). Each tier maps a target to a
     # single model string: a display name for VS Code/Copilot, a `provider/model` ID
     # for OpenCode. Resolved `overrides > tier > default` (see `resolve_model`).
-    # Thinkers = Opus 4.8; implementers = Sonnet 4.6; Haiku is opt-in via `overrides`.
+    # Thinkers = Opus 4.8; implementers = Sonnet 5; Haiku is opt-in via `overrides`.
     # Effort is NOT here — no target has a per-agent effort field; it is the global
     # `--effort high` knob. `temperature` is dropped wholesale.
     "models": {
         "default": {"copilot": "Claude Opus 4.8", "opencode": "anthropic/claude-opus-4-8"},
         "thinkers": {"copilot": "Claude Opus 4.8", "opencode": "anthropic/claude-opus-4-8"},
         "implementers": {
-            "copilot": "Claude Sonnet 4.6",
-            "opencode": "anthropic/claude-sonnet-4-6",
+            "copilot": "Claude Sonnet 5",
+            "opencode": "anthropic/claude-sonnet-5",
         },
         "overrides": {},  # per-agent, e.g. {engineer: {copilot: "Claude Haiku 4.5", ...}}
     },
@@ -306,9 +306,9 @@ AGENT_ALLOWLIST: dict[str, dict[str, bool]] = {
 # silently dead agent (test_models.py asserts the table is non-empty per shipped role).
 MODEL_NAMES: dict[str, dict[str, str]] = {
     "claude-opus-4-8": {"copilot": "Claude Opus 4.8", "opencode": "anthropic/claude-opus-4-8"},
-    "claude-sonnet-4-6": {
-        "copilot": "Claude Sonnet 4.6",
-        "opencode": "anthropic/claude-sonnet-4-6",
+    "claude-sonnet-5": {
+        "copilot": "Claude Sonnet 5",
+        "opencode": "anthropic/claude-sonnet-5",
     },
     # Haiku 4.5 is an opt-in implementer override only (xhigh/max effort error on it).
     "claude-haiku-4-5": {"copilot": "Claude Haiku 4.5", "opencode": "anthropic/claude-haiku-4-5"},

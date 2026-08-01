@@ -270,12 +270,12 @@ the shipped tiers.
 models:
   default:      { copilot: "Claude Opus 4.8",   opencode: "anthropic/claude-opus-4-8" }
   thinkers:     { copilot: "Claude Opus 4.8",   opencode: "anthropic/claude-opus-4-8" }
-  implementers: { copilot: "Claude Sonnet 4.6", opencode: "anthropic/claude-sonnet-4-6" }
+  implementers: { copilot: "Claude Sonnet 5",   opencode: "anthropic/claude-sonnet-5" }
   overrides: {}   # per-agent, e.g. {engineer: {copilot: "Claude Haiku 4.5", opencode: "anthropic/claude-haiku-4-5"}}
 ```
 
 **Resolution: `overrides` > tier > `default`.** Thinkers (maestro, architect, pm,
-learner, narrator) = Opus 4.8; implementers (engineer, devops) = Sonnet 4.6; `default`
+learner, security) = Opus 4.8; implementers (engineer, devops, pm, narrator) = Sonnet 5; `default`
 is the un-tiered catch-all so a future agent never resolves to an empty model. **Haiku
 4.5 is opt-in via `overrides` only** (`xhigh`/`max` effort error on it).
 

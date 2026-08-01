@@ -19,13 +19,14 @@ from typing import Any
 # deprecated — both previously appeared in code/README and disagreed. Single-sourced
 # here; override per-run with EVAL_MODEL / EVAL_JUDGE_MODEL (e.g. a Haiku-class model
 # on the weekly cron, per ADR-0009 D5).
-DEFAULT_MODEL = "claude-sonnet-4-6"
-DEFAULT_JUDGE_MODEL = "claude-sonnet-4-6"
+DEFAULT_MODEL = "claude-sonnet-5"
+DEFAULT_JUDGE_MODEL = "claude-sonnet-5"
 
 # USD price per 1M tokens: model -> (input, output). Unlisted models => cost_usd None.
 PRICE_PER_1M: dict[str, tuple[float, float]] = {
     "claude-opus-4-8": (5.0, 25.0),
-    "claude-sonnet-4-6": (3.0, 15.0),
+    "claude-sonnet-5": (2.0, 10.0),
+    "claude-sonnet-4-6": (3.0, 15.0),  # kept: the recorded adherence fixture is a 4.6 transcript
     "claude-haiku-4-5": (1.0, 5.0),
     "gpt-4o": (2.5, 10.0),
     "gpt-4o-mini": (0.15, 0.60),

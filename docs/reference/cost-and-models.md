@@ -67,7 +67,7 @@ them**, and **(2) MCP servers you're not using but still shipping.**
 | Tier | Model (default) | Agents |
 |------|-----------------|--------|
 | Thinkers | **Opus 4.8** (frontier, most expensive) | maestro, architect, learner, security |
-| Implementers | **Sonnet 4.6** (mid-tier, cheaper) | engineer, devops, **pm**, **narrator** |
+| Implementers | **Sonnet 5** (mid-tier, cheaper) | engineer, devops, **pm**, **narrator** |
 
 That's **4 of 8 agents on the frontier model** — down from 6. `pm` and `narrator` moved
 to Sonnet by default (RFC-0004 lever 1): their work is highly *structured* — narrator's

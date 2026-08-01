@@ -165,7 +165,7 @@ policy:
 models:
   default:      { copilot: "Claude Opus 4.8",   opencode: "anthropic/claude-opus-4-8" }
   thinkers:     { copilot: "Claude Opus 4.8",   opencode: "anthropic/claude-opus-4-8" }
-  implementers: { copilot: "Claude Sonnet 4.6", opencode: "anthropic/claude-sonnet-4-6" }
+  implementers: { copilot: "Claude Sonnet 5",   opencode: "anthropic/claude-sonnet-5" }
   overrides: {}         # per-agent, e.g. {engineer: {copilot: "Claude Haiku 4.5", opencode: "anthropic/claude-haiku-4-5"}}
 
 # Should Carter review your code before you push?
