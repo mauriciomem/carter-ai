@@ -4,6 +4,16 @@
 
 ## v0.8.0 (2026-08-01)
 
+### Documentation
+
+- Correct agent count and trim the carter-golang skill description
+  ([`d603c26`](https://github.com/mauriciomem/carter-ai/commit/d603c26f66c138ebeadb643bbfe82c7fc14afdcd))
+
+### Features
+
+- **agents**: User-facing communication layer + static/template parity
+  ([`ddfafbf`](https://github.com/mauriciomem/carter-ai/commit/ddfafbf9088d0635350941052b8c2191c3cf4158))
+
 
 ## v0.7.0 (2026-08-01)
 
