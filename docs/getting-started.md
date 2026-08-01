@@ -13,7 +13,7 @@ This guide walks you through setting up Carter and using it in real scenarios. I
 
 Before diving in, here's the mental model:
 
-**Agents** are specialized AI assistants with focused expertise. Each one knows what it should and shouldn't do. Carter has 7 agents: 6 conversational specialists (Maestro, Architect, Engineer, DevOps, Learner, PM) plus **Narrator**, which reframes and redacts external-facing content. All 7 are installed by `carter install` and scaffolded by `carter init`.
+**Agents** are specialized AI assistants with focused expertise. Each one knows what it should and shouldn't do. Carter has 8 agents: **Maestro** the orchestrator, five conversational specialists (Architect, Engineer, DevOps, Learner, PM), **Narrator**, which reframes and redacts external-facing content, and **Security**, for threat modeling, secure review, and vulnerability triage. All 8 are installed by `carter install` and scaffolded by `carter init`.
 
 **Maestro** is the orchestrator — it receives your request and routes it to the right specialist. You can also talk to any agent directly.
 
@@ -107,7 +107,8 @@ my-workspace/
     │   ├── carter-devops-local.md
     │   ├── carter-pm-local.md
     │   ├── carter-learner-local.md
-    │   └── carter-narrator-local.md   ← External-facing content + redaction agent
+    │   ├── carter-narrator-local.md   ← External-facing content + redaction agent
+    │   └── carter-security-local.md   ← Threat modeling, secure review, vuln triage
     └── copilot-instructions.md   ← Generated global instructions (skipped if it exists)
 ```
 

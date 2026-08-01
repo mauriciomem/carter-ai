@@ -1,6 +1,6 @@
 ---
 name: carter-golang
-description: Go standards for backend services — CLI tools, REST/gRPC APIs, and network tools over the stack (HTTP, TCP, UDP, QUIC, SSH, long-polling). Covers project layout, error handling, concurrency & context, net/http server/client hardening, graceful shutdown, API design, test-first QA (table tests, fuzzing, goleak, race), and performance profiling. Use when writing or reviewing Go, or when you see goroutine leaks, missing timeouts, unbounded reads, races, or panics in library code.
+description: Go standards for backend services — CLI tools, REST/gRPC APIs, and network code (HTTP, TCP, UDP, QUIC, SSH). Covers layout, errors, concurrency & context, net/http hardening, API design, test-first QA, and profiling. Use when writing or reviewing Go, or on goroutine leaks, missing timeouts, unbounded reads, races, or panics.
 argument-hint: "[Go code, service, or project to write/review]"
 ---
 
