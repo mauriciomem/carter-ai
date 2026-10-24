@@ -2,6 +2,33 @@
 
 <!-- version list -->
 
+## v0.10.0 (2026-10-24)
+
+### Documentation
+
+- Document the language and co-author rules
+  ([#20](https://github.com/mauriciomem/carter-ai/pull/20),
+  [`13044d3`](https://github.com/mauriciomem/carter-ai/commit/13044d3127e3b3f44d4e7c817f8b3bd1dde16e49))
+
+### Features
+
+- **config**: Docs_language for Carter internal documentation
+  ([#20](https://github.com/mauriciomem/carter-ai/pull/20),
+  [`13044d3`](https://github.com/mauriciomem/carter-ai/commit/13044d3127e3b3f44d4e7c817f8b3bd1dde16e49))
+
+- **ops**: Credit the LLM as co-author instead of commit author
+  ([#20](https://github.com/mauriciomem/carter-ai/pull/20),
+  [`13044d3`](https://github.com/mauriciomem/carter-ai/commit/13044d3127e3b3f44d4e7c817f8b3bd1dde16e49))
+
+- **templates**: English-only repository output and co-author rule
+  ([#20](https://github.com/mauriciomem/carter-ai/pull/20),
+  [`13044d3`](https://github.com/mauriciomem/carter-ai/commit/13044d3127e3b3f44d4e7c817f8b3bd1dde16e49))
+
+### Breaking Changes
+
+- **ops**: Carter no longer sets the commit author to the bot identity.
+
+
 ## v0.9.0 (2026-10-24)
 
 ### Bug Fixes
