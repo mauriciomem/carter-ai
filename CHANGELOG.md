@@ -2,6 +2,95 @@
 
 <!-- version list -->
 
+## v0.9.0 (2026-10-24)
+
+### Bug Fixes
+
+- **install**: Only remove the stale OpenCode instructions copy when Carter-owned
+  ([#19](https://github.com/mauriciomem/carter-ai/pull/19),
+  [`eeaa864`](https://github.com/mauriciomem/carter-ai/commit/eeaa864292167bf4304171ccd82ab4e8c16a53ee))
+
+- **mcp**: Drop the Copilot Atlassian bridge (supply-chain)
+  ([#19](https://github.com/mauriciomem/carter-ai/pull/19),
+  [`eeaa864`](https://github.com/mauriciomem/carter-ai/commit/eeaa864292167bf4304171ccd82ab4e8c16a53ee))
+
+- **mcp**: Working server packages and valid OpenCode env syntax
+  ([#19](https://github.com/mauriciomem/carter-ai/pull/19),
+  [`eeaa864`](https://github.com/mauriciomem/carter-ai/commit/eeaa864292167bf4304171ccd82ab4e8c16a53ee))
+
+- **ops**: Validate policy-override category
+  ([#19](https://github.com/mauriciomem/carter-ai/pull/19),
+  [`eeaa864`](https://github.com/mauriciomem/carter-ai/commit/eeaa864292167bf4304171ccd82ab4e8c16a53ee))
+
+- **templates**: Remove dead branches and incorrect references
+  ([#19](https://github.com/mauriciomem/carter-ai/pull/19),
+  [`eeaa864`](https://github.com/mauriciomem/carter-ai/commit/eeaa864292167bf4304171ccd82ab4e8c16a53ee))
+
+### Chores
+
+- Remove legacy install shim and orphaned evals
+  ([#19](https://github.com/mauriciomem/carter-ai/pull/19),
+  [`eeaa864`](https://github.com/mauriciomem/carter-ai/commit/eeaa864292167bf4304171ccd82ab4e8c16a53ee))
+
+- Remove stray file and fix .gitignore ([#19](https://github.com/mauriciomem/carter-ai/pull/19),
+  [`eeaa864`](https://github.com/mauriciomem/carter-ai/commit/eeaa864292167bf4304171ccd82ab4e8c16a53ee))
+
+- Review nitpicks ([#19](https://github.com/mauriciomem/carter-ai/pull/19),
+  [`eeaa864`](https://github.com/mauriciomem/carter-ai/commit/eeaa864292167bf4304171ccd82ab4e8c16a53ee))
+
+### Continuous Integration
+
+- Bump GitHub Actions and Python matrix ([#19](https://github.com/mauriciomem/carter-ai/pull/19),
+  [`eeaa864`](https://github.com/mauriciomem/carter-ai/commit/eeaa864292167bf4304171ccd82ab4e8c16a53ee))
+
+- Drop unused setup-uv step and bump eval models
+  ([#19](https://github.com/mauriciomem/carter-ai/pull/19),
+  [`eeaa864`](https://github.com/mauriciomem/carter-ai/commit/eeaa864292167bf4304171ccd82ab4e8c16a53ee))
+
+- Reproducible toolchain and green lint ([#19](https://github.com/mauriciomem/carter-ai/pull/19),
+  [`eeaa864`](https://github.com/mauriciomem/carter-ai/commit/eeaa864292167bf4304171ccd82ab4e8c16a53ee))
+
+### Documentation
+
+- Align user docs with current code ([#19](https://github.com/mauriciomem/carter-ai/pull/19),
+  [`eeaa864`](https://github.com/mauriciomem/carter-ai/commit/eeaa864292167bf4304171ccd82ab4e8c16a53ee))
+
+- Remove historical RFCs and completed plans
+  ([#19](https://github.com/mauriciomem/carter-ai/pull/19),
+  [`eeaa864`](https://github.com/mauriciomem/carter-ai/commit/eeaa864292167bf4304171ccd82ab4e8c16a53ee))
+
+- **adr**: Fix links to removed records and add status notes
+  ([#19](https://github.com/mauriciomem/carter-ai/pull/19),
+  [`eeaa864`](https://github.com/mauriciomem/carter-ai/commit/eeaa864292167bf4304171ccd82ab4e8c16a53ee))
+
+- **changelog**: Backfill v0.8.0 entries dropped by PSR merge-commit bug
+  ([`950e5ca`](https://github.com/mauriciomem/carter-ai/commit/950e5ca2541b98977cb9dfa8f1f0eacb8561abe1))
+
+- **skills**: Current GitHub Actions versions in examples
+  ([#19](https://github.com/mauriciomem/carter-ai/pull/19),
+  [`eeaa864`](https://github.com/mauriciomem/carter-ai/commit/eeaa864292167bf4304171ccd82ab4e8c16a53ee))
+
+### Features
+
+- **models**: Bump to Claude 5.5 family ([#19](https://github.com/mauriciomem/carter-ai/pull/19),
+  [`eeaa864`](https://github.com/mauriciomem/carter-ai/commit/eeaa864292167bf4304171ccd82ab4e8c16a53ee))
+
+### Refactoring
+
+- Remove dead and test-only code ([#19](https://github.com/mauriciomem/carter-ai/pull/19),
+  [`eeaa864`](https://github.com/mauriciomem/carter-ai/commit/eeaa864292167bf4304171ccd82ab4e8c16a53ee))
+
+- **ops**: Drop legacy --dry-run/--execute operations
+  ([#19](https://github.com/mauriciomem/carter-ai/pull/19),
+  [`eeaa864`](https://github.com/mauriciomem/carter-ai/commit/eeaa864292167bf4304171ccd82ab4e8c16a53ee))
+
+### Testing
+
+- Legacy config keys survive update and check
+  ([#19](https://github.com/mauriciomem/carter-ai/pull/19),
+  [`eeaa864`](https://github.com/mauriciomem/carter-ai/commit/eeaa864292167bf4304171ccd82ab4e8c16a53ee))
+
+
 ## v0.8.0 (2026-08-01)
 
 ### Documentation
