@@ -302,3 +302,53 @@ class TestLegacyConfigKeysTolerated:
         assert loaded["policy"]["level"] == "guarded"
         assert loaded["redaction"]["categories"] == ["secrets"]
         assert loaded["plans"]["step_file_threshold"] == 3
+
+    @staticmethod
+    def _inject_legacy_keys(cfg: dict) -> None:
+        cfg["workspace"]["description"] = "old"
+        cfg["identity"].update({"git_org": "acme", "bot_email": "bot@x"})
+        cfg["quality_gate"]["trigger"] = "user-initiated"
+        cfg["redaction"]["enabled"] = False
+        cfg["state"] = {"git_tracked": True}
+        cfg["plans"]["git_regime"] = "private"
+        cfg["policy"].update(
+            {
+                "unknown_tool": "ask",
+                "audit_overrides": True,
+                "tool_risk": {"my_tool": "remote-write"},
+            }
+        )
+
+    @pytest.mark.parametrize("target", ["opencode", "copilot"])
+    def test_legacy_keys_survive_update_and_check(self, tmp_path, target):
+        """End to end through the real CLI: an older carter.yaml carrying every
+        removed key still updates and passes `carter check` (drift lint included)."""
+        from click.testing import CliRunner
+
+        from carter.cli import main
+
+        runner = CliRunner()
+        result = runner.invoke(main, ["init", str(tmp_path), "--no-git-state", "--target", target])
+        assert result.exit_code == 0, result.output
+
+        cfg_path = tmp_path / ".carter" / "carter.yaml"
+        cfg = yaml.safe_load(cfg_path.read_text())
+        self._inject_legacy_keys(cfg)
+        cfg_path.write_text(yaml.dump(cfg))
+
+        result = runner.invoke(main, ["update", str(tmp_path)])
+        assert result.exit_code == 0, result.output
+        agents_dir = tmp_path / (".opencode/agents" if target == "opencode" else ".github/agents")
+        assert len(list(agents_dir.glob("carter-*.md"))) == len(cfg["agents"])
+        instructions = tmp_path / (
+            "AGENTS.md" if target == "opencode" else ".github/copilot-instructions.md"
+        )
+        assert instructions.is_file()
+
+        result = runner.invoke(main, ["check", str(tmp_path)])
+        assert result.exit_code == 0, result.output
+        assert "drift" not in result.output.lower()
+        # The legacy keys are still in the file, untouched (carried through, ignored).
+        assert yaml.safe_load(cfg_path.read_text())["policy"]["tool_risk"] == {
+            "my_tool": "remote-write"
+        }
