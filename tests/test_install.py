@@ -172,20 +172,66 @@ class TestInstallInstructions:
         assert not (base_dir / "opencode" / "instructions" / "copilot-instructions.md").exists()
         assert manifest["files"] == []
 
-    def test_opencode_stale_instructions_copy_removed(self, base_dir: Path) -> None:
+    @staticmethod
+    def _legacy(base_dir: Path, content: str) -> Path:
         stale = base_dir / "opencode" / "instructions" / "copilot-instructions.md"
         stale.parent.mkdir(parents=True)
-        stale.write_text("old")
+        stale.write_text(content)
+        return stale
+
+    @staticmethod
+    def _shipped() -> str:
+        return (install.REPO_ROOT / "instructions" / "copilot-instructions.md").read_text()
+
+    def test_carter_owned_legacy_copy_removed(self, base_dir: Path) -> None:
+        stale = self._legacy(base_dir, self._shipped())
+        manifest = {"files": [], "file_hashes": {}}
+        install.install_instructions(["opencode"], base_dir, manifest, base_dir / "backup")
+        assert not stale.exists()
+        assert not stale.parent.exists()  # empty instructions/ dir removed
+
+    def test_manifest_recorded_hash_counts_as_carter_owned(self, base_dir: Path) -> None:
+        stale = self._legacy(base_dir, "an older shipped version\n")
+        install.write_manifest(
+            {"files": [str(stale)], "file_hashes": {str(stale): _sha256(stale)}}, base_dir
+        )
         manifest = {"files": [], "file_hashes": {}}
         install.install_instructions(["opencode"], base_dir, manifest, base_dir / "backup")
         assert not stale.exists()
 
-    def test_uninstall_without_manifest_removes_legacy_instructions(self, base_dir: Path) -> None:
-        stale = base_dir / "opencode" / "instructions" / "copilot-instructions.md"
-        stale.parent.mkdir(parents=True)
-        stale.write_text("old")
+    def test_user_modified_copy_backed_up_not_deleted(self, base_dir: Path, capsys) -> None:
+        stale = self._legacy(base_dir, "my own notes\n")
+        (stale.parent / "other.md").write_text("keep")
+        backup = base_dir / "backup"
+        manifest = {"files": [], "file_hashes": {}}
+        install.install_instructions(["opencode"], base_dir, manifest, backup)
+        assert not stale.exists()
+        moved = backup / "opencode-instructions" / "copilot-instructions.md"
+        assert moved.read_text() == "my own notes\n"
+        assert (stale.parent / "other.md").exists()  # non-empty dir kept
+        assert "was modified" in capsys.readouterr().out
+
+    def test_symlink_not_followed(self, base_dir: Path, tmp_path: Path) -> None:
+        target = tmp_path / "elsewhere.md"
+        target.write_text(self._shipped())
+        link = base_dir / "opencode" / "instructions" / "copilot-instructions.md"
+        link.parent.mkdir(parents=True)
+        link.symlink_to(target)
+        manifest = {"files": [], "file_hashes": {}}
+        install.install_instructions(["opencode"], base_dir, manifest, base_dir / "backup")
+        assert link.is_symlink()
+        assert target.read_text() == self._shipped()
+
+    def test_uninstall_without_manifest_removes_carter_owned_copy(self, base_dir: Path) -> None:
+        stale = self._legacy(base_dir, self._shipped())
         install.uninstall(["opencode"], base_dir, {})
         assert not stale.exists()
+
+    def test_uninstall_without_manifest_keeps_modified_copy(self, base_dir: Path, capsys) -> None:
+        stale = self._legacy(base_dir, "my own notes\n")
+        install.uninstall(["opencode"], base_dir, {})
+        assert stale.read_text() == "my own notes\n"
+        assert "left in place" in capsys.readouterr().out
 
 
 class TestInstallKnowledge:

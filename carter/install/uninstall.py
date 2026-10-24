@@ -6,7 +6,7 @@ import shutil
 import subprocess
 from pathlib import Path
 
-from carter.install.components import read_manifest
+from carter.install.components import read_manifest, remove_legacy_opencode_instructions
 from carter.install.console import _log, bold, green, log_err, log_ok, log_skip, log_step
 from carter.install.jsonc import _load_jsonc, _write_json_preserving
 from carter.install.mcp import MCP_SERVERS
@@ -63,10 +63,7 @@ def uninstall(targets: list[str], base_dir: Path | None, prereqs: dict[str, bool
         if "opencode" in targets:
             base = _opencode_base(base_dir)
             # Written by Carter versions that copied instructions for OpenCode.
-            legacy_instructions = base / "instructions" / "copilot-instructions.md"
-            if legacy_instructions.is_file():
-                legacy_instructions.unlink()
-                log_ok(f"Removed {str(legacy_instructions).replace(str(_home()), '~')}")
+            remove_legacy_opencode_instructions(base_dir, backup_root=None)
             for pattern_dir in ["agents", "skills"]:
                 d = base / pattern_dir
                 if d.exists():
