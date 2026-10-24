@@ -6,6 +6,8 @@ argument-hint: "[git operation, GitHub task, or pipeline to create/review]"
 
 <objective>
 Execute git and GitHub operations following best practices. Design branching strategies and CI/CD pipelines with GitHub Actions.
+
+**Language & attribution:** commit messages, branch names, tags and PR text are always English. The user is the commit author (signed `-S`); credit Carter with a `Co-authored-by:` trailer, never `--author`.
 </objective>
 
 <routing>

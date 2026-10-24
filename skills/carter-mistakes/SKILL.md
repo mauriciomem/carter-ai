@@ -6,6 +6,8 @@ argument-hint: "[mistake or lesson to record]"
 
 <objective>
 Capture mistakes, failures, and lessons learned into Carter's memory system for future reference. The goal is to prevent repetition by building a searchable knowledge base of what went wrong and why.
+
+**Language:** write memory entries in the workspace `docs_language` (`.carter/carter.yaml`); if it is absent, English unless the user chose another language.
 </objective>
 
 <workflow>

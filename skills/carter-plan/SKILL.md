@@ -9,6 +9,8 @@ Produce a structured plan **written to disk** under
 `.carter/state/plans/active/<NNN-slug>/`, with machine-readable frontmatter and
 verifiable `must_haves`. A plan is a directory, not a chat message — this is what
 makes session recovery and the quality gate work (ADR-0003).
+
+**Language:** write in the workspace `docs_language` (`.carter/carter.yaml`); if it is absent, English unless the user chose another language.
 </objective>
 
 <canonical-schema>

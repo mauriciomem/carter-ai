@@ -6,6 +6,8 @@ argument-hint: "[file, PR, or code to review]"
 
 <objective>
 Perform a structured code review focusing on quality, maintainability, security, and testability. Produce actionable feedback categorized by severity.
+
+**Language:** review comments posted to a PR or repository are in English; summaries to the user follow the conversation language.
 </objective>
 
 <scope-gate>

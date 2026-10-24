@@ -41,10 +41,26 @@ def create_env(templates_dir: Path = TEMPLATES_DIR) -> Environment:
     env.globals["policy_frontmatter"] = policy_frontmatter
     env.globals["policy_comment"] = policy_comment
     env.globals["policy_gate_table"] = policy_gate_table
+    env.globals["docs_language_phrase"] = docs_language_phrase
     # Only the primary orchestrator dispatches (flat one-level chain), so only it
     # renders the <agents> roster.
     env.globals["primary_role"] = PRIMARY_ROLE
     return env
+
+
+def docs_language_phrase(config: dict[str, Any]) -> str:
+    """How templates name the language for Carter's internal docs.
+
+    A workspace render names its ``docs_language``; a global render (no workspace,
+    ``docs_language`` unset) points at the workspace setting with an English default.
+    """
+    tag = config.get("docs_language")
+    if tag:
+        return f"`{tag}` (`docs_language`)"
+    return (
+        "the workspace `docs_language` from `.carter/carter.yaml` "
+        "(English if unset, unless the user asks for another language)"
+    )
 
 
 def _available_agents(templates_dir: Path) -> list[str]:

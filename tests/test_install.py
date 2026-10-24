@@ -9,7 +9,11 @@ from pathlib import Path
 import pytest
 
 from carter import installer as install
-from carter.install.components import _OPENCODE_AGENTS_MD, _OPENCODE_AGENTS_MD_LEGACY
+from carter.install.components import (
+    _OPENCODE_AGENTS_MD,
+    _OPENCODE_AGENTS_MD_LEGACY,
+    _OPENCODE_AGENTS_MD_V2,
+)
 from carter.install.files import _sha256
 from carter.install.jsonc import _load_jsonc, _strip_jsonc
 
@@ -999,6 +1003,26 @@ class TestOpenCodeRulesUpgrade:
         content = agents_md.read_text()
         assert "## Communication" in content
         assert content == _OPENCODE_AGENTS_MD
+
+    def test_previous_version_is_upgraded(self, base_dir: Path) -> None:
+        agents_md = base_dir / "opencode" / "AGENTS.md"
+        agents_md.parent.mkdir(parents=True, exist_ok=True)
+        agents_md.write_text(_OPENCODE_AGENTS_MD_V2)
+
+        manifest = {"files": [], "file_hashes": {}}
+        install.install_opencode_rules(["opencode"], base_dir, manifest, base_dir / "backup")
+
+        content = agents_md.read_text()
+        assert content == _OPENCODE_AGENTS_MD
+        assert "## Git & Language" in content
+        assert "Co-authored-by:" in content
+        assert "docs_language" in content
+
+    def test_git_language_section_matches_instructions_file(self, repo_root: Path) -> None:
+        """AGENTS.md and the shipped instructions carry the same Git & Language rules."""
+        instructions = (repo_root / "instructions" / "copilot-instructions.md").read_text()
+        section = _OPENCODE_AGENTS_MD.split("## Git & Language\n", 1)[1].split("\n## ", 1)[0]
+        assert section.strip() in instructions
 
     def test_user_modified_file_is_skipped_with_warning(
         self, base_dir: Path, capsys: pytest.CaptureFixture[str]

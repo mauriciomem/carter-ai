@@ -6,6 +6,8 @@ argument-hint: "[optional: focus area or specific agent/skill]"
 
 <objective>
 Read accumulated memory (`~/.carter/memories/`) and curated knowledge (`~/.copilot/knowledge/`) to identify recurring patterns, then propose concrete improvements to Carter's agent definitions or skill files.
+
+**Language:** proposals and notes follow the workspace `docs_language` (`.carter/carter.yaml`; default English); edits to agent and skill files are always English.
 </objective>
 
 <workflow>
