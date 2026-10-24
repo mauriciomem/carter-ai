@@ -99,7 +99,7 @@ jobs:
       - name: carter init + check (fresh workspace)
         run: |
           mkdir -p "$RUNNER_TEMP/smoke-ws"
-          carter init "$RUNNER_TEMP/smoke-ws" --target all
+          carter init "$RUNNER_TEMP/smoke-ws"
           carter check "$RUNNER_TEMP/smoke-ws"
 
       - name: carter install (throwaway home) + assert files
