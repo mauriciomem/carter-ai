@@ -12,17 +12,6 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
-import yaml
-
-
-@pytest.fixture
-def ops_scenarios(scenarios_dir: Path) -> list[dict]:
-    return yaml.safe_load((scenarios_dir / "carter_ops.yaml").read_text())
-
-
-@pytest.fixture
-def skill_scenarios(scenarios_dir: Path) -> list[dict]:
-    return yaml.safe_load((scenarios_dir / "skills.yaml").read_text())
 
 
 @pytest.fixture

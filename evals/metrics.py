@@ -5,8 +5,8 @@ The live-eval providers (GitHub Copilot, OpenAI, Anthropic) already RETURN a
 normalizes those differing shapes into a single ``EvalMetrics`` record and computes
 an estimated USD cost from a small per-model price table.
 
-Single source of truth for the default model name, so judge.py / test_live.py /
-README never drift (ADR-0009 D5, plan 004 step 9).
+Single source of truth for the default model name, so test_live.py /
+test_adherence_live.py / README never drift.
 """
 
 from __future__ import annotations
@@ -17,10 +17,8 @@ from typing import Any
 # Default models for live evals. Canonical Anthropic IDs (hyphens, no dot):
 # `claude-sonnet-4.6` is a 404-causing typo and `claude-sonnet-4-20250514` is
 # deprecated — both previously appeared in code/README and disagreed. Single-sourced
-# here; override per-run with EVAL_MODEL / EVAL_JUDGE_MODEL (e.g. a Haiku-class model
-# on the weekly cron, per ADR-0009 D5).
+# here; override per-run with EVAL_MODEL (e.g. a Haiku-class model on the weekly cron).
 DEFAULT_MODEL = "claude-sonnet-5"
-DEFAULT_JUDGE_MODEL = "claude-sonnet-5"
 
 # USD price per 1M tokens: model -> (input, output). Unlisted models => cost_usd None.
 PRICE_PER_1M: dict[str, tuple[float, float]] = {
@@ -83,7 +81,7 @@ def from_response(provider: str, raw: dict[str, Any], latency_s: float) -> EvalM
 
 
 # ── Run-level accumulator + summary ────────────────────────────────────────────
-# _call_model / judge_response append here so a run can print an aggregate summary
+# _call_model appends here so a run can print an aggregate summary
 # without changing their string return contract.
 _RECORDED: list[EvalMetrics] = []
 
@@ -92,11 +90,6 @@ def record(metric: EvalMetrics) -> EvalMetrics:
     """Record a metric for the run-level summary; returns it for convenience."""
     _RECORDED.append(metric)
     return metric
-
-
-def reset() -> None:
-    """Clear recorded metrics (e.g. between test sessions)."""
-    _RECORDED.clear()
 
 
 def summary() -> dict[str, Any]:

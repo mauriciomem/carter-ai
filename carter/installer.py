@@ -3,9 +3,8 @@
 Installs Carter agents, skills, instructions, knowledge base, and MCP server
 configurations for VS Code Copilot, Copilot CLI, and OpenCode.
 
-This module backs the ``carter install`` command (and the legacy ``install.sh`` /
-``install.py`` bootstrap). The implementation was split into the ``carter.install``
-package; this module imports those leaves and keeps the
+This module backs the ``carter install`` command. The implementation was split
+into the ``carter.install`` package; this module imports those leaves and keeps the
 orchestration plus the few helpers that tests monkeypatch through this namespace
 (``_vscode_detected``, ``_vscode_settings_path``, ``check_prerequisites``,
 ``configure_mcp_servers`` — each resolves a patched dependency from this module's
@@ -15,7 +14,6 @@ both from a development checkout and from an installed wheel (``uv tool install`
 
 from __future__ import annotations
 
-import argparse
 import json
 import os
 import subprocess
@@ -232,62 +230,8 @@ def configure_mcp_servers(
 
 
 # ──────────────────────────────────────────────────────────────────────────────
-# Main
+# Orchestration
 # ──────────────────────────────────────────────────────────────────────────────
-
-
-def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(
-        description="Carter AI Assistant Installer",
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-    )
-    parser.add_argument(
-        "--target",
-        choices=["copilot", "opencode", "all"],
-        default="all",
-        help="Install target (default: all)",
-    )
-    parser.add_argument(
-        "--uninstall",
-        action="store_true",
-        help="Remove Carter installation",
-    )
-    parser.add_argument(
-        "--mcp",
-        action="store_true",
-        help="Install and configure MCP servers",
-    )
-    parser.add_argument(
-        "--bot-name",
-        type=str,
-        default="carter-bot",
-        help="Git commit author name for carter-ops attribution (default: carter-bot)",
-    )
-    parser.add_argument(
-        "--base-dir",
-        type=Path,
-        default=None,
-        help="Override install base directory (for testing)",
-    )
-    parser.add_argument(
-        "-q",
-        "--quiet",
-        action="store_true",
-        help="Errors only",
-    )
-    parser.add_argument(
-        "-v",
-        "--verbose",
-        action="store_true",
-        help="Detailed output",
-    )
-    parser.add_argument(
-        "-vv",
-        "--debug",
-        action="store_true",
-        help="Debug output",
-    )
-    return parser.parse_args()
 
 
 def run(
@@ -392,27 +336,3 @@ def run(
             f"{updated} updated, {unchanged} unchanged",
             level=2,
         )
-
-
-def main() -> None:
-    args = parse_args()
-    if args.quiet:
-        verbosity = 0
-    elif args.debug:
-        verbosity = 3
-    elif args.verbose:
-        verbosity = 2
-    else:
-        verbosity = 1
-    run(
-        target=args.target,
-        mcp=args.mcp,
-        bot_name=args.bot_name,
-        uninstall_flag=args.uninstall,
-        base_dir=args.base_dir,
-        verbosity=verbosity,
-    )
-
-
-if __name__ == "__main__":
-    main()

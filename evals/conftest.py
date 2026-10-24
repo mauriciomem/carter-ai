@@ -7,6 +7,7 @@ import os
 from pathlib import Path
 
 import pytest
+import yaml
 
 
 @pytest.fixture
@@ -28,15 +29,21 @@ def skills_dir(repo_root: Path) -> Path:
 
 
 @pytest.fixture
-def instructions_dir(repo_root: Path) -> Path:
-    """Path to instruction files."""
-    return repo_root / "instructions"
-
-
-@pytest.fixture
 def scenarios_dir() -> Path:
     """Path to scenario definitions."""
     return Path(__file__).resolve().parent / "scenarios"
+
+
+@pytest.fixture
+def ops_scenarios(scenarios_dir: Path) -> list[dict]:
+    """carter-ops skill scenarios."""
+    return yaml.safe_load((scenarios_dir / "carter_ops.yaml").read_text())
+
+
+@pytest.fixture
+def skill_scenarios(scenarios_dir: Path) -> list[dict]:
+    """Skill-correctness scenarios."""
+    return yaml.safe_load((scenarios_dir / "skills.yaml").read_text())
 
 
 def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> None:

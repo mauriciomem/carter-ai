@@ -27,7 +27,6 @@ import time
 from pathlib import Path
 
 import pytest
-import yaml
 
 from evals.metrics import DEFAULT_MODEL, from_response, record
 
@@ -204,16 +203,6 @@ def _build_system_prompt(skill_content: str, config: dict | None = None) -> str:
 @pytest.fixture
 def ops_skill_content(skills_dir: Path) -> str:
     return (skills_dir / "carter-ops" / "SKILL.md").read_text()
-
-
-@pytest.fixture
-def ops_scenarios(scenarios_dir: Path) -> list[dict]:
-    return yaml.safe_load((scenarios_dir / "carter_ops.yaml").read_text())
-
-
-@pytest.fixture
-def skill_scenarios(scenarios_dir: Path) -> list[dict]:
-    return yaml.safe_load((scenarios_dir / "skills.yaml").read_text())
 
 
 class TestLiveCarterOps:
