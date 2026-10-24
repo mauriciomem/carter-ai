@@ -109,7 +109,7 @@ Tests the structural integrity of the routing system:
 Tests that skill files contain the correct instructional content:
 
 - **Workflow phases** — Carter-ops teaches ASSESS→PLAN→APPROVE→EXECUTE→AUDIT→REPORT in order
-- **Attribution flags** — Correct `--author` and `-S` git flags
+- **Attribution** — signed (`-S`), human-authored commits with a `Co-authored-by:` trailer; never `--author`
 - **No anti-patterns** — Skills don't teach legacy/deprecated approaches
 - **Structural requirements** — All skills have frontmatter, adequate content
 - **Domain coverage** — Each skill covers its core patterns (Terraform has resources, Go has error handling, etc.)
@@ -135,7 +135,7 @@ Scenarios are YAML files in `evals/scenarios/`. Each scenario has:
     bot_email: test-bot@users.noreply.github.com
   expect:
     workflow_phases: [ASSESS, PLAN, APPROVE, EXECUTE, AUDIT, REPORT]
-    commands_contain: ["git commit --author=..."]
+    commands_contain: ["git commit -S", "Co-authored-by: ..."]
     commands_not_contain: ["--dry-run", "--execute"]
     response_contains: ["keyword1", "keyword2"]
     response_not_contains: ["anti-pattern"]

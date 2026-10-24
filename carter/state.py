@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any
 
 from carter.config import write_config
+from carter.ops.config import Config
 
 KNOWLEDGE_FILES: dict[str, str] = {
     "lessons-learned.md": """\
@@ -103,11 +104,21 @@ def _git_init(directory: Path) -> None:
         commit_state(directory, "chore: init carter state", allow_empty=True)
 
 
-# Identity for automated state commits — these are local recovery snapshots, not
-# authored work, so they carry a stable bot identity (and avoid failing on a
-# machine/CI with no global git user configured).
+# Fallback author for state commits, used only when no git identity is configured
+# (e.g. a bare CI runner) so a recovery snapshot never fails for lack of one. When
+# the user has a git identity, they are the author (Carter is only the co-author).
 _STATE_COMMIT_NAME = "carter"
 _STATE_COMMIT_EMAIL = "carter-bot@users.noreply.github.com"
+
+
+def co_author_trailer() -> str:
+    """The ``Co-authored-by:`` trailer crediting Carter on commits it makes.
+
+    Uses the ``[attribution]`` name/email from ``~/.carter/config.toml`` (written by
+    ``carter install``), defaulting to ``carter-bot``.
+    """
+    cfg = Config.load()
+    return f"Co-authored-by: {cfg.bot_name} <{cfg.bot_email}>"
 
 
 class StateError(Exception):
@@ -121,6 +132,11 @@ class StateError(Exception):
 def _run_git(args: list[str], cwd: Path) -> subprocess.CompletedProcess[str]:
     """Run a git command in ``cwd``, capturing output and never raising."""
     return subprocess.run(["git", *args], cwd=cwd, capture_output=True, text=True, check=False)
+
+
+def _has_git_identity(cwd: Path) -> bool:
+    """Whether git resolves both ``user.name`` and ``user.email`` in ``cwd``."""
+    return all(_run_git(["config", key], cwd).stdout.strip() for key in ("user.name", "user.email"))
 
 
 def commit_state(carter_dir: Path, message: str, *, allow_empty: bool = False) -> bool:
@@ -150,15 +166,17 @@ def commit_state(carter_dir: Path, message: str, *, allow_empty: bool = False) -
         if diff.returncode != 1:
             raise StateError(f"git diff failed in {carter_dir}: {diff.stderr.strip()}")
 
-    commit_args = [
-        "-c",
-        f"user.name={_STATE_COMMIT_NAME}",
-        "-c",
-        f"user.email={_STATE_COMMIT_EMAIL}",
-        "commit",
-        "-m",
-        message,
-    ]
+    # The user's git identity is the author; fall back to a bot identity only when
+    # none is configured. Carter itself is credited via the co-author trailer.
+    identity: list[str] = []
+    if not _has_git_identity(carter_dir):
+        identity = [
+            "-c",
+            f"user.name={_STATE_COMMIT_NAME}",
+            "-c",
+            f"user.email={_STATE_COMMIT_EMAIL}",
+        ]
+    commit_args = [*identity, "commit", "-m", message, "-m", co_author_trailer()]
     if allow_empty:
         commit_args.append("--allow-empty")
     commit = _run_git(commit_args, carter_dir)

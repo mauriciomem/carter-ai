@@ -35,9 +35,11 @@ class TestCarterOpsSkillContent:
         assert positions == sorted(positions), "Workflow phases are out of order"
 
     def test_has_attribution_flags(self, ops_skill: str) -> None:
-        """Must teach --author and -S flags for git commit."""
-        assert "--author=" in ops_skill or "--author='" in ops_skill
-        assert "-S" in ops_skill
+        """Must teach a signed, human-authored commit with a co-author trailer."""
+        assert "Co-authored-by: {{BOT_NAME}} <{{BOT_EMAIL}}>" in ops_skill
+        assert "git commit -S" in ops_skill
+        # The bot never overrides the author: no `git commit --author=...` form.
+        assert "--author=" not in ops_skill and "--author '" not in ops_skill
 
     def test_has_bot_identity_config(self, ops_skill: str) -> None:
         """Must reference bot identity values."""

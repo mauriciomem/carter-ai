@@ -251,7 +251,7 @@ Use PROJ-42 as the ticket reference.
 
 1. Maestro sees the `ops:` prefix and enters operational mode
 2. It **assesses** current state (runs `git status`, `git log`)
-3. It **plans** — shows you the exact commands with bot attribution
+3. It **plans** — shows you the exact commands, with the co-author trailer
 4. It **waits for your approval** before executing anything
 5. After approval, it **executes** the commands
 6. It **audits** — logs the operation
@@ -263,13 +263,13 @@ Use PROJ-42 as the ticket reference.
 **Operation:** git-flow
 **Branch:** feature/PROJ-42-auth-module
 **Message:** feat(auth): add authentication module
-**Attribution:** carter-bot <carter-bot@users.noreply.github.com>, signed
+**Attribution:** authored by you, signed; Co-authored-by: carter-bot <carter-bot@users.noreply.github.com>
 
 Commands:
 1. git checkout main && git pull origin main
 2. git checkout -b feature/PROJ-42-auth-module
 3. git add src/auth.py
-4. git commit --author='carter-bot <...>' -S -m "feat(auth): add authentication module"
+4. git commit -S -m "feat(auth): add authentication module" --trailer "Co-authored-by: carter-bot <...>"
 5. git push -u origin feature/PROJ-42-auth-module
 
 Approve?
@@ -277,7 +277,7 @@ Approve?
 
 You say "yes" and it executes. You say "no" or ask for changes, and it revises the plan.
 
-**Key takeaway:** You always see exactly what will happen before it happens. The bot attribution means you can always tell which commits came from Carter vs. you.
+**Key takeaway:** You always see exactly what will happen before it happens. You stay the commit author; the `Co-authored-by:` trailer marks which commits Carter helped write.
 
 ---
 

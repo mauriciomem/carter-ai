@@ -13,7 +13,9 @@ and post-hoc audit logging. Run commands directly in the terminal — no interme
 
 ## Attribution Config
 
-Bot identity for commits and footers (from ~/.carter/config.toml):
+The user is always the commit **author** (their own `git config user.name/email`) and
+signs with their key. The bot identity below is credited only as **co-author** (a
+`Co-authored-by:` trailer) and in GitHub/Jira footers (from ~/.carter/config.toml):
 
 - bot_name: `{{BOT_NAME}}`
 - bot_email: `{{BOT_EMAIL}}`
@@ -29,9 +31,9 @@ If you need to verify these values, run: `carter ops config --emit`
 ## Required Workflow
 
 1. **ASSESS** — Run read commands to understand current state (`git status`, `git diff`, `git log --oneline -5`, etc.)
-2. **PLAN** — Show the user a structured plan with the exact commands you will run, including attribution flags
+2. **PLAN** — Show the user a structured plan with the exact commands you will run, including the co-author trailer
 3. **APPROVE** — Wait for user confirmation before executing any write command
-4. **EXECUTE** — Run commands in terminal with attribution flags
+4. **EXECUTE** — Run commands in terminal (co-author trailer on commits)
 5. **AUDIT** — Run: `carter ops audit --operation <name> --params '<json>' --result <success|failure> --identifiers '<json>'`
 6. **REPORT** — Tell the user what happened (branch name, commit SHA, PR URL, etc.)
 
@@ -53,8 +55,12 @@ git checkout <base> && git pull origin <base> && git checkout -b <branch-name>
 
 ```bash
 git add <file1> <file2> ...
-git commit --author='{{BOT_NAME}} <{{BOT_EMAIL}}>' -S -m "<message>"
+git commit -S -m "<subject>" -m "<body>" --trailer "Co-authored-by: {{BOT_NAME}} <{{BOT_EMAIL}}>"
 ```
+
+Never pass `--author`. Commit messages, branch names and PR text are always in English,
+whatever language the user chats in. If `--trailer` is unavailable (git < 2.32), put
+`Co-authored-by: {{BOT_NAME}} <{{BOT_EMAIL}}>` as the last paragraph of the message.
 
 ### Push
 
@@ -67,7 +73,7 @@ git push -u origin <branch-name>
 ```bash
 git checkout <base> && git pull origin <base> && git checkout -b <branch-name>
 git add <file1> <file2> ...
-git commit --author='{{BOT_NAME}} <{{BOT_EMAIL}}>' -S -m "<message>"
+git commit -S -m "<subject>" -m "<body>" --trailer "Co-authored-by: {{BOT_NAME}} <{{BOT_EMAIL}}>"
 git push -u origin <branch-name>
 ```
 
@@ -170,7 +176,7 @@ curl -s -X POST \
 | Signing fails (`-S` error) | Ask user: proceed without signing? |
 | Jira 403 | Check env vars: `echo $ATLASSIAN_URL $ATLASSIAN_EMAIL` — report which are empty |
 | `gh` not found | Suggest `brew install gh` or fall back to `curl` with `$GITHUB_TOKEN` |
-| Git author flag rejected | Verify config: `carter ops config --emit` |
+| Co-author trailer missing or wrong | Verify config: `carter ops config --emit` |
 
 </error-recovery>
 
@@ -196,7 +202,7 @@ When showing the plan to the user, use this structure:
 **Branch:** <name> (if applicable)
 **Files:** <list> (if applicable)
 **Message:** <commit message or body text>
-**Attribution:** {{BOT_NAME}} <{{BOT_EMAIL}}>, signed with {{SIGNING_KEY}}
+**Attribution:** authored by you, signed with {{SIGNING_KEY}}; Co-authored-by: {{BOT_NAME}} <{{BOT_EMAIL}}>
 
 Commands:
 1. <exact command 1>
