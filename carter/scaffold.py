@@ -219,10 +219,10 @@ def render_instructions(config: dict[str, Any], env: Environment) -> dict[str, s
     Returns a dict of {filename: rendered_content}. Agent references inside the
     instructions honor ``agent_suffix`` (the filename itself is not suffixed).
     """
-    template = env.get_template("instructions/copilot-instructions.md.j2")
+    template = env.get_template("instructions/AGENTS.md.j2")
     content = template.render(config=config)
     content = _apply_agent_suffix(content, config["agents"], _suffix_token(config))
-    return {"copilot-instructions.md": content}
+    return {"AGENTS.md": content}
 
 
 def write_rendered_files(

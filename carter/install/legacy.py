@@ -10,11 +10,14 @@ from __future__ import annotations
 import hashlib
 import json
 import platform
+import shutil
 from pathlib import Path
 
+from carter.install.components import read_manifest
 from carter.install.console import _log, log_err, log_ok, log_step, log_warn
+from carter.install.files import _sha256
 from carter.install.jsonc import _load_jsonc, _write_json_preserving
-from carter.install.paths import _copilot_base, _home, legacy_manifest_path
+from carter.install.paths import _copilot_base, _home, _opencode_base, legacy_manifest_path
 
 
 def _vscode_settings_files(base_dir: Path | None) -> list[Path]:
@@ -177,3 +180,61 @@ def uninstall_legacy(base_dir: Path | None) -> None:
         f"  The old manifest and {_tilde(copilot / 'knowledge')} are kept "
         "(knowledge was copied to ~/.carter)."
     )
+
+
+# sha256 of every ``instructions/copilot-instructions.md`` Carter ever shipped (the
+# file itself was deleted in ADR-0014 phase 5). Used only to prove ownership of
+# stale copies left in ~/.config/opencode/instructions/.
+_SHIPPED_INSTRUCTIONS_SHA256 = frozenset(
+    {
+        "sha256:04330dbc7ed896ff1966ab11e23423e517cfce31f5c2dcd561e7172461f90f15",
+        "sha256:0df9a5d78f410da8f59593715aa3a351ae793eb9079bc5d90188f25b9df6a1c3",
+        "sha256:41c537ac05e43c0348c8a832de88ccaf1ca2ccb90344fc1c061bda3e16e6a3f9",
+        "sha256:5aaa5887bd5b116f4537cf0ce72099d7197eb58173a09936e8f25538203ae148",
+        "sha256:7ada1464b86c30ee64ae223b2bda79af971a3aaa636536efddf6891258dfd04c",
+        "sha256:cd5274003ddd1749a534f7882306067b4a151f982d87ed3d0776209f99d8d320",
+        "sha256:d20b17c7de0969dc60d239a08710f747b7fdc04f02f4559b41bf5d81bf85035f",
+        "sha256:e1bcbcf0aff66a6ada719f5352bdce2c043eaa480c6e187729e7efca37c7dfd1",
+        "sha256:f679eafe4bd021f29d3942dc6e2b1c7a298eab9bd88ace45e351c2ed50cb8780",
+    }
+)
+
+
+def remove_legacy_opencode_instructions(base_dir: Path | None, backup_root: Path | None) -> None:
+    """Remove the OpenCode copy of copilot-instructions.md older Carter versions wrote.
+
+    Deleted only when it is provably Carter-owned: its hash matches a version Carter shipped,
+    or the existing install manifest recorded it with the same hash. Otherwise it is
+    treated as user-modified: moved to ``backup_root`` when given, else left in place
+    with a warning. A symlink is never followed or removed.
+    """
+    stale = _opencode_base(base_dir) / "instructions" / "copilot-instructions.md"
+    shown = str(stale).replace(str(_home()), "~")
+    if stale.is_symlink():
+        log_warn(f"{shown} is a symlink — left untouched (no longer used by OpenCode)")
+        return
+    if not stale.is_file():
+        return
+
+    current = _sha256(stale)
+    recorded = ((read_manifest(base_dir) or {}).get("file_hashes") or {}).get(str(stale))
+    carter_owned = current in _SHIPPED_INSTRUCTIONS_SHA256 or current == recorded
+
+    if carter_owned:
+        stale.unlink()
+        log_ok(f"Removed stale {shown}")
+    elif backup_root is not None:
+        dest = backup_root / "opencode-instructions" / stale.name
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        shutil.move(str(stale), dest)
+        log_warn(
+            f"{shown} was modified — moved to {str(dest).replace(str(_home()), '~')} "
+            "(OpenCode does not load it)"
+        )
+    else:
+        log_warn(f"{shown} was modified — left in place (OpenCode does not load it)")
+        return
+
+    parent = stale.parent
+    if parent.is_dir() and not any(parent.iterdir()):
+        parent.rmdir()

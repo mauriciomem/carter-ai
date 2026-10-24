@@ -118,9 +118,8 @@ def _install_rendered_file(
 ) -> str:
     """Write already-rendered ``content`` to ``dst`` (no source file to copy).
 
-    Used to install per-target-rendered output — e.g. OpenCode-shaped agent
-    frontmatter, which differs from the copilot static ``agents/*.md`` (OpenCode
-    rejects the copilot ``tools:`` array; it wants a ``permission`` block). Mirrors
+    Used to install rendered output — e.g. agents rendered from ``templates/``
+    with OpenCode V2 ``permissions:`` frontmatter. Mirrors
     ``_install_file``'s backup/manifest/hash semantics; the hash carries the same
     ``sha256:`` prefix as ``_sha256`` so the unchanged-check matches on re-install.
     """

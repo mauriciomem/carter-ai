@@ -18,11 +18,10 @@ from carter.install.components import (
     install_ops,
     install_skills,
     read_manifest,
-    remove_legacy_opencode_instructions,
     write_manifest,
 )
 from carter.install.console import _log, bold, green, log_debug, log_step, set_verbosity
-from carter.install.legacy import warn_legacy_copilot
+from carter.install.legacy import remove_legacy_opencode_instructions, warn_legacy_copilot
 from carter.install.mcp import configure_mcp_servers
 from carter.install.migrate import migrate_copilot_state
 from carter.install.paths import _home, backups_dir

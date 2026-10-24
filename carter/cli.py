@@ -382,7 +382,7 @@ def _write_if_absent(path: Path, content: str) -> bool:
     """Write ``content`` to ``path`` only if it does not already exist.
 
     Returns True if written, False if skipped. Used for instruction files
-    (``AGENTS.md`` / ``copilot-instructions.md``) which may carry user content
+    (``AGENTS.md``) which may carry user content
     and must never be clobbered.
     """
     if path.exists():
@@ -400,7 +400,7 @@ def _render_and_write(target: Path, config: dict, env: Environment) -> None:
     (skip-if-exists), so user edits are preserved.
     """
     agents = render_agents(config, env)
-    instructions_content = render_instructions(config, env)["copilot-instructions.md"]
+    instructions_content = render_instructions(config, env)["AGENTS.md"]
     write_rendered_files(agents, _agents_dir(target))
     _write_if_absent(_instructions_path(target), instructions_content)
 

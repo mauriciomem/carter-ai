@@ -333,8 +333,8 @@ class TestScaffold:
     def test_render_instructions(self, default_config, env):
         """Instructions template renders with workspace name."""
         results = render_instructions(default_config, env)
-        assert "copilot-instructions.md" in results
-        content = results["copilot-instructions.md"]
+        assert "AGENTS.md" in results
+        content = results["AGENTS.md"]
         assert "test-workspace" in content
 
     def test_write_rendered_files(self, tmp_path, default_config, env):
@@ -768,7 +768,7 @@ class TestAgentSuffix:
 
     def test_instructions_references_suffixed(self, env):
         cfg = generate_default_config()
-        instr = render_instructions(cfg, env)["copilot-instructions.md"]
+        instr = render_instructions(cfg, env)["AGENTS.md"]
         assert "carter-maestro-local" in instr
 
     def test_default_suffix_end_to_end(self, tmp_path, env):
@@ -1126,7 +1126,7 @@ class TestLanguageAndCoAuthorRules:
         agents, instructions = self._render(docs_language="es")
         for role in ("maestro", "pm", "architect", "security"):
             assert "`es` (`docs_language`)" in agents[f"carter-{role}.md"], role
-        assert "`es` (`docs_language`)" in instructions["copilot-instructions.md"]
+        assert "`es` (`docs_language`)" in instructions["AGENTS.md"]
 
     def test_global_render_defers_to_workspace_setting(self):
         agents, _ = self._render(docs_language=None)
@@ -1138,7 +1138,7 @@ class TestLanguageAndCoAuthorRules:
             text = agents[f"carter-{role}.md"]
             assert "Co-authored-by:" in text, role
             assert "never pass `--author`" in text.lower() or "never `--author`" in text, role
-        assert "Co-authored-by:" in instructions["copilot-instructions.md"]
+        assert "Co-authored-by:" in instructions["AGENTS.md"]
 
     def test_narrator_outward_content_is_english(self):
         agents, _ = self._render(docs_language="es")

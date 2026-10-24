@@ -8,7 +8,8 @@ from types import SimpleNamespace
 
 import pytest
 
-from carter.install import components, mcp, paths
+from carter.config import generate_default_config
+from carter.install import components, legacy, mcp, paths
 from carter.install import uninstall as uninstall_mod
 from carter.install.components import (
     _OPENCODE_AGENTS_MD,
@@ -17,6 +18,7 @@ from carter.install.components import (
 )
 from carter.install.files import _sha256
 from carter.install.jsonc import _load_jsonc, _strip_jsonc
+from carter.scaffold import create_env, render_agents
 
 # One namespace over the installer leaves so the tests read like the CLI surface.
 install = SimpleNamespace(
@@ -28,7 +30,7 @@ install = SimpleNamespace(
     install_memories=components.install_memories,
     install_ops=components.install_ops,
     install_opencode_rules=components.install_opencode_rules,
-    remove_legacy_opencode_instructions=components.remove_legacy_opencode_instructions,
+    remove_legacy_opencode_instructions=legacy.remove_legacy_opencode_instructions,
     read_manifest=components.read_manifest,
     write_manifest=components.write_manifest,
     uninstall=uninstall_mod.uninstall,
@@ -151,7 +153,17 @@ class TestInstallSkills:
         assert len(skill_dirs) == 28
 
 
+_SHIPPED_TEXT = "# Carter — Global Instructions (a version Carter shipped)\n"
+
+
 class TestInstallInstructions:
+    @pytest.fixture(autouse=True)
+    def _known_shipped(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        import hashlib
+
+        digest = hashlib.sha256(_SHIPPED_TEXT.encode()).hexdigest()
+        monkeypatch.setattr(legacy, "_SHIPPED_INSTRUCTIONS_SHA256", frozenset({f"sha256:{digest}"}))
+
     @staticmethod
     def _legacy(base_dir: Path, content: str) -> Path:
         stale = base_dir / "opencode" / "instructions" / "copilot-instructions.md"
@@ -161,7 +173,7 @@ class TestInstallInstructions:
 
     @staticmethod
     def _shipped() -> str:
-        return (install.REPO_ROOT / "instructions" / "copilot-instructions.md").read_text()
+        return _SHIPPED_TEXT
 
     def test_carter_owned_legacy_copy_removed(self, base_dir: Path) -> None:
         stale = self._legacy(base_dir, self._shipped())
@@ -334,7 +346,7 @@ class TestOfficialGitHubServer:
         return json.loads(path.read_text())["carter-github"]
 
     def _command_str(self, entry: dict) -> str:
-        # copilot shape: command=str + args=list; opencode shape: command=list.
+        # opencode shape: command=list (a str command + args list is also accepted).
         cmd = entry["command"]
         parts = [cmd, *entry.get("args", [])] if isinstance(cmd, str) else list(cmd)
         return " ".join(parts)
@@ -346,8 +358,8 @@ class TestOfficialGitHubServer:
                 f"{cfg}: still references the archived GitHub MCP server"
             )
 
-    def test_both_targets_use_official_docker_image(self) -> None:
-        for target in ("copilot", "opencode"):
+    def test_opencode_use_official_docker_image(self) -> None:
+        for target in ("opencode",):
             cmd = self._command_str(self._github_cfg(target))
             assert "docker" in cmd, f"{target}: not a docker invocation"
             assert "ghcr.io/github/github-mcp-server@sha256:" in cmd, (
@@ -355,25 +367,25 @@ class TestOfficialGitHubServer:
             )
             assert ":latest" not in cmd, f"{target}: must not use :latest"
 
-    def test_both_targets_are_read_only(self) -> None:
-        for target in ("copilot", "opencode"):
+    def test_opencode_are_read_only(self) -> None:
+        for target in ("opencode",):
             cmd = self._command_str(self._github_cfg(target))
             assert "--read-only" in cmd, f"{target}: missing --read-only"
 
-    def test_both_targets_carry_surgical_tool_allowlist(self) -> None:
-        for target in ("copilot", "opencode"):
+    def test_opencode_carry_surgical_tool_allowlist(self) -> None:
+        for target in ("opencode",):
             cmd = self._command_str(self._github_cfg(target))
             assert "--tools" in cmd, f"{target}: missing --tools allowlist"
             for tool in self.EXPECTED_TOOLS:
                 assert tool in cmd, f"{target}: surgical tool {tool!r} absent"
 
     def test_token_is_env_placeholder_not_literal(self) -> None:
-        for target in ("copilot", "opencode"):
+        for target in ("opencode",):
             entry = self._github_cfg(target)
             env = entry.get("env") or entry.get("environment", {})
             # The PAT is passed by env placeholder, never a baked literal.
-            # copilot: ${VAR}; opencode: {env:VAR} (OpenCode docs, mcp-servers).
-            assert any("${" in str(v) or "{env:" in str(v) for v in env.values()), (
+            # opencode: {env:VAR} (OpenCode docs, mcp-servers).
+            assert any("{env:" in str(v) for v in env.values()), (
                 f"{target}: GitHub token must be an env placeholder"
             )
 
@@ -749,11 +761,13 @@ class TestOpenCodeRulesUpgrade:
         assert "Co-authored-by:" in content
         assert "docs_language" in content
 
-    def test_git_language_section_matches_instructions_file(self, repo_root: Path) -> None:
-        """AGENTS.md and the shipped instructions carry the same Git & Language rules."""
-        instructions = (repo_root / "instructions" / "copilot-instructions.md").read_text()
+    def test_git_language_section_has_core_rules(self) -> None:
+        """The global AGENTS.md Git & Language section keeps its core rules."""
         section = _OPENCODE_AGENTS_MD.split("## Git & Language\n", 1)[1].split("\n## ", 1)[0]
-        assert section.strip() in instructions
+        assert "Never pass `--author`" in section
+        assert "Co-authored-by:" in section
+        assert "English" in section
+        assert "docs_language" in section
 
     def test_user_modified_file_is_skipped_with_warning(
         self, base_dir: Path, capsys: pytest.CaptureFixture[str]
@@ -914,8 +928,9 @@ class TestTimeAwareness:
                 f"{skill}: date-fetch item must gate dated frontmatter writes"
             )
 
-    def test_global_instructions_carry_date_fetch_item(self, repo_root: Path) -> None:
-        content = (repo_root / "instructions" / "copilot-instructions.md").read_text().lower()
+    def test_workspace_instructions_carry_date_fetch_item(self, repo_root: Path) -> None:
+        template = repo_root / "templates" / "instructions" / "AGENTS.md.j2"
+        content = template.read_text().lower()
         assert "current date" in content, "global instructions missing date-fetch guidance"
         assert "before writing any dated frontmatter" in content
 
@@ -994,6 +1009,6 @@ class TestVisibleMemoryReferences:
         assert "knowledge" in agents_md
 
     def test_maestro_has_reflect_skill(self) -> None:
-        """Static maestro lists carter-reflect (source check until ADR-0014 phase 5)."""
-        maestro = (install.REPO_ROOT / "agents" / "carter-maestro.md").read_text()
+        """The rendered maestro lists carter-reflect."""
+        maestro = render_agents(generate_default_config(), create_env())["carter-maestro-local.md"]
         assert "carter-reflect" in maestro

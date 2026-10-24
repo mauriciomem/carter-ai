@@ -5,8 +5,9 @@ from __future__ import annotations
 import shutil
 from pathlib import Path
 
-from carter.install.components import read_manifest, remove_legacy_opencode_instructions
+from carter.install.components import read_manifest
 from carter.install.console import _log, bold, green, log_ok, log_step
+from carter.install.legacy import remove_legacy_opencode_instructions
 from carter.install.mcp import remove_carter_servers
 from carter.install.paths import (
     _carter_base,
@@ -19,7 +20,7 @@ from carter.install.paths import (
 
 
 def uninstall(base_dir: Path | None) -> None:
-    """Remove the OpenCode install. Copilot/VS Code leftovers are not touched (D7)."""
+    """Remove the OpenCode install. Pre-ADR-0014 leftovers are not touched (D7)."""
     log_step("Uninstalling Carter...")
     manifest = read_manifest(base_dir)
     opencode_base = _opencode_base(base_dir)
