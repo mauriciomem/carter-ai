@@ -33,8 +33,7 @@ jobs:
       # Budget controls: low-cost model + a hard per-call completion ceiling so a
       # misbehaving prompt can't run up the bill. The suite is a small, fixed set of
       # scenarios, so model + max-tokens bound the spend.
-      EVAL_MODEL: claude-haiku-4-5
-      EVAL_JUDGE_MODEL: claude-haiku-4-5
+      EVAL_MODEL: claude-haiku-5-5
       EVAL_MAX_TOKENS: "1024"
       EVAL_METRICS_OUT: ${{ github.workspace }}/eval-metrics.json
       # Dedicated key from secrets — NEVER commit a key. Empty when unset → tests skip.
@@ -53,8 +52,8 @@ jobs:
 
       - name: Run live evals (budgeted, low-cost model)
         # All `live`-marked evals: the prompt-quality canary (test_live.py) AND the
-        # implementer-adherence run (test_adherence_live.py, ADR-0010 D9 — Sonnet 4.6
-        # vs a thinker plan, graded against the >=90% / 0-critical bar). Both hit the
+        # adherence run (test_adherence_live.py, ADR-0010 D9 — EVAL_MODEL vs a thinker
+        # plan, graded against the >=90% / 0-critical bar). Both hit the
         # billed API and are NEVER on the per-PR gate (ci.yml runs -m "not live").
         run: uv run pytest evals/ -m live -v -p no:cacheprovider
 

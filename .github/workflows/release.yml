@@ -34,9 +34,6 @@ jobs:
         with:
           fetch-depth: 0 # full history + tags so PSR can compute the bump
 
-      - name: Install uv (provides the `uv build` build_command)
-        uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2
-
       - name: Python Semantic Release
         uses: python-semantic-release/python-semantic-release@b700dbeb1f431a0fcc30a79f3f0869407fe07278 # v10.7.0
         with:
