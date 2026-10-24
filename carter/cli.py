@@ -424,13 +424,13 @@ def _render_and_write(target: Path, config: dict, env: Environment) -> None:
 )
 @click.argument("args", nargs=-1, type=click.UNPROCESSED)
 def ops(args: tuple[str, ...]) -> None:
-    """Run a carter-ops operation (deterministic executor).
+    """Carter-ops audit ledger and config helper (used by the carter-ops skill).
 
     All arguments are passed through to the carter-ops CLI, e.g.:
 
-        carter ops --list
         carter ops audit --operation git-flow --result success
-        carter ops git-flow --branch feature/x --message "feat: x" --dry-run
+        carter ops policy-override --category remote-write --action "git push" --tier native-ask
+        carter ops config --emit
     """
     from carter.ops.carter_ops import main as ops_main
 

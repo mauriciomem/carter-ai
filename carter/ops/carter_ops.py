@@ -1,32 +1,23 @@
-# /// script
-# requires-python = ">=3.11"
-# dependencies = ["httpx"]
-# ///
-"""Carter-ops — deterministic CLI for operational tasks.
+"""Carter-ops — audit ledger and config helper for operational tasks.
 
-The model executes write operations directly in the terminal with bot
-attribution flags. This CLI provides:
-  - audit: Post-hoc audit logging after model-driven execution
-  - config --emit: Print config values for model consumption
-  - --list: List available operation names
+The model executes write operations (git, gh, Jira) directly in the terminal
+with bot attribution flags, following the ``carter-ops`` skill. This CLI only
+provides the deterministic side-channel around that:
 
-Legacy support (backward compat):
-  carter-ops <operation> [params] --dry-run   → shows the plan
-  carter-ops <operation> [params] --execute   → executes the plan
+  - audit:           post-hoc audit logging after model-driven execution
+  - policy-override: record a single-action strictness-policy override
+  - config --emit:   print attribution/config values for model consumption
 
 All output is JSON to stdout. Human-readable errors go to stderr.
 
 Exit codes:
   0 — Success
-  1 — Validation error (missing params, bad ticket key, etc.)
-  2 — Execution error (git push rejected, Jira API 403, etc.)
-  3 — Configuration error (missing env vars, signing key not found)
+  1 — Usage/validation error (missing params, unknown subcommand)
 
-Usage:
-  carter-ops audit --operation git-flow --params '{"branch":"x"}' --result success
-  carter-ops config --emit
-  carter-ops --list
-  carter-ops git-flow --branch feature/X --message "feat: X" --dry-run  (legacy)
+Usage (via the ``carter`` CLI):
+  carter ops audit --operation git-flow --params '{"branch":"x"}' --result success
+  carter ops policy-override --category remote-write --action "git push" --tier native-ask
+  carter ops config --emit
 """
 
 from __future__ import annotations
@@ -38,16 +29,11 @@ from pathlib import Path
 from typing import Any
 
 from carter.ops.config import Config
-from carter.ops.operations import discover_operations, get_operation, list_operations
-from carter.ops.output import (
-    dry_run_output,
-    emit,
-    emit_error,
-    error_output,
-    execute_output,
-)
+from carter.ops.output import emit, emit_error
 
 AUDIT_LOG = Path.home() / ".carter" / "audit.log"
+
+USAGE = "Usage: carter ops {audit|policy-override|config --emit} [--key value ...]"
 
 
 def _audit(entry: dict[str, Any]) -> None:
@@ -60,64 +46,24 @@ def _audit(entry: dict[str, Any]) -> None:
         pass  # Audit is best-effort
 
 
-def _parse_argv(argv: list[str]) -> tuple[str, dict[str, Any], str]:
-    """Parse CLI arguments into (operation_name, params, phase).
+def _parse_flags(args: list[str]) -> dict[str, Any]:
+    """Parse ``--key value`` pairs; a ``--flag`` with no value becomes ``True``.
 
-    Returns phase as 'dry-run', 'execute', or 'list'.
+    Non-flag tokens that are not a flag's value are ignored.
     """
-    if not argv:
-        return "", {}, ""
-
-    # Check for --list
-    if "--list" in argv:
-        return "", {}, "list"
-
-    operation = argv[0]
     params: dict[str, Any] = {}
-    phase = ""
-    i = 1
-
-    while i < len(argv):
-        arg = argv[i]
-
-        if arg == "--dry-run":
-            phase = "dry-run"
-            i += 1
-        elif arg == "--execute":
-            phase = "execute"
-            i += 1
+    i = 0
+    while i < len(args):
+        arg = args[i]
+        if arg.startswith("--") and i + 1 < len(args) and not args[i + 1].startswith("--"):
+            params[arg[2:]] = args[i + 1]
+            i += 2
         elif arg.startswith("--"):
-            key = arg[2:]
-            if i + 1 < len(argv) and not argv[i + 1].startswith("--"):
-                value = argv[i + 1]
-                # Handle list params (--files can appear multiple times or comma-separated)
-                if key in params:
-                    existing = params[key]
-                    if isinstance(existing, list):
-                        existing.append(value)
-                    else:
-                        params[key] = [existing, value]
-                else:
-                    params[key] = value
-                i += 2
-            else:
-                params[key] = True
-                i += 1
+            params[arg[2:]] = True
+            i += 1
         else:
             i += 1
-
-    # Normalize files param to list
-    if "files" in params and isinstance(params["files"], str):
-        if "," in params["files"]:
-            params["files"] = [f.strip() for f in params["files"].split(",")]
-        else:
-            params["files"] = [params["files"]]
-
-    # Normalize labels param to list
-    if "labels" in params and isinstance(params["labels"], str) and "," in params["labels"]:
-        params["labels"] = [label.strip() for label in params["labels"].split(",")]
-
-    return operation, params, phase
+    return params
 
 
 def _handle_audit(params: dict[str, Any]) -> int:
@@ -244,166 +190,22 @@ def main(argv: list[str] | None = None) -> int:
     if argv is None:
         argv = sys.argv[1:]
 
-    # Discover all operations (for legacy --dry-run/--execute support)
-    discover_operations()
+    command, rest = (argv[0], argv[1:]) if argv else ("", [])
 
-    # Handle subcommands: audit, config
-    if argv and argv[0] == "audit":
-        _, params, _ = _parse_argv(argv[1:])
-        # Re-parse: audit uses positional-style --key value pairs
-        audit_params: dict[str, Any] = {}
-        i = 1
-        while i < len(argv):
-            arg = argv[i]
-            if arg.startswith("--") and i + 1 < len(argv) and not argv[i + 1].startswith("--"):
-                audit_params[arg[2:]] = argv[i + 1]
-                i += 2
-            elif arg.startswith("--"):
-                audit_params[arg[2:]] = True
-                i += 1
-            else:
-                i += 1
-        return _handle_audit(audit_params)
+    if command == "audit":
+        return _handle_audit(_parse_flags(rest))
 
-    if argv and argv[0] == "policy-override":
-        override_params: dict[str, Any] = {}
-        i = 1
-        while i < len(argv):
-            arg = argv[i]
-            if arg.startswith("--") and i + 1 < len(argv) and not argv[i + 1].startswith("--"):
-                override_params[arg[2:]] = argv[i + 1]
-                i += 2
-            elif arg.startswith("--"):
-                override_params[arg[2:]] = True
-                i += 1
-            else:
-                i += 1
-        return _handle_policy_override(override_params)
+    if command == "policy-override":
+        return _handle_policy_override(_parse_flags(rest))
 
-    if argv and argv[0] == "config":
-        if "--emit" in argv:
+    if command == "config":
+        if "--emit" in rest:
             return _handle_config_emit()
-        emit_error("Usage: carter-ops config --emit")
+        emit_error("Usage: carter ops config --emit")
         return 1
 
-    operation_name, params, phase = _parse_argv(argv)
-
-    # --list mode
-    if phase == "list":
-        ops = list_operations()
-        emit({"operations": ops})
-        return 0
-
-    # Validate we have an operation and phase
-    if not operation_name:
-        emit_error("Usage: carter-ops <operation> [params] --dry-run|--execute")
-        emit_error(f"Operations: {', '.join(list_operations())}")
-        return 1
-
-    if not phase:
-        emit_error("Must specify --dry-run or --execute")
-        return 1
-
-    # Look up operation
-    op = get_operation(operation_name)
-    if not op:
-        emit_error(f"Unknown operation: {operation_name}")
-        emit_error(f"Available: {', '.join(list_operations())}")
-        return 1
-
-    # Load config
-    cfg = Config.load()
-
-    # Validate config for domain
-    if operation_name.startswith("jira-"):
-        cfg_errors = cfg.validate_jira()
-        if cfg_errors:
-            emit(error_output(operation_name, "CONFIG_ERROR", "; ".join(cfg_errors)))
-            return 3
-
-    if operation_name.startswith("gh-"):
-        cfg_errors = cfg.validate_github()
-        if cfg_errors:
-            emit(error_output(operation_name, "CONFIG_ERROR", "; ".join(cfg_errors)))
-            return 3
-
-    # Validate params
-    validation_errors = op.validate(params)
-    if validation_errors:
-        emit(error_output(operation_name, "VALIDATION_ERROR", "; ".join(validation_errors)))
-        return 1
-
-    # Execute the phase
-    if phase == "dry-run":
-        plan = op.dry_run(params, cfg)
-        result = dry_run_output(
-            operation=plan.operation,
-            steps=plan.steps,
-            attribution=plan.attribution,
-            side_effects=plan.side_effects,
-        )
-        emit(result)
-
-        _audit(
-            {
-                "timestamp": datetime.now(UTC).isoformat(),
-                "operation": operation_name,
-                "phase": "dry-run",
-                "params": {k: v for k, v in params.items() if k not in ("body", "description")},
-            }
-        )
-        return 0
-
-    elif phase == "execute":
-        outcome = op.execute(params, cfg)
-
-        if outcome.success:
-            output = execute_output(
-                operation=outcome.operation,
-                success=True,
-                result=outcome.data,
-                attribution=outcome.attribution,
-            )
-            emit(output)
-
-            _audit(
-                {
-                    "timestamp": datetime.now(UTC).isoformat(),
-                    "operation": operation_name,
-                    "phase": "execute",
-                    "params": {k: v for k, v in params.items() if k not in ("body", "description")},
-                    "result": "success",
-                    "identifiers": {
-                        k: v
-                        for k, v in outcome.data.items()
-                        if k in ("commit_sha", "branch", "key", "comment_id", "ticket")
-                    },
-                }
-            )
-            return 0
-        else:
-            # Check if result has a suggestion
-            suggestion = outcome.data.pop("suggestion", "")
-            output = error_output(
-                operation=outcome.operation,
-                code=outcome.data.get("error", "EXECUTION_ERROR"),
-                message=outcome.data.get("message", outcome.data.get("error", "Unknown error")),
-                suggestion=suggestion,
-            )
-            emit(output)
-
-            _audit(
-                {
-                    "timestamp": datetime.now(UTC).isoformat(),
-                    "operation": operation_name,
-                    "phase": "execute",
-                    "params": {k: v for k, v in params.items() if k not in ("body", "description")},
-                    "result": "failure",
-                    "error": outcome.data.get("error", ""),
-                }
-            )
-            return 2
-
+    emit_error(f"Unknown subcommand: {command}" if command else "Missing subcommand")
+    emit_error(USAGE)
     return 1
 
 

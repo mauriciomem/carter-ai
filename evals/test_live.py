@@ -319,7 +319,7 @@ class TestLiveCarterOps:
 
         response = _call_model(system, user_msg)
 
-        assert "carter-ops audit" in response, (
+        assert "carter ops audit" in response, (
             f"Missing audit command in response.\nResponse: {response[:500]}"
         )
         assert "--operation" in response, "Missing --operation flag in audit"

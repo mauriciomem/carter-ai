@@ -51,8 +51,8 @@ git config --global init.defaultBranch main
 git checkout main
 git pull
 
-# Create branch, make changes, commit, and push — use carter-ops:
-# carter-ops git-flow --branch feature/PROJ-123-add-auth --message "feat: ..." --files src/auth.py --dry-run
+# Create branch, make changes, commit, and push — use the carter-ops skill (`ops:` prefix):
+# ops: create branch feature/PROJ-123-add-auth, commit src/auth.py with "feat: ...", push
 
 # Stay current with main (read operation — run directly)
 git fetch origin
@@ -94,7 +94,7 @@ git branch -D <name>           # force-delete unmerged branch
 - Delete branches after merging
 - Never commit directly to `main`
 
-**Creating branches** — use `carter-ops git-branch` (see deterministic-operations above).
+**Creating branches** — use the `carter-ops` skill (`ops:` prefix).
 
 ### Fetching and Pulling
 
@@ -188,7 +188,7 @@ git push origin --tags                 # push all tags
 ## Safety Rules
 
 1. **Never force-push shared branches** — only force-push personal feature branches with `--force-with-lease`
-2. **Always review before committing** — use `git diff` to check changes before running `carter-ops git-commit`
+2. **Always review before committing** — use `git diff` to check changes before committing via the `carter-ops` skill
 3. **Pull before push** — stay current to avoid conflicts
 4. **Don't commit secrets** — use `.gitignore` and secret managers
 5. **Don't rewrite public history** — use `git revert` for published commits
