@@ -24,7 +24,8 @@ from carter.install.components import (
 from carter.install.console import _log, bold, green, log_debug, log_step, set_verbosity
 from carter.install.legacy import warn_legacy_copilot
 from carter.install.mcp import configure_mcp_servers
-from carter.install.paths import _copilot_base, _home
+from carter.install.migrate import migrate_copilot_state
+from carter.install.paths import _home, backups_dir
 from carter.install.prereqs import (
     check_credentials,
     check_optional_tools,
@@ -74,8 +75,12 @@ def run(
     else:
         log_step("Skipping MCP credentials (no --mcp flag)")
 
+    # Before anything reads or seeds ~/.carter: knowledge seeds must not shadow
+    # the user's migrated knowledge (D3).
+    migrate_copilot_state(base_dir)
+
     now = datetime.now(UTC)
-    backup_root = _copilot_base(base_dir) / "backup" / now.strftime("%Y%m%dT%H%M%S")
+    backup_root = backups_dir(base_dir) / now.strftime("%Y%m%dT%H%M%S")
 
     manifest: dict = {
         "version": __version__,

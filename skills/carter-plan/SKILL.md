@@ -133,5 +133,5 @@ files_modified: []
 - 1–3 steps inline; > 3 steps get per-step files. Respect the size budgets.
 - `carter-plan` owns plan files; `carter-adr` owns ADRs — no overlap.
 - Use Jira (via carter-atlassian MCP) to mirror issues when a plan is approved.
-- Reference `~/.copilot/knowledge/project-history.md` for estimation calibration.
+- Reference `~/.carter/knowledge/project-history.md` for estimation calibration.
 </guidelines>

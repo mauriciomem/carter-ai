@@ -87,7 +87,7 @@ def _install_templated_file(
     for placeholder, value in template_vars.items():
         content = content.replace(placeholder, value)
 
-    content_hash = hashlib.sha256(content.encode()).hexdigest()
+    content_hash = f"sha256:{hashlib.sha256(content.encode()).hexdigest()}"
 
     if dst.exists():
         dst_hash = _sha256(dst)

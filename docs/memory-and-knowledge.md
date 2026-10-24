@@ -11,7 +11,7 @@ Carter has **two levels** of knowledge storage:
 | Level | Location | Scope | Managed By |
 |-------|----------|-------|-----------|
 | **Workspace** | `.carter/knowledge/` | Per-workspace (your project) | `carter init` + you |
-| **System** | `~/.copilot/knowledge/` | Global (all projects) | `carter install` + `carter-distill` |
+| **System** | `~/.carter/knowledge/` | Global (all projects) | `carter install` + `carter-distill` |
 
 There's also a **memory layer** for raw, unprocessed notes that haven't been promoted to knowledge yet:
 
@@ -73,9 +73,9 @@ This is genuinely optional — not half-mandatory. Use it on an entry you might 
 
 ---
 
-## System Knowledge (`~/.copilot/knowledge/`)
+## System Knowledge (`~/.carter/knowledge/`)
 
-System-level knowledge is global — it applies across all your workspaces. It lives at `~/.copilot/knowledge/` and contains six topic-specific files:
+System-level knowledge is global — it applies across all your workspaces. It lives at `~/.carter/knowledge/` and contains six topic-specific files:
 
 | File | Content Type |
 |------|-------------|
@@ -164,7 +164,7 @@ How a mistake becomes an agent improvement:
 4. You run: @carter-maestro distill
          │
          ▼
-5. carter-distill promotes to ~/.copilot/knowledge/
+5. carter-distill promotes to ~/.carter/knowledge/
    (classifies, deduplicates, formats, appends)
          │
          ▼
@@ -196,9 +196,9 @@ All three are **on-demand only** — they never auto-run.
 | Scenario | Where It Goes |
 |----------|---------------|
 | "This Terraform provider has a bug in v1.6" | `.carter/knowledge/gotchas.md` (workspace) |
-| "Always validate JWT expiry before checking claims" | `~/.copilot/knowledge/patterns.md` (system) |
+| "Always validate JWT expiry before checking claims" | `~/.carter/knowledge/patterns.md` (system) |
 | "We use envelope format for all API responses" | `.carter/knowledge/patterns.md` (workspace) |
-| "Never use `rm -rf` without confirmation in agents" | `~/.copilot/knowledge/mistakes.md` (system) |
+| "Never use `rm -rf` without confirmation in agents" | `~/.carter/knowledge/mistakes.md` (system) |
 | "Our CI uses Buildkite, not GitHub Actions" | `.carter/knowledge/tools.md` (workspace) |
 
 **Rule of thumb:** If it applies only to this project → workspace. If it applies everywhere → system.
@@ -235,9 +235,24 @@ carter install
 Creates:
 - `~/.carter/memories/{user,session,repo}` directories
 - `~/.carter/config.toml` (carter-ops attribution settings)
-- `~/.copilot/knowledge/` with six seed files — header + entry-format comment only, no
+- `~/.carter/knowledge/` with six seed files — header + entry-format comment only, no
   entries (existing files are never overwritten)
-- Records all paths in manifest for clean uninstall
+- Records all paths in `~/.carter/manifest.json` for clean uninstall; backups of
+  replaced files go to `~/.carter/backups/<timestamp>/`
+
+### Upgrading from a `~/.copilot` install
+
+Earlier versions kept knowledge, the manifest and backups under `~/.copilot/`. The
+first `carter install` copies them to `~/.carter/knowledge/`, `~/.carter/manifest.json`
+and `~/.carter/backups/`. Nothing in `~/.copilot` is deleted, and a destination file
+that already exists with different content is kept (a warning names it). The
+migration runs once; `~/.carter/.migrated-from-copilot` marks it done (delete that
+file to run it again).
+
+Copilot/VS Code files from the old install stay in place. `carter uninstall --legacy`
+removes the Carter ones listed in the old `~/.copilot/.carter-manifest.json` (agents,
+skills, instructions, `carter-*` MCP entries), skipping files you edited. Without
+that manifest it only lists what to remove by hand.
 
 ### What the installer does NOT do
 

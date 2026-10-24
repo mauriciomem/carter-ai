@@ -1,11 +1,11 @@
 ---
 name: carter-distill
-description: Promote notes from ~/.carter/memories/ and /memories/ into curated knowledge entries in ~/.copilot/knowledge/
+description: Promote notes from ~/.carter/memories/ and /memories/ into curated knowledge entries in ~/.carter/knowledge/
 argument-hint: "[optional: topic filter]"
 ---
 
 <objective>
-Review recent notes in `~/.carter/memories/` (visible memory) and `/memories/` (platform memory) and promote valuable learnings into structured, curated entries in `~/.copilot/knowledge/`.
+Review recent notes in `~/.carter/memories/` (visible memory) and `/memories/` (platform memory) and promote valuable learnings into structured, curated entries in `~/.carter/knowledge/`.
 
 **Language:** write knowledge and memory entries in the workspace `docs_language` (`.carter/carter.yaml`); if it is absent, English unless the user chose another language.
 </objective>

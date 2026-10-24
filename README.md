@@ -176,7 +176,7 @@ to transmit.
 ## Memory & knowledge
 
 Carter learns from experience across layers: **workspace** (`.carter/knowledge/`),
-**system** (`~/.copilot/knowledge/`), and raw **memory** (`~/.carter/memories/`)
+**system** (`~/.carter/knowledge/`), and raw **memory** (`~/.carter/memories/`)
 promoted into knowledge. Lifecycle skills: `carter-mistakes` (capture) →
 `carter-distill` (promote) → `carter-reflect` (improve agents from patterns).
 

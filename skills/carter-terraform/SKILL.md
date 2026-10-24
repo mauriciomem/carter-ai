@@ -21,7 +21,7 @@ This file covers core Terraform conventions. For specialized topics, use `read_f
 | `import.md` | importing resources, `.tfquery.hcl`, terraform query, bulk import, unmanaged infrastructure, terraform search |
 | `stacks.md` | Terraform Stacks, `.tfcomponent.hcl`, `.tfdeploy.hcl`, deployments, workload identity, multi-environment orchestration |
 
-**How to load:** derive the directory path from this SKILL.md's location and read the sibling file. For example, if this file is at `~/.copilot/skills/carter-terraform/SKILL.md`, read `~/.copilot/skills/carter-terraform/testing.md`.
+**How to load:** derive the directory path from this SKILL.md's location and read the sibling file. For example, if this file is at `~/.config/opencode/skills/carter-terraform/SKILL.md`, read `~/.config/opencode/skills/carter-terraform/testing.md`.
 
 If the request does not match any specialized topic, use the core guidelines below without loading additional files.
 

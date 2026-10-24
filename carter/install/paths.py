@@ -43,3 +43,24 @@ def _local_bin(base_dir: Path | None) -> Path:
     if base_dir:
         return base_dir / "local" / "bin"
     return _home() / ".local" / "bin"
+
+
+# Carter-owned state (ADR-0014 D3). Earlier versions kept these under ~/.copilot:
+#   ~/.copilot/knowledge/            → ~/.carter/knowledge/
+#   ~/.copilot/.carter-manifest.json → ~/.carter/manifest.json
+#   ~/.copilot/backup/<timestamp>/   → ~/.carter/backups/<timestamp>/
+def knowledge_dir(base_dir: Path | None) -> Path:
+    return _carter_base(base_dir) / "knowledge"
+
+
+def manifest_path(base_dir: Path | None) -> Path:
+    return _carter_base(base_dir) / "manifest.json"
+
+
+def backups_dir(base_dir: Path | None) -> Path:
+    return _carter_base(base_dir) / "backups"
+
+
+def legacy_manifest_path(base_dir: Path | None) -> Path:
+    """The manifest pre-ADR-0014 installs wrote under ~/.copilot (read-only now)."""
+    return _copilot_base(base_dir) / ".carter-manifest.json"

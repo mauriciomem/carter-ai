@@ -10,10 +10,11 @@ from carter.install.console import _log, bold, green, log_ok, log_step
 from carter.install.mcp import remove_carter_servers
 from carter.install.paths import (
     _carter_base,
-    _copilot_base,
     _home,
     _local_bin,
     _opencode_base,
+    knowledge_dir,
+    manifest_path,
 )
 
 
@@ -22,8 +23,7 @@ def uninstall(base_dir: Path | None) -> None:
     log_step("Uninstalling Carter...")
     manifest = read_manifest(base_dir)
     opencode_base = _opencode_base(base_dir)
-    # The knowledge base is still Carter-managed under ~/.copilot (ADR-0014 phase 4).
-    managed_roots = (str(opencode_base), str(_copilot_base(base_dir) / "knowledge"))
+    managed_roots = (str(opencode_base), str(knowledge_dir(base_dir)))
 
     if manifest:
         for f in manifest.get("files", []):
@@ -51,9 +51,9 @@ def uninstall(base_dir: Path | None) -> None:
         log_ok(f"Removed {name} from opencode.json")
 
     # Remove manifest
-    manifest_path = _copilot_base(base_dir) / ".carter-manifest.json"
-    if manifest_path.exists():
-        manifest_path.unlink()
+    path = manifest_path(base_dir)
+    if path.exists():
+        path.unlink()
         log_ok("Removed manifest")
 
     # Remove carter-ops

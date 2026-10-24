@@ -216,7 +216,7 @@ class TestInstallKnowledge:
         backup = base_dir / "backup"
         count = install.install_knowledge(base_dir, manifest, backup)
 
-        knowledge_dir = base_dir / "copilot" / "knowledge"
+        knowledge_dir = base_dir / "carter" / "knowledge"
         assert knowledge_dir.exists()
         assert count == 6
 
@@ -233,7 +233,7 @@ class TestInstallKnowledge:
 
     def test_does_not_overwrite_existing(self, base_dir: Path) -> None:
         # Pre-create a knowledge file with custom content
-        knowledge_dir = base_dir / "copilot" / "knowledge"
+        knowledge_dir = base_dir / "carter" / "knowledge"
         knowledge_dir.mkdir(parents=True, exist_ok=True)
         existing = knowledge_dir / "mistakes.md"
         existing.write_text("# My custom mistakes\n\nKeep this content.\n")
@@ -661,6 +661,14 @@ class TestCarterOpsSkill:
         assert "{{BOT_EMAIL}}" not in content
         assert "{{SIGNING_KEY}}" not in content
 
+    def test_templated_skill_unchanged_on_reinstall(self, base_dir: Path) -> None:
+        """A re-install must not rewrite (and back up) the unchanged templated skill."""
+        backup = base_dir / "backup"
+        install.install_skills(base_dir, {"files": [], "file_hashes": {}}, backup)
+        stats = install.install_skills(base_dir, {"files": [], "file_hashes": {}}, backup)
+        assert stats["updated"] == 0
+        assert not backup.exists()
+
     def test_carter_ops_skill_opencode(self, base_dir: Path) -> None:
         """carter-ops skill should be installed for OpenCode target too."""
         manifest = {"files": [], "file_hashes": {}}
@@ -962,7 +970,7 @@ class TestCarterReflectSkill:
         content = skill_md.read_text()
         assert "reflect" in content.lower()
         assert "~/.carter/memories/" in content
-        assert "~/.copilot/knowledge/" in content
+        assert "~/.carter/knowledge/" in content
 
     def test_reflect_skill_opencode(self, base_dir: Path) -> None:
         """carter-reflect skill should be installed for OpenCode target too."""

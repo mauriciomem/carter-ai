@@ -1,8 +1,8 @@
 """Component installers: agents, skills, OpenCode rules, knowledge, memories, ops.
 
 Plus the install manifest read/write. OpenCode is the only install target
-(ADR-0014); the knowledge base and manifest stay under ``~/.copilot`` until the
-path migration (ADR-0014 phase 4).
+(ADR-0014); the knowledge base, manifest and backups live under ``~/.carter``
+(D3, see ``carter.install.paths``).
 """
 
 from __future__ import annotations
@@ -23,9 +23,10 @@ from carter.install.files import (
 from carter.install.paths import (
     REPO_ROOT,
     _carter_base,
-    _copilot_base,
     _home,
     _opencode_base,
+    knowledge_dir,
+    manifest_path,
 )
 
 
@@ -154,7 +155,7 @@ its instructions exactly.
   `/memories/` (platform, if available).
 - Use `~/.carter/memories/user/` for cross-project notes, `repo/<name>/` for
   project-specific notes, and `session/` for conversation-scoped working notes.
-- Consult `~/.carter/memories/` and `~/.copilot/knowledge/` before proposing
+- Consult `~/.carter/memories/` and `~/.carter/knowledge/` before proposing
   solutions to check for past decisions and lessons.
 """
 
@@ -260,7 +261,7 @@ def install_knowledge(
 ) -> int:
     log_step("Initializing knowledge base...")
     src_dir = REPO_ROOT / "knowledge"
-    dst_dir = _copilot_base(base_dir) / "knowledge"
+    dst_dir = knowledge_dir(base_dir)
     count = 0
 
     for src_file in sorted(src_dir.glob("*.md")):
@@ -339,14 +340,37 @@ def install_ops(
 
 
 def write_manifest(manifest: dict, base_dir: Path | None) -> Path:
-    manifest_path = _copilot_base(base_dir) / ".carter-manifest.json"
-    manifest_path.parent.mkdir(parents=True, exist_ok=True)
-    manifest_path.write_text(json.dumps(manifest, indent=2) + "\n")
-    return manifest_path
+    path = manifest_path(base_dir)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(manifest, indent=2) + "\n")
+    return path
+
+
+def normalize_manifest(data: dict) -> dict:
+    """Accept both manifest shapes.
+
+    Pre-ADR-0014 manifests kept ``mcp_servers`` as ``{target: [names]}``; the
+    current shape is a flat list. Old dicts are flattened (de-duplicated, order
+    kept) so callers only ever see the list form.
+    """
+    servers = data.get("mcp_servers")
+    if isinstance(servers, dict):
+        flat: list[str] = []
+        for names in servers.values():
+            for name in names or []:
+                if name not in flat:
+                    flat.append(name)
+        data["mcp_servers"] = flat
+    elif servers is None:
+        data["mcp_servers"] = []
+    data.setdefault("files", [])
+    data.setdefault("file_hashes", {})
+    return data
 
 
 def read_manifest(base_dir: Path | None) -> dict | None:
-    manifest_path = _copilot_base(base_dir) / ".carter-manifest.json"
-    if manifest_path.exists():
-        return json.loads(manifest_path.read_text())
+    """Read ``~/.carter/manifest.json`` (either shape), or ``None`` if absent."""
+    path = manifest_path(base_dir)
+    if path.exists():
+        return normalize_manifest(json.loads(path.read_text()))
     return None
