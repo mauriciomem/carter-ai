@@ -1,7 +1,7 @@
 ---
 description: "Carter's orchestrator — analyzes requests and routes to the right specialist agent."
 mode: primary
-model: Claude Opus 4.8
+model: Claude Opus 5.5
 tools: [agent, codebase, search, usages, fetch]
 agents: [carter-architect, carter-devops, carter-engineer, carter-learner, carter-narrator, carter-pm, carter-security]
 handoffs: [carter-architect, carter-devops, carter-engineer, carter-learner, carter-narrator, carter-pm, carter-security]

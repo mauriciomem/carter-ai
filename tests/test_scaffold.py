@@ -1458,7 +1458,7 @@ class TestInitProfileFlag:
         assert cfg["profile"] == "quality"
         # narrator (default Sonnet) is lifted to Opus under quality in the rendered file.
         narrator = (tmp_path / ".github" / "agents" / "carter-narrator-local.md").read_text()
-        assert "model: Claude Opus 4.8" in narrator
+        assert "model: Claude Opus 5.5" in narrator
 
     def test_default_init_has_no_profile_key(self, tmp_path):
         result = self._run(tmp_path)
@@ -1467,7 +1467,7 @@ class TestInitProfileFlag:
         assert cfg.get("profile") is None
         # narrator ships on Sonnet by default.
         narrator = (tmp_path / ".github" / "agents" / "carter-narrator-local.md").read_text()
-        assert "model: Claude Sonnet 5" in narrator
+        assert "model: Claude Sonnet 5.5" in narrator
 
     def test_invalid_profile_is_rejected(self, tmp_path):
         result = self._run(tmp_path, "--profile", "cheapest")

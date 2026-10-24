@@ -84,17 +84,17 @@ DEFAULT_CONFIG: dict[str, Any] = {
     # wipe it — same footgun the taxonomy maps avoid). Each tier maps a target to a
     # single model string: a display name for VS Code/Copilot, a `provider/model` ID
     # for OpenCode. Resolved `overrides > tier > default` (see `resolve_model`).
-    # Thinkers = Opus 4.8; implementers = Sonnet 5; Haiku is opt-in via `overrides`.
+    # Thinkers = Opus 5.5; implementers = Sonnet 5.5; Haiku 5.5 is opt-in via `overrides`.
     # Effort is NOT here — no target has a per-agent effort field; it is the global
     # `--effort high` knob. `temperature` is dropped wholesale.
     "models": {
-        "default": {"copilot": "Claude Opus 4.8", "opencode": "anthropic/claude-opus-4-8"},
-        "thinkers": {"copilot": "Claude Opus 4.8", "opencode": "anthropic/claude-opus-4-8"},
+        "default": {"copilot": "Claude Opus 5.5", "opencode": "anthropic/claude-opus-5-5"},
+        "thinkers": {"copilot": "Claude Opus 5.5", "opencode": "anthropic/claude-opus-5-5"},
         "implementers": {
-            "copilot": "Claude Sonnet 5",
-            "opencode": "anthropic/claude-sonnet-5",
+            "copilot": "Claude Sonnet 5.5",
+            "opencode": "anthropic/claude-sonnet-5-5",
         },
-        "overrides": {},  # per-agent, e.g. {engineer: {copilot: "Claude Haiku 4.5", ...}}
+        "overrides": {},  # per-agent, e.g. {engineer: {copilot: "Claude Haiku 5.5", ...}}
     },
     "target": "copilot",
 }

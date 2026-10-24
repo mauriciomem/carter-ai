@@ -1,7 +1,7 @@
 ---
 description: "Solution Architect — system design, cloud architecture, trade-off analysis, and architecture decisions."
 mode: subagent
-model: Claude Opus 4.8
+model: Claude Opus 5.5
 tools: [codebase, search, usages, fetch, carter-github/*, carter-terraform/*]
 agents: []
 ---

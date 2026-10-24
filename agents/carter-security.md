@@ -1,7 +1,7 @@
 ---
 description: "Security specialist — defensive review, threat modeling, vuln triage, and authorized security methodology (advisory; hands off remediation to devops)."
 mode: subagent
-model: Claude Opus 4.8
+model: Claude Opus 5.5
 tools: [codebase, search, usages, fetch, editFiles, carter-github/*]
 agents: []
 ---

@@ -18,9 +18,11 @@ from typing import Any
 # `claude-sonnet-4.6` is a 404-causing typo and `claude-sonnet-4-20250514` is
 # deprecated — both previously appeared in code/README and disagreed. Single-sourced
 # here; override per-run with EVAL_MODEL (e.g. a Haiku-class model on the weekly cron).
-DEFAULT_MODEL = "claude-sonnet-5"
+DEFAULT_MODEL = "claude-sonnet-5-5"
 
 # USD price per 1M tokens: model -> (input, output). Unlisted models => cost_usd None.
+# TODO: add the Claude 5.5 family once its pricing is confirmed; until then a 5.5 run
+# reports cost_usd None rather than a guessed figure.
 PRICE_PER_1M: dict[str, tuple[float, float]] = {
     "claude-opus-4-8": (5.0, 25.0),
     "claude-sonnet-5": (2.0, 10.0),
