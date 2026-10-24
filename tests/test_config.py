@@ -15,6 +15,7 @@ from carter.config import (
     AGENT_ALLOWLIST,
     DEFAULT_CONFIG,
     RISK_TAXONOMY,
+    ConfigError,
     effective_allowlist,
     generate_default_config,
     load_config,
@@ -352,3 +353,53 @@ class TestLegacyConfigKeysTolerated:
         assert yaml.safe_load(cfg_path.read_text())["policy"]["tool_risk"] == {
             "my_tool": "remote-write"
         }
+
+
+class TestDocsLanguage:
+    def test_default_is_english(self):
+        assert DEFAULT_CONFIG["docs_language"] == "en"
+        assert generate_default_config()["docs_language"] == "en"
+
+    def test_old_config_without_key_resolves_english(self, tmp_path):
+        cfg_path = tmp_path / "carter.yaml"
+        cfg_path.write_text(yaml.dump(_minimal_existing_config()))
+        assert load_config(cfg_path)["docs_language"] == "en"
+
+    @pytest.mark.parametrize("tag", ["en", "es", "pt-BR", "zh-Hant", "deu"])
+    def test_valid_tags_load(self, tmp_path, tag):
+        cfg = {**_minimal_existing_config(), "docs_language": tag}
+        cfg_path = tmp_path / "carter.yaml"
+        cfg_path.write_text(yaml.dump(cfg))
+        assert load_config(cfg_path)["docs_language"] == tag
+
+    @pytest.mark.parametrize("tag", ["", "english!", "e", "pt_BR", 42, None])
+    def test_invalid_tags_rejected(self, tmp_path, tag):
+        cfg = {**_minimal_existing_config(), "docs_language": tag}
+        cfg_path = tmp_path / "carter.yaml"
+        cfg_path.write_text(yaml.dump(cfg))
+        with pytest.raises(ConfigError, match="docs_language"):
+            load_config(cfg_path)
+
+    def test_init_seeds_docs_language(self, tmp_path):
+        from click.testing import CliRunner
+
+        from carter.cli import main
+
+        result = CliRunner().invoke(
+            main, ["init", str(tmp_path), "--no-git-state", "--docs-language", "es"]
+        )
+        assert result.exit_code == 0, result.output
+        cfg = yaml.safe_load((tmp_path / ".carter" / "carter.yaml").read_text())
+        assert cfg["docs_language"] == "es"
+
+    def test_init_rejects_bad_docs_language(self, tmp_path):
+        from click.testing import CliRunner
+
+        from carter.cli import main
+
+        result = CliRunner().invoke(
+            main, ["init", str(tmp_path), "--no-git-state", "--docs-language", "pt_BR"]
+        )
+        assert result.exit_code != 0
+        assert "docs_language" in result.output
+        assert not (tmp_path / ".carter").exists()

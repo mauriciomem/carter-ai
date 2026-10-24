@@ -16,6 +16,9 @@ REQUIRED_KEYS = {"version", "workspace", "identity", "agents"}
 # (e.g. carter-engineer-local). Lowercase alphanumeric + hyphen, or empty.
 _AGENT_SUFFIX_RE = re.compile(r"^[a-z0-9-]*$")
 
+# docs_language: a simple BCP 47-style language tag (en, es, pt-BR, zh-Hant).
+_LANGUAGE_TAG_RE = re.compile(r"^[A-Za-z]{2,3}(-[A-Za-z0-9]{2,8})*$")
+
 DEFAULT_CONFIG: dict[str, Any] = {
     "version": "2",
     "workspace": {
@@ -97,6 +100,10 @@ DEFAULT_CONFIG: dict[str, Any] = {
         "overrides": {},  # per-agent, e.g. {engineer: {copilot: "Claude Haiku 5.5", ...}}
     },
     "target": "copilot",
+    # Language for Carter's internal documentation only: ADRs, RFCs, and everything
+    # under .carter/ (plans, knowledge, checkpoints) plus memories. Repository output
+    # (commits, code comments, docs, PRs, issues, Jira, Slack) is always English.
+    "docs_language": "en",
 }
 
 
@@ -115,6 +122,14 @@ def _validate_agent_suffix(suffix: Any) -> None:
         raise ConfigError(
             f"Invalid agent_suffix: {suffix!r}. "
             "Must be a lowercase alphanumeric/hyphen string (or empty)."
+        )
+
+
+def _validate_docs_language(tag: Any) -> None:
+    """Validate ``docs_language``: a simple language tag such as ``en`` or ``pt-BR``."""
+    if not isinstance(tag, str) or not _LANGUAGE_TAG_RE.match(tag):
+        raise ConfigError(
+            f"Invalid docs_language: {tag!r}. Must be a language tag such as 'en', 'es' or 'pt-BR'."
         )
 
 
@@ -188,6 +203,7 @@ def load_config(config_path: Path) -> dict[str, Any]:
     _validate_agent_suffix(merged.get("agent_suffix", ""))
     _validate_policy(merged.get("policy", {}))
     _validate_profile(merged.get("profile"))
+    _validate_docs_language(merged.get("docs_language"))
     return merged
 
 
