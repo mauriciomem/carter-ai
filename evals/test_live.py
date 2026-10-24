@@ -6,14 +6,16 @@ Authentication (checked in this order):
   3. OPENAI_API_KEY env var
 
 Usage:
+  uv sync --extra dev                      # once: pytest, pyyaml, httpx
+
   # Run all live evals (uses Copilot auth automatically)
-  uv run --with pytest --with pyyaml --with httpx pytest evals/test_live.py -v
+  uv run pytest evals -m live -v
 
   # Run specific scenario
-  uv run --with pytest --with pyyaml --with httpx pytest evals/test_live.py -k "git_branch_flow" -v
+  uv run pytest evals/test_live.py -k "git_branch_flow" -v
 
   # Override model
-  EVAL_MODEL=gpt-4o uv run --with pytest --with pyyaml --with httpx pytest evals/test_live.py -v
+  EVAL_MODEL=gpt-4o uv run pytest evals -m live -v
 
 The live tests are marked with @pytest.mark.live and skipped when no auth is available.
 """

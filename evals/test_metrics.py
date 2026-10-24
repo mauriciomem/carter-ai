@@ -47,10 +47,17 @@ def test_cost_computed_for_priced_model():
     assert m.cost_usd == (100 / 1_000_000 * 3.0) + (50 / 1_000_000 * 15.0)
 
 
-def test_cost_none_for_unpriced_model():
+def test_cost_none_for_unpriced_model_warns_once():
+    import warnings
+
     raw = {**_OPENAI_RAW, "model": "some-unknown-model"}
-    m = from_response("openai", raw, latency_s=1.0)
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        m = from_response("openai", raw, latency_s=1.0)
+        from_response("openai", raw, latency_s=1.0)
     assert m.cost_usd is None
+    msgs = [str(w.message) for w in caught if "some-unknown-model" in str(w.message)]
+    assert len(msgs) == 1
 
 
 def test_total_falls_back_to_sum_when_absent():

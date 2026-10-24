@@ -11,6 +11,7 @@ test_adherence_live.py / README never drift.
 
 from __future__ import annotations
 
+import warnings
 from dataclasses import dataclass
 from typing import Any
 
@@ -32,6 +33,9 @@ PRICE_PER_1M: dict[str, tuple[float, float]] = {
     "gpt-4o-mini": (0.15, 0.60),
 }
 
+# Models already warned about (warn once per model per run, not per call).
+_UNPRICED_WARNED: set[str] = set()
+
 
 @dataclass
 class EvalMetrics:
@@ -48,6 +52,12 @@ def _cost(model: str, prompt_tokens: int, completion_tokens: int) -> float | Non
     """Estimated USD cost, or None when the model has no price entry."""
     price = PRICE_PER_1M.get(model)
     if price is None:
+        if model not in _UNPRICED_WARNED:
+            _UNPRICED_WARNED.add(model)
+            warnings.warn(
+                f"no price for model {model!r} in PRICE_PER_1M; cost_usd will be None",
+                stacklevel=2,
+            )
         return None
     in_price, out_price = price
     return (prompt_tokens / 1_000_000 * in_price) + (completion_tokens / 1_000_000 * out_price)

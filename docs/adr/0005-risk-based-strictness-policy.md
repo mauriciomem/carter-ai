@@ -11,7 +11,7 @@ tags: [strictness, enforcement, security, agents, mcp, policy]
 
 # ADR-0005: Risk-Based Strictness Policy
 
-> **Status note (2026-10-24):** Superseded by ADR-0010. The MCP env-var list (`REQUIRED_ENV_VARS`) now lives in `carter/install/prereqs.py` and is `GITHUB_TOKEN`, `TFE_TOKEN` (Atlassian uses OAuth).
+> **Status note (2026-10-24):** Superseded by ADR-0010. The MCP env-var list (`REQUIRED_ENV_VARS`) now lives in `carter/install/prereqs.py` and is `GITHUB_TOKEN`, `TFE_TOKEN` (Atlassian uses OAuth). `redaction.enabled` was removed in 2026-10 and is ignored if present: the narrator's redaction pass is always on, and `carter check` no longer warns about it.
 
 **Status:** Superseded by [ADR-0010](0010-agent-platform-refresh.md) (2026-06-26)
 **Date:** 2026-06-13

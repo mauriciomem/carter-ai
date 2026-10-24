@@ -11,7 +11,7 @@ tags: [agents, orchestration, subagents, dispatch, models, strictness, policy, t
 
 # ADR-0010: Carter Agent Platform Refresh
 
-> **Status note (2026-10-24):** D2 tiers have moved on: pm and narrator are now implementers (Sonnet), and the shipped models are the Claude 5.5 family (Opus 5.5 / Sonnet 5.5). A `profile:` key re-tiers at resolve time.
+> **Status note (2026-10-24):** D2 tiers have moved on: pm and narrator are now implementers (Sonnet), and the shipped models are the Claude 5.5 family (Opus 5.5 / Sonnet 5.5). A `profile:` key re-tiers at resolve time. `redaction.enabled` (kept by D5) was removed in 2026-10 and is ignored if present: narrator redaction is always on, and there is no `carter check` warning.
 
 **Status:** Accepted
 **Date:** 2026-06-26
