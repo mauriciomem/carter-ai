@@ -1,11 +1,6 @@
 {
   "carter-atlassian": {
-    "type": "local",
-    "command": ["npx", "-y", "@atlassian/mcp-server-atlassian"],
-    "env": {
-      "ATLASSIAN_API_TOKEN": "${ATLASSIAN_API_TOKEN}",
-      "ATLASSIAN_EMAIL": "${ATLASSIAN_EMAIL}",
-      "ATLASSIAN_URL": "${ATLASSIAN_URL}"
-    }
+    "type": "remote",
+    "url": "https://mcp.atlassian.com/v2/mcp"
   }
 }

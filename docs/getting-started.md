@@ -45,14 +45,12 @@ yet** — `uv` prints a warning if so. Put it on your PATH once:
 ```bash
 uv tool update-shell      # adds the tool bin dir to your shell startup file
 exec $SHELL               # reload the shell (or just open a new terminal)
-carter --version          # verify: carter, version 2.0.0a1
+carter --version          # verify: carter, version X.Y.Z
 ```
 
 > **`bash: carter: command not found`?** The install succeeded but `~/.local/bin`
 > isn't on your `PATH`. Run `uv tool update-shell` and reload your shell (above),
 > or for the current shell only: `export PATH="$HOME/.local/bin:$PATH"`.
-> Alternatively, run the bundled installer straight from a repo checkout without
-> touching your PATH: `./install.sh` (equivalent to `carter install`).
 
 From there you have two paths depending on how you want to use Carter:
 
@@ -69,18 +67,18 @@ carter install
 This generates customized agents from templates into a specific workspace directory.
 
 ```bash
-# Create a new workspace
+# Create a new workspace (the directory must already exist)
+mkdir -p ~/my-workspace
 carter init ~/my-workspace --name "my-project"
 
-# Choose where agents are written, and the agent-name suffix
+# ...or choose where agents are written, and the agent-name suffix
 carter init ~/my-workspace --target all --agent-suffix local
 #   --target copilot|opencode|all   (default copilot)
 #   --agent-suffix <suffix>         (default local; "" for none)
 ```
 
-> At both levels (`guarded`/`strict`) the narrator's redaction pass is **forced**
-> regardless of `redaction.enabled`, so a rule-less narrator can never ship. If you
-> set `redaction.enabled: false`, `carter check` flags the contradiction.
+> The narrator's redaction rules are always rendered; `redaction.categories` in
+> `carter.yaml` selects which categories it redacts.
 
 **What `carter init` creates** (agent/instruction locations depend on `target` in
 `carter.yaml`; the tree below shows the default `target: copilot`):
@@ -134,7 +132,7 @@ This is the file that drives all template rendering. Key sections:
 # What personality should Carter have?
 personality:
   skepticism: scaled    # off | scaled | always
-  style: reviewer       # helpful | reviewer | terse
+  style: reviewer       # only `reviewer` changes output (adds the reviewer persona)
 
 # Which agents to generate
 agents:
@@ -145,6 +143,7 @@ agents:
   - pm
   - learner
   - narrator
+  - security
 
 # Suffix that distinguishes these workspace agents from globally-installed ones
 # (carter-engineer-local). Use "" for no suffix (same names as global).
@@ -156,18 +155,16 @@ target: copilot
 # Risk-based strictness policy (ADR-0005 / ADR-0010). One knob; deny-by-default per agent.
 policy:
   level: guarded        # guarded | strict
-  unknown_tool: ask     # gate for a tool not in the risk map: allow | ask | deny
   overrides: {}         # category -> gate, e.g. {remote-write: deny} to tighten remote-write
-  audit_overrides: true # log escape-hatch overrides via `carter ops`
 
 # Per-agent model (ADR-0010 D2). Thinkers run on Opus, implementers on a cheaper
-# Sonnet; resolved overrides > tier > default. One model: string per agent (never an
+# Sonnet; resolved overrides > profile > tier > default. One model: string per agent (never an
 # array). Haiku is opt-in via overrides only.
 models:
-  default:      { copilot: "Claude Opus 4.8",   opencode: "anthropic/claude-opus-4-8" }
-  thinkers:     { copilot: "Claude Opus 4.8",   opencode: "anthropic/claude-opus-4-8" }
-  implementers: { copilot: "Claude Sonnet 5",   opencode: "anthropic/claude-sonnet-5" }
-  overrides: {}         # per-agent, e.g. {engineer: {copilot: "Claude Haiku 4.5", opencode: "anthropic/claude-haiku-4-5"}}
+  default:      { copilot: "Claude Opus 5.5",   opencode: "anthropic/claude-opus-5-5" }
+  thinkers:     { copilot: "Claude Opus 5.5",   opencode: "anthropic/claude-opus-5-5" }
+  implementers: { copilot: "Claude Sonnet 5.5", opencode: "anthropic/claude-sonnet-5-5" }
+  overrides: {}         # per-agent, e.g. {engineer: {copilot: "Claude Haiku 5.5", opencode: "anthropic/claude-haiku-5-5"}}
 
 # Should Carter review your code before you push?
 quality_gate:
@@ -425,6 +422,6 @@ Omit `@vX.Y.Z` to track the default branch's latest (a dev version).
 ## Next Steps
 
 - [strictness-policy.md](strictness-policy.md) — Tutorial: gating actions by risk with `policy.level`
-- [carter-ops.md](carter-ops.md) — Full reference for write operations
+- [carter-ops.md](carter-ops.md) — Write operations (`ops:`) and the `carter ops` helper
 - [memory-and-knowledge.md](memory-and-knowledge.md) — Deep dive on the knowledge system
 - [testing.md](testing.md) — How to run and extend the test suite

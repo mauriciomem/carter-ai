@@ -1,7 +1,7 @@
 ---
 description: "Project Manager — planning, roadmaps, work breakdown, risk management, and agile methodology."
 mode: subagent
-model: Claude Sonnet 5
+model: Claude Sonnet 5.5
 tools: [codebase, search, usages, fetch, editFiles, carter-atlassian/*, carter-github/*]
 agents: []
 ---

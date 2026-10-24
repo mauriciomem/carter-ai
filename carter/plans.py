@@ -48,7 +48,6 @@ DEFAULT_THRESHOLDS: dict[str, Any] = {
     "step_file_threshold": 3,
     "readme_max_lines": 150,
     "step_max_lines": 80,
-    "git_regime": "private",
 }
 
 

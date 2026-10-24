@@ -16,11 +16,11 @@ from carter.config import (
     generate_default_config,
     load_config,
     parse_policy_comment,
+    resolve_targets,
 )
 from carter.plans import validate_checkpoint, validate_plans_dir
 from carter.scaffold import (
     agent_filename,
-    config_warnings,
     create_env,
     lint_policy,
     model_advisory,
@@ -157,7 +157,6 @@ def init(
     # Generate default config, applying CLI overrides before it is persisted so
     # carter.yaml matches what was scaffolded.
     config = generate_default_config(workspace_name=workspace_name, mode=mode)
-    config["state"]["git_tracked"] = not no_git_state
     if target_tool is not None:
         config["target"] = target_tool
     if agent_suffix is not None:
@@ -188,12 +187,7 @@ def init(
     env = create_env()
     _render_and_write(target, config, env)
 
-    for warning in config_warnings(config):
-        click.echo(f"⚠  {warning}", err=True)
-
-    notice = policy_notice(config)
-    if notice:
-        click.echo(f"ℹ  {notice}")
+    click.echo(f"ℹ  {policy_notice(config)}")
 
     click.echo(f"Workspace '{workspace_name}' initialized ({mode} mode)")
 
@@ -215,7 +209,7 @@ def update(target_dir: str, dry_run: bool) -> None:
 
     if dry_run:
         agents = render_agents(config, env)
-        tools = _resolve_targets(config.get("target", "copilot"))
+        tools = resolve_targets(config.get("target", "copilot"))
         click.echo("Would render:")
         for tool in tools:
             agents_dir = _agents_dir(target, tool)
@@ -227,11 +221,7 @@ def update(target_dir: str, dry_run: bool) -> None:
         return
 
     _render_and_write(target, config, env)
-    for warning in config_warnings(config):
-        click.echo(f"⚠  {warning}", err=True)
-    notice = policy_notice(config)
-    if notice:
-        click.echo(f"ℹ  {notice}")
+    click.echo(f"ℹ  {policy_notice(config)}")
     click.echo("Templates re-rendered from carter.yaml")
 
 
@@ -264,7 +254,7 @@ def check(target_dir: str, accept_degraded: bool) -> None:
     # Check agent and instruction files exist in each target's discovery path,
     # collecting each role's parsed frontmatter for the policy lint as we go.
     installed: dict[str, dict] = {}
-    for tool in _resolve_targets(config.get("target", "copilot")):
+    for tool in resolve_targets(config.get("target", "copilot")):
         agents_dir = _agents_dir(target, tool)
         for agent_name in config["agents"]:
             agent_file = agents_dir / agent_filename(agent_name, config)
@@ -305,7 +295,7 @@ def check(target_dir: str, accept_degraded: bool) -> None:
             click.echo(f"  ✗ {error}", err=True)
         raise SystemExit(1)
 
-    for warning in [*config_warnings(config), *policy_warnings]:
+    for warning in policy_warnings:
         click.echo(f"⚠  {warning}", err=True)
 
     # Required unverifiable-model advisory — always printed.
@@ -343,14 +333,6 @@ def save(target_dir: str, message: str | None) -> None:
         click.echo("Saved .carter/ state")
     else:
         click.echo("Nothing to save (no changes or git state disabled)")
-
-
-def _resolve_targets(target: str) -> list[str]:
-    """Resolve a config ``target`` value to concrete tool targets.
-
-    Mirrors the installer: ``all`` expands to both, anything else is itself.
-    """
-    return ["copilot", "opencode"] if target == "all" else [target]
 
 
 # Per-target discovery paths (relative to the workspace root) where each tool
@@ -423,7 +405,7 @@ def _render_and_write(target: Path, config: dict, env: Environment) -> None:
     absent (skip-if-exists), so user edits to ``AGENTS.md`` /
     ``copilot-instructions.md`` are preserved.
     """
-    tools = _resolve_targets(config.get("target", "copilot"))
+    tools = resolve_targets(config.get("target", "copilot"))
     agents = render_agents(config, env)
     instructions_content = render_instructions(config, env)["copilot-instructions.md"]
 
@@ -442,13 +424,13 @@ def _render_and_write(target: Path, config: dict, env: Environment) -> None:
 )
 @click.argument("args", nargs=-1, type=click.UNPROCESSED)
 def ops(args: tuple[str, ...]) -> None:
-    """Run a carter-ops operation (deterministic executor).
+    """Carter-ops audit ledger and config helper (used by the carter-ops skill).
 
     All arguments are passed through to the carter-ops CLI, e.g.:
 
-        carter ops --list
         carter ops audit --operation git-flow --result success
-        carter ops git-flow --branch feature/x --message "feat: x" --dry-run
+        carter ops policy-override --category remote-write --action "git push" --tier native-ask
+        carter ops config --emit
     """
     from carter.ops.carter_ops import main as ops_main
 

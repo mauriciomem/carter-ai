@@ -50,6 +50,7 @@ class OrderProcessor:
 ```python
 from dataclasses import dataclass
 
+
 @dataclass(frozen=True)
 class Config:
     host: str
@@ -61,6 +62,7 @@ Use `frozen=True` for immutable value objects. Use `@dataclass(slots=True)` for 
 ### Use Protocols for Structural Typing
 ```python
 from typing import Protocol
+
 
 class Repository(Protocol):
     def get(self, id: str) -> dict: ...
@@ -75,10 +77,12 @@ Pass dependencies as constructor arguments. Don't import and instantiate inside 
 ```python
 _handlers: dict[str, type[Handler]] = {}
 
+
 def register(name: str):
     def decorator(cls):
         _handlers[name] = cls
         return cls
+
     return decorator
 ```
 
@@ -91,8 +95,10 @@ def register(name: str):
 class AppError(Exception):
     """Base exception for the application."""
 
+
 class ValidationError(AppError):
     """Input validation failed."""
+
 
 class NotFoundError(AppError):
     """Requested resource not found."""
@@ -113,11 +119,14 @@ class NotFoundError(AppError):
 - **Fixtures:** Use `@pytest.fixture` for setup, `conftest.py` for shared fixtures.
 - **Table-driven tests:**
   ```python
-  @pytest.mark.parametrize("input,expected", [
-      ("hello", "HELLO"),
-      ("", ""),
-      ("123", "123"),
-  ])
+  @pytest.mark.parametrize(
+      "input,expected",
+      [
+          ("hello", "HELLO"),
+          ("", ""),
+          ("123", "123"),
+      ],
+  )
   def test_to_upper(input, expected):
       assert to_upper(input) == expected
   ```

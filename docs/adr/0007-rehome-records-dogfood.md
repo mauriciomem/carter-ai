@@ -11,6 +11,8 @@ tags: [repo, docs, organization, adr, rfc, plans, dogfooding]
 
 # ADR-0007: Re-home ADRs/RFCs to `docs/` for convention dogfood; plans to a private `.carter/`
 
+> **Status note (2026-10-24):** The completed plans in `design/plans/` and the RFCs in `docs/rfcs/` were deleted in 2026-10; carter-ai no longer keeps a private `.carter/` dogfood plan workspace in this repo. ADRs remain in `docs/adr/`.
+
 **Status:** Accepted
 **Date:** 2026-06-14
 **Deciders:** Carter maintainer (mauriciomem), Carter Maestro

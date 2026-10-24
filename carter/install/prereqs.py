@@ -14,12 +14,11 @@ import subprocess
 
 from carter.install.console import _log, log_ok, log_step, log_warn
 
+# Env vars the shipped MCP configs (mcp/*/*.json) read. carter-atlassian is the
+# official remote server (OAuth in the client), so it needs none.
 REQUIRED_ENV_VARS = (
     "GITHUB_TOKEN",
-    "TF_TOKEN",
-    "ATLASSIAN_API_TOKEN",
-    "ATLASSIAN_EMAIL",
-    "ATLASSIAN_URL",
+    "TFE_TOKEN",
 )
 
 

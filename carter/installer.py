@@ -3,9 +3,8 @@
 Installs Carter agents, skills, instructions, knowledge base, and MCP server
 configurations for VS Code Copilot, Copilot CLI, and OpenCode.
 
-This module backs the ``carter install`` command (and the legacy ``install.sh`` /
-``install.py`` bootstrap). The implementation was split into the ``carter.install``
-package; this module re-exports those leaves and keeps the
+This module backs the ``carter install`` command. The implementation was split
+into the ``carter.install`` package; this module imports those leaves and keeps the
 orchestration plus the few helpers that tests monkeypatch through this namespace
 (``_vscode_detected``, ``_vscode_settings_path``, ``check_prerequisites``,
 ``configure_mcp_servers`` — each resolves a patched dependency from this module's
@@ -15,14 +14,15 @@ both from a development checkout and from an installed wheel (``uv tool install`
 
 from __future__ import annotations
 
-import argparse
+import contextlib
 import json
 import os
-import platform  # noqa: F401  re-exported: tests monkeypatch ``installer.platform.system``
 import subprocess
 from datetime import UTC, datetime
 from pathlib import Path
 
+from carter import __version__
+from carter.config import resolve_targets
 from carter.install.components import (
     install_agents,
     install_instructions,
@@ -45,11 +45,8 @@ from carter.install.console import (
     log_warn,
     set_verbosity,
 )
-from carter.install.files import _sha256  # noqa: F401  re-exported for tests
-from carter.install.jsonc import (  # noqa: F401  _strip_jsonc/_load_jsonc re-exported for tests
-    _load_jsonc,
-    _strip_jsonc,
-)
+from carter.install.files import _backup_file
+from carter.install.jsonc import _load_jsonc, _write_json_preserving
 from carter.install.mcp import MCP_SERVERS, _merge_json_key
 from carter.install.paths import (
     REPO_ROOT,
@@ -150,7 +147,7 @@ def configure_mcp_servers(
 ) -> int:
     """Wire the selected MCP servers into each target's config.
 
-    ``servers`` is the opt-in selection (RFC-0004 lever 1): a subset of ``MCP_SERVERS``.
+    ``servers`` is the opt-in selection: a subset of ``MCP_SERVERS``.
     ``None`` (the default) means the full shipped set — today's backward-compatible
     behaviour, so an unused server can be dropped per workspace without adding its
     tool-schema tokens. An unknown server name is a ``ValueError``.
@@ -168,26 +165,54 @@ def configure_mcp_servers(
             )
         servers = list(servers)
 
+    wired: dict[str, list[str]] = {}
+
     if "copilot" in targets:
+        # A server may ship no config for a target (Atlassian has no Copilot entry:
+        # it needs an OAuth bridge we don't ship). Skip it there — never crash.
+        copilot_servers = []
+        for server in servers:
+            if (REPO_ROOT / "mcp" / "copilot" / f"{server}.json").is_file():
+                copilot_servers.append(server)
+            else:
+                # A warning, not log_skip: skips are hidden at default verbosity, and
+                # a server the user asked for must not vanish silently.
+                log_warn(f"carter-{server}: not available for copilot")
+        unavailable = [
+            f"carter-{s}"
+            for s in MCP_SERVERS
+            if not (REPO_ROOT / "mcp" / "copilot" / f"{s}.json").is_file()
+        ]
+        copilot_wired: set[str] = set()
+
         # VS Code settings.json — only when a VS Code config dir actually exists,
         # so we never create a phantom settings.json that VS Code won't read.
         if _vscode_detected(base_dir):
             vscode_settings = _vscode_settings_path(base_dir)
+            _remove_stale_vscode_servers(vscode_settings, unavailable, backup_root)
             copilot_entries = {}
-            for server in servers:
+            for server in copilot_servers:
                 src = REPO_ROOT / "mcp" / "copilot" / f"{server}.json"
                 copilot_entries.update(json.loads(src.read_text()))
 
-            _merge_json_key(vscode_settings, "mcp.servers", copilot_entries, backup_root)
-            for server in servers:
+            if copilot_entries:
+                _merge_json_key(vscode_settings, "mcp.servers", copilot_entries, backup_root)
+            for server in copilot_servers:
                 log_ok(f"carter-{server} → VS Code settings.json")
+                copilot_wired.add(f"carter-{server}")
                 count += 1
         else:
             log_skip("VS Code not detected — skipping settings.json (use the CLI targets)")
 
         # Copilot CLI via `copilot mcp add`
         if prereqs.get("copilot", False) and not base_dir:
-            for server in servers:
+            # Drop entries an older Carter wired for servers no longer offered here.
+            for name in unavailable:
+                with contextlib.suppress(subprocess.SubprocessError, OSError):
+                    subprocess.run(
+                        ["copilot", "mcp", "remove", name], capture_output=True, timeout=10
+                    )
+            for server in copilot_servers:
                 src = REPO_ROOT / "mcp" / "copilot" / f"{server}.json"
                 config = json.loads(src.read_text())
                 name = f"carter-{server}"
@@ -213,85 +238,65 @@ def configure_mcp_servers(
                         check=True,
                     )
                     log_ok(f"{name} → copilot mcp add")
+                    copilot_wired.add(name)
                     count += 1
                 except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as e:
                     log_warn(f"Failed to add {name} to Copilot CLI: {e}")
         elif not base_dir:
             log_skip("copilot CLI not found, skipping copilot mcp add")
+        wired["copilot"] = [
+            f"carter-{s}" for s in copilot_servers if f"carter-{s}" in copilot_wired
+        ]
 
     if "opencode" in targets:
         opencode_config = _opencode_base(base_dir) / "opencode.json"
         opencode_entries = {}
+        opencode_servers = []
         for server in servers:
             src = REPO_ROOT / "mcp" / "opencode" / f"{server}.json"
+            if not src.is_file():
+                log_warn(f"carter-{server}: not available for opencode")
+                continue
             opencode_entries.update(json.loads(src.read_text()))
+            opencode_servers.append(server)
 
-        _merge_json_key(opencode_config, "mcp", opencode_entries, backup_root)
-        for server in servers:
+        if opencode_entries:
+            _merge_json_key(opencode_config, "mcp", opencode_entries, backup_root)
+        for server in opencode_servers:
             log_ok(f"carter-{server} → opencode.json")
             count += 1
+        wired["opencode"] = [f"carter-{s}" for s in opencode_servers]
 
-    manifest["mcp_servers"] = [f"carter-{s}" for s in servers]
+    # Per target: what was actually wired (uninstall removes every `carter-*` entry
+    # regardless, so it stays correct for servers wired by older versions too).
+    manifest["mcp_servers"] = wired
     return count
 
 
-# ──────────────────────────────────────────────────────────────────────────────
-# Main
-# ──────────────────────────────────────────────────────────────────────────────
+def _remove_stale_vscode_servers(
+    settings: Path, names: list[str], backup_root: Path | None
+) -> None:
+    """Remove ``carter-*`` VS Code MCP entries for servers no longer offered on copilot."""
+    if not names or not settings.is_file():
+        return
+    data = _load_jsonc(settings)
+    if data is None:
+        return  # unparseable: _merge_json_key reports it; never risk data loss
+    servers = data.get("mcp.servers") or {}
+    stale = [n for n in names if n in servers]
+    if not stale:
+        return
+    if backup_root:
+        _backup_file(settings, backup_root)
+    for name in stale:
+        del servers[name]
+        log_ok(f"Removed {name} from VS Code settings.json (not available for copilot)")
+    _write_json_preserving(settings, data)
 
 
-def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(
-        description="Carter AI Assistant Installer",
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-    )
-    parser.add_argument(
-        "--target",
-        choices=["copilot", "opencode", "all"],
-        default="all",
-        help="Install target (default: all)",
-    )
-    parser.add_argument(
-        "--uninstall",
-        action="store_true",
-        help="Remove Carter installation",
-    )
-    parser.add_argument(
-        "--mcp",
-        action="store_true",
-        help="Install and configure MCP servers",
-    )
-    parser.add_argument(
-        "--bot-name",
-        type=str,
-        default="carter-bot",
-        help="Git commit author name for carter-ops attribution (default: carter-bot)",
-    )
-    parser.add_argument(
-        "--base-dir",
-        type=Path,
-        default=None,
-        help="Override install base directory (for testing)",
-    )
-    parser.add_argument(
-        "-q",
-        "--quiet",
-        action="store_true",
-        help="Errors only",
-    )
-    parser.add_argument(
-        "-v",
-        "--verbose",
-        action="store_true",
-        help="Detailed output",
-    )
-    parser.add_argument(
-        "-vv",
-        "--debug",
-        action="store_true",
-        help="Debug output",
-    )
-    return parser.parse_args()
+# ──────────────────────────────────────────────────────────────────────────────
+# Orchestration
+# ──────────────────────────────────────────────────────────────────────────────
 
 
 def run(
@@ -307,11 +312,11 @@ def run(
 
     This is the programmatic entry point used by the ``carter install``
     command. Parameters mirror the CLI options. ``mcp_servers`` is the opt-in
-    subset (RFC-0004 lever 1); ``None`` installs the full shipped set.
+    subset; ``None`` installs the full shipped set.
     """
     set_verbosity(verbosity)
 
-    targets = ["copilot", "opencode"] if target == "all" else [target]
+    targets = resolve_targets(target)
 
     _log(f"\n {bold('Carter Installer')}")
     _log(f" Target: {', '.join(targets)}")
@@ -337,12 +342,12 @@ def run(
     backup_root = _copilot_base(base_dir) / "backup" / now.strftime("%Y%m%dT%H%M%S")
 
     manifest: dict = {
-        "version": "1.0.0",
+        "version": __version__,
         "installed_at": now.isoformat(),
         "updated_at": now.isoformat(),
         "targets": targets,
         "files": [],
-        "mcp_servers": [],
+        "mcp_servers": {},
         "file_hashes": {},
     }
 
@@ -368,7 +373,7 @@ def run(
     else:
         log_step("Skipping MCP servers (no --mcp flag)")
         mcp_count = 0
-        manifest["mcp_servers"] = []
+        manifest["mcp_servers"] = {}
 
     # Write manifest
     manifest_path = write_manifest(manifest, base_dir)
@@ -396,27 +401,3 @@ def run(
             f"{updated} updated, {unchanged} unchanged",
             level=2,
         )
-
-
-def main() -> None:
-    args = parse_args()
-    if args.quiet:
-        verbosity = 0
-    elif args.debug:
-        verbosity = 3
-    elif args.verbose:
-        verbosity = 2
-    else:
-        verbosity = 1
-    run(
-        target=args.target,
-        mcp=args.mcp,
-        bot_name=args.bot_name,
-        uninstall_flag=args.uninstall,
-        base_dir=args.base_dir,
-        verbosity=verbosity,
-    )
-
-
-if __name__ == "__main__":
-    main()

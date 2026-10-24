@@ -11,11 +11,13 @@ tags: [agents, security, defensive, authorization, threat-model, mcp, dispatch, 
 
 # ADR-0013: A first-class `carter-security` agent — defensive-by-default, authorized-pentest-aware
 
+> **Status note (2026-10-24):** The thinkers tier now resolves to Opus 5.5 (Claude 5.5 family); the security agent's tier decision is unchanged.
+
 **Status:** Accepted
 **Date:** 2026-06-30
 **Deciders:** Carter maintainer (mauriciomem), Carter Maestro (synthesis of architect/engineer/devops/narrator/pm reviews)
 **Reference format:** Michael Nygard ADR (<https://cognitect.com/blog/2011/11/15/documenting-architecture-decisions>)
-**Related:** Records the decision of [RFC-0006](../rfcs/0006-carter-security-agent/README.md) (revision 2,
+**Related:** Records the decision of RFC-0006 (record removed 2026-10) (revision 2,
 accepted 2026-06-30, all five reviews approve). Builds **on** [ADR-0010](0010-agent-platform-refresh.md)
 (the agent platform), [ADR-0011](0011-tools-allowlist-derives-from-policy.md) (`tools:` derived from
 policy), and [ADR-0008](0008-mcp-cost-and-security.md) (read-only Dockerized MCP) — **none re-opened**.
@@ -227,7 +229,7 @@ the plan-003 lineage and the agent ships without it.
 
 ## References
 
-- [RFC-0006 — carter-security agent](../rfcs/0006-carter-security-agent/README.md) — the proposal this ADR
+- RFC-0006 — carter-security agent (record removed 2026-10) — the proposal this ADR
   records (revision 2, accepted 2026-06-30); carries the `file:line` grounding, exact emission, the
   verbatim authorization/untrusted-input blocks, and the resolved open questions.
 - [ADR-0010 — Agent Platform Refresh](0010-agent-platform-refresh.md) — D1 native dispatch / explicit

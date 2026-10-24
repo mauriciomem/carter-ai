@@ -1,4 +1,4 @@
-"""Tests for the risk-based strictness policy model (RFC-0002 / ADR-0005, P1 step 1).
+"""Tests for the risk-based strictness policy model (ADR-0005).
 
 The model layer only: the `policy` config block, the shipped R0-R6 taxonomy,
 the tool->risk map, and the per-agent allowlist. No emission or enforcement yet.
@@ -15,13 +15,9 @@ from carter.config import (
     AGENT_ALLOWLIST,
     DEFAULT_CONFIG,
     RISK_TAXONOMY,
-    TOOL_RISK_MAP,
     effective_allowlist,
-    effective_tool_risk_map,
     generate_default_config,
     load_config,
-    most_restrictive_gate,
-    resolve_action_gate,
 )
 
 
@@ -37,12 +33,9 @@ def _minimal_existing_config() -> dict:
 
 class TestPolicyBlock:
     def test_default_config_has_policy_control_keys(self):
-        """DEFAULT_CONFIG ships the four policy control keys; `guarded` is the floor."""
+        """DEFAULT_CONFIG ships the policy control keys; `guarded` is the floor."""
         policy = DEFAULT_CONFIG["policy"]
-        assert policy["level"] == "guarded"
-        assert policy["unknown_tool"] == "ask"
-        assert policy["overrides"] == {}
-        assert policy["audit_overrides"] is True
+        assert policy == {"level": "guarded", "overrides": {}}
 
     def test_existing_config_omitting_policy_resolves_guarded(self, tmp_path):
         """ADR-0010 D3: an existing config with no policy block resolves to `guarded`
@@ -188,7 +181,7 @@ class TestPolicyLevelValidation:
 
 
 class TestProfileValidation:
-    """The optional cost `profile:` key (RFC-0004 lever 1 / plan 007) is validated at the
+    """The optional cost `profile:` key is validated at the
     config boundary: unset/None or a known profile name, else a loud ConfigError.
     """
 
@@ -243,20 +236,10 @@ class TestShippedMapsAreDictShaped:
         for gates in RISK_TAXONOMY.values():
             assert {"guarded", "strict"} <= set(gates)
 
-    def test_secret_access_merged_into_remote_write(self):
-        """ADR-0010 D4.2: secret reads classify as remote-write (ask at guarded,
-        gate at strict) — no standalone secret-access category survives."""
-        from carter.config import TOOL_RISK_MAP
-
-        assert TOOL_RISK_MAP["vault read"] == "remote-write"
-        assert TOOL_RISK_MAP["read .env"] == "remote-write"
+    def test_remote_write_gates(self):
+        """remote-write (incl. secret reads) asks at guarded and gates at strict."""
         assert RISK_TAXONOMY["remote-write"]["guarded"] == "ask"
         assert RISK_TAXONOMY["remote-write"]["strict"] == "gate"
-
-    def test_tool_risk_map_is_dict(self):
-        """The tool->risk map is dict-shaped (tool -> category), never a list."""
-        assert isinstance(TOOL_RISK_MAP, dict)
-        assert all(isinstance(v, str) for v in TOOL_RISK_MAP.values())
 
     def test_allowlist_is_dict_of_dicts(self):
         """The per-agent allowlist is agent -> {category: bool}, never a list."""
@@ -279,16 +262,6 @@ class TestShippedMapsAreDictShaped:
 
 
 class TestUserOverridesDoNotWipeShippedMaps:
-    def test_tool_risk_override_merges_not_replaces(self):
-        """A user tool->risk addition deep-merges; shipped entries survive (dict-shaped)."""
-        config = {"policy": {"tool_risk": {"my_custom_tool": "remote-write"}}}
-        effective = effective_tool_risk_map(config)
-        # user addition is present
-        assert effective["my_custom_tool"] == "remote-write"
-        # every shipped entry survives the merge
-        for tool, risk in TOOL_RISK_MAP.items():
-            assert effective[tool] == risk
-
     def test_allowlist_override_merges_not_replaces(self):
         """A user allowlist tweak deep-merges without wiping other shipped agents."""
         config = {"policy": {"allowlist": {"engineer": {"remote-write": True}}}}
@@ -300,28 +273,82 @@ class TestUserOverridesDoNotWipeShippedMaps:
         assert effective["engineer"]["remote-write"] is True
 
     def test_no_policy_overrides_returns_shipped_defaults(self):
-        """With no overrides, the effective maps equal the shipped maps."""
-        assert effective_tool_risk_map({}) == TOOL_RISK_MAP
+        """With no overrides, the effective allowlist equals the shipped one."""
         assert effective_allowlist({}) == AGENT_ALLOWLIST
 
 
-class TestGatePrecedence:
-    def test_most_restrictive_gate_orders_allow_ask_gate_deny(self):
-        assert most_restrictive_gate(["allow", "ask"]) == "ask"
-        assert most_restrictive_gate(["ask", "deny", "gate"]) == "deny"
-        assert most_restrictive_gate(["gate", "ask"]) == "gate"
-        assert most_restrictive_gate(["allow"]) == "allow"
+class TestLegacyConfigKeysTolerated:
+    def test_removed_keys_in_existing_config_still_load(self, tmp_path):
+        """Keys Carter no longer reads (dropped as dead config) must not break
+        loading an older carter.yaml — they are carried through and ignored."""
+        cfg = _minimal_existing_config()
+        cfg["workspace"]["description"] = "old"
+        cfg["identity"].update({"git_org": "acme", "bot_email": "bot@x"})
+        cfg["quality_gate"] = {"enabled": True, "max_iterations": 2, "trigger": "user-initiated"}
+        cfg["redaction"] = {"enabled": False, "categories": ["secrets"]}
+        cfg["state"] = {"git_tracked": True}
+        cfg["plans"] = {"git_regime": "private"}
+        cfg["policy"] = {
+            "level": "guarded",
+            "unknown_tool": "ask",
+            "audit_overrides": True,
+            "tool_risk": {"my_tool": "remote-write"},
+        }
+        cfg_path = tmp_path / "carter.yaml"
+        cfg_path.write_text(yaml.dump(cfg))
 
-    def test_most_restrictive_gate_empty_defaults_allow(self):
-        assert most_restrictive_gate([]) == "allow"
+        loaded = load_config(cfg_path)
 
-    def test_resolve_action_gate_push_force_is_dangerous(self):
-        """push --force = remote-write and dangerous; guarded -> gate (strictest)."""
-        assert resolve_action_gate(["remote-write", "dangerous"], "guarded") == "gate"
+        assert loaded["policy"]["level"] == "guarded"
+        assert loaded["redaction"]["categories"] == ["secrets"]
+        assert loaded["plans"]["step_file_threshold"] == 3
 
-    def test_resolve_action_gate_dangerous_denied_at_strict(self):
-        """terraform destroy = dangerous; strict -> deny."""
-        assert resolve_action_gate(["dangerous"], "strict") == "deny"
+    @staticmethod
+    def _inject_legacy_keys(cfg: dict) -> None:
+        cfg["workspace"]["description"] = "old"
+        cfg["identity"].update({"git_org": "acme", "bot_email": "bot@x"})
+        cfg["quality_gate"]["trigger"] = "user-initiated"
+        cfg["redaction"]["enabled"] = False
+        cfg["state"] = {"git_tracked": True}
+        cfg["plans"]["git_regime"] = "private"
+        cfg["policy"].update(
+            {
+                "unknown_tool": "ask",
+                "audit_overrides": True,
+                "tool_risk": {"my_tool": "remote-write"},
+            }
+        )
 
-    def test_resolve_action_gate_read_always_allowed(self):
-        assert resolve_action_gate(["read"], "strict") == "allow"
+    @pytest.mark.parametrize("target", ["opencode", "copilot"])
+    def test_legacy_keys_survive_update_and_check(self, tmp_path, target):
+        """End to end through the real CLI: an older carter.yaml carrying every
+        removed key still updates and passes `carter check` (drift lint included)."""
+        from click.testing import CliRunner
+
+        from carter.cli import main
+
+        runner = CliRunner()
+        result = runner.invoke(main, ["init", str(tmp_path), "--no-git-state", "--target", target])
+        assert result.exit_code == 0, result.output
+
+        cfg_path = tmp_path / ".carter" / "carter.yaml"
+        cfg = yaml.safe_load(cfg_path.read_text())
+        self._inject_legacy_keys(cfg)
+        cfg_path.write_text(yaml.dump(cfg))
+
+        result = runner.invoke(main, ["update", str(tmp_path)])
+        assert result.exit_code == 0, result.output
+        agents_dir = tmp_path / (".opencode/agents" if target == "opencode" else ".github/agents")
+        assert len(list(agents_dir.glob("carter-*.md"))) == len(cfg["agents"])
+        instructions = tmp_path / (
+            "AGENTS.md" if target == "opencode" else ".github/copilot-instructions.md"
+        )
+        assert instructions.is_file()
+
+        result = runner.invoke(main, ["check", str(tmp_path)])
+        assert result.exit_code == 0, result.output
+        assert "drift" not in result.output.lower()
+        # The legacy keys are still in the file, untouched (carried through, ignored).
+        assert yaml.safe_load(cfg_path.read_text())["policy"]["tool_risk"] == {
+            "my_tool": "remote-write"
+        }

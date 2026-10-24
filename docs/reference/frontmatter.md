@@ -152,7 +152,6 @@ plans:
   step_file_threshold: 3     # > N steps -> per-step files
   readme_max_lines: 150      # README split budget
   step_max_lines: 80         # step-file split budget
-  git_regime: private        # private | workspace (umbrella mode only)
 ```
 
 The **ADR ≤ 400-line budget is NOT workspace config** — ADRs live in the main
@@ -161,8 +160,7 @@ repo, outside any `.carter/`, so `carter.yaml` cannot govern them. It is a
 
 ## Risk-based strictness policy (`policy` block)
 
-The risk-based strictness policy (RFC-0002 /
-[ADR-0005](../adr/0005-risk-based-strictness-policy.md), refreshed by
+The risk-based strictness policy ([ADR-0005](../adr/0005-risk-based-strictness-policy.md), refreshed by
 [ADR-0010](../adr/0010-agent-platform-refresh.md)) adds a `policy` block to
 `carter.yaml`. `guarded` is the floor and the default for everything: a new install,
 an existing config that omits the block, and an unrecognized level all resolve to
@@ -171,18 +169,14 @@ an existing config that omits the block, and an unrecognized level all resolve t
 ```yaml
 policy:
   level: guarded            # guarded | strict
-  unknown_tool: ask         # gate for a tool not in the risk map: allow | ask | deny
   overrides: {}             # category -> gate, explicit per-category override
-  audit_overrides: true     # log escape-hatch overrides via `carter ops`
-  # Optional user extensions — DICT-shaped so they deep-merge over the shipped
-  # defaults (a list would replace them wholesale; carter/config.py _deep_merge):
-  tool_risk: {}             # tool/command -> risk category, e.g. {my_tool: remote-write}
+  # Optional user extension — DICT-shaped so it deep-merges over the shipped
+  # default (a list would replace it wholesale; carter/config.py _deep_merge):
   allowlist: {}             # agent -> {category: bool}, e.g. {engineer: {remote-write: true}}
 ```
 
 **Risk taxonomy (shipped, fixed — 4 categories, ADR-0010 D4).** Each maps a
-strictness level to a gate (`allow` | `ask` | `gate` | `deny`). An action in
-multiple categories takes the most restrictive gate.
+strictness level to a gate (`allow` | `ask` | `gate` | `deny`).
 
 | Category | Meaning | guarded | strict |
 |----------|---------|---------|--------|
@@ -207,8 +201,10 @@ and `dangerous` (the single pusher); the narrator is first-class (`read` +
 | pm, narrator, engineer, security | read, local-write |
 | devops | read, local-write, remote-write, dangerous |
 
-**Per-agent emitted frontmatter (P2).** Carter emits the allowlist + gates into
-each agent, using the canonical mechanism per target:
+**Per-agent emission.** Carter writes the agent's allowlist + gates as a
+`<!-- carter:policy {"level":…,"allow":[…],"gates":{…}} -->` comment right after the
+frontmatter (the declared model `carter check` lints against), and emits native
+frontmatter keys per target:
 
 - **OpenCode:** `permission` (edit / bash command-globs / webfetch) + per-agent
   MCP scope via tool-name patterns.
@@ -268,21 +264,18 @@ the shipped tiers.
 
 ```yaml
 models:
-  default:      { copilot: "Claude Opus 4.8",   opencode: "anthropic/claude-opus-4-8" }
-  thinkers:     { copilot: "Claude Opus 4.8",   opencode: "anthropic/claude-opus-4-8" }
-  implementers: { copilot: "Claude Sonnet 5",   opencode: "anthropic/claude-sonnet-5" }
-  overrides: {}   # per-agent, e.g. {engineer: {copilot: "Claude Haiku 4.5", opencode: "anthropic/claude-haiku-4-5"}}
+  default:      { copilot: "Claude Opus 5.5",   opencode: "anthropic/claude-opus-5-5" }
+  thinkers:     { copilot: "Claude Opus 5.5",   opencode: "anthropic/claude-opus-5-5" }
+  implementers: { copilot: "Claude Sonnet 5.5", opencode: "anthropic/claude-sonnet-5-5" }
+  overrides: {}   # per-agent, e.g. {engineer: {copilot: "Claude Haiku 5.5", opencode: "anthropic/claude-haiku-5-5"}}
 ```
 
-**Resolution: `overrides` > tier > `default`.** Thinkers (maestro, architect, pm,
-learner, security) = Opus 4.8; implementers (engineer, devops, pm, narrator) = Sonnet 5; `default`
-is the un-tiered catch-all so a future agent never resolves to an empty model. **Haiku
-4.5 is opt-in via `overrides` only** (`xhigh`/`max` effort error on it).
-
-A Carter→target **model-name table** (`MODEL_NAMES`, anchored by a `MODEL LAUNCH` sync
-marker in [config.py](../../carter/config.py)) maps the canonical Anthropic id to each
-target's string; the next model bump updates it. A stale string is a silently dead
-agent, so a test asserts the table is non-empty for every shipped role.
+**Resolution: `overrides` > `profile` > tier > `default`.** Thinkers (maestro,
+architect, learner, security) = Opus 5.5; implementers (engineer, devops, pm, narrator)
+= Sonnet 5.5; `default` is the un-tiered catch-all so a future agent never resolves to
+an empty model. A `profile:` (`quality` | `budget`) re-tiers roles at resolve time (see
+[cost-and-models.md](cost-and-models.md)). **Haiku is opt-in via `overrides` only.**
+A test asserts every shipped role resolves to a non-empty model string.
 
 **`carter check` model advisory (required).** Carter cannot verify the user's
 Copilot/OpenCode subscription includes a pinned model, so it **emits the pin anyway**
@@ -292,11 +285,10 @@ can't-verify caveat — an unavailable model is silently ignored frontmatter oth
 **Effort and temperature are NOT emitted.** No target has a per-agent effort field, so
 effort is the global `output_config.effort` knob — set per-session on the harness
 (`copilot --effort high`). Carter's docs recommend a single global default of **`high`**
-(the safe all-rounder: `xhigh`/`max` error on a Haiku override, `medium` under-serves
+(the safe all-rounder: `medium` under-serves
 the thinkers), raised per-session (e.g. `xhigh`) for thinker-heavy RFC/ADR/plan work.
 `temperature` is dropped wholesale (D7) — dead or rejected on every pinned model.
 
 ## See also
 
 - [ADR-0003](../adr/0003-knowledge-adr-rfc-plan-storage.md) — the decision of record
-- [ADR-0003 implementation plan](../adr/0003-implementation.md) — execution checklist

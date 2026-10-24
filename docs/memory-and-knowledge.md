@@ -220,6 +220,7 @@ All three are **on-demand only** — they never auto-run.
 ### Workspace-level (via `carter init`)
 
 ```bash
+mkdir -p ~/my-workspace   # carter init requires an existing directory
 carter init ~/my-workspace
 ```
 
@@ -234,7 +235,8 @@ carter install
 Creates:
 - `~/.carter/memories/{user,session,repo}` directories
 - `~/.carter/config.toml` (carter-ops attribution settings)
-- `~/.copilot/knowledge/` with six template files
+- `~/.copilot/knowledge/` with six seed files — header + entry-format comment only, no
+  entries (existing files are never overwritten)
 - Records all paths in manifest for clean uninstall
 
 ### What the installer does NOT do

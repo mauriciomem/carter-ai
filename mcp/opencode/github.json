@@ -8,14 +8,14 @@
       "--rm",
       "-e",
       "GITHUB_PERSONAL_ACCESS_TOKEN",
-      "ghcr.io/github/github-mcp-server@sha256:e25564dccc9110a70a77b9df560cbde11aa392fcb5f08b9abe5c4ebc6d146ea4",
+      "ghcr.io/github/github-mcp-server@sha256:250bc6ce70788207608ef74cef4397230ff2e8481218da74d6093e4bd9101132",
       "stdio",
       "--read-only",
       "--tools",
       "get_me,get_file_contents,search_code,search_repositories,list_commits,get_commit,pull_request_read,issue_read,list_issues,list_pull_requests"
     ],
-    "env": {
-      "GITHUB_PERSONAL_ACCESS_TOKEN": "${GITHUB_TOKEN}"
+    "environment": {
+      "GITHUB_PERSONAL_ACCESS_TOKEN": "{env:GITHUB_TOKEN}"
     }
   }
 }

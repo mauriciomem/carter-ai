@@ -37,11 +37,9 @@ Carter Maestro (`carter-maestro`) is the orchestrator. Direct specialist request
 - **TDD**: Spec-handoff convention enabled. Document contracts before complex work.
 {% endif %}
 {% if config.quality_gate.enabled %}
-- **Quality Gate**: Available via "carter review". Max {{ config.quality_gate.max_iterations }} iterations.
+- **Quality Gate**: Ask the maestro in chat (e.g. "review", "check before push"). Max {{ config.quality_gate.max_iterations }} iterations.
 {% endif %}
-{% if config.redaction.enabled %}
 - **Redaction**: External-facing content goes through carter-narrator for redaction.
-{% endif %}
 
 ## Identity
 

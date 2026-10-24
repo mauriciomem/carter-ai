@@ -1,7 +1,7 @@
 ---
 description: "Narrator — external-facing content, redaction, and audience-aware narrative."
 mode: subagent
-model: Claude Sonnet 5
+model: Claude Sonnet 5.5
 tools: [codebase, search, usages, fetch, editFiles]
 agents: []
 ---

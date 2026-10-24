@@ -37,11 +37,12 @@ carter install --target copilot # Copilot only (or: opencode, all)
 carter install --mcp            # also configure MCP servers (needs tokens)
 carter install --uninstall      # remove
 
+mkdir -p ~/my-project                          # the directory must exist
 carter init ~/my-project --name "my-project"   # scaffold a workspace
 ```
 
-For MCP servers and write operations, set the relevant tokens first
-(`GITHUB_TOKEN`, `TF_TOKEN`, `ATLASSIAN_*`). See [.env.example](.env.example).
+For MCP servers, set the relevant tokens first (`GITHUB_TOKEN`, `TFE_TOKEN`);
+the Atlassian server authenticates via OAuth in your client. See [.env.example](.env.example).
 
 → Full walkthrough: **[docs/getting-started.md](docs/getting-started.md)**
 
@@ -120,8 +121,7 @@ approve → execute → audit**. Trigger with the `ops:` prefix.
 ```
 
 Carter shows the exact commands (with bot attribution), waits for your approval,
-executes, and logs the operation — using the `carter ops` subcommand under the
-hood (`carter ops --list`).
+executes the commands directly, and records the result with `carter ops audit`.
 
 → Reference: **[docs/carter-ops.md](docs/carter-ops.md)**
 
@@ -140,7 +140,7 @@ workspace.
 | `personality.skepticism` | How much Carter challenges your decisions |
 | `quality_gate.enabled` | Multi-agent review before push |
 | `tdd.strict` | Force test-first workflow |
-| `redaction.enabled` | Sanitize external-facing content |
+| `redaction.categories` | What the narrator redacts from external-facing content |
 | `agents` | Which agents to generate |
 | `target` | Where to write: `copilot` / `opencode` / `all` |
 | `agent_suffix` | Distinguish workspace agents from global (default `local`) |
@@ -162,8 +162,8 @@ category). One `policy.level` knob sets how strict:
 | `guarded` | The floor and the default — remote-write is `ask`, dangerous is `gate` |
 | `strict` | Regulated / prod-critical — remote-write is `gate`, dangerous is `deny` |
 
-Where the target runtime supports it (OpenCode `permission`, Copilot CLI `hooks`),
-Carter **emits native enforcement**; elsewhere it degrades to honestly-labelled
+Where the target runtime supports it (OpenCode `permission`), Carter **emits native
+enforcement**; elsewhere (the `copilot` target) it degrades to honestly-labelled
 prose and `carter check` flags the gap. `devops` is the **sole pusher** — the only
 agent holding `remote-write`/`dangerous`. Substantive outward content is forced
 through `narrator` for redaction (a `gate`-tier handoff), then handed to `devops`
@@ -185,11 +185,8 @@ promoted into knowledge. Lifecycle skills: `carter-mistakes` (capture) →
 Plans are directories under `.carter/state/plans/` with machine-readable
 frontmatter and verifiable `must_haves`; a session `checkpoint.md` cursor enables
 "where were we?" recovery. `carter check` validates the frontmatter contract;
-`carter save` commits a recovery snapshot of `.carter/`. Architecture decisions
-live as ADRs in [`docs/adr/`](docs/adr/) and RFCs in [`docs/rfcs/`](docs/rfcs/).
-The carter-ai repo's own plan workspace is a private, git-ignored `.carter/`
-(versioned in its own nested git); completed plans are archived in
-[`design/plans/`](design/plans/) (ADR-0007).
+`carter save` commits a recovery snapshot of `.carter/`. carter-ai's own
+architecture decisions live as ADRs in [`docs/adr/`](docs/adr/).
 
 → Reference: **[docs/plans-and-state.md](docs/plans-and-state.md)**
 
@@ -200,8 +197,8 @@ Configured by `carter install --mcp` into VS Code, Copilot CLI, and OpenCode:
 | Server | Purpose |
 |--------|---------|
 | `carter-github` | Repos, PRs, issues (read-only) |
-| `carter-terraform` | Terraform configs, state, plans |
-| `carter-atlassian` | Jira issues, Confluence pages |
+| `carter-terraform` | Terraform Registry, HCP Terraform / TFE workspaces (Docker, `TFE_TOKEN`) |
+| `carter-atlassian` | Jira issues, Confluence pages (official remote server, OAuth) — **OpenCode only**; not wired for VS Code / Copilot CLI |
 
 **Install only what you use.** MCP tool schemas are the largest per-request token
 surface, so a workspace should wire only the servers it needs:
@@ -224,35 +221,36 @@ transport at `https://api.githubcopilot.com/mcp/`, not wired by default). Set
 > **"Read-only" is MCP-surface only.** It removes GitHub *write tools* from the model's
 > MCP surface — it does **not** mean Carter can't write to GitHub. Shell `gh`/`git`
 > writes use the same token and remain governed by the risk-based strictness policy
-> ([RFC-0002](docs/rfcs/0002-risk-based-strictness-policy/README.md)): devops is the sole
+> ([docs/strictness-policy.md](docs/strictness-policy.md)): devops is the sole
 > pusher, gated per its allowlist. "Read-only" ≠ "cannot write."
 
 ## Development
 
 ```bash
 git clone https://github.com/mauriciomem/carter-ai.git && cd carter-ai
-uv venv && source .venv/bin/activate
-uv pip install -e ".[dev]"
-python -m pytest tests/ -q          # unit tests (offline)
+uv sync --extra dev
+uv run pytest -q                     # unit tests (offline)
+uv run pytest evals -m "not live" -q # offline evals
 ```
 
 The suite (installer, scaffold, parity, carter-ops) runs on every push and PR via
 [GitHub Actions](.github/workflows/ci.yml). → **[docs/testing.md](docs/testing.md)**
 
 ```
-carter/        CLI package (cli, installer, scaffold, config, state, ops/)
-templates/     Jinja2 agent + instruction templates
-agents/        Source-of-truth agent definitions (copied by `carter install`)
+carter/        CLI package (cli, installer, install/, scaffold, config, plans, state, ops/)
+templates/     Jinja2 agent + instruction templates (`carter init` / `update`)
+agents/        Static agent definitions (copied by `carter install`)
+instructions/  Global instructions (copied by `carter install`)
 skills/        Skill definitions (hand-maintained)
-knowledge/     Knowledge-base templates
+knowledge/     Knowledge-base seed templates
 mcp/           MCP server config templates
-docs/          Documentation
-tests/         Test suites (install, scaffold, parity, ops)
+docs/          Documentation (incl. ADRs)
+tests/         Unit tests (offline)
+evals/         Prompt/skill evals (offline + live)
 ```
 
 > `carter` bundles its data inside the package, so `uv tool install` works
-> without a checkout. The legacy `./install.sh` / `uv run install.py` shims still
-> delegate to `carter install`. The installer is idempotent (SHA-256 hashing) and
+> without a checkout. The installer is idempotent (SHA-256 hashing) and
 > writes a manifest for clean updates and uninstall.
 
 ## Troubleshooting
@@ -260,7 +258,7 @@ tests/         Test suites (install, scaffold, parity, ops)
 | Symptom | Fix |
 |---------|-----|
 | `carter: command not found` | `~/.local/bin` not on `PATH` — run `uv tool update-shell` and reload your shell (see [Install](#install)) |
-| `uv tool upgrade` says "Nothing to upgrade" | Version is unchanged across commits; force it: `uv tool install --force git+https://github.com/mauriciomem/carter-ai.git` |
+| `uv tool upgrade` says "Nothing to upgrade" | Force a reinstall from the latest commit: `uv tool install --force git+https://github.com/mauriciomem/carter-ai.git` |
 | Agents not appearing in VS Code | Restart VS Code; agents load from `~/.copilot/agents/` (system) or `.github/agents/` (workspace) on startup |
 | MCP server conflicts | Carter installs alongside existing servers as `carter-*`; remove the original to avoid duplicate tools |
 | Missing tokens for `--mcp` | Run `carter install --mcp -v` to see which env vars are unset |

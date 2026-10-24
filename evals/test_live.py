@@ -6,14 +6,16 @@ Authentication (checked in this order):
   3. OPENAI_API_KEY env var
 
 Usage:
+  uv sync --extra dev                      # once: pytest, pyyaml, httpx
+
   # Run all live evals (uses Copilot auth automatically)
-  uv run --with pytest --with pyyaml --with httpx pytest evals/test_live.py -v
+  uv run pytest evals -m live -v
 
   # Run specific scenario
-  uv run --with pytest --with pyyaml --with httpx pytest evals/test_live.py -k "git_branch_flow" -v
+  uv run pytest evals/test_live.py -k "git_branch_flow" -v
 
   # Override model
-  EVAL_MODEL=gpt-4o uv run --with pytest --with pyyaml --with httpx pytest evals/test_live.py -v
+  EVAL_MODEL=gpt-4o uv run pytest evals -m live -v
 
 The live tests are marked with @pytest.mark.live and skipped when no auth is available.
 """
@@ -27,7 +29,6 @@ import time
 from pathlib import Path
 
 import pytest
-import yaml
 
 from evals.metrics import DEFAULT_MODEL, from_response, record
 
@@ -95,7 +96,7 @@ def _max_tokens() -> int:
     """Per-call completion ceiling — a hard cost cap for the weekly live cron.
 
     Defaults to 4096 for local runs; the budgeted CI canary sets a low EVAL_MAX_TOKENS
-    so a misbehaving prompt can't run up the bill (ADR-0009 D5, plan 004 step 10).
+    so a misbehaving prompt can't run up the bill (ADR-0009 D5).
     """
     return int(os.environ.get("EVAL_MAX_TOKENS", "4096"))
 
@@ -206,16 +207,6 @@ def ops_skill_content(skills_dir: Path) -> str:
     return (skills_dir / "carter-ops" / "SKILL.md").read_text()
 
 
-@pytest.fixture
-def ops_scenarios(scenarios_dir: Path) -> list[dict]:
-    return yaml.safe_load((scenarios_dir / "carter_ops.yaml").read_text())
-
-
-@pytest.fixture
-def skill_scenarios(scenarios_dir: Path) -> list[dict]:
-    return yaml.safe_load((scenarios_dir / "skills.yaml").read_text())
-
-
 class TestLiveCarterOps:
     """Live eval: Does the model follow carter-ops workflow correctly?"""
 
@@ -319,7 +310,7 @@ class TestLiveCarterOps:
 
         response = _call_model(system, user_msg)
 
-        assert "carter-ops audit" in response, (
+        assert "carter ops audit" in response, (
             f"Missing audit command in response.\nResponse: {response[:500]}"
         )
         assert "--operation" in response, "Missing --operation flag in audit"

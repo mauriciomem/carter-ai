@@ -11,11 +11,13 @@ tags: [agents, orchestration, subagents, dispatch, models, strictness, policy, t
 
 # ADR-0010: Carter Agent Platform Refresh
 
+> **Status note (2026-10-24):** D2 tiers have moved on: pm and narrator are now implementers (Sonnet), and the shipped models are the Claude 5.5 family (Opus 5.5 / Sonnet 5.5). A `profile:` key re-tiers at resolve time. `redaction.enabled` (kept by D5) was removed in 2026-10 and is ignored if present: narrator redaction is always on, and there is no `carter check` warning.
+
 **Status:** Accepted
 **Date:** 2026-06-26
 **Deciders:** Carter maintainer (mauriciomem), Carter Maestro (synthesis of architect/engineer/devops/narrator/pm reviews)
 **Reference format:** Michael Nygard ADR (<https://cognitect.com/blog/2011/11/15/documenting-architecture-decisions>)
-**Related:** Records the decision of [RFC-0005](../rfcs/0005-native-subagent-orchestration/README.md)
+**Related:** Records the decision of RFC-0005 (record removed 2026-10)
 (revision 3, accepted 2026-06-26). **Supersedes [ADR-0005](0005-risk-based-strictness-policy.md) in
 full** — four of the decisions below change ADR-0005's load-bearing model (levels, taxonomy, narrator
 special-casing, dispatch primitive). [ADR-0004](0004-rfc-system.md) defined the RFC system that
@@ -251,8 +253,8 @@ and interpolation poisons the cache. The D9 eval keeps the cheap-tier decision e
 
 ## References
 
-- [RFC-0005 — Carter Agent Platform Refresh](../rfcs/0005-native-subagent-orchestration/README.md) — the proposal this ADR records (revision 3, accepted 2026-06-26); carries the per-agent allowlist table, `file:line` grounding, and the §7 phased roadmap.
+- RFC-0005 — Carter Agent Platform Refresh (record removed 2026-10) — the proposal this ADR records (revision 3, accepted 2026-06-26); carries the per-agent allowlist table, `file:line` grounding, and the §7 phased roadmap.
 - [ADR-0005 — Risk-Based Strictness Policy](0005-risk-based-strictness-policy.md) — **superseded in full** by this ADR (`superseded_by: ADR-0010`).
 - [ADR-0004 — RFC system](0004-rfc-system.md) — the RFC→ADR→plan chain (§D6) and the synthesis gate (§D5) this decision followed.
-- [Plan 005 — Agent platform refresh](../../.carter/state/plans/active/005-agent-platform-refresh/) — the execution plan decomposing P0–P4 + P4-eval.
+- Plan 005 — Agent platform refresh (private plan record, not in repo) — the execution plan decomposing P0–P4 + P4-eval.
 - [Frontmatter reference](../reference/frontmatter.md) — canonical schema for the `policy`/`models` blocks and agent frontmatter.

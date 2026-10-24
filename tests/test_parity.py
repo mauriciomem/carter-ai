@@ -316,7 +316,7 @@ class TestNoFalseReadOnlyClaim:
     """ADR-0005 D5: the shared full-scope MCP token makes a 'read-only' claim a
     false guarantee. Neither the static agents nor their templates may assert it
     in prose — actual tool scoping is enforced by the strictness-policy emission,
-    not promised in the body. Closes the frontmatter-parity gap (RFC-0002 N3):
+    not promised in the body. Closes the frontmatter-parity gap:
     the parity tests above check only frontmatter, so a body relapse would slip.
     """
 
@@ -425,7 +425,7 @@ class TestStrictnessPolicyParity:
         """ADR-0010 D2: every static agent bakes a single per-target ``model:`` string
         matching the shipped resolution (overrides > tier > default) at the copilot
         default. A re-bake gap (e.g. a tier rename not propagated to statics) fails
-        here. Thinkers = Opus 4.8; implementers = Sonnet 5. Never an array; no effort.
+        here. Thinkers = Opus 5.5; implementers = Sonnet 5.5. Never an array; no effort.
         """
         cfg = generate_default_config()
         cfg["agent_suffix"] = ""  # copilot default, canonical names

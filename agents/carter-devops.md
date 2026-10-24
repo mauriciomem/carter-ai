@@ -1,7 +1,7 @@
 ---
 description: "DevOps Engineer — CI/CD, infrastructure as code, containers, deployment, and git workflows."
 mode: subagent
-model: Claude Sonnet 5
+model: Claude Sonnet 5.5
 tools: [codebase, search, usages, fetch, editFiles, carter-github/*, carter-terraform/*]
 agents: []
 ---

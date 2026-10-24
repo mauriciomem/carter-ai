@@ -3,12 +3,15 @@
 from __future__ import annotations
 
 import json
+import platform
 from pathlib import Path
 
 import pytest
 
 from carter import installer as install
 from carter.install.components import _OPENCODE_AGENTS_MD, _OPENCODE_AGENTS_MD_LEGACY
+from carter.install.files import _sha256
+from carter.install.jsonc import _load_jsonc, _strip_jsonc
 
 # ──────────────────────────────────────────────────────────────────────────────
 # File operations
@@ -161,6 +164,74 @@ class TestInstallInstructions:
         assert inst.exists()
         content = inst.read_text()
         assert "Carter" in content
+
+    def test_opencode_gets_no_instructions_copy(self, base_dir: Path) -> None:
+        """OpenCode reads AGENTS.md, never instructions/copilot-instructions.md."""
+        manifest = {"files": [], "file_hashes": {}}
+        install.install_instructions(["opencode"], base_dir, manifest, base_dir / "backup")
+        assert not (base_dir / "opencode" / "instructions" / "copilot-instructions.md").exists()
+        assert manifest["files"] == []
+
+    @staticmethod
+    def _legacy(base_dir: Path, content: str) -> Path:
+        stale = base_dir / "opencode" / "instructions" / "copilot-instructions.md"
+        stale.parent.mkdir(parents=True)
+        stale.write_text(content)
+        return stale
+
+    @staticmethod
+    def _shipped() -> str:
+        return (install.REPO_ROOT / "instructions" / "copilot-instructions.md").read_text()
+
+    def test_carter_owned_legacy_copy_removed(self, base_dir: Path) -> None:
+        stale = self._legacy(base_dir, self._shipped())
+        manifest = {"files": [], "file_hashes": {}}
+        install.install_instructions(["opencode"], base_dir, manifest, base_dir / "backup")
+        assert not stale.exists()
+        assert not stale.parent.exists()  # empty instructions/ dir removed
+
+    def test_manifest_recorded_hash_counts_as_carter_owned(self, base_dir: Path) -> None:
+        stale = self._legacy(base_dir, "an older shipped version\n")
+        install.write_manifest(
+            {"files": [str(stale)], "file_hashes": {str(stale): _sha256(stale)}}, base_dir
+        )
+        manifest = {"files": [], "file_hashes": {}}
+        install.install_instructions(["opencode"], base_dir, manifest, base_dir / "backup")
+        assert not stale.exists()
+
+    def test_user_modified_copy_backed_up_not_deleted(self, base_dir: Path, capsys) -> None:
+        stale = self._legacy(base_dir, "my own notes\n")
+        (stale.parent / "other.md").write_text("keep")
+        backup = base_dir / "backup"
+        manifest = {"files": [], "file_hashes": {}}
+        install.install_instructions(["opencode"], base_dir, manifest, backup)
+        assert not stale.exists()
+        moved = backup / "opencode-instructions" / "copilot-instructions.md"
+        assert moved.read_text() == "my own notes\n"
+        assert (stale.parent / "other.md").exists()  # non-empty dir kept
+        assert "was modified" in capsys.readouterr().out
+
+    def test_symlink_not_followed(self, base_dir: Path, tmp_path: Path) -> None:
+        target = tmp_path / "elsewhere.md"
+        target.write_text(self._shipped())
+        link = base_dir / "opencode" / "instructions" / "copilot-instructions.md"
+        link.parent.mkdir(parents=True)
+        link.symlink_to(target)
+        manifest = {"files": [], "file_hashes": {}}
+        install.install_instructions(["opencode"], base_dir, manifest, base_dir / "backup")
+        assert link.is_symlink()
+        assert target.read_text() == self._shipped()
+
+    def test_uninstall_without_manifest_removes_carter_owned_copy(self, base_dir: Path) -> None:
+        stale = self._legacy(base_dir, self._shipped())
+        install.uninstall(["opencode"], base_dir, {})
+        assert not stale.exists()
+
+    def test_uninstall_without_manifest_keeps_modified_copy(self, base_dir: Path, capsys) -> None:
+        stale = self._legacy(base_dir, "my own notes\n")
+        install.uninstall(["opencode"], base_dir, {})
+        assert stale.read_text() == "my own notes\n"
+        assert "left in place" in capsys.readouterr().out
 
 
 class TestInstallKnowledge:
@@ -382,7 +453,7 @@ class TestMCPMerging:
 
 
 class TestMCPServerSingleSource:
-    """D5 (RFC-0002): the MCP server triple must come from one module constant,
+    """The MCP server triple must come from one module constant,
     not be hardcoded separately in install and uninstall (drift risk).
     """
 
@@ -397,13 +468,13 @@ class TestMCPServerSingleSource:
 
 
 class TestOfficialGitHubServer:
-    """ADR-0008 D2 / plan 003 step 2: the shipped GitHub MCP server is the official
+    """ADR-0008 D2: the shipped GitHub MCP server is the official
     github/github-mcp-server via Docker, digest-pinned, read-only, with a surgical tool
     allowlist. The archived @modelcontextprotocol/server-github must be gone from the
     shipped configs (grep-clean over mcp/).
     """
 
-    # The surgical read-only tool set (RFC-0004 V3; ~6,650 tok, +68% over archived).
+    # The surgical read-only tool set (~6,650 tok, +68% over archived).
     EXPECTED_TOOLS = {
         "get_me",
         "get_file_contents",
@@ -458,9 +529,10 @@ class TestOfficialGitHubServer:
     def test_token_is_env_placeholder_not_literal(self) -> None:
         for target in ("copilot", "opencode"):
             entry = self._github_cfg(target)
-            env = entry.get("env", {})
+            env = entry.get("env") or entry.get("environment", {})
             # The PAT is passed by env placeholder, never a baked literal.
-            assert any("${" in str(v) for v in env.values()), (
+            # copilot: ${VAR}; opencode: {env:VAR} (OpenCode docs, mcp-servers).
+            assert any("${" in str(v) or "{env:" in str(v) for v in env.values()), (
                 f"{target}: GitHub token must be an env placeholder"
             )
 
@@ -473,37 +545,37 @@ class TestOfficialGitHubServer:
 class TestJSONCParsing:
     def test_strip_single_line_comments(self) -> None:
         text = '{\n  // comment\n  "key": "value"\n}'
-        result = json.loads(install._strip_jsonc(text))
+        result = json.loads(_strip_jsonc(text))
         assert result == {"key": "value"}
 
     def test_strip_block_comments(self) -> None:
         text = '{\n  /* block\n     comment */\n  "key": "value"\n}'
-        result = json.loads(install._strip_jsonc(text))
+        result = json.loads(_strip_jsonc(text))
         assert result == {"key": "value"}
 
     def test_strip_trailing_commas(self) -> None:
         text = '{\n  "a": 1,\n  "b": 2,\n}'
-        result = json.loads(install._strip_jsonc(text))
+        result = json.loads(_strip_jsonc(text))
         assert result == {"a": 1, "b": 2}
 
     def test_preserves_comments_inside_strings(self) -> None:
         text = '{\n  "url": "https://example.com // not a comment",\n  "key": "value"\n}'
-        result = json.loads(install._strip_jsonc(text))
+        result = json.loads(_strip_jsonc(text))
         assert result["url"] == "https://example.com // not a comment"
 
     def test_preserves_slashes_inside_strings(self) -> None:
         text = '{\n  "path": "/* keep this */"\n}'
-        result = json.loads(install._strip_jsonc(text))
+        result = json.loads(_strip_jsonc(text))
         assert result["path"] == "/* keep this */"
 
     def test_load_jsonc_returns_none_on_garbage(self, tmp_path: Path) -> None:
         f = tmp_path / "bad.json"
         f.write_text("not json {{{")
-        assert install._load_jsonc(f) is None
+        assert _load_jsonc(f) is None
 
     def test_load_jsonc_returns_none_on_missing_file(self, tmp_path: Path) -> None:
         f = tmp_path / "missing.json"
-        assert install._load_jsonc(f) is None
+        assert _load_jsonc(f) is None
 
     def test_realistic_vscode_settings(self) -> None:
         """Parse a realistic VS Code settings.json with mixed JSONC features."""
@@ -524,7 +596,7 @@ class TestJSONCParsing:
   /* MCP configuration */
   "mcp.servers": {},
 }"""
-        result = json.loads(install._strip_jsonc(text))
+        result = json.loads(_strip_jsonc(text))
         assert result["workbench.colorTheme"] == "Lunar-dark-theme"
         assert result["editor.fontFamily"] == "Fira Code"
         assert ".tab:not(:hover) .tab-actions" in result["custom-ui-style.stylesheet"]
@@ -544,7 +616,7 @@ class TestManifest:
             "targets": ["copilot"],
             "files": ["/some/file.md"],
             "file_hashes": {"/some/file.md": "sha256:abc123"},
-            "mcp_servers": ["carter-github"],
+            "mcp_servers": {"copilot": ["carter-github"]},
         }
         install.write_manifest(manifest, base_dir)
         loaded = install.read_manifest(base_dir)
@@ -610,8 +682,8 @@ class TestHashing:
     def test_sha256_consistent(self, tmp_path: Path) -> None:
         f = tmp_path / "test.txt"
         f.write_text("hello world\n")
-        h1 = install._sha256(f)
-        h2 = install._sha256(f)
+        h1 = _sha256(f)
+        h2 = _sha256(f)
         assert h1 == h2
         assert h1.startswith("sha256:")
 
@@ -620,7 +692,7 @@ class TestHashing:
         f2 = tmp_path / "b.txt"
         f1.write_text("hello\n")
         f2.write_text("world\n")
-        assert install._sha256(f1) != install._sha256(f2)
+        assert _sha256(f1) != _sha256(f2)
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -745,7 +817,8 @@ class TestMCPFlag:
         servers = data["mcp.servers"]
         assert "carter-github" in servers
         assert "carter-terraform" in servers
-        assert "carter-atlassian" in servers
+        # Atlassian ships no Copilot config (no npx bridge) — OpenCode only.
+        assert "carter-atlassian" not in servers
 
     def test_mcp_skipped_when_vscode_absent(self, base_dir: Path, monkeypatch) -> None:
         """No VS Code config dir → settings.json is not created (no phantom file)."""
@@ -767,17 +840,17 @@ class TestMCPFlag:
 
 class TestCrossPlatform:
     def test_vscode_settings_path_macos(self, monkeypatch) -> None:
-        monkeypatch.setattr(install.platform, "system", lambda: "Darwin")
+        monkeypatch.setattr(platform, "system", lambda: "Darwin")
         path = install._vscode_settings_path(None)
         assert "Library/Application Support/Code/User/settings.json" in str(path)
 
     def test_vscode_settings_path_linux(self, monkeypatch) -> None:
-        monkeypatch.setattr(install.platform, "system", lambda: "Linux")
+        monkeypatch.setattr(platform, "system", lambda: "Linux")
         path = install._vscode_settings_path(None)
         assert str(path).endswith(".config/Code/User/settings.json")
 
     def test_vscode_user_dirs_linux_includes_variants(self, monkeypatch) -> None:
-        monkeypatch.setattr(install.platform, "system", lambda: "Linux")
+        monkeypatch.setattr(platform, "system", lambda: "Linux")
         dirs = [str(p) for p in install._vscode_user_dirs(None)]
         joined = "\n".join(dirs)
         assert "VSCodium" in joined
@@ -786,7 +859,7 @@ class TestCrossPlatform:
 
     def test_vscode_settings_prefers_existing_variant(self, base_dir, monkeypatch) -> None:
         """When a non-stable variant dir exists, it is preferred over the default."""
-        monkeypatch.setattr(install.platform, "system", lambda: "Linux")
+        monkeypatch.setattr(platform, "system", lambda: "Linux")
         codium = base_dir / ".config" / "VSCodium" / "User"
         codium.mkdir(parents=True)
         monkeypatch.setattr(

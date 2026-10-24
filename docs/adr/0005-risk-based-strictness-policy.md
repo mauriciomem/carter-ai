@@ -11,11 +11,13 @@ tags: [strictness, enforcement, security, agents, mcp, policy]
 
 # ADR-0005: Risk-Based Strictness Policy
 
+> **Status note (2026-10-24):** Superseded by ADR-0010. The MCP env-var list (`REQUIRED_ENV_VARS`) now lives in `carter/install/prereqs.py` and is `GITHUB_TOKEN`, `TFE_TOKEN` (Atlassian uses OAuth). `redaction.enabled` was removed in 2026-10 and is ignored if present: the narrator's redaction pass is always on, and `carter check` no longer warns about it.
+
 **Status:** Superseded by [ADR-0010](0010-agent-platform-refresh.md) (2026-06-26)
 **Date:** 2026-06-13
 **Deciders:** Carter maintainer (mauriciomem), Carter Maestro (synthesis of architect/engineer/devops/narrator/pm reviews)
 **Reference format:** Michael Nygard ADR (<https://cognitect.com/blog/2011/11/15/documenting-architecture-decisions>)
-**Related:** Records the decision of [RFC-0002](../rfcs/0002-risk-based-strictness-policy/README.md);
+**Related:** Records the decision of RFC-0002 (record removed 2026-10);
 [ADR-0004](0004-rfc-system.md) defined the RFC system that produced it.
 
 ---
@@ -118,7 +120,7 @@ The shared full-scope MCP token is **not** fixed here. This policy ships
 `guarded`, **drops the false "read-only" wording** from all four static agents
 that carry it (body prose, not frontmatter — so the `test_parity` check won't catch
 it; P1 must edit both statics and templates), and **defers genuine per-agent
-scoped tokens to [RFC-0003](../rfcs/0003-per-agent-scoped-mcp-tokens/README.md)**.
+scoped tokens to RFC-0003 (record removed 2026-10)**.
 Accepted residual risk: **medium**.
 
 ### D6 — Reconciliations with existing seams
@@ -181,7 +183,7 @@ Accepted residual risk: **medium**.
 
 ### Option 6: Per-agent scoped MCP tokens
 - **Pros:** fixes the shared full-scope token at its root.
-- **Cons:** out of scope here — **split into [RFC-0003](../rfcs/0003-per-agent-scoped-mcp-tokens/README.md)**
+- **Cons:** out of scope here — **split into RFC-0003 (record removed 2026-10)**
   (see D5).
 
 ---
@@ -235,8 +237,8 @@ tokens to RFC-0003 keeps this decision shippable while removing the dishonest
 
 ## References
 
-- [RFC-0002 — Risk-Based Strictness Policy](../rfcs/0002-risk-based-strictness-policy/README.md) — the proposal this ADR records (revision 3, accepted 2026-06-13).
+- RFC-0002 — Risk-Based Strictness Policy (record removed 2026-10) — the proposal this ADR records (revision 3, accepted 2026-06-13).
 - [ADR-0004 — RFC system](0004-rfc-system.md) — the process that produced RFC-0002.
 - [ADR-0002 §37 — single-source agent generation](0002-single-source-agent-generation.md) — build-time generation is WON'T-DO (statics are raw-copied; D6).
-- [RFC-0003 — Per-agent scoped MCP tokens](../rfcs/0003-per-agent-scoped-mcp-tokens/README.md) — deferred token fix (D5).
+- RFC-0003 — Per-agent scoped MCP tokens (record removed 2026-10) — deferred token fix (D5).
 - [Frontmatter reference](../reference/frontmatter.md) — canonical schema for the `policy` block and agent frontmatter.

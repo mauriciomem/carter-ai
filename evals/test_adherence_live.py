@@ -1,10 +1,9 @@
-"""LIVE adherence eval (P4-eval — RFC-0005 §2 D2.5 / ADR-0010 D9; extended by plan 007).
+"""LIVE adherence eval (ADR-0010 D9).
 
-Sends a thinker-produced plan to the **Sonnet 4.6** tier (the agent's system prompt) via
+Sends a thinker-produced plan to the **Sonnet** implementer tier (the agent's system prompt) via
 the live API and grades the real transcript with the same deterministic grader the
 offline replay uses. This is the BILLED run. It covers every agent moving off Opus →
-Sonnet by default: the engineer implementer (original), plus the narrator and pm added by
-plan 007 / RFC-0004 lever 1.
+Sonnet by default: the engineer implementer, plus the narrator and pm.
 
 Cadence: NOT per-PR. It carries the `live` marker (via the shared `test_live` auth
 helpers), so the PR gate — which runs `-m "not live"` — never invokes it. It runs on the

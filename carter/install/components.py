@@ -8,6 +8,7 @@ rather than in ``carter.installer``.
 from __future__ import annotations
 
 import json
+import shutil
 import subprocess
 from pathlib import Path
 
@@ -17,6 +18,7 @@ from carter.install.files import (
     _install_file,
     _install_rendered_file,
     _install_templated_file,
+    _sha256,
 )
 from carter.install.paths import (
     REPO_ROOT,
@@ -140,9 +142,52 @@ def install_instructions(
         dst = _copilot_base(base_dir) / "instructions" / "copilot-instructions.md"
         _install_file(src, dst, manifest, backup_root)
 
+    # OpenCode never loads instructions/copilot-instructions.md (it reads AGENTS.md,
+    # installed by install_opencode_rules), so it is no longer copied there. Clean up
+    # the copy earlier Carter versions wrote, so upgrades don't leave it behind.
     if "opencode" in targets:
-        dst = _opencode_base(base_dir) / "instructions" / "copilot-instructions.md"
-        _install_file(src, dst, manifest, backup_root)
+        remove_legacy_opencode_instructions(base_dir, backup_root)
+
+
+def remove_legacy_opencode_instructions(base_dir: Path | None, backup_root: Path | None) -> None:
+    """Remove the OpenCode copy of copilot-instructions.md older Carter versions wrote.
+
+    Deleted only when it is provably Carter-owned: its hash equals the shipped file,
+    or the existing install manifest recorded it with the same hash. Otherwise it is
+    treated as user-modified: moved to ``backup_root`` when given, else left in place
+    with a warning. A symlink is never followed or removed.
+    """
+    stale = _opencode_base(base_dir) / "instructions" / "copilot-instructions.md"
+    shown = str(stale).replace(str(_home()), "~")
+    if stale.is_symlink():
+        log_warn(f"{shown} is a symlink — left untouched (no longer used by OpenCode)")
+        return
+    if not stale.is_file():
+        return
+
+    current = _sha256(stale)
+    shipped = REPO_ROOT / "instructions" / "copilot-instructions.md"
+    recorded = ((read_manifest(base_dir) or {}).get("file_hashes") or {}).get(str(stale))
+    carter_owned = current == _sha256(shipped) or current == recorded
+
+    if carter_owned:
+        stale.unlink()
+        log_ok(f"Removed stale {shown}")
+    elif backup_root is not None:
+        dest = backup_root / "opencode-instructions" / stale.name
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        shutil.move(str(stale), dest)
+        log_warn(
+            f"{shown} was modified — moved to {str(dest).replace(str(_home()), '~')} "
+            "(OpenCode does not load it)"
+        )
+    else:
+        log_warn(f"{shown} was modified — left in place (OpenCode does not load it)")
+        return
+
+    parent = stale.parent
+    if parent.is_dir() and not any(parent.iterdir()):
+        parent.rmdir()
 
 
 _OPENCODE_AGENTS_MD_LEGACY = """\

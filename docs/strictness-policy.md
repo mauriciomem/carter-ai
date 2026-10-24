@@ -61,7 +61,7 @@ allowed past `read`/`local-write`.
 | Agent | Allowed categories | In plain terms |
 |-------|--------------------|----------------|
 | maestro, architect, learner | read | read only |
-| pm, narrator, engineer | read, local-write | read + local work |
+| pm, narrator, engineer, security | read, local-write | read + local work |
 | **devops** | read, local-write, remote-write, dangerous | the **only** pusher / infra-mutator |
 
 So an engineer asking to `terraform apply` is out of scope at any level — that is
@@ -78,9 +78,7 @@ The policy lives in a `policy` block in `carter.yaml`:
 ```yaml
 policy:
   level: guarded        # guarded | strict
-  unknown_tool: ask     # gate for a tool not in the risk map: allow | ask | deny
   overrides: {}         # category -> gate, e.g. {remote-write: deny}
-  audit_overrides: true # log escape-hatch overrides via `carter ops`
 ```
 
 **Defaults (no surprises):**
@@ -115,26 +113,28 @@ You'll see the policy notice (both levels enforce gates):
 
 Carter is a **scaffolder, not a runtime** — it can't intercept a tool call itself.
 What it *can* do is emit each target's native enforcement, and honestly label the
-rest. Every agent's frontmatter carries a deterministic `policy:` block (the
-source of truth), plus native keys where the target supports them:
+rest. Every agent file carries a deterministic `<!-- carter:policy {...} -->` comment
+right after the frontmatter (the source of truth `carter check` lints), plus native
+frontmatter keys where the target supports them:
 
 | Target | What's emitted | Enforcement |
 |--------|----------------|-------------|
 | **OpenCode** | `permission:` (edit / bash command-globs / webfetch) | **runtime** — OpenCode honors `permission` |
-| **Copilot / VS Code** | enforced `tools:` allowlist + per-agent MCP scope | tool allowlist enforced; per-category gating is advisory + `hooks` |
+| **Copilot / VS Code** | enforced `tools:` allowlist + per-agent MCP scope | tool allowlist enforced; per-category gating is advisory (prose) |
 | **all** | both of the above | each runtime reads the keys it understands |
 
 A guarded devops agent on OpenCode, for example, emits:
 
-```yaml
-policy:
-  level: guarded
-  allow: [dangerous, local-write, read, remote-write]
-  gates: {dangerous: gate, local-write: allow, read: allow, remote-write: ask}
+```markdown
+---
+mode: subagent
+model: anthropic/claude-sonnet-5-5
 permission:
   edit: allow
-  bash: {"*": allow, "git push*": ask, "terraform apply*": ask, "rm -rf*": ask}
+  bash: {'*': allow, git push*: ask, terraform apply*: ask, rm -rf*: ask, ...}
   webfetch: allow
+---
+<!-- carter:policy {"level":"guarded","allow":["dangerous","local-write","read","remote-write"],"gates":{"dangerous":"gate","local-write":"allow","read":"allow","remote-write":"ask"}} -->
 ```
 
 Local shell stays open (so the agent can run tests and local `git`), while
@@ -152,7 +152,8 @@ policy, and surfaces honest gaps:
 carter check .
 ```
 
-It reports an error if an agent's emitted `policy`/`permission`/`tools` has
+It reports an error if an agent's emitted policy comment / `permission` / `tools` /
+`model` has
 drifted from the model (e.g. someone hand-edited a gate), and:
 
 - **Hard ack for `strict` on a non-enforcing target.** If you set `strict` but the
@@ -160,22 +161,18 @@ drifted from the model (e.g. someone hand-edited a gate), and:
   check` **fails closed** — you must acknowledge the degradation explicitly:
 
   ```bash
-  carter check . --accept-degraded     # also valid on `carter install`
+  carter check . --accept-degraded
   ```
 
-  Without the flag in a non-interactive context, the command fails rather than
-  silently shipping a weaker guarantee than `strict` implies.
-
-- **Redaction contradiction warning.** At `guarded`/`strict`, the redaction pass
-  is forced (see Step 5); if you've also set `redaction.enabled: false`,
-  `carter check` warns about the contradiction.
+  Without the flag the command fails rather than silently shipping a weaker
+  guarantee than `strict` implies.
 
 ---
 
 ## Step 4 — Customize (optional)
 
 Everything is dict-shaped so your overrides **merge** with the shipped defaults
-(they never wipe them). All three keys are validated at load time.
+(they never wipe them). `overrides` is validated at load time.
 
 **Tighten or loosen a category** with `overrides`:
 
@@ -184,14 +181,6 @@ policy:
   level: guarded
   overrides:
     remote-write: deny   # make every remote-write a hard deny, beyond guarded's `ask`
-```
-
-**Add a custom tool to the risk map** with `tool_risk`:
-
-```yaml
-policy:
-  tool_risk:
-    my_deploy_script: dangerous   # treat it as infra-mutating / destructive
 ```
 
 **Adjust an agent's allowlist** with `allowlist` (use with care — it can break the
@@ -224,10 +213,8 @@ redaction handoff** (ADR-0010 D5). The narrator is the external-content speciali
   handoff — a `gate`-tier step encoded in the allowlist, not a convention.
   **Short-form, low-risk** content (a one-line PR comment) needs only an inline
   redaction check.
-- At **`guarded` and `strict`** (both shipped levels), the narrator's redaction
-  rules are rendered **regardless of `redaction.enabled`** — disabling redaction
-  can't silently ship a rule-less narrator; `carter check` flags the
-  `redaction.enabled: false` contradiction instead.
+- The narrator's redaction rules are always rendered; `redaction.categories`
+  selects which categories they cover.
 
 ---
 
@@ -262,9 +249,8 @@ carter ops policy-override \
 | Validate the install | `carter check .` |
 | Accept a degraded `strict` target | `carter check . --accept-degraded` |
 | Tighten/loosen a category | `policy.overrides: {dangerous: deny}` |
-| Map a custom tool | `policy.tool_risk: {tool: remote-write}` |
 | Record an override | `carter ops policy-override --category … --action … --tier …` |
-| Pin a per-agent model | `models.overrides: {engineer: {copilot: "Claude Haiku 4.5"}}` |
+| Pin a per-agent model | `models.overrides: {engineer: {copilot: "Claude Haiku 5.5"}}` |
 | Set reasoning effort | global on the harness (`copilot --effort high`); default `high`, raise to `xhigh` for thinker-heavy work — Carter emits no per-agent effort |
 
 ## See also

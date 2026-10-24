@@ -1,4 +1,4 @@
-"""Implementer-adherence grader (P4-eval — RFC-0005 §2 D2.5 / ADR-0010 D9).
+"""Implementer-adherence grader (ADR-0010 D9).
 
 Grades how faithfully an implementer transcript executes a thinker-produced plan. The
 grading is deterministic and evidence-pattern based (no model call), so a recorded

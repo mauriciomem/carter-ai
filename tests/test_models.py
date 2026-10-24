@@ -1,19 +1,16 @@
-"""Tests for per-agent model emission (P4, RFC-0005 §2 / ADR-0010 D2).
+"""Tests for per-agent model emission.
 
 Carter pins a per-target `model:` string on each agent, resolved from a dedicated
-`models:` block by `overrides > tier > default` (D2.1). Thinkers (maestro, architect,
-learner, security) = Opus 4.8; implementers (engineer, devops, pm, narrator) = Sonnet
-5 — pm + narrator moved off Opus by default per RFC-0004 lever 1 / plan 007 (both
-cleared the adherence gate on Sonnet). Haiku is opt-in via `overrides` only. The
-`profile:` key (quality|budget) can re-tier at resolve time. The emitted value is a
-SINGLE string (an array breaks
-Copilot CLI): a display name for VS Code/Copilot, a `provider/model` ID for OpenCode.
-A Carter→target model-name table (with a `MODEL LAUNCH` sync marker + a non-empty-per-role
-test) prevents a model rename from silently producing a dead agent. `carter check`
-prints a required unverifiable-model advisory. No effort key; no `temperature`.
+`models:` block by `overrides > profile > tier > default`. Thinkers (maestro,
+architect, learner, security) = Opus 5.5; implementers (engineer, devops, pm,
+narrator) = Sonnet 5.5. Haiku 5.5 is opt-in via `overrides` only. The `profile:` key
+(quality|budget) can re-tier at resolve time. The emitted value is a SINGLE string
+(an array breaks Copilot CLI): a display name for VS Code/Copilot, a `provider/model`
+ID for OpenCode. `carter check` prints a required unverifiable-model advisory. No
+effort key; no `temperature`.
 
-Model facts verified against the bundled `claude-api` skill (cached 2026-06-04):
-Opus 4.8 = `claude-opus-4-8`; Sonnet 5 = `claude-sonnet-5`; Haiku 4.5 = `claude-haiku-4-5`.
+Model ids (OpenCode catalog): `anthropic/claude-opus-5-5`, `anthropic/claude-sonnet-5-5`,
+`anthropic/claude-haiku-5-5`; Copilot display names "Claude Opus 5.5" etc.
 """
 
 from __future__ import annotations
@@ -22,14 +19,13 @@ import yaml
 
 from carter.config import (
     DEFAULT_CONFIG,
-    MODEL_NAMES,
     generate_default_config,
     policy_frontmatter,
     policy_native_keys,
     resolve_model,
 )
 
-# Default tiers after RFC-0004 lever 1 / plan 007: pm + narrator ship on Sonnet.
+# Default tiers: pm + narrator ship on Sonnet.
 THINKERS = ("maestro", "architect", "learner", "security")
 IMPLEMENTERS = ("engineer", "devops", "pm", "narrator")
 
@@ -58,19 +54,19 @@ class TestModelsBlock:
 
     def test_thinkers_tier_is_opus(self):
         models = DEFAULT_CONFIG["models"]
-        assert models["thinkers"]["copilot"] == "Claude Opus 4.8"
-        assert models["thinkers"]["opencode"] == "anthropic/claude-opus-4-8"
+        assert models["thinkers"]["copilot"] == "Claude Opus 5.5"
+        assert models["thinkers"]["opencode"] == "anthropic/claude-opus-5-5"
 
     def test_implementers_tier_is_sonnet(self):
         models = DEFAULT_CONFIG["models"]
-        assert models["implementers"]["copilot"] == "Claude Sonnet 5"
-        assert models["implementers"]["opencode"] == "anthropic/claude-sonnet-5"
+        assert models["implementers"]["copilot"] == "Claude Sonnet 5.5"
+        assert models["implementers"]["opencode"] == "anthropic/claude-sonnet-5-5"
 
     def test_default_tier_is_opus_catch_all(self):
         # `default` is the un-tiered catch-all so a future agent never resolves empty.
         models = DEFAULT_CONFIG["models"]
-        assert models["default"]["copilot"] == "Claude Opus 4.8"
-        assert models["default"]["opencode"] == "anthropic/claude-opus-4-8"
+        assert models["default"]["copilot"] == "Claude Opus 5.5"
+        assert models["default"]["opencode"] == "anthropic/claude-opus-5-5"
 
     def test_overrides_default_empty(self):
         assert DEFAULT_CONFIG["models"]["overrides"] == {}
@@ -82,7 +78,7 @@ class TestModelsBlock:
         merged = _merge_with_defaults(
             {"version": "2", "workspace": {}, "identity": {}, "agents": ["maestro"]}
         )
-        assert merged["models"]["thinkers"]["copilot"] == "Claude Opus 4.8"
+        assert merged["models"]["thinkers"]["copilot"] == "Claude Opus 5.5"
 
 
 # ─── Resolution: overrides > tier > default ──────────────────────────────────
@@ -92,19 +88,19 @@ class TestResolveModel:
     def test_thinkers_resolve_to_opus(self):
         cfg = _config(target="copilot")
         for role in THINKERS:
-            assert resolve_model(cfg, role) == "Claude Opus 4.8", role
+            assert resolve_model(cfg, role) == "Claude Opus 5.5", role
 
     def test_implementers_resolve_to_sonnet(self):
         cfg = _config(target="copilot")
         for role in IMPLEMENTERS:
-            assert resolve_model(cfg, role) == "Claude Sonnet 5", role
+            assert resolve_model(cfg, role) == "Claude Sonnet 5.5", role
 
     def test_narrator_and_pm_default_to_sonnet(self):
-        # RFC-0004 lever 1 / plan 007: pm + narrator ship on Sonnet by DEFAULT (both
+        # pm + narrator ship on Sonnet by DEFAULT (both
         # cleared the adherence gate). A regression here re-inflates the Opus bill.
         for target, sonnet in (
-            ("copilot", "Claude Sonnet 5"),
-            ("opencode", "anthropic/claude-sonnet-5"),
+            ("copilot", "Claude Sonnet 5.5"),
+            ("opencode", "anthropic/claude-sonnet-5-5"),
         ):
             cfg = _config(target=target)
             assert resolve_model(cfg, "narrator") == sonnet, f"narrator/{target}"
@@ -112,39 +108,39 @@ class TestResolveModel:
 
     def test_opencode_resolves_provider_id(self):
         cfg = _config(target="opencode")
-        assert resolve_model(cfg, "maestro") == "anthropic/claude-opus-4-8"
-        assert resolve_model(cfg, "engineer") == "anthropic/claude-sonnet-5"
+        assert resolve_model(cfg, "maestro") == "anthropic/claude-opus-5-5"
+        assert resolve_model(cfg, "engineer") == "anthropic/claude-sonnet-5-5"
 
     def test_override_wins_over_tier(self):
         cfg = _config(target="copilot")
-        cfg["models"]["overrides"] = {"engineer": {"copilot": "Claude Haiku 4.5"}}
-        assert resolve_model(cfg, "engineer") == "Claude Haiku 4.5"
+        cfg["models"]["overrides"] = {"engineer": {"copilot": "Claude Haiku 5.5"}}
+        assert resolve_model(cfg, "engineer") == "Claude Haiku 5.5"
         # The other implementer still resolves to the tier.
-        assert resolve_model(cfg, "devops") == "Claude Sonnet 5"
+        assert resolve_model(cfg, "devops") == "Claude Sonnet 5.5"
 
     def test_untiered_agent_falls_back_to_default(self):
         cfg = _config(target="copilot")
         # A role in no named tier resolves to `default`, never empty.
-        assert resolve_model(cfg, "some-future-agent") == "Claude Opus 4.8"
+        assert resolve_model(cfg, "some-future-agent") == "Claude Opus 5.5"
 
     def test_resolution_order_is_overrides_then_tier_then_default(self):
         cfg = _config(target="copilot")
         # Tier beats default: engineer is an implementer (Sonnet), not default (Opus).
-        assert resolve_model(cfg, "engineer") == "Claude Sonnet 5"
+        assert resolve_model(cfg, "engineer") == "Claude Sonnet 5.5"
         # Override beats tier.
-        cfg["models"]["overrides"] = {"engineer": {"copilot": "Claude Haiku 4.5"}}
-        assert resolve_model(cfg, "engineer") == "Claude Haiku 4.5"
+        cfg["models"]["overrides"] = {"engineer": {"copilot": "Claude Haiku 5.5"}}
+        assert resolve_model(cfg, "engineer") == "Claude Haiku 5.5"
 
 
-# ─── Cost profiles: overrides > profile > tier > default (plan 007 / OQ10) ────
+# ─── Cost profiles: overrides > profile > tier > default ────
 
 
 class TestProfileResolution:
-    OPUS = "Claude Opus 4.8"
-    SONNET = "Claude Sonnet 5"
+    OPUS = "Claude Opus 5.5"
+    SONNET = "Claude Sonnet 5.5"
 
     def test_quality_profile_puts_everyone_on_opus(self):
-        # `quality` restores the pre-RFC-0004 default: all agents, incl. the now-cheap
+        # `quality` restores the earlier all-Opus default: all agents, incl. the now-cheap
         # narrator/pm, resolve to Opus.
         cfg = _config(target="copilot")
         cfg["profile"] = "quality"
@@ -182,20 +178,20 @@ class TestProfileResolution:
         cfg["profile"] = "quality"
         assert resolve_model(cfg, "narrator") == self.OPUS
         # an explicit override beats the profile.
-        cfg["models"]["overrides"] = {"narrator": {"copilot": "Claude Haiku 4.5"}}
-        assert resolve_model(cfg, "narrator") == "Claude Haiku 4.5"
+        cfg["models"]["overrides"] = {"narrator": {"copilot": "Claude Haiku 5.5"}}
+        assert resolve_model(cfg, "narrator") == "Claude Haiku 5.5"
 
     def test_profile_resolves_on_opencode_target_too(self):
         cfg = _config(target="opencode")
         cfg["profile"] = "quality"
-        assert resolve_model(cfg, "narrator") == "anthropic/claude-opus-4-8"
+        assert resolve_model(cfg, "narrator") == "anthropic/claude-opus-5-5"
 
 
 # ─── The Carter→target model-name table (MODEL LAUNCH sync marker) ────────────
 
 
-class TestModelNameTable:
-    def test_model_names_non_empty_for_every_shipped_role(self):
+class TestModelStrings:
+    def test_model_string_non_empty_for_every_shipped_role(self):
         # A stale/missing string = a silently dead agent. Every shipped role must
         # resolve to a non-empty per-target model string.
         cfg = _config(target="copilot")
@@ -205,20 +201,6 @@ class TestModelNameTable:
         for role in cfg["agents"]:
             assert resolve_model(cfg, role), f"{role}: empty opencode model string"
 
-    def test_model_names_table_maps_id_to_display_and_provider(self):
-        # The one-home Carter->target table: canonical id -> {copilot display, opencode id}.
-        assert MODEL_NAMES["claude-opus-4-8"]["copilot"] == "Claude Opus 4.8"
-        assert MODEL_NAMES["claude-opus-4-8"]["opencode"] == "anthropic/claude-opus-4-8"
-        assert MODEL_NAMES["claude-sonnet-5"]["copilot"] == "Claude Sonnet 5"
-        assert MODEL_NAMES["claude-haiku-4-5"]["opencode"] == "anthropic/claude-haiku-4-5"
-
-    def test_model_launch_sync_marker_present(self):
-        # The next model bump must update the table — a grep-able marker anchors it.
-        from pathlib import Path
-
-        src = (Path(__file__).resolve().parent.parent / "carter" / "config.py").read_text()
-        assert "MODEL LAUNCH" in src, "missing the MODEL LAUNCH sync marker on the name table"
-
 
 # ─── Emission: a SINGLE per-target model: string (never an array) ────────────
 
@@ -226,12 +208,12 @@ class TestModelNameTable:
 class TestModelEmission:
     def test_copilot_emits_display_name_string(self):
         keys = policy_native_keys(_config(target="copilot"), "maestro")
-        assert keys.get("model") == "Claude Opus 4.8"
+        assert keys.get("model") == "Claude Opus 5.5"
         assert isinstance(keys["model"], str), "model must be a single string, not an array"
 
     def test_opencode_emits_provider_id_string(self):
         keys = policy_native_keys(_config(target="opencode"), "engineer")
-        assert keys.get("model") == "anthropic/claude-sonnet-5"
+        assert keys.get("model") == "anthropic/claude-sonnet-5-5"
         assert isinstance(keys["model"], str)
 
     def test_every_agent_emits_exactly_one_model_string(self):
@@ -244,7 +226,7 @@ class TestModelEmission:
     def test_frontmatter_carries_model(self):
         cfg = _config(target="copilot")
         fm = yaml.safe_load(policy_frontmatter(cfg, "devops"))
-        assert fm["model"] == "Claude Sonnet 5"
+        assert fm["model"] == "Claude Sonnet 5.5"
 
     def test_no_temperature_anywhere(self):
         for target in ("copilot", "opencode"):
@@ -267,7 +249,7 @@ class TestModelAdvisory:
         assert advisory, "the unverifiable-model advisory is required, not optional"
         # Names an agent and its pinned model + the can't-verify-subscription caveat.
         assert "maestro" in advisory
-        assert "Claude Opus 4.8" in advisory
+        assert "Claude Opus 5.5" in advisory
         assert "subscription" in advisory.lower()
 
     def test_check_prints_advisory(self, tmp_path):

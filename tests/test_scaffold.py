@@ -168,7 +168,6 @@ class TestConfigMerge:
         assert "quality_gate" in loaded
         assert "tdd" in loaded
         assert "redaction" in loaded
-        assert "state" in loaded
 
     def test_partial_nested_dict_gets_missing_keys(self, tmp_path):
         """Partial quality_gate gets missing keys from defaults."""
@@ -187,7 +186,6 @@ class TestConfigMerge:
         assert loaded["quality_gate"]["enabled"] is False
         # Defaults filled in for missing keys
         assert loaded["quality_gate"]["max_iterations"] == 2
-        assert loaded["quality_gate"]["trigger"] == "user-initiated"
 
     def test_user_list_values_not_merged_with_defaults(self, tmp_path):
         """User's agents list replaces default, not merges with it."""
@@ -383,7 +381,7 @@ class TestScaffold:
     def test_skepticism_off_keeps_policy_drops_calibration(self, default_config, env):
         """Off skepticism keeps the always-on policy gate table (in
         interaction_rules) but drops only the Skepticism Calibration sub-section
-        (RFC-0002 P2 step 5 — the policy gate is independent of skepticism)."""
+        (the policy gate is independent of skepticism)."""
         default_config["personality"]["skepticism"] = "off"
         results = render_agents(default_config, env)
         maestro = results["carter-maestro.md"]
@@ -734,11 +732,11 @@ class TestRenderDiscovery:
         assert "Carter Maestro" in agent.read_text()
 
     def test_resolve_targets(self):
-        from carter.cli import _resolve_targets
+        from carter.config import resolve_targets
 
-        assert _resolve_targets("copilot") == ["copilot"]
-        assert _resolve_targets("opencode") == ["opencode"]
-        assert _resolve_targets("all") == ["copilot", "opencode"]
+        assert resolve_targets("copilot") == ["copilot"]
+        assert resolve_targets("opencode") == ["opencode"]
+        assert resolve_targets("all") == ["copilot", "opencode"]
 
 
 # ─── Agent name suffix (workspace vs global distinction) ─────────────────────
@@ -784,6 +782,13 @@ class TestAgentSuffix:
         rendered = render_agents(cfg, env)
         assert "carter-engineer-demo.md" in rendered
         assert "carter-engineer-demo" in rendered["carter-maestro-demo.md"]
+
+    def test_agents_roster_rendered_only_for_primary(self, env):
+        cfg = generate_default_config()
+        rendered = render_agents(cfg, env)
+        for name, content in rendered.items():
+            has_roster = "## Available Agents" in content
+            assert has_roster == name.startswith("carter-maestro"), name
 
     def test_suffix_applied_to_routing_footer_and_crossrefs(self, env):
         cfg = generate_default_config()  # default "local"
@@ -842,38 +847,6 @@ class TestAgentSuffix:
         assert agent_filename("engineer", cfg) == "carter-engineer-demo.md"
 
 
-# ─── Config warnings (narrator/redaction edge case) ──────────────────────────
-
-
-class TestConfigWarnings:
-    """ADR-0010 D3: with `loose` gone, every shipped level forces the narrator's
-    redaction pass, so the rule-less-narrator gap `config_warnings` once flagged can
-    no longer occur — it returns no redaction warning. A `redaction.enabled: false`
-    contradiction at an enforcing level is surfaced by the policy lint instead.
-    """
-
-    def test_no_warning_at_guarded_redaction_off(self):
-        from carter.scaffold import config_warnings
-
-        cfg = generate_default_config()  # guarded
-        cfg["redaction"]["enabled"] = False
-        assert config_warnings(cfg) == []
-
-    def test_no_warning_when_both_on(self):
-        from carter.scaffold import config_warnings
-
-        cfg = generate_default_config()  # narrator in agents, redaction on
-        assert config_warnings(cfg) == []
-
-    def test_no_warning_when_narrator_absent(self):
-        from carter.scaffold import config_warnings
-
-        cfg = generate_default_config()
-        cfg["agents"] = [a for a in cfg["agents"] if a != "narrator"]
-        cfg["redaction"]["enabled"] = False
-        assert config_warnings(cfg) == []
-
-
 # ─── Policy gate table + notice + redaction handoff (P2 / ADR-0010 D4/D5) ──────
 
 
@@ -890,7 +863,6 @@ class TestPolicyGateTable:
             "remote-write",
             "dangerous",
         ]
-        assert all(r["label"] for r in rows)
 
     def test_guarded_gates_match_taxonomy(self):
         from carter.config import policy_gate_table
@@ -1352,11 +1324,9 @@ class TestConfigureMcpServersUnchanged:
 
         manifest = {"files": [], "file_hashes": {}, "mcp_servers": []}
         installer.configure_mcp_servers(["opencode"], tmp_path, manifest, {}, tmp_path / "backup")
-        assert manifest["mcp_servers"] == [
-            "carter-github",
-            "carter-terraform",
-            "carter-atlassian",
-        ]
+        assert manifest["mcp_servers"] == {
+            "opencode": ["carter-github", "carter-terraform", "carter-atlassian"]
+        }
         opencode_cfg = json.loads((tmp_path / "opencode" / "opencode.json").read_text())
         assert {"carter-github", "carter-terraform", "carter-atlassian"} <= set(opencode_cfg["mcp"])
 
@@ -1371,7 +1341,7 @@ class TestConfigureMcpServersUnchanged:
 
 
 class TestMcpServerOptIn:
-    """RFC-0004 lever 1 / plan 003 step 1: `configure_mcp_servers` installs only the
+    """`configure_mcp_servers` installs only the
     servers a workspace selects; an unused server adds zero tool-schema tokens. Omitting
     the selection preserves today's behaviour (all shipped servers).
     """
@@ -1389,7 +1359,7 @@ class TestMcpServerOptIn:
         assert "carter-github" in wired
         assert "carter-terraform" not in wired
         assert "carter-atlassian" not in wired
-        assert manifest["mcp_servers"] == ["carter-github"]
+        assert manifest["mcp_servers"] == {"opencode": ["carter-github"]}
 
     def test_subset_wires_only_selected_copilot_vscode(self, tmp_path):
         from carter import installer
@@ -1406,7 +1376,7 @@ class TestMcpServerOptIn:
             tmp_path / "backup",
             servers=["github", "terraform"],
         )
-        assert manifest["mcp_servers"] == ["carter-github", "carter-terraform"]
+        assert manifest["mcp_servers"] == {"copilot": ["carter-github", "carter-terraform"]}
 
     def test_default_is_all_servers_backward_compatible(self, tmp_path):
         from carter import installer
@@ -1414,11 +1384,53 @@ class TestMcpServerOptIn:
         manifest = {"files": [], "file_hashes": {}, "mcp_servers": []}
         # No `servers=` arg → today's behaviour: the full shipped set.
         installer.configure_mcp_servers(["opencode"], tmp_path, manifest, {}, tmp_path / "backup")
-        assert manifest["mcp_servers"] == [
-            "carter-github",
-            "carter-terraform",
-            "carter-atlassian",
-        ]
+        assert manifest["mcp_servers"] == {
+            "opencode": ["carter-github", "carter-terraform", "carter-atlassian"]
+        }
+
+    def test_atlassian_skipped_for_copilot_wired_for_opencode(self, tmp_path, capsys):
+        from carter import installer
+
+        settings = tmp_path / "vscode" / "settings.json"
+        settings.parent.mkdir(parents=True)
+        # A stale npx bridge entry from an older install is removed.
+        settings.write_text(json.dumps({"mcp.servers": {"carter-atlassian": {"command": "npx"}}}))
+        manifest = {"files": [], "file_hashes": {}, "mcp_servers": []}
+        count = installer.configure_mcp_servers(
+            ["copilot", "opencode"],
+            tmp_path,
+            manifest,
+            {},
+            tmp_path / "backup",
+            servers=["atlassian"],
+        )
+        assert "carter-atlassian: not available for copilot" in capsys.readouterr().out
+        assert count == 1  # only the OpenCode entry
+        assert manifest["mcp_servers"] == {"copilot": [], "opencode": ["carter-atlassian"]}
+        assert "carter-atlassian" not in json.loads(settings.read_text())["mcp.servers"]
+        opencode_cfg = json.loads((tmp_path / "opencode" / "opencode.json").read_text())
+        assert opencode_cfg["mcp"]["carter-atlassian"]["type"] == "remote"
+
+    def test_cli_atlassian_copilot_only_succeeds(self, tmp_path):
+        from click.testing import CliRunner
+
+        from carter.cli import main
+
+        result = CliRunner().invoke(
+            main,
+            [
+                "install",
+                "--target",
+                "copilot",
+                "--mcp",
+                "--mcp-servers",
+                "atlassian",
+                "--base-dir",
+                str(tmp_path),
+            ],
+        )
+        assert result.exit_code == 0, result.output
+        assert "carter-atlassian: not available for copilot" in result.output
 
     def test_unknown_server_is_rejected(self, tmp_path):
         from carter import installer
@@ -1469,7 +1481,7 @@ class TestMcpServerOptIn:
 
 class TestInitProfileFlag:
     """`carter init --profile` seeds the cost profile into the scaffolded carter.yaml and
-    it flows through to the rendered agent models (RFC-0004 lever 1 / plan 007).
+    it flows through to the rendered agent models.
     """
 
     def _run(self, tmp_path, *args):
@@ -1486,7 +1498,7 @@ class TestInitProfileFlag:
         assert cfg["profile"] == "quality"
         # narrator (default Sonnet) is lifted to Opus under quality in the rendered file.
         narrator = (tmp_path / ".github" / "agents" / "carter-narrator-local.md").read_text()
-        assert "model: Claude Opus 4.8" in narrator
+        assert "model: Claude Opus 5.5" in narrator
 
     def test_default_init_has_no_profile_key(self, tmp_path):
         result = self._run(tmp_path)
@@ -1495,7 +1507,7 @@ class TestInitProfileFlag:
         assert cfg.get("profile") is None
         # narrator ships on Sonnet by default.
         narrator = (tmp_path / ".github" / "agents" / "carter-narrator-local.md").read_text()
-        assert "model: Claude Sonnet 5" in narrator
+        assert "model: Claude Sonnet 5.5" in narrator
 
     def test_invalid_profile_is_rejected(self, tmp_path):
         result = self._run(tmp_path, "--profile", "cheapest")

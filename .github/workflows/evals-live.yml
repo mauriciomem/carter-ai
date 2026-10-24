@@ -1,6 +1,6 @@
 name: evals-live
 
-# Weekly live-eval canary (ADR-0009 D5, plan 004 step 10).
+# Weekly live-eval canary (ADR-0009 D5).
 #
 # The PR gate (ci.yml) runs only the key-free, deterministic OFFLINE evals. This
 # workflow is the budgeted ACCURACY canary: it sends the real agent/skill prompts to
@@ -33,38 +33,33 @@ jobs:
       # Budget controls: low-cost model + a hard per-call completion ceiling so a
       # misbehaving prompt can't run up the bill. The suite is a small, fixed set of
       # scenarios, so model + max-tokens bound the spend.
-      EVAL_MODEL: claude-haiku-4-5
-      EVAL_JUDGE_MODEL: claude-haiku-4-5
+      EVAL_MODEL: claude-haiku-5-5
       EVAL_MAX_TOKENS: "1024"
       EVAL_METRICS_OUT: ${{ github.workspace }}/eval-metrics.json
       # Dedicated key from secrets — NEVER commit a key. Empty when unset → tests skip.
       ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
       OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
     steps:
-      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Install uv
-        uses: astral-sh/setup-uv@d4b2f3b6ecc6e67c4457f6d3e41ec42d3d0fcb86 # v5
+        uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2
         with:
-          python-version: "3.13"
+          python-version: "3.14"
 
-      - name: Create venv and install (with dev deps + httpx)
-        run: |
-          uv venv --clear
-          uv pip install -e ".[dev]" httpx
+      - name: Install locked deps (dev extra includes httpx)
+        run: uv sync --locked --extra dev
 
       - name: Run live evals (budgeted, low-cost model)
         # All `live`-marked evals: the prompt-quality canary (test_live.py) AND the
-        # implementer-adherence run (test_adherence_live.py, ADR-0010 D9 — Sonnet 4.6
-        # vs a thinker plan, graded against the >=90% / 0-critical bar). Both hit the
+        # adherence run (test_adherence_live.py, ADR-0010 D9 — EVAL_MODEL vs a thinker
+        # plan, graded against the >=90% / 0-critical bar). Both hit the
         # billed API and are NEVER on the per-PR gate (ci.yml runs -m "not live").
-        run: |
-          source .venv/bin/activate
-          python -m pytest -m live -v -p no:cacheprovider
+        run: uv run pytest evals/ -m live -v -p no:cacheprovider
 
       - name: Upload metrics summary artifact
         if: always() # publish the cost/latency summary even if an assertion fails
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: eval-metrics
           path: eval-metrics.json

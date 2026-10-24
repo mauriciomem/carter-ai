@@ -10,24 +10,24 @@ The test suite validates these systems:
 |--------|-----------|----------------|
 | **Installer** | `tests/test_install.py` | File copying, MCP merging, manifest tracking, idempotency |
 | **Scaffold (CLI + Templates)** | `tests/test_scaffold.py` | Config loading, template rendering, quality gates, **policy emission**, workspace init |
-| **Policy model** | `tests/test_config.py` | The `policy` block, risk taxonomy, per-agent allowlist, gate precedence, overrides |
-| **Policy lint** | `tests/test_policy_lint.py` | `carter check` drift detection, hard ack, redaction WARN |
-| **Agent parity** | `tests/test_parity.py` | Static↔template invariants, baked policy frontmatter, no false claims |
+| **Policy model** | `tests/test_config.py` | The `policy` block, risk taxonomy, per-agent allowlist, overrides, legacy-key tolerance |
+| **Policy lint** | `tests/test_policy_lint.py` | `carter check` drift detection, dispatch lint, hard ack |
+| **Models** | `tests/test_models.py` | Per-agent model resolution and emission |
+| **Dispatch** | `tests/test_dispatch.py` | Native subagent dispatch emission |
+| **Agent parity** | `tests/test_parity.py` | Static↔template invariants, baked policy, no false claims |
 | **Plans & state** | `tests/test_plans.py`, `tests/test_state.py` | Plan frontmatter contract, checkpoint recovery, `.carter/` git state |
-| **Carter-Ops** | `tests/ops/test_operations.py` | CLI parsing, operations, the policy-override ledger, attribution |
+| **Carter-Ops** | `tests/ops/test_operations.py` | `carter ops` audit, policy-override ledger, config emit |
+| **Version** | `tests/test_version.py` | `carter.__version__` derives from package metadata |
 
 The tests run in full isolation using temporary directories — they never touch your real `~/.copilot/`, `~/.config/opencode/`, or any workspace paths.
 
 ## Prerequisites
 
-All three suites import from the installed `carter` package (Click, Jinja2,
-PyYAML, httpx), so the simplest setup is a venv with the package installed in
-editable mode:
+The suites import the `carter` package, so set up the project environment with uv
+(this also installs the dev tools: pytest, ruff, mypy, httpx for live evals):
 
 ```bash
-# Create and activate a venv with the package installed
-uv venv && source .venv/bin/activate
-uv pip install -e ".[dev]"
+uv sync --extra dev
 ```
 
 > **Troubleshooting — `carter` CLI crashes with `ModuleNotFoundError: No module
@@ -36,35 +36,28 @@ uv pip install -e ".[dev]"
 > `carter/_data/` via `force-include` (see `pyproject.toml`); in an editable
 > install that materializes `carter/_data` as a real directory in `site-packages`,
 > which **shadows** the `.pth` redirect to your source — `import carter` then finds
-> the stub (only `_data`, no `cli`). Running `pytest` from the repo root can
-> re-trigger it. Fix by symlinking the source package over the shadow:
+> the stub (only `_data`, no `cli`). Fix by symlinking the source package over the
+> shadow (replace `python3.X` with your version and delete the shadow directory
+> first):
 >
 > ```bash
-> SP=.venv/lib/python3.13/site-packages   # adjust the python3.13 for your version
-> rm -rf "$SP/carter" && ln -s "$PWD/carter" "$SP/carter"
-> carter --version                        # verify
+> SP=.venv/lib/python3.X/site-packages
+> ln -sfn "$PWD/carter" "$SP/carter"      # after removing the shadow "$SP/carter" dir
+> uv run carter --version                 # verify
 > ```
->
-> The symlink survives the editable-rebuild trigger. `carter/resources.py`
-> `data_dir()` still resolves bundled content from the repo root in a checkout.
 
 ### Run everything
 
 ```bash
-# From the venv (covers every test file — 467 tests)
-python -m pytest tests/ -v
+uv run pytest -q                       # unit tests (tests/, via pyproject testpaths)
+uv run pytest evals -m "not live" -q   # offline evals
 ```
 
 ### Run a single suite
 
 ```bash
-python -m pytest tests/test_install.py -v     # installer (75)
-python -m pytest tests/test_scaffold.py -v    # scaffold + policy emission (154)
-python -m pytest tests/test_config.py -v      # policy model (24)
-python -m pytest tests/test_policy_lint.py -v # policy lint / carter check (26)
-python -m pytest tests/test_parity.py -v      # agent source parity (17)
-python -m pytest tests/test_plans.py -v       # plan frontmatter contract (80)
-python -m pytest tests/ops/ -v                # carter-ops (78)
+uv run pytest tests/test_install.py -v
+uv run pytest tests/ops/ -v
 ```
 
 ## Continuous Integration
@@ -74,17 +67,16 @@ every PR, and a budgeted live-accuracy canary on a weekly cron.
 
 | Tier | Workflow | Trigger | Key? | What it proves |
 |------|----------|---------|------|----------------|
-| **PR gate** (required) | [ci.yml](../.github/workflows/ci.yml) | every push to `main` + every PR | none | Functionality + structural accuracy: `ruff check`, `ruff format --check`, `mypy`, unit tests + offline evals (py3.11 & py3.13), and a real `install-smoke` (`uv tool install` → `carter --version`/`init`/`check`) on Linux + macOS |
+| **PR gate** (required) | [ci.yml](../.github/workflows/ci.yml) | every push to `main` + every PR | none | Functionality + structural accuracy: `ruff check`, `ruff format --check`, `mypy`, unit tests + offline evals (py3.11, 3.14 & 3.15), and a real `install-smoke` (`uv tool install` → `carter --version`/`init`/`check`) on Linux + macOS |
 | **Live canary** (informational) | [evals-live.yml](../.github/workflows/evals-live.yml) | weekly cron + manual dispatch | one repo secret | Prompt-quality accuracy + token/latency/cost against a budgeted low-cost model |
 
 The PR gate, in full:
 
 ```bash
-uv venv --clear
-uv pip install -e ".[dev]"
-ruff check . && ruff format --check . && mypy        # lint + types
-python -m pytest tests/ -q                                  # 467 unit tests
-python -m pytest evals/test_skills.py evals/test_routing.py evals/test_metrics.py -q  # offline evals
+uv sync --locked --extra dev
+uv run ruff check . && uv run ruff format --check . && uv run mypy   # lint + types
+uv run pytest tests/ -q                                             # unit tests
+uv run pytest evals/ -m "not live" -q                               # offline evals
 ```
 
 ### Why the live evals need an API key (and the PR gate does not)
@@ -134,34 +126,29 @@ No external mocking libraries are used. Both the installer and the scaffold acce
 
 ```
 tests/
-├── conftest.py             # Shared fixtures (base_dir, settings, etc.)
-├── test_install.py         # Installer tests (75)
-├── test_scaffold.py        # Scaffold + policy emission tests (154)
-├── test_config.py          # Policy model: taxonomy, allowlist, overrides (24)
-├── test_policy_lint.py     # carter check policy lint + hard ack (26)
-├── test_parity.py          # Agent source-parity + baked policy frontmatter (17)
-├── test_plans.py           # Plan frontmatter contract + recovery (80)
-├── test_state.py           # .carter/ git state (13)
+├── conftest.py             # Shared fixtures (repo_root, base_dir)
+├── test_install.py         # Installer
+├── test_scaffold.py        # Scaffold + policy emission
+├── test_config.py          # Policy model: taxonomy, allowlist, overrides
+├── test_policy_lint.py     # carter check policy lint + hard ack
+├── test_models.py          # Per-agent model resolution
+├── test_dispatch.py        # Native subagent dispatch
+├── test_parity.py          # Agent source-parity + baked policy
+├── test_plans.py           # Plan frontmatter contract + recovery
+├── test_state.py           # .carter/ git state
+├── test_version.py         # Version metadata
 └── ops/
-    ├── conftest.py         # Ops path setup
-    └── test_operations.py  # Carter-ops + policy-override ledger (78)
+    └── test_operations.py  # carter ops: audit, policy-override, config
 ```
-
-The full suite is **467 tests** (`python -m pytest tests/ -v`), plus 28 offline
-evals under `evals/`.
 
 ## Fixtures (conftest.py)
 
-Fixtures are reusable setup functions that pytest injects into tests by name. All fixtures live in `tests/conftest.py`.
+Shared fixtures live in `tests/conftest.py`; suites define local fixtures where only they need them.
 
 | Fixture | Type | Description |
 |---------|------|-------------|
 | `repo_root` | `Path` | Absolute path to the Carter repository root. Used when tests need to reference source files. |
 | `base_dir` | `Path` | A fresh `tmp_path` directory. Every installer function accepts this as a parameter, so all file writes go here instead of real user directories. |
-| `copilot_dir` | `Path` | `base_dir/copilot/`, pre-created. Represents `~/.copilot/`. |
-| `opencode_dir` | `Path` | `base_dir/opencode/`, pre-created. Represents `~/.config/opencode/`. |
-| `vscode_settings` | `Path` | An empty `settings.json` at `base_dir/vscode/settings.json`. Simulates a fresh VS Code config. |
-| `existing_settings` | `Path` | A `settings.json` pre-populated with `editor.fontSize` and a non-Carter MCP server. Simulates a user who already has VS Code configured. |
 
 ### How `base_dir` Isolation Works
 
@@ -178,8 +165,8 @@ Tests are grouped into classes by behavior within each file (see
 goes stale the moment a test is added — discover them from the source:
 
 ```bash
-python -m pytest tests/ --co -q          # list every test (collection only)
-python -m pytest tests/test_config.py -v # one suite, with class/test names
+uv run pytest tests/ --co -q          # list every test (collection only)
+uv run pytest tests/test_config.py -v # one suite, with class/test names
 ```
 
 Each class name states what it covers (e.g. `TestPolicyOverridesAreHonored`,
@@ -207,8 +194,8 @@ Add tests when you:
 # Your Feature Name
 # ──────────────────────────────────────────────────────────────────────────────
 
-class TestYourFeature:
-    ...
+
+class TestYourFeature: ...
 ```
 
 **2. Use `base_dir` for filesystem isolation.** Every test that touches files should use the `base_dir` fixture:
@@ -227,7 +214,7 @@ def test_my_new_feature(self, base_dir: Path) -> None:
     assert "expected content" in output.read_text()
 ```
 
-**3. For JSON/settings tests**, create the settings file in the test body or use the `vscode_settings` / `existing_settings` fixtures:
+**3. For JSON/settings tests**, create the settings file in the test body:
 
 ```python
 def test_my_merge_logic(self, base_dir: Path) -> None:
@@ -239,7 +226,7 @@ def test_my_merge_logic(self, base_dir: Path) -> None:
 
     result = json.loads(settings.read_text())
     assert result["existing.key"] == "value"  # preserved
-    assert "new.key" in result                  # added
+    assert "new.key" in result  # added
 ```
 
 **4. Test idempotency for any new install function.** Run it twice and verify the second run reports no changes:
@@ -308,29 +295,17 @@ assert existing.read_text() == "custom content\n"
 
 ```python
 data = json.loads(settings.read_text())
-assert "new-key" in data["mcp.servers"]     # added
-assert "old-key" in data["mcp.servers"]     # preserved
+assert "new-key" in data["mcp.servers"]  # added
+assert "old-key" in data["mcp.servers"]  # preserved
 ```
 
 ## Troubleshooting
 
-### `ModuleNotFoundError: No module named 'install'`
-
-The test file adds the repo root to `sys.path` at import time. Make sure you're running pytest from the repository root:
-
-```bash
-cd ~/carter-ai
-uv run --with pytest pytest tests/ -v
-```
-
 ### Tests pass locally but fail in CI
 
-Check that the CI runner has `uv` and Python 3.11+ installed. See the GitHub Actions workflow in `.github/workflows/` if available.
+CI runs `uv sync --locked`, so a dependency change must be reflected in `uv.lock`
+(`uv lock`). See [`.github/workflows/ci.yml`](../.github/workflows/ci.yml).
 
 ### A test is failing after adding a new agent/skill
 
-If you added a new file (e.g., a 7th agent), update the expected counts in the relevant test assertions. Search for the current count (e.g., `== 6`) and update it.
-
-### Ops tests fail with `ModuleNotFoundError`
-
-The ops tests manipulate `sys.path` to import from `ops/`. Make sure you're running from the repo root and that `tests/ops/conftest.py` exists (it adds the path).
+Some tests assert exact agent/skill sets. Search the tests for the current list and add the new entry.

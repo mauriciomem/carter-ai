@@ -10,6 +10,8 @@ tags: [storage, metadata, plans, adr]
 
 # ADR-0003: Knowledge, ADRs, RFCs & plans — storage, frontmatter & splitting
 
+> **Status note (2026-10-24):** `plans.git_regime` was never read by code and was removed from the config; the companion `0003-implementation.md` checklist was deleted.
+
 **Status:** Accepted
 **Date:** 2026-06-07 (proposed), 2026-06-09 (accepted)
 **Deciders:** Carter maintainer (mauriciomem), Carter Maestro
@@ -74,7 +76,7 @@ produces**:
 
 ### A complete design already exists, unbuilt
 
-[docs/analysis/implementation-plan.md](../analysis/implementation-plan.md) §8
+docs/analysis/implementation-plan.md (record no longer in repo) §8
 specifies almost exactly this: multi-file plans with frontmatter
 (`id/status/must_haves/push_policy/rfc`), per-step `depends_on`, a single-folder
 RFC system, and a note that *"carter-plan SKILL needs updating."*
@@ -338,7 +340,7 @@ how the quality gate reasons (verify a *state*, confirm an *artifact*, follow a
 ## Implementation
 
 The phased execution checklist (5 phases, 13 steps) lives in its companion,
-[0003-implementation.md](0003-implementation.md), extracted to keep this ADR under
+0003-implementation.md (record removed 2026-10), extracted to keep this ADR under
 its own 400-line budget (D4 rule 3). Execute only after acceptance (now granted).
 
 > **Deferred to their own assessments:** detailed **RFC** design → prospective
@@ -381,5 +383,5 @@ implementation may proceed.
 ## References
 
 - ADR-0001 ([0001-narrator-content-suite.md](0001-narrator-content-suite.md)) — labeled-sub-decision + anti-drift pattern; ADR-0002 ([0002-single-source-agent-generation.md](0002-single-source-agent-generation.md)) — status-block + superseded-marker convention
-- Carter design (unbuilt) — [docs/analysis/implementation-plan.md](../analysis/implementation-plan.md) §8 + Q5
+- Carter design (unbuilt) — docs/analysis/implementation-plan.md (record no longer in repo) §8 + Q5
 - Source: [carter/state.py](../../carter/state.py), [skills/carter-plan/SKILL.md](../../skills/carter-plan/SKILL.md), [skills/carter-adr/SKILL.md](../../skills/carter-adr/SKILL.md), [templates/agents/carter-maestro.md.j2](../../templates/agents/carter-maestro.md.j2), [templates/agents/carter-pm.md.j2](../../templates/agents/carter-pm.md.j2)

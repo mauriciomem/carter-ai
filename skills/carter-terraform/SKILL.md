@@ -53,7 +53,7 @@ When generating Terraform code:
 ```hcl
 # terraform.tf
 terraform {
-  required_version = ">= 1.14"
+  required_version = ">= 1.14" # 1.14+ for list resources/query; latest is 1.17 (2026-10)
 
   required_providers {
     aws = {
@@ -269,6 +269,6 @@ terraform fmt -recursive
 terraform validate
 ```
 
-Additional tools: `tflint` (linting), `checkov` / `tfsec` (security scanning)
+Additional tools: `tflint` (linting), `trivy config` / `checkov` (security scanning; `tfsec` is deprecated and merged into Trivy)
 
 </review-checklist>

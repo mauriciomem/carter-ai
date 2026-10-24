@@ -1,10 +1,10 @@
 # Running Carter without breaking the bank
 
 *A plain-language guide to what Carter costs you, why, and how to run it on cheaper
-models without losing quality. Companion to [RFC-0004](../rfcs/0004-cost-context-optimization/README.md)
-(the design record); this doc is for people who **use** Carter.*
+models without losing quality. The design record is
+[ADR-0008](../adr/0008-mcp-cost-and-security.md); this doc is for people who **use** Carter.*
 
-Last reviewed: 2026-07-06.
+Last reviewed: 2026-10-24.
 
 ---
 
@@ -44,8 +44,7 @@ writes, for the whole session. That's why model choice is the biggest lever you 
 
 ## Where Carter's tokens actually go
 
-Rough sizes (they drift as the project grows — see [RFC-0004 §P2](../rfcs/0004-cost-context-optimization/README.md)
-for the measured baseline):
+Rough sizes (they drift as the project grows):
 
 - **Always loaded, every request:** global instructions + all skill *descriptions* ≈
   **~1.4k tokens**, plus the primary orchestrator's own prompt — Maestro ≈ **3.2k
@@ -72,21 +71,22 @@ them**, and **(2) MCP servers you're not using but still shipping.**
 
 | Tier | Model (default) | Agents |
 |------|-----------------|--------|
-| Thinkers | **Opus 4.8** (frontier, most expensive) | maestro, architect, learner, security |
-| Implementers | **Sonnet 5** (mid-tier, cheaper) | engineer, devops, **pm**, **narrator** |
+| Thinkers | **Opus 5.5** (frontier, most expensive) | maestro, architect, learner, security |
+| Implementers | **Sonnet 5.5** (mid-tier, cheaper) | engineer, devops, **pm**, **narrator** |
 
 That's **4 of 8 agents on the frontier model** — down from 6. `pm` and `narrator` moved
-to Sonnet by default (RFC-0004 lever 1): their work is highly *structured* — narrator's
+to Sonnet by default: their work is highly *structured* — narrator's
 redaction is rule-bound, pm's planning follows a fixed schema — so a mid-tier model,
 guided by Carter's skills, does the job at a fraction of the cost. Both had to **clear an
-adherence eval on Sonnet** before the default moved (see below). The four remaining
+adherence eval on Sonnet** before the default moved (see below; the recorded runs are on
+Sonnet 4.6). The four remaining
 thinkers stay on Opus because their work is open-ended: maestro routes everything,
 architect and security reason deeply, learner writes free-form explanation.
 
 **MCP servers.** `carter install --mcp` wires the three servers (GitHub, Terraform,
 Atlassian). MCP tool schemas are the **largest per-request token surface** — larger than
-all of Carter's prose combined — so shipping one you never use is pure waste. As of
-RFC-0004 lever 1 you can install a **subset**:
+all of Carter's prose combined — so shipping one you never use is pure waste. You can
+install a **subset**:
 
 ```bash
 carter install --mcp --mcp-servers github          # just GitHub — skips terraform+atlassian
@@ -96,7 +96,7 @@ carter install --mcp                                 # all three (default)
 
 The GitHub server is the official `github/github-mcp-server` run **read-only** via Docker
 (a security hardening that costs ~68% more GitHub tokens than the old server, accepted
-deliberately — see RFC-0004 §C). "Read-only" removes the MCP *write* surface only; shell
+deliberately — see [ADR-0008](../adr/0008-mcp-cost-and-security.md)). "Read-only" removes the MCP *write* surface only; shell
 `gh`/`git` writes still work, governed by the strictness policy.
 
 ## Choosing a cost profile
@@ -114,6 +114,7 @@ workspace `carter.yaml`:
 Set it at scaffold time:
 
 ```bash
+mkdir -p ~/my-project
 carter init ~/my-project --profile budget      # or: quality
 ```
 
@@ -137,13 +138,12 @@ A `profile:` re-tiers everyone at once. To change **one** agent, add a per-agent
 models:
   overrides:
     engineer:
-      copilot: "Claude Haiku 4.5"          # cheapest tier for well-specified impl work
-      opencode: "anthropic/claude-haiku-4-5"
+      copilot: "Claude Haiku 5.5"          # cheapest tier for well-specified impl work
+      opencode: "anthropic/claude-haiku-5-5"
 ```
 
-Then re-run `carter update`. Haiku 4.5 is the cheapest option for well-specified
-implementer work (`engineer`/`devops`), but note it doesn't support the highest
-reasoning-effort levels.
+Then re-run `carter update`. Haiku is the cheapest option for well-specified
+implementer work (`engineer`/`devops`).
 
 ## Prove a downgrade is safe before you commit to it
 
@@ -151,7 +151,7 @@ You don't have to guess whether a cheaper model still does the job. Carter ships
 **adherence eval** that scores whether an agent faithfully followed its plan:
 
 ```bash
-uv run --with pytest --with pyyaml pytest evals/ -m "not live" -v
+uv run pytest evals -m "not live" -v
 ```
 
 The grader ([evals/adherence.py](../../evals/adherence.py)) is deterministic and free —
@@ -167,7 +167,8 @@ it still passes.
 ### Don't install MCP servers you won't use
 
 Install the **subset** you need with `--mcp-servers` (e.g. `--mcp-servers github`), and
-only set the tokens (`GITHUB_TOKEN`, `TF_TOKEN`, `ATLASSIAN_*`) for the servers you wire.
+only set the tokens (`GITHUB_TOKEN`, `TFE_TOKEN`) for the servers you wire (Atlassian
+authenticates via OAuth).
 An unused server adds zero tool-schema tokens.
 
 ### Cut round-trips
@@ -201,13 +202,7 @@ pieces.** You spend frontier-model money once, on the hard thinking, not on ever
 | Spend even less | `profile: budget` in `carter.yaml` (or `carter init --profile budget`), then `carter update` |
 | Restore max quality | `profile: quality` (all agents on Opus) |
 | Tune one agent | Add a `models.overrides` entry, run `carter update` |
-| Check quality held up | `pytest evals/ -m "not live"` |
+| Check quality held up | `uv run pytest evals -m "not live"` |
 | Avoid MCP token cost | Only `--mcp` the servers you use; only set their tokens |
 | Reduce hops | `@`-mention specialists directly; be specific up front |
-| Understand the trade-offs | Read [RFC-0004](../rfcs/0004-cost-context-optimization/README.md) |
-
----
-
-*Anything here out of date? The design rationale and measured numbers live in
-[RFC-0004](../rfcs/0004-cost-context-optimization/README.md) and its `verification.md`.
-This guide is intentionally lighter — start here, go there for the evidence.*
+| Understand the trade-offs | Read [ADR-0008](../adr/0008-mcp-cost-and-security.md) |

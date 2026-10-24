@@ -74,6 +74,6 @@
     bot_email: test-bot@users.noreply.github.com
   expect:
     commands_contain:
-      - "carter-ops audit"
+      - "carter ops audit"
       - "--operation"
       - "--result"

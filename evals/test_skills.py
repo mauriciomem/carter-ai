@@ -12,17 +12,6 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
-import yaml
-
-
-@pytest.fixture
-def ops_scenarios(scenarios_dir: Path) -> list[dict]:
-    return yaml.safe_load((scenarios_dir / "carter_ops.yaml").read_text())
-
-
-@pytest.fixture
-def skill_scenarios(scenarios_dir: Path) -> list[dict]:
-    return yaml.safe_load((scenarios_dir / "skills.yaml").read_text())
 
 
 @pytest.fixture
@@ -75,12 +64,12 @@ class TestCarterOpsSkillContent:
         assert "git push" in ops_skill
         assert "git checkout" in ops_skill
         # Should NOT teach CLI invocation as primary path
-        assert "carter-ops git-flow --execute" not in ops_skill
-        assert "carter-ops git-commit --execute" not in ops_skill
+        assert "--execute" not in ops_skill
+        assert "--dry-run" not in ops_skill
 
     def test_has_audit_command(self, ops_skill: str) -> None:
         """Must include the audit command template."""
-        assert "carter-ops audit" in ops_skill
+        assert "carter ops audit" in ops_skill
         assert "--operation" in ops_skill
         assert "--result" in ops_skill
 
@@ -105,9 +94,12 @@ class TestCarterOpsSkillContent:
     def test_no_legacy_cli_invocations(self, ops_skill: str) -> None:
         """Skill should not teach the legacy CLI as primary execution method."""
         # These are legacy patterns that should not be the taught approach
-        assert "carter-ops git-branch --execute" not in ops_skill
-        assert "carter-ops git-push --execute" not in ops_skill
-        assert "carter-ops jira-create --execute" not in ops_skill
+        # The `carter-ops` binary no longer exists; the CLI is `carter ops`, and it
+        # has no git/gh/jira operations — the model runs those commands directly.
+        for legacy in ("carter-ops git-", "carter-ops gh-", "carter-ops jira-", "carter-ops audit"):
+            assert legacy not in ops_skill
+        for op in ("git-", "gh-", "jira-"):
+            assert f"carter ops {op}" not in ops_skill
 
 
 class TestSkillStructure:
