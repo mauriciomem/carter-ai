@@ -140,9 +140,14 @@ def install_instructions(
         dst = _copilot_base(base_dir) / "instructions" / "copilot-instructions.md"
         _install_file(src, dst, manifest, backup_root)
 
+    # OpenCode never loads instructions/copilot-instructions.md (it reads AGENTS.md,
+    # installed by install_opencode_rules), so it is no longer copied there. Remove
+    # the copy earlier Carter versions wrote, so upgrades don't leave it behind.
     if "opencode" in targets:
-        dst = _opencode_base(base_dir) / "instructions" / "copilot-instructions.md"
-        _install_file(src, dst, manifest, backup_root)
+        stale = _opencode_base(base_dir) / "instructions" / "copilot-instructions.md"
+        if stale.is_file():
+            stale.unlink()
+            log_ok(f"Removed stale {str(stale).replace(str(_home()), '~')}")
 
 
 _OPENCODE_AGENTS_MD_LEGACY = """\

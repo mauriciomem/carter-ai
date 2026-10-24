@@ -41,6 +41,9 @@ def create_env(templates_dir: Path = TEMPLATES_DIR) -> Environment:
     env.globals["policy_frontmatter"] = policy_frontmatter
     env.globals["policy_comment"] = policy_comment
     env.globals["policy_gate_table"] = policy_gate_table
+    # Only the primary orchestrator dispatches (flat one-level chain), so only it
+    # renders the <agents> roster.
+    env.globals["primary_role"] = PRIMARY_ROLE
     return env
 
 

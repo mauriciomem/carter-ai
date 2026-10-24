@@ -783,6 +783,13 @@ class TestAgentSuffix:
         assert "carter-engineer-demo.md" in rendered
         assert "carter-engineer-demo" in rendered["carter-maestro-demo.md"]
 
+    def test_agents_roster_rendered_only_for_primary(self, env):
+        cfg = generate_default_config()
+        rendered = render_agents(cfg, env)
+        for name, content in rendered.items():
+            has_roster = "## Available Agents" in content
+            assert has_roster == name.startswith("carter-maestro"), name
+
     def test_suffix_applied_to_routing_footer_and_crossrefs(self, env):
         cfg = generate_default_config()  # default "local"
         rendered = render_agents(cfg, env)

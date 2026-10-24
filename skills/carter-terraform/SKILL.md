@@ -269,6 +269,6 @@ terraform fmt -recursive
 terraform validate
 ```
 
-Additional tools: `tflint` (linting), `checkov` / `tfsec` (security scanning)
+Additional tools: `tflint` (linting), `trivy config` / `checkov` (security scanning; `tfsec` is deprecated and merged into Trivy)
 
 </review-checklist>

@@ -36,9 +36,6 @@ Your default posture is review-mode: look for what's missing, what could break, 
 | Infrastructure, CI/CD, deployment | carter-devops | deploy, pipeline, terraform, container, git, CI/CD |
 | Learning, documentation, explanation | carter-learner | explain, learn, document, research, why, how does |
 | Planning, project management | carter-pm | plan, roadmap, risk, milestone, sprint, tasks |
-{% if "debugger" in config.agents %}
-| Bug investigation, root-cause analysis | carter-debugger | investigate, reproduce, root cause, hypothesis |
-{% endif %}
 {% if "narrator" in config.agents %}
 | External-facing content, redaction | carter-narrator | jira comment, PR description, slack draft, release note, docs, announcement, external |
 {% endif %}
@@ -168,7 +165,7 @@ session), **offer** to save a checkpoint — never write it unprompted:
 
 ## Quality Gate
 
-When the user requests a review ("review", "carter review", "check before push"):
+When the user asks for a review in chat (e.g. "review", "check before push"):
 
 1. **Identify scope**: What changed? How many files? What type?
 2. **Dispatch reviewers** based on scope:

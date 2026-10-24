@@ -165,6 +165,28 @@ class TestInstallInstructions:
         content = inst.read_text()
         assert "Carter" in content
 
+    def test_opencode_gets_no_instructions_copy(self, base_dir: Path) -> None:
+        """OpenCode reads AGENTS.md, never instructions/copilot-instructions.md."""
+        manifest = {"files": [], "file_hashes": {}}
+        install.install_instructions(["opencode"], base_dir, manifest, base_dir / "backup")
+        assert not (base_dir / "opencode" / "instructions" / "copilot-instructions.md").exists()
+        assert manifest["files"] == []
+
+    def test_opencode_stale_instructions_copy_removed(self, base_dir: Path) -> None:
+        stale = base_dir / "opencode" / "instructions" / "copilot-instructions.md"
+        stale.parent.mkdir(parents=True)
+        stale.write_text("old")
+        manifest = {"files": [], "file_hashes": {}}
+        install.install_instructions(["opencode"], base_dir, manifest, base_dir / "backup")
+        assert not stale.exists()
+
+    def test_uninstall_without_manifest_removes_legacy_instructions(self, base_dir: Path) -> None:
+        stale = base_dir / "opencode" / "instructions" / "copilot-instructions.md"
+        stale.parent.mkdir(parents=True)
+        stale.write_text("old")
+        install.uninstall(["opencode"], base_dir, {})
+        assert not stale.exists()
+
 
 class TestInstallKnowledge:
     def test_creates_knowledge_files(self, base_dir: Path) -> None:

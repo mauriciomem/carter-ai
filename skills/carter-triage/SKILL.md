@@ -17,6 +17,10 @@ Analyze the user's request and determine which Carter specialist agent(s) should
 | Infrastructure, CI/CD, deployment, IaC | carter-devops | deploy, pipeline, terraform, container, git, AWS, CI/CD, k8s |
 | Learning, documentation, explanation | carter-learner | explain, learn, document, research, why, how does, teach |
 | Planning, project management, tracking | carter-pm | plan, roadmap, risk, milestone, sprint, standup, WBS, tasks |
+| External-facing content, redaction | carter-narrator | jira comment, PR description, slack draft, release note, docs, announcement, external |
+| Security review, threat modeling, vuln/CVE triage, IR | carter-security | threat model, secure code review, vuln, CVE, advisory, secrets, incident response, hardening, OWASP, supply-chain |
+
+carter-maestro is the router itself (it runs this classification); it never appears as a delegation target.
 
 </routing-table>
 

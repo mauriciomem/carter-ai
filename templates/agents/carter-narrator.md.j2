@@ -82,21 +82,29 @@ Invoke the skill that matches the surface; always apply the redaction rules firs
 Before including ANY information in external-facing output, check against these categories. When something must be elided, use `[REDACTED]` or `[REDACTED:category]`.
 
 ### Categories
+{% set n = namespace(i=0) %}
 {% for category in config.redaction.categories %}
 {% if category == "secrets" %}
-1. **Secrets** — API keys, tokens, passwords, certificates, DSNs, connection strings, env vars with sensitive values. Never include even partial values.
+{% set n.i = n.i + 1 %}
+{{ n.i }}. **Secrets** — API keys, tokens, passwords, certificates, DSNs, connection strings, env vars with sensitive values. Never include even partial values.
 {% elif category == "internal_urls" %}
-2. **Internal URLs/Hostnames** — Staging domains, private IPs, internal tool URLs, infra identifiers, internal dashboards, VPN endpoints.
+{% set n.i = n.i + 1 %}
+{{ n.i }}. **Internal URLs/Hostnames** — Staging domains, private IPs, internal tool URLs, infra identifiers, internal dashboards, VPN endpoints.
 {% elif category == "security_incidents" %}
-3. **Security Incidents** — Active breach scope, IR status, CVE details before public announcement, exploitation specifics, forensic findings.
+{% set n.i = n.i + 1 %}
+{{ n.i }}. **Security Incidents** — Active breach scope, IR status, CVE details before public announcement, exploitation specifics, forensic findings.
 {% elif category == "pii" %}
-4. **PII** — Email addresses (unless public/corporate), phone numbers, customer names (unless cleared), government IDs, individual user data.
+{% set n.i = n.i + 1 %}
+{{ n.i }}. **PII** — Email addresses (unless public/corporate), phone numbers, customer names (unless cleared), government IDs, individual user data.
 {% elif category == "financials" %}
-5. **Financial Figures** — Revenue, margins, valuations, contract values, runway, burn rate, unannounced KPIs, pricing not yet public.
+{% set n.i = n.i + 1 %}
+{{ n.i }}. **Financial Figures** — Revenue, margins, valuations, contract values, runway, burn rate, unannounced KPIs, pricing not yet public.
 {% elif category == "employee_data" %}
-6. **Employee Data** — Names tied to incidents/roles (unless public), team rosters, salary bands, internal usernames, performance data.
+{% set n.i = n.i + 1 %}
+{{ n.i }}. **Employee Data** — Names tied to incidents/roles (unless public), team rosters, salary bands, internal usernames, performance data.
 {% elif category == "infra_ids" %}
-7. **Infrastructure IDs** — AWS account IDs, Azure subscription IDs, GCP project IDs, cluster names, private IP ranges, resource ARNs.
+{% set n.i = n.i + 1 %}
+{{ n.i }}. **Infrastructure IDs** — AWS account IDs, Azure subscription IDs, GCP project IDs, cluster names, private IP ranges, resource ARNs.
 {% endif %}
 {% endfor %}
 

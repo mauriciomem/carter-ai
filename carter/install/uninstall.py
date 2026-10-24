@@ -62,6 +62,11 @@ def uninstall(targets: list[str], base_dir: Path | None, prereqs: dict[str, bool
 
         if "opencode" in targets:
             base = _opencode_base(base_dir)
+            # Written by Carter versions that copied instructions for OpenCode.
+            legacy_instructions = base / "instructions" / "copilot-instructions.md"
+            if legacy_instructions.is_file():
+                legacy_instructions.unlink()
+                log_ok(f"Removed {str(legacy_instructions).replace(str(_home()), '~')}")
             for pattern_dir in ["agents", "skills"]:
                 d = base / pattern_dir
                 if d.exists():
