@@ -117,19 +117,14 @@ def policy_notice(config: dict[str, Any]) -> str:
 
 
 def model_advisory(config: dict[str, Any]) -> str:
-    """The required unverifiable-model advisory `carter check` always prints.
+    """The model advisory `carter check` always prints (never empty).
 
-    Carter pins a per-agent `model:` but cannot verify the user's OpenCode provider
-    subscription actually includes it — an unavailable model would be silently ignored
-    frontmatter (a broken agent). So it emits the pin anyway and names every agent's
-    pinned model with the can't-verify caveat. Always returns a non-empty string.
+    OpenCode ignores a pinned model your provider lacks, so name each pin.
     """
     pins = ", ".join(f"{role} → {resolve_model(config, role)}" for role in config.get("agents", []))
     return (
-        f"Agents pin these models: {pins}. Carter cannot verify your "
-        "OpenCode provider subscription includes them — an unavailable model is "
-        "silently ignored at load. Effort is global (`--effort high`, per-session "
-        "overridable); Carter emits no per-agent effort or temperature."
+        f"Model pins: {pins}. Carter cannot verify your OpenCode provider "
+        "subscription includes them."
     )
 
 

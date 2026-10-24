@@ -27,16 +27,40 @@ def fake_opencode(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     PATH holds only the fake bin dir, so a real ``opencode`` can never leak in.
     """
 
-    def make(version_output: str | None = "opencode v2.1.4") -> Path:
+    def make(
+        version_output: str | None = "opencode v2.1.4",
+        agents_output: str = "[]",
+        agents_exit: int = 0,
+    ) -> Path:
+        """``agents_output``/``agents_exit`` drive ``opencode debug agents``."""
         bindir = tmp_path / "fakebin"
         bindir.mkdir(exist_ok=True)
         script = bindir / "opencode"
         if version_output is None:
             script.unlink(missing_ok=True)
         else:
-            script.write_text(f"#!/bin/sh\nprintf '%s\\n' '{version_output}'\n")
+            agents_file = bindir / "agents.out"
+            agents_file.write_text(agents_output)
+            script.write_text(
+                "#!/bin/sh\n"
+                f'if [ "$1" = debug ]; then /bin/cat "{agents_file}"; exit {agents_exit}; fi\n'
+                f"printf '%s\\n' '{version_output}'\n"
+            )
             script.chmod(0o755)
         monkeypatch.setenv("PATH", str(bindir))
         return bindir
 
     return make
+
+
+@pytest.fixture(autouse=True)
+def _no_real_opencode(request: pytest.FixtureRequest, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Keep ``carter check`` from running a developer's real ``opencode``.
+
+    Tests that want the harness step opt in via the ``fake_opencode`` fixture.
+    """
+    if "fake_opencode" in request.fixturenames:
+        return
+    import carter.harness
+
+    monkeypatch.setattr(carter.harness, "_which", lambda _cmd: None)

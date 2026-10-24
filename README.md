@@ -131,7 +131,9 @@ executes the commands directly, and records the result with `carter ops audit`.
 Workspace agents are generated from Jinja2 templates (base + per-agent
 inheritance) driven by `.carter/carter.yaml`. Edit config, then `carter update .`
 to regenerate (knowledge files are never touched); `carter check .` validates the
-workspace.
+workspace and runs `opencode debug agents` to confirm OpenCode loads every Carter
+agent with its emitted permissions (skipped with a warning if `opencode` is not on
+PATH; `--no-harness` skips it explicitly).
 
 | Config key | Effect |
 |------------|--------|

@@ -17,6 +17,7 @@ from carter.config import (
     generate_default_config,
     load_config,
 )
+from carter.harness import validate_agents
 from carter.plans import validate_checkpoint, validate_plans_dir
 from carter.scaffold import (
     agent_filename,
@@ -247,8 +248,13 @@ def update(target_dir: str, dry_run: bool) -> None:
 
 @main.command()
 @click.argument("target_dir", default=".", type=click.Path(exists=True, file_okay=False))
-def check(target_dir: str) -> None:
-    """Validate workspace integrity."""
+@click.option(
+    "--no-harness",
+    is_flag=True,
+    help="Skip the `opencode debug agents` harness validation step.",
+)
+def check(target_dir: str, no_harness: bool) -> None:
+    """Validate workspace integrity and that OpenCode loads the Carter agents."""
     target = Path(target_dir).resolve()
     config_path = target / ".carter" / "carter.yaml"
     errors: list[str] = []
@@ -300,6 +306,23 @@ def check(target_dir: str) -> None:
 
     # Lint emitted `permissions:`/`model` against what carter.yaml generates.
     errors.extend(lint_policy(config, installed))
+
+    # Harness validation (ADR-0014 D6): OpenCode must actually load every agent.
+    if not no_harness:
+        expected: dict[str, list | None] = {}
+        for role in config["agents"]:
+            if not (agents_dir / agent_filename(role, config)).exists():
+                continue  # already reported as a missing file
+            perms = installed.get(role, {}).get("permissions")
+            expected[Path(agent_filename(role, config)).stem] = (
+                perms if isinstance(perms, list) else None
+            )
+        harness_result = validate_agents(target, expected)
+        if harness_result.warning:
+            click.echo(f"⚠  {harness_result.warning}", err=True)
+        errors.extend(harness_result.errors)
+        if harness_result.status == "ok":
+            click.echo(f"OpenCode loaded all {len(expected)} Carter agents")
 
     if errors:
         click.echo("Workspace issues found:", err=True)
