@@ -34,7 +34,7 @@ Carter built `tools:` from one input only: the per-agent **MCP server scope**
 (`AGENT_MCP_SCOPE` in `carter/config.py`), with `agent` prepended on the primary:
 
 ```python
-tools = (["agent"] + scope) if is_primary else scope   # config.py
+tools = (["agent"] + scope) if is_primary else scope  # config.py
 ```
 
 So the emitted lists were:

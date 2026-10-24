@@ -1,6 +1,6 @@
 name: evals-live
 
-# Weekly live-eval canary (ADR-0009 D5, plan 004 step 10).
+# Weekly live-eval canary (ADR-0009 D5).
 #
 # The PR gate (ci.yml) runs only the key-free, deterministic OFFLINE evals. This
 # workflow is the budgeted ACCURACY canary: it sends the real agent/skill prompts to
@@ -48,19 +48,15 @@ jobs:
         with:
           python-version: "3.13"
 
-      - name: Create venv and install (with dev deps + httpx)
-        run: |
-          uv venv --clear
-          uv pip install -e ".[dev]" httpx
+      - name: Install locked deps (dev extra includes httpx)
+        run: uv sync --locked --extra dev
 
       - name: Run live evals (budgeted, low-cost model)
         # All `live`-marked evals: the prompt-quality canary (test_live.py) AND the
         # implementer-adherence run (test_adherence_live.py, ADR-0010 D9 — Sonnet 4.6
         # vs a thinker plan, graded against the >=90% / 0-critical bar). Both hit the
         # billed API and are NEVER on the per-PR gate (ci.yml runs -m "not live").
-        run: |
-          source .venv/bin/activate
-          python -m pytest -m live -v -p no:cacheprovider
+        run: uv run pytest evals/ -m live -v -p no:cacheprovider
 
       - name: Upload metrics summary artifact
         if: always() # publish the cost/latency summary even if an assertion fails

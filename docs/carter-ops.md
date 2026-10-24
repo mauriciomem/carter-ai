@@ -587,6 +587,7 @@ a wrapper script. It only initializes the runtime directory under `~/.carter/`:
 from operations import Operation, Plan, Result, register
 from config import Config
 
+
 @register
 class GitPR(Operation):
     name = "git-pr"

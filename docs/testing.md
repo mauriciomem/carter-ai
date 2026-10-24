@@ -207,8 +207,8 @@ Add tests when you:
 # Your Feature Name
 # ──────────────────────────────────────────────────────────────────────────────
 
-class TestYourFeature:
-    ...
+
+class TestYourFeature: ...
 ```
 
 **2. Use `base_dir` for filesystem isolation.** Every test that touches files should use the `base_dir` fixture:
@@ -239,7 +239,7 @@ def test_my_merge_logic(self, base_dir: Path) -> None:
 
     result = json.loads(settings.read_text())
     assert result["existing.key"] == "value"  # preserved
-    assert "new.key" in result                  # added
+    assert "new.key" in result  # added
 ```
 
 **4. Test idempotency for any new install function.** Run it twice and verify the second run reports no changes:
@@ -308,8 +308,8 @@ assert existing.read_text() == "custom content\n"
 
 ```python
 data = json.loads(settings.read_text())
-assert "new-key" in data["mcp.servers"]     # added
-assert "old-key" in data["mcp.servers"]     # preserved
+assert "new-key" in data["mcp.servers"]  # added
+assert "old-key" in data["mcp.servers"]  # preserved
 ```
 
 ## Troubleshooting

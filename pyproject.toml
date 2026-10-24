@@ -6,7 +6,7 @@ requires-python = ">=3.11"
 dependencies = [
     "jinja2>=3.1",
     "pyyaml>=6.0",
-    "click>=8.0",
+    "click>=8.1",
 ]
 
 [project.scripts]
@@ -14,9 +14,9 @@ carter = "carter.cli:main"
 
 [project.optional-dependencies]
 dev = [
-    "pytest>=8.0",
-    "ruff>=0.6",
-    "mypy>=1.11",
+    "pytest>=9.0",
+    "ruff>=0.17",
+    "mypy>=2.3",
     "types-PyYAML",
     "httpx>=0.27",  # evals/test_live.py (live model calls)
 ]
@@ -64,8 +64,8 @@ disallow_untyped_calls = true
 warn_return_any = true
 extra_checks = true
 
-# python-semantic-release (PSR) — release automation (ADR-0009, plan 004 step 5).
-# Verified against PSR 10.5.x (2026). The git tag is the SINGLE version source
+# python-semantic-release (PSR) — release automation (ADR-0009).
+# Verified against PSR 10.7.x (2026-10). The git tag is the SINGLE version source
 # (ADR-0009 D1): PSR derives the current version from the latest `v{version}` tag
 # and we set NEITHER `version_toml` NOR `version_variables`, so NO version file is
 # written back. PSR's job here is purely to compute the bump, create the tag,
