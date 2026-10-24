@@ -1,8 +1,8 @@
-"""Component installers: agents, skills, instructions, knowledge, memories, ops.
+"""Component installers: agents, skills, OpenCode rules, knowledge, memories, ops.
 
-Plus the install manifest read/write. These are pure orchestration over the file
-primitives and path resolvers — none are monkeypatched by tests, so they live here
-rather than in ``carter.installer``.
+Plus the install manifest read/write. OpenCode is the only install target
+(ADR-0014); the knowledge base and manifest stay under ``~/.copilot`` until the
+path migration (ADR-0014 phase 4).
 """
 
 from __future__ import annotations
@@ -30,33 +30,17 @@ from carter.install.paths import (
 
 
 def install_agents(
-    targets: list[str],
     base_dir: Path | None,
     manifest: dict,
     backup_root: Path,
 ) -> dict[str, int]:
+    """Install the OpenCode agents rendered from the shipped guarded defaults."""
     log_step("Installing agents...")
-    src_dir = REPO_ROOT / "agents"
     stats: dict[str, int] = {"created": 0, "updated": 0, "unchanged": 0}
-
-    # The static `agents/*.md` are copilot-shaped (a `tools:` allowlist array).
-    # OpenCode rejects that array — it wants a `permission` block and `provider/model`
-    # ids — so for the opencode target we render the OpenCode-shaped frontmatter from
-    # the guarded defaults rather than copying the copilot file verbatim.
-    opencode_rendered = _render_opencode_agents() if "opencode" in targets else {}
-
-    for agent_file in sorted(src_dir.glob("carter-*.md")):
-        if "copilot" in targets:
-            dst = _copilot_base(base_dir) / "agents" / agent_file.name
-            status = _install_file(agent_file, dst, manifest, backup_root)
-            stats[status] += 1
-
-        if "opencode" in targets:
-            dst = _opencode_base(base_dir) / "agents" / agent_file.name
-            content = opencode_rendered[agent_file.name]
-            status = _install_rendered_file(content, dst, manifest, backup_root)
-            stats[status] += 1
-
+    for name, content in sorted(_render_opencode_agents().items()):
+        dst = _opencode_base(base_dir) / "agents" / name
+        status = _install_rendered_file(content, dst, manifest, backup_root)
+        stats[status] += 1
     return stats
 
 
@@ -78,7 +62,6 @@ def _render_opencode_agents() -> dict[str, str]:
 
 
 def install_skills(
-    targets: list[str],
     base_dir: Path | None,
     manifest: dict,
     backup_root: Path,
@@ -107,47 +90,16 @@ def install_skills(
             # Template substitution for carter-ops SKILL.md
             needs_template = skill_dir.name == "carter-ops" and src_file.name == "SKILL.md"
 
-            if "copilot" in targets:
-                dst = _copilot_base(base_dir) / "skills" / skill_dir.name / rel
-                if needs_template:
-                    status = _install_templated_file(
-                        src_file, dst, manifest, backup_root, template_vars
-                    )
-                else:
-                    status = _install_file(src_file, dst, manifest, backup_root)
-                stats[status] += 1
-
-            if "opencode" in targets:
-                dst = _opencode_base(base_dir) / "skills" / skill_dir.name / rel
-                if needs_template:
-                    status = _install_templated_file(
-                        src_file, dst, manifest, backup_root, template_vars
-                    )
-                else:
-                    status = _install_file(src_file, dst, manifest, backup_root)
-                stats[status] += 1
+            dst = _opencode_base(base_dir) / "skills" / skill_dir.name / rel
+            if needs_template:
+                status = _install_templated_file(
+                    src_file, dst, manifest, backup_root, template_vars
+                )
+            else:
+                status = _install_file(src_file, dst, manifest, backup_root)
+            stats[status] += 1
 
     return stats
-
-
-def install_instructions(
-    targets: list[str],
-    base_dir: Path | None,
-    manifest: dict,
-    backup_root: Path,
-) -> None:
-    log_step("Installing instructions...")
-    src = REPO_ROOT / "instructions" / "copilot-instructions.md"
-
-    if "copilot" in targets:
-        dst = _copilot_base(base_dir) / "instructions" / "copilot-instructions.md"
-        _install_file(src, dst, manifest, backup_root)
-
-    # OpenCode never loads instructions/copilot-instructions.md (it reads AGENTS.md,
-    # installed by install_opencode_rules), so it is no longer copied there. Clean up
-    # the copy earlier Carter versions wrote, so upgrades don't leave it behind.
-    if "opencode" in targets:
-        remove_legacy_opencode_instructions(base_dir, backup_root)
 
 
 def remove_legacy_opencode_instructions(base_dir: Path | None, backup_root: Path | None) -> None:
@@ -249,14 +201,11 @@ _OPENCODE_AGENTS_MD_KNOWN = (_OPENCODE_AGENTS_MD_LEGACY, _OPENCODE_AGENTS_MD_V2)
 
 
 def install_opencode_rules(
-    targets: list[str],
     base_dir: Path | None,
     manifest: dict,
     backup_root: Path,
 ) -> None:
     """Generate ~/.config/opencode/AGENTS.md for OpenCode global rules."""
-    if "opencode" not in targets:
-        return
     log_step("Installing OpenCode global rules...")
     dst = _opencode_base(base_dir) / "AGENTS.md"
     dst.parent.mkdir(parents=True, exist_ok=True)

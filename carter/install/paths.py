@@ -6,7 +6,6 @@ Every install target's base directory is resolved here. A ``base_dir`` override
 
 from __future__ import annotations
 
-import platform
 from pathlib import Path
 
 from carter.resources import data_dir
@@ -44,32 +43,3 @@ def _local_bin(base_dir: Path | None) -> Path:
     if base_dir:
         return base_dir / "local" / "bin"
     return _home() / ".local" / "bin"
-
-
-def _vscode_user_dirs(base_dir: Path | None) -> list[Path]:
-    """Return candidate VS Code ``User/`` config directories, most-preferred first.
-
-    Covers the common variants on macOS and Linux: stable VS Code, Insiders,
-    VSCodium, and (Linux) the Flatpak sandbox location. The ``base_dir`` test
-    override yields a single deterministic path.
-    """
-    if base_dir:
-        return [base_dir / "vscode"]
-
-    home = _home()
-    if platform.system() == "Darwin":
-        app_support = home / "Library" / "Application Support"
-        return [
-            app_support / "Code" / "User",
-            app_support / "Code - Insiders" / "User",
-            app_support / "VSCodium" / "User",
-        ]
-    # Linux / other POSIX
-    config = home / ".config"
-    return [
-        config / "Code" / "User",
-        config / "Code - Insiders" / "User",
-        config / "VSCodium" / "User",
-        # Flatpak-sandboxed VS Code
-        home / ".var" / "app" / "com.visualstudio.code" / "config" / "Code" / "User",
-    ]

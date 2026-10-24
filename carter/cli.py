@@ -38,12 +38,6 @@ def main() -> None:
 
 
 @main.command()
-@click.option(
-    "--target",
-    type=click.Choice(["copilot", "opencode", "all"]),
-    default="all",
-    help="Install target (default: all).",
-)
 @click.option("--mcp", is_flag=True, help="Install and configure MCP servers.")
 @click.option(
     "--mcp-servers",
@@ -68,7 +62,6 @@ def main() -> None:
 @click.option("-v", "--verbose", is_flag=True, help="Detailed output.")
 @click.option("--debug", is_flag=True, help="Debug output.")
 def install(
-    target: str,
     mcp: bool,
     mcp_servers: str | None,
     bot_name: str,
@@ -78,9 +71,10 @@ def install(
     verbose: bool,
     debug: bool,
 ) -> None:
-    """Install Carter agents, skills, and MCP servers system-wide (~/.copilot/)."""
+    """Install Carter agents, skills, and MCP servers for OpenCode (>= 2.1)."""
     from carter.install.mcp import MCP_SERVERS
-    from carter.installer import run as run_install
+    from carter.install.orchestrator import run as run_install
+    from carter.install.prereqs import PrerequisiteError
 
     if quiet:
         verbosity = 0
@@ -103,15 +97,17 @@ def install(
                 param_hint="--mcp-servers",
             )
 
-    run_install(
-        target=target,
-        mcp=mcp,
-        bot_name=bot_name,
-        uninstall_flag=uninstall_flag,
-        base_dir=base_dir,
-        verbosity=verbosity,
-        mcp_servers=servers,
-    )
+    try:
+        run_install(
+            mcp=mcp,
+            bot_name=bot_name,
+            uninstall_flag=uninstall_flag,
+            base_dir=base_dir,
+            verbosity=verbosity,
+            mcp_servers=servers,
+        )
+    except PrerequisiteError as exc:
+        raise click.ClickException(f"{exc} Nothing was installed.") from exc
 
 
 @main.command()

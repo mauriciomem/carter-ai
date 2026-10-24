@@ -1,6 +1,6 @@
 """ANSI color + leveled logging helpers for the installer.
 
-The verbosity level is module state here (single source); ``carter.installer.run``
+The verbosity level is module state here (single source); ``carter.install.orchestrator.run``
 sets it via :func:`set_verbosity`. ``0=quiet, 1=default, 2=verbose, 3=debug``.
 """
 

@@ -1018,152 +1018,48 @@ class TestPolicyRenderedIntegration:
 class TestConfigureMcpServersUnchanged:
     """Per-agent MCP scope lives in agent frontmatter, NOT the global wiring."""
 
-    def test_global_server_set_is_the_shipped_triple(self, tmp_path):
-        from carter import installer
+    def _wire(self, tmp_path, servers=None):
+        from carter.install.mcp import configure_mcp_servers
 
-        manifest = {"files": [], "file_hashes": {}, "mcp_servers": []}
-        installer.configure_mcp_servers(["opencode"], tmp_path, manifest, {}, tmp_path / "backup")
-        assert manifest["mcp_servers"] == {
-            "opencode": ["carter-github", "carter-terraform", "carter-atlassian"]
-        }
-        opencode_cfg = json.loads((tmp_path / "opencode" / "opencode.json").read_text())
-        assert {"carter-github", "carter-terraform", "carter-atlassian"} <= set(opencode_cfg["mcp"])
+        manifest: dict = {}
+        configure_mcp_servers(tmp_path, manifest, tmp_path / "backup", servers=servers)
+        cfg = json.loads((tmp_path / "opencode" / "opencode.json").read_text())
+        return manifest, cfg["mcp"]["servers"]
+
+    def test_global_server_set_is_the_shipped_triple(self, tmp_path):
+        manifest, servers = self._wire(tmp_path)
+        assert manifest["mcp_servers"] == ["carter-github", "carter-terraform", "carter-atlassian"]
+        assert {"carter-github", "carter-terraform", "carter-atlassian"} <= set(servers)
 
     def test_no_per_agent_dimension_in_global_wiring(self, tmp_path):
-        from carter import installer
-
-        manifest = {"files": [], "file_hashes": {}, "mcp_servers": []}
-        installer.configure_mcp_servers(["opencode"], tmp_path, manifest, {}, tmp_path / "backup")
-        opencode_cfg = json.loads((tmp_path / "opencode" / "opencode.json").read_text())
+        _, servers = self._wire(tmp_path)
         for role in _ALL_ROLES:
-            assert role not in opencode_cfg["mcp"]
+            assert role not in servers
 
 
 class TestMcpServerOptIn:
-    """`configure_mcp_servers` installs only the
-    servers a workspace selects; an unused server adds zero tool-schema tokens. Omitting
-    the selection preserves today's behaviour (all shipped servers).
+    """`configure_mcp_servers` installs only the servers a workspace selects; an
+    unused server adds zero tool-schema tokens. Omitting the selection installs all.
     """
 
-    def test_subset_wires_only_selected_opencode(self, tmp_path):
-        from carter import installer
+    def test_subset_wires_only_selected(self, tmp_path):
+        manifest, servers = TestConfigureMcpServersUnchanged()._wire(tmp_path, ["github"])
+        assert set(servers) == {"carter-github"}
+        assert manifest["mcp_servers"] == ["carter-github"]
 
-        manifest = {"files": [], "file_hashes": {}, "mcp_servers": []}
-        installer.configure_mcp_servers(
-            ["opencode"], tmp_path, manifest, {}, tmp_path / "backup", servers=["github"]
-        )
-        opencode_cfg = json.loads((tmp_path / "opencode" / "opencode.json").read_text())
-        wired = set(opencode_cfg["mcp"])
-        # Only the selected server's schema is present; the others contribute nothing.
-        assert "carter-github" in wired
-        assert "carter-terraform" not in wired
-        assert "carter-atlassian" not in wired
-        assert manifest["mcp_servers"] == {"opencode": ["carter-github"]}
-
-    def test_subset_wires_only_selected_copilot_vscode(self, tmp_path):
-        from carter import installer
-
-        # A VS Code settings.json must exist for the copilot path to write to it.
-        (tmp_path / ".vscode").mkdir(parents=True, exist_ok=True)
-        (tmp_path / ".vscode" / "settings.json").write_text("{}")
-        manifest = {"files": [], "file_hashes": {}, "mcp_servers": []}
-        installer.configure_mcp_servers(
-            ["copilot"],
-            tmp_path,
-            manifest,
-            {},
-            tmp_path / "backup",
-            servers=["github", "terraform"],
-        )
-        assert manifest["mcp_servers"] == {"copilot": ["carter-github", "carter-terraform"]}
-
-    def test_default_is_all_servers_backward_compatible(self, tmp_path):
-        from carter import installer
-
-        manifest = {"files": [], "file_hashes": {}, "mcp_servers": []}
-        # No `servers=` arg → today's behaviour: the full shipped set.
-        installer.configure_mcp_servers(["opencode"], tmp_path, manifest, {}, tmp_path / "backup")
-        assert manifest["mcp_servers"] == {
-            "opencode": ["carter-github", "carter-terraform", "carter-atlassian"]
-        }
-
-    def test_atlassian_skipped_for_copilot_wired_for_opencode(self, tmp_path, capsys):
-        from carter import installer
-
-        settings = tmp_path / "vscode" / "settings.json"
-        settings.parent.mkdir(parents=True)
-        # A stale npx bridge entry from an older install is removed.
-        settings.write_text(json.dumps({"mcp.servers": {"carter-atlassian": {"command": "npx"}}}))
-        manifest = {"files": [], "file_hashes": {}, "mcp_servers": []}
-        count = installer.configure_mcp_servers(
-            ["copilot", "opencode"],
-            tmp_path,
-            manifest,
-            {},
-            tmp_path / "backup",
-            servers=["atlassian"],
-        )
-        assert "carter-atlassian: not available for copilot" in capsys.readouterr().out
-        assert count == 1  # only the OpenCode entry
-        assert manifest["mcp_servers"] == {"copilot": [], "opencode": ["carter-atlassian"]}
-        assert "carter-atlassian" not in json.loads(settings.read_text())["mcp.servers"]
-        opencode_cfg = json.loads((tmp_path / "opencode" / "opencode.json").read_text())
-        assert opencode_cfg["mcp"]["carter-atlassian"]["type"] == "remote"
-
-    def test_cli_atlassian_copilot_only_succeeds(self, tmp_path):
+    def test_cli_mcp_servers_subset(self, tmp_path, fake_opencode):
         from click.testing import CliRunner
 
         from carter.cli import main
 
+        fake_opencode()
         result = CliRunner().invoke(
             main,
-            [
-                "install",
-                "--target",
-                "copilot",
-                "--mcp",
-                "--mcp-servers",
-                "atlassian",
-                "--base-dir",
-                str(tmp_path),
-            ],
-        )
-        assert result.exit_code == 0, result.output
-        assert "carter-atlassian: not available for copilot" in result.output
-
-    def test_unknown_server_is_rejected(self, tmp_path):
-        from carter import installer
-
-        manifest = {"files": [], "file_hashes": {}, "mcp_servers": []}
-        with pytest.raises(ValueError, match="bogus"):
-            installer.configure_mcp_servers(
-                ["opencode"], tmp_path, manifest, {}, tmp_path / "backup", servers=["bogus"]
-            )
-
-    def test_cli_mcp_servers_subset(self, tmp_path):
-        from click.testing import CliRunner
-
-        from carter.cli import main
-
-        result = CliRunner().invoke(
-            main,
-            [
-                "install",
-                "--target",
-                "opencode",
-                "--mcp",
-                "--mcp-servers",
-                "github",
-                "--base-dir",
-                str(tmp_path),
-            ],
+            ["install", "--mcp", "--mcp-servers", "github", "--base-dir", str(tmp_path)],
         )
         assert result.exit_code == 0, result.output
         opencode_cfg = json.loads((tmp_path / "opencode" / "opencode.json").read_text())
-        wired = set(opencode_cfg["mcp"])
-        assert "carter-github" in wired
-        assert "carter-terraform" not in wired
-        assert "carter-atlassian" not in wired
+        assert set(opencode_cfg["mcp"]["servers"]) == {"carter-github"}
 
     def test_cli_mcp_servers_rejects_unknown(self, tmp_path):
         from click.testing import CliRunner
