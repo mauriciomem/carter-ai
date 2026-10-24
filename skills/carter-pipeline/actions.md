@@ -10,6 +10,13 @@ Design and create GitHub Actions workflows for CI/CD.
 4. **Secure** — never echo secrets, minimize permissions with `permissions:` key
 5. **Cacheable** — cache dependencies, build artifacts, and Docker layers
 
+> **Pinning note:** examples below use readable major tags (`@v7`) for brevity. In real
+> workflows pin the full commit SHA with an exact-version comment, as in the first
+> `checkout` step — e.g. `actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1`.
+> Resolve annotated tags to the commit SHA (`gh api repos/OWNER/REPO/git/ref/tags/vX.Y.Z`,
+> then follow `object.type == "tag"`). Let Dependabot/Renovate keep pins current.
+> Versions current as of 2026-10.
+
 ## Workflow Structure
 
 ```yaml
@@ -28,7 +35,7 @@ jobs:
   lint:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Lint
         run: echo "lint step"
 
@@ -36,7 +43,7 @@ jobs:
     needs: lint
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Test
         run: echo "test step"
 
@@ -44,7 +51,7 @@ jobs:
     needs: test
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Build
         run: echo "build step"
 
@@ -101,8 +108,8 @@ jobs:
   ci:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v4
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10
       - name: Lint
         run: uv run --with ruff ruff check .
       - name: Test
@@ -118,8 +125,8 @@ jobs:
   ci:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
       - run: go vet ./...
@@ -139,8 +146,8 @@ jobs:
       contents: read
       pull-requests: write
     steps:
-      - uses: actions/checkout@v4
-      - uses: hashicorp/setup-terraform@v3
+      - uses: actions/checkout@v7
+      - uses: hashicorp/setup-terraform@v4
       - run: terraform fmt -check
       - run: terraform init
       - run: terraform validate
@@ -154,8 +161,8 @@ jobs:
   ci:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version-file: .nvmrc
           cache: npm
@@ -167,7 +174,7 @@ jobs:
 ## Caching
 
 ```yaml
-- uses: actions/cache@v4
+- uses: actions/cache@v6
   with:
     path: |
       ~/.cache/uv
@@ -205,12 +212,12 @@ jobs:
     strategy:
       matrix:
         os: [ubuntu-latest, macos-latest]
-        python-version: ['3.11', '3.12', '3.13']
+        python-version: ['3.11', '3.14', '3.15']
       fail-fast: true
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
         with:
           python-version: ${{ matrix.python-version }}
       - run: python -m pytest
@@ -220,13 +227,13 @@ jobs:
 
 ```yaml
 # Upload
-- uses: actions/upload-artifact@v4
+- uses: actions/upload-artifact@v7
   with:
     name: build-output
     path: dist/
 
 # Download (in a later job)
-- uses: actions/download-artifact@v4
+- uses: actions/download-artifact@v8
   with:
     name: build-output
 ```
@@ -240,14 +247,14 @@ on:
     inputs:
       python-version:
         type: string
-        default: '3.13'
+        default: '3.14'
 
 jobs:
   test:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
         with:
           python-version: ${{ inputs.python-version }}
       - run: pytest
@@ -259,7 +266,7 @@ jobs:
   test:
     uses: ./.github/workflows/reusable-test.yml
     with:
-      python-version: '3.13'
+      python-version: '3.14'
 ```
 
 ## Security Checklist

@@ -103,7 +103,7 @@ project/
 
 - `gofmt`/`goimports` are non-negotiable. Lint with `golangci-lint` (`errcheck`, `govet`, `staticcheck`, `gosec`, `ineffassign`, `unused`, `gocritic`).
 - Scan with `govulncheck` (known CVEs) and `gosec` (security smells) in CI.
-- Use `go mod`; commit `go.mod` and `go.sum`. Prefer stdlib; add a dependency only when it clearly beats it.
+- Use `go mod`; commit `go.mod` and `go.sum`. Target a supported toolchain in `go.mod` (`go 1.26` or newer — Go supports the two latest majors; 1.27 is current as of 2026-10). Prefer stdlib; add a dependency only when it clearly beats it.
 - Modern Go you should reach for: `slog` structured logging, `min`/`max`/`clear` (1.21), `ServeMux` method+wildcard routing (1.22), iterators (1.23), `b.Loop` (1.24), `testing/synctest` (1.25).
 
 **Source:** [Go Modules Reference](https://go.dev/ref/mod), [govulncheck](https://pkg.go.dev/golang.org/x/vuln/cmd/govulncheck)
