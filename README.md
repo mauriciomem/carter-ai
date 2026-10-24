@@ -7,12 +7,14 @@ learning, and project management. Instead of one generic assistant, you get
 specialized agents with focused expertise and strict boundaries; a central
 orchestrator (**Maestro**) routes each request to the right specialist.
 
-Runs on **VS Code**, **Copilot CLI**, and **OpenCode** — same agents, skills, and
-MCP integrations across all three.
+Carter runs on **[OpenCode](https://opencode.ai/v2/docs/) 2.1 or newer** — the only
+supported harness (the program that runs the agents and talks to the model).
 
 ## Install
 
-**Prerequisites:** [uv](https://docs.astral.sh/uv/) and Python 3.11+.
+**Prerequisites:** [uv](https://docs.astral.sh/uv/), Python 3.11+, and
+[OpenCode](https://opencode.ai/v2/docs/) >= 2.1 on your `PATH` (`carter install`
+stops with an error if `opencode` is missing or older).
 
 ```bash
 uv tool install git+https://github.com/mauriciomem/carter-ai.git
@@ -28,12 +30,11 @@ Then choose how to use Carter:
 
 | Command | What it does |
 |---------|--------------|
-| `carter install` | System-level: copies agents/skills to `~/.copilot/` (and/or OpenCode) for use in every workspace |
-| `carter init <dir>` | Per-project: scaffolds a `.carter/` workspace with agents generated from templates |
+| `carter install` | System-level: writes agents, skills and global rules to `~/.config/opencode/`, state to `~/.carter/` |
+| `carter init <dir>` | Per-project: scaffolds `.carter/`, `.opencode/agents/` and `AGENTS.md` from templates |
 
 ```bash
-carter install                  # all targets
-carter install --target copilot # Copilot only (or: opencode, all)
+carter install                  # agents, skills, rules, knowledge seeds
 carter install --mcp            # also configure MCP servers (needs tokens)
 carter install --uninstall      # remove
 
@@ -45,6 +46,18 @@ For MCP servers, set the relevant tokens first (`GITHUB_TOKEN`, `TFE_TOKEN`);
 the Atlassian server authenticates via OAuth in your client. See [.env.example](.env.example).
 
 → Full walkthrough: **[docs/getting-started.md](docs/getting-started.md)**
+
+### Upgrading from a Copilot-era install
+
+Earlier Carter versions also targeted GitHub Copilot and VS Code. That support is gone.
+
+- **State migrates automatically.** The first `carter install` copies knowledge, the
+  manifest and backups from `~/.copilot/` to `~/.carter/` (nothing is deleted).
+- **Old Copilot/VS Code files stay put.** `carter uninstall --legacy` removes the ones
+  the old manifest lists, skipping anything you edited.
+- **Edit `carter.yaml`:** delete the `target:` key (it is now an error), and collapse
+  each per-target `models:` entry to one OpenCode string, e.g.
+  `thinkers: anthropic/claude-opus-5-5`. Then run `carter update .`.
 
 ## Usage
 
@@ -58,12 +71,6 @@ Maestro routes single-domain requests to one specialist and chains specialists
 for cross-domain work. The **quality gate** dispatches reviewers (engineer for
 code, architect for design) that report findings by severity — 🚨 Blocking,
 ⚠️ Suggestion, 💡 Nitpick — and is configurable in `carter.yaml`.
-
-**Copilot CLI:** launch Maestro, reach specialists by `@`-mention:
-
-```bash
-copilot --agent carter-maestro -p "@carter-devops write a Terraform module for S3" --allow-all
-```
 
 **Spend fewer tokens per task.** Each maestro hand-off re-sends context, so when you
 already know the domain, **`@`-mention the specialist directly** (e.g. `@carter-engineer`)
@@ -104,12 +111,12 @@ first-class citizen, each the authority in its domain.
 | **DevOps** | CI/CD, IaC, containers, git | Pipelines, Terraform, Packer, deployment — the **only** agent that pushes/mutates infra |
 | **Learner** | Explanation, research, memory | Documentation, mistake capture, topic research |
 | **PM** | Planning, risk, agile | WBS, roadmaps, sprint planning, risk assessment |
-| **Narrator** | External-facing content | The external-content specialist (the way Architect is the design specialist) — drafts + **redacts** outward content (PRs, Jira, docs, announcements); on `guarded`/`strict` substantive outward content routes through the narrator's redaction pass before DevOps transmits it (ADR-0001) |
+| **Narrator** | External-facing content | The external-content specialist (the way Architect is the design specialist) — drafts + **redacts** outward content (PRs, Jira, docs, announcements); substantive outward content should go through the narrator's redaction pass before DevOps transmits it (prompt-level guidance, ADR-0001) |
 | **Security** | Defensive review, threat modeling, authorized methodology | any agent can flag a risk; carter-security specializes in defensive review and *authorized* security methodology. Advisory only (it threat-models, reviews, and triages — it does not run attacks); offensive methodology is authorized-context-gated; it never pushes — remediation is a handoff to devops. |
 
-> Across targets, the per-agent `mode:` (`primary`/`subagent`) is **OpenCode-scoped**:
-> OpenCode reads it; VS Code ignores it (there the primary/subagent split comes from
-> the `agents:` allowlist).
+> Maestro is emitted with `mode: primary` and the specialists with `mode: subagent`
+> ([OpenCode agents](https://opencode.ai/v2/docs/agents/)). Only Maestro may launch
+> subagents, and only `carter-*` ones.
 
 ## Carter-Ops — write operations
 
@@ -138,14 +145,13 @@ PATH; `--no-harness` skips it explicitly).
 | Config key | Effect |
 |------------|--------|
 | `policy.level` | Risk-based strictness: `guarded` / `strict` (pre-action gates) |
-| `models` | Per-agent model by tier (thinkers = Opus; implementers = Sonnet, incl. pm + narrator; `overrides > profile > tier > default`) |
+| `models` | Per-agent model by tier, each a single `provider/model[#variant]` string (thinkers = Opus; implementers = Sonnet, incl. pm + narrator; `overrides > profile > tier > default`) |
 | `profile` | Cost profile: `quality` (all Opus) or `budget` (Sonnet where safe). See [docs/reference/cost-and-models.md](docs/reference/cost-and-models.md) |
 | `personality.skepticism` | How much Carter challenges your decisions |
 | `quality_gate.enabled` | Multi-agent review before push |
 | `tdd.strict` | Force test-first workflow |
 | `redaction.categories` | What the narrator redacts from external-facing content |
 | `agents` | Which agents to generate |
-| `target` | Where to write: `copilot` / `opencode` / `all` |
 | `agent_suffix` | Distinguish workspace agents from global (default `local`) |
 | `docs_language` | Language of Carter's internal docs — ADRs, RFCs, `.carter/` plans and knowledge, memories (default `en`). Everything in the repository or sent outward is always English |
 
@@ -153,25 +159,25 @@ PATH; `--no-harness` skips it explicitly).
 
 ## Strictness policy
 
-Carter's safety posture is **enforced**, not just described. A **risk-based
-strictness policy** (ADR-0010,
-superseding ADR-0005) gives each
-agent a deny-by-default tool allowlist and gates actions across four risk
-categories — **read → local-write → remote-write → dangerous** (secret reads fold
-into `remote-write`; outward content is an enforced redaction handoff, not a
-category). One `policy.level` knob sets how strict:
+Each agent gets an ordered OpenCode
+[`permissions:`](https://opencode.ai/v2/docs/permissions/) list (last match wins)
+generated from a **risk-based strictness policy** (ADR-0014; categories from
+ADR-0010). Everything starts at `ask`; reading and searching are allowed; four risk
+categories — **read → local-write → remote-write → dangerous** — are granted per
+agent. One `policy.level` knob sets how strict:
 
 | Level | Behaviour |
 |-------|-----------|
-| `guarded` | The floor and the default — remote-write is `ask`, dangerous is `gate` |
-| `strict` | Regulated / prod-critical — remote-write is `gate`, dangerous is `deny` |
+| `guarded` | The floor and the default — remote-write asks, dangerous asks |
+| `strict` | Regulated / prod-critical — remote-write asks, dangerous is denied |
 
-Where the target runtime supports it (OpenCode `permission`), Carter **emits native
-enforcement**; elsewhere (the `copilot` target) it degrades to honestly-labelled
-prose and `carter check` flags the gap. `devops` is the **sole pusher** — the only
-agent holding `remote-write`/`dangerous`. Substantive outward content is forced
-through `narrator` for redaction (a `gate`-tier handoff), then handed to `devops`
-to transmit.
+`devops` is the **sole pusher** — the only agent holding `remote-write`/`dangerous`;
+risky shell commands are denied for everyone else.
+
+**Limits, stated plainly.** OpenCode has only `allow`/`ask`/`deny`, so Carter's
+`gate` tier is emitted as `ask`. Choosing **"Allow always"** at a prompt saves a
+project-scoped allow that bypasses that ask from then on. The narrator redaction
+handoff is prompt-level guidance, not something OpenCode enforces.
 
 → Tutorial: **[docs/strictness-policy.md](docs/strictness-policy.md)** · schema: **[docs/reference/frontmatter.md](docs/reference/frontmatter.md)**
 
@@ -196,13 +202,15 @@ architecture decisions are ADRs kept maintainer-local under `docs/adr/` (not ver
 
 ## MCP servers
 
-Configured by `carter install --mcp` into VS Code, Copilot CLI, and OpenCode:
+Configured by `carter install --mcp` under `mcp.servers.<name>` in
+`~/.config/opencode/opencode.json` ([OpenCode MCP servers](https://opencode.ai/v2/docs/mcp-servers/)).
+Their tools have no explicit permission rule, so each call falls to the `ask` baseline.
 
 | Server | Purpose |
 |--------|---------|
 | `carter-github` | Repos, PRs, issues (read-only) |
 | `carter-terraform` | Terraform Registry, HCP Terraform / TFE workspaces (Docker, `TFE_TOKEN`) |
-| `carter-atlassian` | Jira issues, Confluence pages (official remote server, OAuth) — **OpenCode only**; not wired for VS Code / Copilot CLI |
+| `carter-atlassian` | Jira issues, Confluence pages (official remote server, OAuth) |
 
 **Install only what you use.** MCP tool schemas are the largest per-request token
 surface, so a workspace should wire only the servers it needs:
@@ -219,7 +227,7 @@ An unused server adds **zero** tool-schema tokens.
 [`github/github-mcp-server`](https://github.com/github/github-mcp-server) via Docker
 (digest-pinned), in **read-only** mode with a surgical tool allowlist. This needs a
 running **Docker daemon** (the no-Docker alternative is the server's remote-HTTP
-transport at `https://api.githubcopilot.com/mcp/`, not wired by default). Set
+transport, not wired by default). Set
 `GITHUB_TOKEN` before use.
 
 > **"Read-only" is MCP-surface only.** It removes GitHub *write tools* from the model's
@@ -242,13 +250,11 @@ The suite (installer, scaffold, parity, carter-ops) runs on every push and PR vi
 
 ```
 carter/        CLI package (cli, installer, install/, scaffold, config, plans, state, ops/)
-templates/     Jinja2 agent + instruction templates (`carter init` / `update`)
-agents/        Static agent definitions (copied by `carter install`)
-instructions/  Global instructions (copied by `carter install`)
+templates/     Jinja2 agent + AGENTS.md templates (install, init, update)
 skills/        Skill definitions (hand-maintained)
 knowledge/     Knowledge-base seed templates
-mcp/           MCP server config templates
-docs/          Documentation (incl. ADRs)
+mcp/opencode/  MCP server config templates
+docs/          Documentation
 tests/         Unit tests (offline)
 evals/         Prompt/skill evals (offline + live)
 ```
@@ -263,7 +269,9 @@ evals/         Prompt/skill evals (offline + live)
 |---------|-----|
 | `carter: command not found` | `~/.local/bin` not on `PATH` — run `uv tool update-shell` and reload your shell (see [Install](#install)) |
 | `uv tool upgrade` says "Nothing to upgrade" | Force a reinstall from the latest commit: `uv tool install --force git+https://github.com/mauriciomem/carter-ai.git` |
-| Agents not appearing in VS Code | Restart VS Code; agents load from `~/.copilot/agents/` (system) or `.github/agents/` (workspace) on startup |
+| `carter install` fails: opencode not found / too old | Install or upgrade [OpenCode](https://opencode.ai/v2/docs/) to 2.1+ and make sure `opencode --version` works |
+| Agents not appearing in OpenCode | Run `carter check .` — it runs `opencode debug agents` and names any agent OpenCode dropped. Agents load from `~/.config/opencode/agents/` (system) or `.opencode/agents/` (workspace) |
+| `Unknown key 'target'` | Delete `target:` from `.carter/carter.yaml` (see [Upgrading](#upgrading-from-a-copilot-era-install)) |
 | MCP server conflicts | Carter installs alongside existing servers as `carter-*`; remove the original to avoid duplicate tools |
 | Missing tokens for `--mcp` | Run `carter install --mcp -v` to see which env vars are unset |
 

@@ -17,8 +17,7 @@ There's also a **memory layer** for raw, unprocessed notes that haven't been pro
 
 | Level | Location | Scope |
 |-------|----------|-------|
-| **Visible memory** | `~/.carter/memories/` | Cross-project + per-project |
-| **Platform memory** | `/memories/` (VS Code internal) | Per-session + user-level |
+| **Memory** | `~/.carter/memories/` | Cross-project + per-project |
 
 **The key distinction:** Memory is raw notes. Knowledge is curated, structured, and consulted before acting.
 
@@ -107,7 +106,7 @@ Entries are **promoted** from raw memory via `@carter-maestro distill`. This ski
 
 Memory is where unprocessed observations land before they're promoted to knowledge. Think of it as a scratchpad.
 
-### Visible Memory (`~/.carter/memories/`)
+### `~/.carter/memories/`
 
 Plain Markdown files on disk that both you and Carter can browse and edit:
 
@@ -129,21 +128,10 @@ Plain Markdown files on disk that both you and Carter can browse and edit:
 | Session | `~/.carter/memories/session/` | Until distill cleanup |
 | Repo | `~/.carter/memories/repo/<name>/` | Permanent |
 
-**Why visible memory exists:** VS Code's built-in `/memories/` tool stores files in internal storage — invisible, not portable, not git-trackable. Visible memory is browseable, works on all surfaces, and can be manually edited.
+Every agent may read `~/.carter/*`, and agents holding `local-write` may edit `~/.carter/memories/*` without a prompt (see the emitted `permissions:` in [strictness-policy.md](strictness-policy.md)).
 
-### Platform Memory (`/memories/`)
-
-VS Code's built-in memory tool. Its key advantage: **auto-loading** — the first 200 lines are injected into the agent's context automatically.
-
-| Scope | Persistence | Available On |
-|-------|-------------|-------------|
-| User | Permanent | VS Code only |
-| Session | Conversation-scoped | VS Code only |
-| Repo | Workspace-scoped | VS Code only |
-
-**Limitations:** VS Code only, invisible to users, not portable across machines.
-
-Carter writes to **both** visible and platform memory simultaneously when platform memory is available. Visible memory is always the source of truth.
+The global rules mention a platform `/memories/` directory "if available"; OpenCode
+has none, so `~/.carter/memories/` is the source of truth.
 
 ---
 
@@ -205,16 +193,6 @@ All three are **on-demand only** — they never auto-run.
 
 ---
 
-## Cross-Surface Behavior
-
-| Surface | Visible Memory | Platform Memory | Knowledge | Distill | Reflect |
-|---------|---------------|----------------|-----------|---------|---------|
-| VS Code | ✅ Read/write | ✅ Read/write (auto-loaded) | ✅ Read | ✅ | ✅ |
-| Copilot CLI | ✅ Read/write | Varies | ✅ Read | ✅ | ✅ |
-| OpenCode | ✅ Read/write | ❌ Not available | ✅ Read | ✅ | ✅ |
-
----
-
 ## Installation
 
 ### Workspace-level (via `carter init`)
@@ -240,7 +218,7 @@ Creates:
 - Records all paths in `~/.carter/manifest.json` for clean uninstall; backups of
   replaced files go to `~/.carter/backups/<timestamp>/`
 
-### Upgrading from a `~/.copilot` install
+### Upgrading from a Copilot-era install
 
 Earlier versions kept knowledge, the manifest and backups under `~/.copilot/`. The
 first `carter install` copies them to `~/.carter/knowledge/`, `~/.carter/manifest.json`
@@ -258,4 +236,3 @@ that manifest it only lists what to remove by hand.
 
 - Does not initialize Git in memory directories (workspace `.carter/` has its own git)
 - Does not sync across machines (local only)
-- Does not create platform `/memories/` files (VS Code manages those)

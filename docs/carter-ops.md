@@ -26,7 +26,7 @@ Agent loads the carter-ops skill
 
 **Key principle:** the model runs git / `gh` / `curl` commands directly. The `carter ops` subcommand is only a small utility around that: it prints config values, records audit entries, and records policy overrides. It does not execute operations itself.
 
-The protocol lives in a single skill, `skills/carter-ops/SKILL.md`. It is triggered by the `ops:` prefix: every globally installed agent (`agents/*.md`), the global `instructions/copilot-instructions.md`, and OpenCode's global `AGENTS.md` carry the one-liner *"When the user's request starts with `ops:`, load the `carter-ops` skill and follow its instructions exactly."*
+The protocol lives in a single skill, `skills/carter-ops/SKILL.md`. It is triggered by the `ops:` prefix: every agent rendered from `templates/` and the global and workspace `AGENTS.md` carry the one-liner *"When the user's request starts with `ops:`, load the `carter-ops` skill and follow its instructions exactly."*
 
 ## Setup
 

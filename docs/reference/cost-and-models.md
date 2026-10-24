@@ -12,9 +12,9 @@ Last reviewed: 2026-10-24.
 
 **Carter is a scaffolder, not a program that runs your AI.** When you run `carter
 install` or `carter init`, Carter writes a pile of static files — agent definitions,
-skills, and MCP server configs — into your editor or CLI, and then it *exits*. From that
-point on, your **harness** (GitHub Copilot, OpenCode, or VS Code) is what actually talks
-to the model.
+skills, and MCP server configs — into OpenCode's config directories, and then it
+*exits*. From that point on, your **harness** (OpenCode, the program that runs the
+agents) is what actually talks to the model.
 
 Why this matters for your bill: Carter can only influence two things about cost —
 
@@ -26,17 +26,12 @@ Everything else that saves money — reusing cached context, summarizing long
 conversations, loading files only when needed — is your harness's job, not Carter's. So
 this guide focuses on the two knobs Carter *does* control.
 
-## How you're billed (both harnesses charge for tokens)
+## How you're billed
 
-Both supported harnesses now bill by **tokens** — the chunks of text the model reads and
-writes:
-
-| | **GitHub Copilot** | **OpenCode** |
-|---|---|---|
-| You pay for | tokens → "AI Credits" (1 credit = $0.01) | tokens (your own API key) |
-| Bigger prompts cost… | more | more |
-| A more expensive model costs… | **more, per token** | **more, per token** |
-| Tool calls & agent-to-agent hops | cost extra (they re-send context) | cost extra |
+OpenCode sends requests to whichever model provider you configured, and providers
+bill by **tokens** — the chunks of text the model reads and writes. Bigger prompts
+cost more, a more expensive model costs more **per token**, and every tool call or
+agent-to-agent hop re-sends context.
 
 The key takeaway: **the model you choose is a multiplier on every token.** A cheaper
 model doesn't just cost less once — it costs less on *everything* that agent reads and
@@ -137,9 +132,7 @@ A `profile:` re-tiers everyone at once. To change **one** agent, add a per-agent
 ```yaml
 models:
   overrides:
-    engineer:
-      copilot: "Claude Haiku 5.5"          # cheapest tier for well-specified impl work
-      opencode: "anthropic/claude-haiku-5-5"
+    engineer: anthropic/claude-haiku-5-5   # cheapest tier for well-specified impl work
 ```
 
 Then re-run `carter update`. Haiku is the cheapest option for well-specified
