@@ -3,12 +3,15 @@
 from __future__ import annotations
 
 import json
+import platform
 from pathlib import Path
 
 import pytest
 
 from carter import installer as install
 from carter.install.components import _OPENCODE_AGENTS_MD, _OPENCODE_AGENTS_MD_LEGACY
+from carter.install.files import _sha256
+from carter.install.jsonc import _load_jsonc, _strip_jsonc
 
 # ──────────────────────────────────────────────────────────────────────────────
 # File operations
@@ -473,37 +476,37 @@ class TestOfficialGitHubServer:
 class TestJSONCParsing:
     def test_strip_single_line_comments(self) -> None:
         text = '{\n  // comment\n  "key": "value"\n}'
-        result = json.loads(install._strip_jsonc(text))
+        result = json.loads(_strip_jsonc(text))
         assert result == {"key": "value"}
 
     def test_strip_block_comments(self) -> None:
         text = '{\n  /* block\n     comment */\n  "key": "value"\n}'
-        result = json.loads(install._strip_jsonc(text))
+        result = json.loads(_strip_jsonc(text))
         assert result == {"key": "value"}
 
     def test_strip_trailing_commas(self) -> None:
         text = '{\n  "a": 1,\n  "b": 2,\n}'
-        result = json.loads(install._strip_jsonc(text))
+        result = json.loads(_strip_jsonc(text))
         assert result == {"a": 1, "b": 2}
 
     def test_preserves_comments_inside_strings(self) -> None:
         text = '{\n  "url": "https://example.com // not a comment",\n  "key": "value"\n}'
-        result = json.loads(install._strip_jsonc(text))
+        result = json.loads(_strip_jsonc(text))
         assert result["url"] == "https://example.com // not a comment"
 
     def test_preserves_slashes_inside_strings(self) -> None:
         text = '{\n  "path": "/* keep this */"\n}'
-        result = json.loads(install._strip_jsonc(text))
+        result = json.loads(_strip_jsonc(text))
         assert result["path"] == "/* keep this */"
 
     def test_load_jsonc_returns_none_on_garbage(self, tmp_path: Path) -> None:
         f = tmp_path / "bad.json"
         f.write_text("not json {{{")
-        assert install._load_jsonc(f) is None
+        assert _load_jsonc(f) is None
 
     def test_load_jsonc_returns_none_on_missing_file(self, tmp_path: Path) -> None:
         f = tmp_path / "missing.json"
-        assert install._load_jsonc(f) is None
+        assert _load_jsonc(f) is None
 
     def test_realistic_vscode_settings(self) -> None:
         """Parse a realistic VS Code settings.json with mixed JSONC features."""
@@ -524,7 +527,7 @@ class TestJSONCParsing:
   /* MCP configuration */
   "mcp.servers": {},
 }"""
-        result = json.loads(install._strip_jsonc(text))
+        result = json.loads(_strip_jsonc(text))
         assert result["workbench.colorTheme"] == "Lunar-dark-theme"
         assert result["editor.fontFamily"] == "Fira Code"
         assert ".tab:not(:hover) .tab-actions" in result["custom-ui-style.stylesheet"]
@@ -610,8 +613,8 @@ class TestHashing:
     def test_sha256_consistent(self, tmp_path: Path) -> None:
         f = tmp_path / "test.txt"
         f.write_text("hello world\n")
-        h1 = install._sha256(f)
-        h2 = install._sha256(f)
+        h1 = _sha256(f)
+        h2 = _sha256(f)
         assert h1 == h2
         assert h1.startswith("sha256:")
 
@@ -620,7 +623,7 @@ class TestHashing:
         f2 = tmp_path / "b.txt"
         f1.write_text("hello\n")
         f2.write_text("world\n")
-        assert install._sha256(f1) != install._sha256(f2)
+        assert _sha256(f1) != _sha256(f2)
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -767,17 +770,17 @@ class TestMCPFlag:
 
 class TestCrossPlatform:
     def test_vscode_settings_path_macos(self, monkeypatch) -> None:
-        monkeypatch.setattr(install.platform, "system", lambda: "Darwin")
+        monkeypatch.setattr(platform, "system", lambda: "Darwin")
         path = install._vscode_settings_path(None)
         assert "Library/Application Support/Code/User/settings.json" in str(path)
 
     def test_vscode_settings_path_linux(self, monkeypatch) -> None:
-        monkeypatch.setattr(install.platform, "system", lambda: "Linux")
+        monkeypatch.setattr(platform, "system", lambda: "Linux")
         path = install._vscode_settings_path(None)
         assert str(path).endswith(".config/Code/User/settings.json")
 
     def test_vscode_user_dirs_linux_includes_variants(self, monkeypatch) -> None:
-        monkeypatch.setattr(install.platform, "system", lambda: "Linux")
+        monkeypatch.setattr(platform, "system", lambda: "Linux")
         dirs = [str(p) for p in install._vscode_user_dirs(None)]
         joined = "\n".join(dirs)
         assert "VSCodium" in joined
@@ -786,7 +789,7 @@ class TestCrossPlatform:
 
     def test_vscode_settings_prefers_existing_variant(self, base_dir, monkeypatch) -> None:
         """When a non-stable variant dir exists, it is preferred over the default."""
-        monkeypatch.setattr(install.platform, "system", lambda: "Linux")
+        monkeypatch.setattr(platform, "system", lambda: "Linux")
         codium = base_dir / ".config" / "VSCodium" / "User"
         codium.mkdir(parents=True)
         monkeypatch.setattr(

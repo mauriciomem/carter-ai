@@ -5,7 +5,6 @@ from __future__ import annotations
 import copy
 import json
 import re
-from collections.abc import Iterable
 from pathlib import Path
 from typing import Any
 
@@ -21,14 +20,11 @@ DEFAULT_CONFIG: dict[str, Any] = {
     "version": "2",
     "workspace": {
         "name": "my-workspace",
-        "description": "",
         "mode": "umbrella",
     },
     "identity": {
         "git_account": "",
-        "git_org": None,
         "bot_name": "carter-bot",
-        "bot_email": "carter-bot@users.noreply.github.com",
     },
     "personality": {
         "skepticism": "scaled",
@@ -50,10 +46,8 @@ DEFAULT_CONFIG: dict[str, Any] = {
     "quality_gate": {
         "enabled": True,
         "max_iterations": 2,
-        "trigger": "user-initiated",
     },
     "redaction": {
-        "enabled": True,
         "categories": [
             "secrets",
             "internal_urls",
@@ -68,9 +62,6 @@ DEFAULT_CONFIG: dict[str, Any] = {
         "strict": False,
         "spec_handoff": True,
     },
-    "state": {
-        "git_tracked": True,
-    },
     # Plan-splitting thresholds. Numeric budgets are tunable per
     # workspace; the structural rules (every plan is a directory, status in
     # frontmatter) are invariant and not configurable.
@@ -78,19 +69,16 @@ DEFAULT_CONFIG: dict[str, Any] = {
         "step_file_threshold": 3,  # > N steps -> per-step files
         "readme_max_lines": 150,  # README split budget
         "step_max_lines": 80,  # step-file split budget
-        "git_regime": "private",  # private | workspace (umbrella mode only)
     },
-    # Risk-based strictness policy. Control keys only; the shipped taxonomy /
-    # tool->risk map / allowlist live as module constants below (user-extensible
-    # via carter.yaml policy.tool_risk / policy.allowlist). `guarded` is the floor
+    # Risk-based strictness policy. Control keys only; the shipped taxonomy and
+    # per-agent allowlist live as module constants below (the allowlist is
+    # user-extensible via carter.yaml policy.allowlist). `guarded` is the floor
     # and the default for everything (new and existing/omitted) — strictness is two
     # levels only, so an absent or unrecognized level resolves to `guarded` through
     # this default.
     "policy": {
         "level": "guarded",  # guarded | strict
-        "unknown_tool": "ask",  # gate for tools not in the risk map: allow | ask | deny
         "overrides": {},  # category -> gate, explicit per-category override
-        "audit_overrides": True,  # log escape-hatch overrides via carter ops
     },
     # Per-agent model. Dict-shaped per tier (so `_deep_merge` doesn't
     # wipe it — same footgun the taxonomy maps avoid). Each tier maps a target to a
@@ -110,6 +98,11 @@ DEFAULT_CONFIG: dict[str, Any] = {
     },
     "target": "copilot",
 }
+
+
+def resolve_targets(target: str) -> list[str]:
+    """Resolve a config/CLI ``target`` to concrete tool targets (``all`` = both)."""
+    return ["copilot", "opencode"] if target == "all" else [target]
 
 
 class ConfigError(Exception):
@@ -226,7 +219,7 @@ def _deep_merge(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any
 # ──────────────────────────────────────────────────────────────────────────────
 # Risk-based strictness policy model
 # ──────────────────────────────────────────────────────────────────────────────
-# The taxonomy, tool->risk map, and per-agent allowlist are shipped with Carter and
+# The taxonomy and per-agent allowlist are shipped with Carter; the allowlist is
 # user-extensible via carter.yaml. They are dict-shaped on purpose: `_deep_merge`
 # replaces lists wholesale, so a list shape would let a single user override silently
 # wipe the shipped defaults. Dicts merge key-by-key instead.
@@ -249,27 +242,6 @@ RISK_TAXONOMY: dict[str, dict[str, str]] = {
     "local-write": {"guarded": "allow", "strict": "allow"},
     "remote-write": {"guarded": "ask", "strict": "gate"},  # incl. reading secrets
     "dangerous": {"guarded": "gate", "strict": "deny"},  # infra-mutate + destructive
-}
-
-# Tool/command -> risk category. Shipped defaults; user-extensible via
-# `policy.tool_risk` in carter.yaml (deep-merged over this map). Secret reads
-# (`vault read`, `read .env`) classify as `remote-write` (they gate identically).
-TOOL_RISK_MAP: dict[str, str] = {
-    "git status": "read",
-    "git log": "read",
-    "git diff": "read",
-    "git add": "local-write",
-    "git commit": "local-write",
-    "git push": "remote-write",
-    "git push --force": "dangerous",
-    "terraform apply": "dangerous",
-    "terraform destroy": "dangerous",
-    "kubectl apply": "dangerous",
-    "helm upgrade": "dangerous",
-    "rm -rf": "dangerous",
-    "git reset --hard": "dangerous",
-    "vault read": "remote-write",
-    "read .env": "remote-write",
 }
 
 # Per-agent allowlist: agent -> {category: True}. A category absent
@@ -298,22 +270,6 @@ AGENT_ALLOWLIST: dict[str, dict[str, bool]] = {
 # ──────────────────────────────────────────────────────────────────────────────
 # Per-agent model
 # ──────────────────────────────────────────────────────────────────────────────
-# MODEL LAUNCH — KEEP IN SYNC. The Carter→target model-name table: one home for the
-# canonical Anthropic model id ⇄ the per-target string Carter emits (display name for
-# VS Code/Copilot, `provider/model` id for OpenCode). When a model is bumped, update
-# this table AND the `models:` tiers in DEFAULT_CONFIG above. Model ids verified
-# against the bundled `claude-api` skill (cached 2026-06-04): a stale string here is a
-# silently dead agent (test_models.py asserts the table is non-empty per shipped role).
-MODEL_NAMES: dict[str, dict[str, str]] = {
-    "claude-opus-4-8": {"copilot": "Claude Opus 4.8", "opencode": "anthropic/claude-opus-4-8"},
-    "claude-sonnet-5": {
-        "copilot": "Claude Sonnet 5",
-        "opencode": "anthropic/claude-sonnet-5",
-    },
-    # Haiku 4.5 is an opt-in implementer override only (xhigh/max effort error on it).
-    "claude-haiku-4-5": {"copilot": "Claude Haiku 4.5", "opencode": "anthropic/claude-haiku-4-5"},
-}
-
 # Role → model tier. Thinkers run on the high-reasoning model; implementers run the
 # cheaper one. A role in no tier resolves to `models.default` (the un-tiered catch-all)
 # so it never resolves empty.
@@ -392,38 +348,6 @@ def resolve_model(config: dict[str, Any], role: str) -> str:
     return (models.get("default") or {}).get(key, "")
 
 
-def most_restrictive_gate(gates: Iterable[str]) -> str:
-    """Return the strictest gate among ``gates`` (allow < ask < gate < deny).
-
-    Empty input resolves to ``allow`` (nothing to restrict).
-    """
-    strictest = "allow"
-    for gate in gates:
-        if GATE_SEVERITY[gate] > GATE_SEVERITY[strictest]:
-            strictest = gate
-    return strictest
-
-
-def resolve_action_gate(
-    categories: Iterable[str],
-    level: str,
-    taxonomy: dict[str, dict[str, str]] | None = None,
-) -> str:
-    """Resolve the effective gate for an action at ``level``.
-
-    An action may match multiple risk categories (e.g. ``git push --force`` is both
-    ``remote-write`` and ``dangerous``); most-restrictive-wins.
-    """
-    tax = taxonomy if taxonomy is not None else RISK_TAXONOMY
-    return most_restrictive_gate(tax[category][level] for category in categories)
-
-
-def effective_tool_risk_map(config: dict[str, Any]) -> dict[str, str]:
-    """Shipped tool->risk map with any ``policy.tool_risk`` overrides merged on top."""
-    overrides = (config.get("policy") or {}).get("tool_risk", {})
-    return _deep_merge(copy.deepcopy(TOOL_RISK_MAP), overrides)
-
-
 def effective_allowlist(config: dict[str, Any]) -> dict[str, dict[str, bool]]:
     """Shipped per-agent allowlist with any ``policy.allowlist`` overrides merged on top."""
     overrides = (config.get("policy") or {}).get("allowlist", {})
@@ -490,26 +414,6 @@ _BASH_COMMANDS: dict[str, tuple[str, ...]] = {
     ),
 }
 
-# Human-readable label per risk category, for the maestro policy gate table. With
-# the 4-category taxonomy the id IS the label.
-RISK_LABELS: dict[str, str] = {
-    "read": "read",
-    "local-write": "local-write",
-    "remote-write": "remote-write",
-    "dangerous": "dangerous",
-}
-
-
-def _emit_level(level: str) -> str:
-    """The strictness level Carter emits.
-
-    ``strict`` emits its real gate map (``dangerous`` ``deny``), backed by the
-    `carter check` lint (hard ack on a non-enforcing target) and the single-action
-    override ledger. This is the identity today; it remains a single seam so a
-    future level remap has one home.
-    """
-    return level
-
 
 def _opencode_permission(allowed: list[str], gates: dict[str, str]) -> dict[str, Any]:
     """Best-effort OpenCode ``permission`` map from an agent's allowlist x gates.
@@ -547,13 +451,13 @@ def _opencode_bash(allowed: list[str], gates: dict[str, str]) -> dict[str, str]:
 
 
 def _gates_for(
-    allowed: list[str], emit_level: str, overrides: dict[str, str] | None = None
+    allowed: list[str], level: str, overrides: dict[str, str] | None = None
 ) -> dict[str, str]:
-    """The gate per allowed category at ``emit_level``, with ``policy.overrides``
+    """The gate per allowed category at ``level``, with ``policy.overrides``
     applied on top (an explicit per-category override replaces the level gate).
     """
     overrides = overrides or {}
-    return {cat: overrides.get(cat, RISK_TAXONOMY[cat][emit_level]) for cat in allowed}
+    return {cat: overrides.get(cat, RISK_TAXONOMY[cat][level]) for cat in allowed}
 
 
 # The primary orchestrator (the only router) and the subagent dispatch primitive.
@@ -606,9 +510,9 @@ def policy_native_keys(config: dict[str, Any], role: str) -> dict[str, Any]:
     """
     target = config.get("target", "copilot")
     policy = config.get("policy") or {}
-    emit_level = _emit_level(policy.get("level", "guarded"))
+    level = policy.get("level", "guarded")
     allowed = [cat for cat, on in sorted(effective_allowlist(config).get(role, {}).items()) if on]
-    gates = _gates_for(allowed, emit_level, policy.get("overrides"))
+    gates = _gates_for(allowed, level, policy.get("overrides"))
     is_primary = role == PRIMARY_ROLE
     specialists = dispatch_specialists(config)
 
@@ -661,10 +565,10 @@ def _policy_block(config: dict[str, Any], role: str) -> dict[str, Any]:
     policy lint validates.
     """
     policy = config.get("policy") or {}
-    emit_level = _emit_level(policy.get("level", "guarded"))
+    level = policy.get("level", "guarded")
     allowed = [cat for cat, on in sorted(effective_allowlist(config).get(role, {}).items()) if on]
-    gates = _gates_for(allowed, emit_level, policy.get("overrides"))
-    return {"level": emit_level, "allow": allowed, "gates": gates}
+    gates = _gates_for(allowed, level, policy.get("overrides"))
+    return {"level": level, "allow": allowed, "gates": gates}
 
 
 # Machine-readable marker carrying the policy block outside the wire-facing
@@ -721,16 +625,16 @@ def policy_frontmatter(config: dict[str, Any], role: str) -> str:
 def policy_gate_table(config: dict[str, Any]) -> list[dict[str, str]]:
     """Rows for the maestro's always-on risk/gate table at the active level.
 
-    One row per category (the 4-category taxonomy): ``category`` id,
-    human ``label``, and the active level's ``gate`` with any ``policy.overrides``
+    One row per category (the 4-category taxonomy): ``category`` id and the
+    active level's ``gate`` with any ``policy.overrides``
     applied. ``strict`` shows the real ``deny`` row for ``dangerous``.
     """
     policy = config.get("policy") or {}
-    level = _emit_level(policy.get("level", "guarded"))
+    level = policy.get("level", "guarded")
     overrides = policy.get("overrides") or {}
     cats = ("read", "local-write", "remote-write", "dangerous")
     gates = _gates_for(list(cats), level, overrides)
-    return [{"category": cat, "label": RISK_LABELS[cat], "gate": gates[cat]} for cat in cats]
+    return [{"category": cat, "gate": gates[cat]} for cat in cats]
 
 
 def generate_default_config(
@@ -739,11 +643,7 @@ def generate_default_config(
 ) -> dict[str, Any]:
     """Generate a default config dict for a new workspace."""
     config = copy.deepcopy(DEFAULT_CONFIG)
-    config["workspace"] = {
-        "name": workspace_name,
-        "description": "",
-        "mode": mode,
-    }
+    config["workspace"] = {"name": workspace_name, "mode": mode}
     # `guarded` is the floor and the DEFAULT_CONFIG value, so new
     # installs and existing/omitted configs both resolve to it — no per-install bump.
     return config

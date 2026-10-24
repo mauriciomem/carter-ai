@@ -237,10 +237,10 @@ Pre-action gates by risk category, always in force and **independent of**
 `personality.skepticism` (skepticism shapes tone; the policy authorizes actions).
 A category not in an agent's allowlist is denied for that agent (deny-by-default).
 
-| Category | Risk | Gate |
-|----------|------|------|
+| Category | Gate |
+|----------|------|
 {% for row in policy_gate_table(config) %}
-| {{ row.category }} | {{ row.label }} | {{ row.gate }} |
+| {{ row.category }} | {{ row.gate }} |
 {% endfor %}
 
 `allow` = silent · `ask` = confirm with the human · `gate` = confirm **+** handoff

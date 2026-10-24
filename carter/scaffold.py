@@ -11,7 +11,6 @@ from jinja2 import Environment, FileSystemLoader
 from carter.config import (
     PRIMARY_ROLE,
     ConfigError,
-    _emit_level,
     _gates_for,
     dispatch_specialists,
     effective_allowlist,
@@ -20,6 +19,7 @@ from carter.config import (
     policy_gate_table,
     policy_native_keys,
     resolve_model,
+    resolve_targets,
 )
 from carter.resources import templates_dir
 
@@ -88,19 +88,7 @@ def agent_filename(role: str, config: dict[str, Any]) -> str:
     return f"carter-{role}{_suffix_token(config)}.md"
 
 
-def config_warnings(config: dict[str, Any]) -> list[str]:
-    """Return non-fatal configuration warnings for a workspace config.
-
-    Both shipped strictness levels **force** the narrator's redaction pass — the
-    rule-less-narrator gap that this warning once flagged at a since-dropped advisory
-    level can no longer occur. A ``redaction.enabled: false`` contradiction at an
-    enforcing level is surfaced by the policy lint instead, not here. Kept as a seam
-    so future non-fatal config warnings have a home.
-    """
-    return []
-
-
-def policy_notice(config: dict[str, Any]) -> str | None:
+def policy_notice(config: dict[str, Any]) -> str:
     """The 'you're guarded now' notice, surfaced at init/update.
 
     Both shipped levels (``guarded``/``strict``) enforce gates, so the notice always
@@ -151,11 +139,6 @@ def model_advisory(config: dict[str, Any]) -> str:
 _TARGET_ENFORCES_GATES: dict[str, bool] = {"opencode": True, "copilot": False}
 
 
-def _resolve_policy_targets(target: str) -> list[str]:
-    """Resolve a config ``target`` to concrete tool targets (``all`` = both)."""
-    return ["copilot", "opencode"] if target == "all" else [target]
-
-
 def _is_failopen_entry(entry: str) -> bool:
     """A dispatch allowlist entry that breaks deny-by-default: ``'*'`` or any glob."""
     return entry == "*" or "*" in entry
@@ -171,7 +154,7 @@ def _lint_dispatch_allowlist(config: dict[str, Any], primary_fm: dict[str, Any])
     """
     errors: list[str] = []
     expected = dispatch_specialists(config)
-    targets = _resolve_policy_targets(config.get("target", "copilot"))
+    targets = resolve_targets(config.get("target", "copilot"))
 
     if "copilot" in targets:
         agents = primary_fm.get("agents")
@@ -226,7 +209,7 @@ def lint_policy(
     the expected allowlist + gate map from the model and reports drift as an error;
     a role absent from ``installed`` is not lint's concern (missing files are handled
     by ``carter check`` itself). It also enforces the strict-on-non-enforcing-target
-    acknowledgement (fail-closed) and the redaction contradiction.
+    acknowledgement (fail-closed).
 
     Returns ``(errors, warnings)``. Scope notes:
 
@@ -241,7 +224,6 @@ def lint_policy(
 
     policy = config.get("policy") or {}
     level = policy.get("level", "guarded")
-    emit_level = _emit_level(level)
     allowlist = effective_allowlist(config)
     overrides = policy.get("overrides")
 
@@ -252,7 +234,7 @@ def lint_policy(
             errors.append(f"{role}: agent frontmatter is missing the policy block")
             continue
         expected_allow = [cat for cat, on in sorted(allowlist.get(role, {}).items()) if on]
-        expected_gates = _gates_for(expected_allow, emit_level, overrides)
+        expected_gates = _gates_for(expected_allow, level, overrides)
         if emitted.get("allow") != expected_allow:
             errors.append(
                 f"{role}: emitted allow {emitted.get('allow')} drifted from "
@@ -292,7 +274,7 @@ def lint_policy(
     if level == "strict":
         non_enforcing = [
             t
-            for t in _resolve_policy_targets(config.get("target", "copilot"))
+            for t in resolve_targets(config.get("target", "copilot"))
             if not _TARGET_ENFORCES_GATES.get(t, False)
         ]
         if non_enforcing:
@@ -307,15 +289,6 @@ def lint_policy(
                     f"strict level on a non-enforcing target ({targets}) requires "
                     "explicit --accept-degraded"
                 )
-
-    # REDACTION WARN: guarded|strict forces a redaction pass at runtime, so a
-    # disabled redaction config is a contradiction worth surfacing.
-    if level in ("guarded", "strict") and not (config.get("redaction") or {}).get("enabled", False):
-        warnings.append(
-            f"{level} forces a redaction pass but redaction.enabled is false — "
-            "narrator renders with no redaction rules; strict|guarded will force "
-            "the pass at runtime"
-        )
 
     return errors, warnings
 

@@ -5,7 +5,7 @@ configurations for VS Code Copilot, Copilot CLI, and OpenCode.
 
 This module backs the ``carter install`` command (and the legacy ``install.sh`` /
 ``install.py`` bootstrap). The implementation was split into the ``carter.install``
-package; this module re-exports those leaves and keeps the
+package; this module imports those leaves and keeps the
 orchestration plus the few helpers that tests monkeypatch through this namespace
 (``_vscode_detected``, ``_vscode_settings_path``, ``check_prerequisites``,
 ``configure_mcp_servers`` — each resolves a patched dependency from this module's
@@ -18,11 +18,12 @@ from __future__ import annotations
 import argparse
 import json
 import os
-import platform  # noqa: F401  re-exported: tests monkeypatch ``installer.platform.system``
 import subprocess
 from datetime import UTC, datetime
 from pathlib import Path
 
+from carter import __version__
+from carter.config import resolve_targets
 from carter.install.components import (
     install_agents,
     install_instructions,
@@ -44,11 +45,6 @@ from carter.install.console import (
     log_step,
     log_warn,
     set_verbosity,
-)
-from carter.install.files import _sha256  # noqa: F401  re-exported for tests
-from carter.install.jsonc import (  # noqa: F401  _strip_jsonc/_load_jsonc re-exported for tests
-    _load_jsonc,
-    _strip_jsonc,
 )
 from carter.install.mcp import MCP_SERVERS, _merge_json_key
 from carter.install.paths import (
@@ -311,7 +307,7 @@ def run(
     """
     set_verbosity(verbosity)
 
-    targets = ["copilot", "opencode"] if target == "all" else [target]
+    targets = resolve_targets(target)
 
     _log(f"\n {bold('Carter Installer')}")
     _log(f" Target: {', '.join(targets)}")
@@ -337,7 +333,7 @@ def run(
     backup_root = _copilot_base(base_dir) / "backup" / now.strftime("%Y%m%dT%H%M%S")
 
     manifest: dict = {
-        "version": "1.0.0",
+        "version": __version__,
         "installed_at": now.isoformat(),
         "updated_at": now.isoformat(),
         "targets": targets,

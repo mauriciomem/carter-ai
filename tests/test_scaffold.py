@@ -168,7 +168,6 @@ class TestConfigMerge:
         assert "quality_gate" in loaded
         assert "tdd" in loaded
         assert "redaction" in loaded
-        assert "state" in loaded
 
     def test_partial_nested_dict_gets_missing_keys(self, tmp_path):
         """Partial quality_gate gets missing keys from defaults."""
@@ -187,7 +186,6 @@ class TestConfigMerge:
         assert loaded["quality_gate"]["enabled"] is False
         # Defaults filled in for missing keys
         assert loaded["quality_gate"]["max_iterations"] == 2
-        assert loaded["quality_gate"]["trigger"] == "user-initiated"
 
     def test_user_list_values_not_merged_with_defaults(self, tmp_path):
         """User's agents list replaces default, not merges with it."""
@@ -734,11 +732,11 @@ class TestRenderDiscovery:
         assert "Carter Maestro" in agent.read_text()
 
     def test_resolve_targets(self):
-        from carter.cli import _resolve_targets
+        from carter.config import resolve_targets
 
-        assert _resolve_targets("copilot") == ["copilot"]
-        assert _resolve_targets("opencode") == ["opencode"]
-        assert _resolve_targets("all") == ["copilot", "opencode"]
+        assert resolve_targets("copilot") == ["copilot"]
+        assert resolve_targets("opencode") == ["opencode"]
+        assert resolve_targets("all") == ["copilot", "opencode"]
 
 
 # ─── Agent name suffix (workspace vs global distinction) ─────────────────────
@@ -842,38 +840,6 @@ class TestAgentSuffix:
         assert agent_filename("engineer", cfg) == "carter-engineer-demo.md"
 
 
-# ─── Config warnings (narrator/redaction edge case) ──────────────────────────
-
-
-class TestConfigWarnings:
-    """ADR-0010 D3: with `loose` gone, every shipped level forces the narrator's
-    redaction pass, so the rule-less-narrator gap `config_warnings` once flagged can
-    no longer occur — it returns no redaction warning. A `redaction.enabled: false`
-    contradiction at an enforcing level is surfaced by the policy lint instead.
-    """
-
-    def test_no_warning_at_guarded_redaction_off(self):
-        from carter.scaffold import config_warnings
-
-        cfg = generate_default_config()  # guarded
-        cfg["redaction"]["enabled"] = False
-        assert config_warnings(cfg) == []
-
-    def test_no_warning_when_both_on(self):
-        from carter.scaffold import config_warnings
-
-        cfg = generate_default_config()  # narrator in agents, redaction on
-        assert config_warnings(cfg) == []
-
-    def test_no_warning_when_narrator_absent(self):
-        from carter.scaffold import config_warnings
-
-        cfg = generate_default_config()
-        cfg["agents"] = [a for a in cfg["agents"] if a != "narrator"]
-        cfg["redaction"]["enabled"] = False
-        assert config_warnings(cfg) == []
-
-
 # ─── Policy gate table + notice + redaction handoff (P2 / ADR-0010 D4/D5) ──────
 
 
@@ -890,7 +856,6 @@ class TestPolicyGateTable:
             "remote-write",
             "dangerous",
         ]
-        assert all(r["label"] for r in rows)
 
     def test_guarded_gates_match_taxonomy(self):
         from carter.config import policy_gate_table

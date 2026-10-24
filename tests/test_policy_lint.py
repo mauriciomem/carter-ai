@@ -21,13 +21,12 @@ from carter.config import (
 from carter.scaffold import lint_policy
 
 
-def _config(level: str = "guarded", target: str = "copilot", redaction: bool = True) -> dict:
+def _config(level: str = "guarded", target: str = "copilot") -> dict:
     """Default config pinned to a policy level + target, canonical agent names."""
     cfg = generate_default_config(workspace_name="lint", mode="single")
     cfg["agent_suffix"] = ""
     cfg["policy"]["level"] = level
     cfg["target"] = target
-    cfg["redaction"]["enabled"] = redaction
     return cfg
 
 
@@ -56,13 +55,12 @@ class TestLintClean:
         assert errors == []
 
     def test_matching_install_has_no_warnings(self):
-        cfg = _config(level="guarded", target="copilot")  # not strict, redaction on
+        cfg = _config(level="guarded", target="copilot")  # not strict
         _, warnings = lint_policy(cfg, _installed(cfg))
         assert warnings == []
 
     def test_guarded_opencode_install_is_clean(self):
-        # guarded on an enforcing target (opencode) with redaction on: no hard-ack,
-        # no redaction contradiction → clean.
+        # guarded on an enforcing target (opencode): no hard-ack → clean.
         cfg = _config(level="guarded", target="opencode")
         errors, warnings = lint_policy(cfg, _installed(cfg))
         assert errors == []
@@ -174,21 +172,6 @@ class TestHardAck:
         assert len(ack_errors) == 1
         assert "copilot" in ack_errors[0]
         assert "opencode" not in ack_errors[0]  # opencode enforces, not degraded
-
-
-# ─── Redaction WARN (Q16): guarded|strict + redaction off is a contradiction ──
-
-
-class TestRedactionWarn:
-    def test_guarded_redaction_off_warns(self):
-        cfg = _config(level="guarded", redaction=False)
-        _, warnings = lint_policy(cfg, _installed(cfg))
-        assert any("redaction.enabled is false" in w for w in warnings)
-
-    def test_strict_redaction_off_warns(self):
-        cfg = _config(level="strict", target="opencode", redaction=False)
-        _, warnings = lint_policy(cfg, _installed(cfg))
-        assert any("redaction.enabled is false" in w and w.startswith("strict") for w in warnings)
 
 
 # ─── Fail-closed dispatch lint (P3, RFC-0005 §1 D1.2 / ADR-0010 D1) ──────────
@@ -338,19 +321,6 @@ class TestCheckCliIntegration:
 
         ok = runner.invoke(main, ["check", str(tmp_path), "--accept-degraded"])
         assert ok.exit_code == 0, ok.output
-
-    def test_check_warns_on_redaction_contradiction(self, tmp_path):
-        runner, main = self._init(tmp_path)  # guarded, redaction on
-        cfg_path = tmp_path / ".carter" / "carter.yaml"
-        config = load_config(cfg_path)
-        config["redaction"]["enabled"] = False
-        write_config(cfg_path, config)
-        assert runner.invoke(main, ["update", str(tmp_path)]).exit_code == 0
-
-        result = runner.invoke(main, ["check", str(tmp_path)])
-        # guarded + redaction off is a contradiction → WARN, but not an error.
-        assert result.exit_code == 0, result.output
-        assert "redaction.enabled is false" in result.output
 
     def test_init_surfaces_guarded_policy_notice(self, tmp_path):
         from carter.cli import main

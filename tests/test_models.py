@@ -22,7 +22,6 @@ import yaml
 
 from carter.config import (
     DEFAULT_CONFIG,
-    MODEL_NAMES,
     generate_default_config,
     policy_frontmatter,
     policy_native_keys,
@@ -194,8 +193,8 @@ class TestProfileResolution:
 # ─── The Carter→target model-name table (MODEL LAUNCH sync marker) ────────────
 
 
-class TestModelNameTable:
-    def test_model_names_non_empty_for_every_shipped_role(self):
+class TestModelStrings:
+    def test_model_string_non_empty_for_every_shipped_role(self):
         # A stale/missing string = a silently dead agent. Every shipped role must
         # resolve to a non-empty per-target model string.
         cfg = _config(target="copilot")
@@ -204,20 +203,6 @@ class TestModelNameTable:
         cfg = _config(target="opencode")
         for role in cfg["agents"]:
             assert resolve_model(cfg, role), f"{role}: empty opencode model string"
-
-    def test_model_names_table_maps_id_to_display_and_provider(self):
-        # The one-home Carter->target table: canonical id -> {copilot display, opencode id}.
-        assert MODEL_NAMES["claude-opus-4-8"]["copilot"] == "Claude Opus 4.8"
-        assert MODEL_NAMES["claude-opus-4-8"]["opencode"] == "anthropic/claude-opus-4-8"
-        assert MODEL_NAMES["claude-sonnet-5"]["copilot"] == "Claude Sonnet 5"
-        assert MODEL_NAMES["claude-haiku-4-5"]["opencode"] == "anthropic/claude-haiku-4-5"
-
-    def test_model_launch_sync_marker_present(self):
-        # The next model bump must update the table — a grep-able marker anchors it.
-        from pathlib import Path
-
-        src = (Path(__file__).resolve().parent.parent / "carter" / "config.py").read_text()
-        assert "MODEL LAUNCH" in src, "missing the MODEL LAUNCH sync marker on the name table"
 
 
 # ─── Emission: a SINGLE per-target model: string (never an array) ────────────
