@@ -112,6 +112,27 @@ carter ops policy-override \
 
 Every entry carries `"authorized": false` and lands in `~/.carter/audit.log`.
 
+## Commit flow
+
+The user is always the commit **author** (their `git config user.name/email`) and signs
+with their own key. Carter is credited only as a **co-author**, using the bot identity
+from `[attribution]` in `~/.carter/config.toml`:
+
+```bash
+git add <files>
+git commit -S -m "feat(auth): add token refresh" -m "<body>" \
+  --trailer "Co-authored-by: carter-bot <carter-bot@users.noreply.github.com>"
+git push -u origin <branch>
+```
+
+- Never `--author`. With git older than 2.32 (no `--trailer`), put the
+  `Co-authored-by:` line as the last paragraph of the message.
+- Commit messages, branch names and PR/issue text are **always English**, whatever
+  language you chat in. Carter's internal docs follow the workspace `docs_language`.
+- `carter save` (the `.carter/` state snapshot) follows the same rule: your git
+  identity is the author (a bot identity is used only if none is configured), plus the
+  co-author trailer.
+
 ## Attribution
 
 - **Git** — you are the commit author (your `git config user.name/email`) and commits are signed with your key (`-S`). The bot is credited only through a `Co-authored-by: <name> <email>` trailer; Carter never passes `--author`.

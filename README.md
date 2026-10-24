@@ -145,6 +145,7 @@ workspace.
 | `agents` | Which agents to generate |
 | `target` | Where to write: `copilot` / `opencode` / `all` |
 | `agent_suffix` | Distinguish workspace agents from global (default `local`) |
+| `docs_language` | Language of Carter's internal docs — ADRs, RFCs, `.carter/` plans and knowledge, memories (default `en`). Everything in the repository or sent outward is always English |
 
 → Config reference and walkthrough: **[docs/getting-started.md](docs/getting-started.md)**
 

@@ -75,6 +75,7 @@ carter init ~/my-workspace --name "my-project"
 carter init ~/my-workspace --target all --agent-suffix local
 #   --target copilot|opencode|all   (default copilot)
 #   --agent-suffix <suffix>         (default local; "" for none)
+#   --docs-language <tag>           (default en; internal docs only)
 ```
 
 > The narrator's redaction rules are always rendered; `redaction.categories` in
@@ -151,6 +152,12 @@ agent_suffix: local
 
 # Where to write agents/instructions: copilot | opencode | all
 target: copilot
+
+# Language for Carter's internal docs: ADRs, RFCs, .carter/ plans + knowledge, memories.
+# Commits, code comments, repo docs, PRs/issues, Jira and Slack are always English;
+# Carter still talks to you in your own language. Set at scaffold time with
+# `carter init --docs-language es`.
+docs_language: en
 
 # Risk-based strictness policy (ADR-0005 / ADR-0010). One knob; deny-by-default per agent.
 policy:
