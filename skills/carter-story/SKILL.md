@@ -8,6 +8,8 @@ argument-hint: "[what to announce or narrate, and the audience]"
 Turn technical work into public-facing narrative that is warm, clear, and honest —
 the kind of writing a person is glad to read. Lead with what matters to the
 reader, ground every claim in something real, and never oversell.
+
+**Language:** all public-facing narrative is written in English, whatever language the user chats in.
 </objective>
 
 <delegation>

@@ -10,6 +10,8 @@ explores *"should we do X?"* before a plan or code exists. An accepted RFC yield
 an ADR (the durable decision) and then a plan (execution). This skill implements
 ADR-0004; the canonical frontmatter schema lives in
 [docs/reference/frontmatter.md](../../docs/reference/frontmatter.md).
+
+**Language:** write in the workspace `docs_language` (`.carter/carter.yaml`); if it is absent, English unless the user chose another language.
 </objective>
 
 <when-to-rfc>

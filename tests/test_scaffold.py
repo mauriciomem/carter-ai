@@ -1514,3 +1514,44 @@ class TestInitProfileFlag:
         assert result.exit_code != 0
         # click.Choice rejects it before any scaffolding happens.
         assert not (tmp_path / ".carter").exists()
+
+
+class TestLanguageAndCoAuthorRules:
+    """Decisions A/B/C: English repository output, docs_language for internal docs,
+    and the user as commit author with a Co-authored-by trailer."""
+
+    def _render(self, **overrides):
+        cfg = generate_default_config(workspace_name="lang", mode="single")
+        cfg["agent_suffix"] = ""
+        cfg.update(overrides)
+        env = create_env()
+        return render_agents(cfg, env), render_instructions(cfg, env)
+
+    def test_workspace_docs_language_is_named(self):
+        agents, instructions = self._render(docs_language="es")
+        for role in ("maestro", "pm", "architect", "security"):
+            assert "`es` (`docs_language`)" in agents[f"carter-{role}.md"], role
+        assert "`es` (`docs_language`)" in instructions["copilot-instructions.md"]
+
+    def test_global_render_defers_to_workspace_setting(self):
+        agents, _ = self._render(docs_language=None)
+        assert "the workspace `docs_language`" in agents["carter-pm.md"]
+
+    def test_committers_use_trailer_never_author(self):
+        agents, instructions = self._render()
+        for role in ("engineer", "devops", "maestro"):
+            text = agents[f"carter-{role}.md"]
+            assert "Co-authored-by:" in text, role
+            assert "never pass `--author`" in text.lower() or "never `--author`" in text, role
+        assert "Co-authored-by:" in instructions["copilot-instructions.md"]
+
+    def test_narrator_outward_content_is_english(self):
+        agents, _ = self._render(docs_language="es")
+        assert "is written in English, whatever language" in agents["carter-narrator.md"]
+
+    def test_global_opencode_install_defers_docs_language(self):
+        from carter.install.components import _render_opencode_agents
+
+        pm = _render_opencode_agents()["carter-pm.md"]
+        assert "the workspace `docs_language`" in pm
+        assert "`en` (`docs_language`)" not in pm

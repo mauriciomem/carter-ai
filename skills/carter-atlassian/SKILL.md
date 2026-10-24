@@ -6,6 +6,8 @@ argument-hint: "[Jira ticket key, operation, or issue type to create]"
 
 <objective>
 Perform Jira operations and write high-quality tickets using the carter-atlassian MCP server.
+
+**Language:** Jira tickets, comments and descriptions are always written in English, whatever language the user chats in.
 </objective>
 
 <tools>

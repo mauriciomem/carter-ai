@@ -165,3 +165,48 @@ class TestStateExtras:
         assert not plan.exists()
         _git(carter_dir, "checkout", "HEAD", "--", "state/plans/active/001-x/README.md")
         assert (plan / "README.md").exists()
+
+
+class TestCommitAttribution:
+    """Decision A/B: the user is the author; Carter is only a ``Co-authored-by:``."""
+
+    @staticmethod
+    def _isolate(monkeypatch, tmp_path: Path, *, identity: bool) -> Path:
+        home = tmp_path / "home"
+        home.mkdir()
+        monkeypatch.setenv("HOME", str(home))
+        gitconfig = home / ".gitconfig"
+        gitconfig.write_text(
+            "[user]\n\tname = Jane Dev\n\temail = jane@example.com\n" if identity else ""
+        )
+        monkeypatch.setenv("GIT_CONFIG_GLOBAL", str(gitconfig))
+        monkeypatch.setenv("GIT_CONFIG_NOSYSTEM", "1")
+        for var in ("GIT_AUTHOR_NAME", "GIT_AUTHOR_EMAIL", "GIT_COMMITTER_NAME", "EMAIL"):
+            monkeypatch.delenv(var, raising=False)
+        return home
+
+    def test_user_is_author_and_default_bot_is_co_author(self, tmp_path, config, monkeypatch):
+        self._isolate(monkeypatch, tmp_path, identity=True)
+        carter_dir = init_workspace(tmp_path / "ws", config, git_state=True)
+        (carter_dir / "knowledge" / "note.md").write_text("x\n")
+        assert commit_state(carter_dir, "chore: snapshot") is True
+
+        log = _git(carter_dir, "log", "-1", "--format=%an <%ae>%n%B")
+        assert log.stdout.startswith("Jane Dev <jane@example.com>")
+        assert "Co-authored-by: carter-bot <carter-bot@users.noreply.github.com>" in log.stdout
+
+    def test_co_author_comes_from_carter_config(self, tmp_path, config, monkeypatch):
+        home = self._isolate(monkeypatch, tmp_path, identity=True)
+        (home / ".carter").mkdir()
+        (home / ".carter" / "config.toml").write_text(
+            '[attribution]\nname = "acme-bot"\nemail = "acme-bot@example.com"\n'
+        )
+        carter_dir = init_workspace(tmp_path / "ws", config, git_state=True)
+        trailers = _git(carter_dir, "log", "-1", "--format=%(trailers:key=Co-authored-by)")
+        assert "Co-authored-by: acme-bot <acme-bot@example.com>" in trailers.stdout
+
+    def test_falls_back_to_bot_author_without_git_identity(self, tmp_path, config, monkeypatch):
+        self._isolate(monkeypatch, tmp_path, identity=False)
+        carter_dir = init_workspace(tmp_path / "ws", config, git_state=True)
+        log = _git(carter_dir, "log", "-1", "--format=%ae")
+        assert log.stdout.strip() == "carter-bot@users.noreply.github.com"

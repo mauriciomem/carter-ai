@@ -6,6 +6,8 @@ argument-hint: "[optional: topic filter]"
 
 <objective>
 Review recent notes in `~/.carter/memories/` (visible memory) and `/memories/` (platform memory) and promote valuable learnings into structured, curated entries in `~/.copilot/knowledge/`.
+
+**Language:** write knowledge and memory entries in the workspace `docs_language` (`.carter/carter.yaml`); if it is absent, English unless the user chose another language.
 </objective>
 
 <workflow>

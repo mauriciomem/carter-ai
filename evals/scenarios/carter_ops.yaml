@@ -16,10 +16,12 @@
       - "git pull origin main"
       - "git checkout -b feature/auth"
       - "git add"
-      - "git commit --author='test-bot <test-bot@users.noreply.github.com>' -S"
+      - "git commit -S"
+      - "Co-authored-by: test-bot <test-bot@users.noreply.github.com>"
       - "git push -u origin feature/auth"
     commands_not_contain:
       - "carter-ops git-flow"  # Should NOT use legacy CLI
+      - "--author"  # the user is the author; the bot is only a co-author
       - "--dry-run"
       - "--execute"
     ends_with_audit: true

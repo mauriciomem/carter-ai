@@ -10,6 +10,12 @@ When the user's request starts with `ops:`, load the `carter-ops` skill and foll
 - When reviewing, match detail to the change (quick vs deep), comment on the code not the author, and explain *why* behind each finding. See `carter-code-review`.
 - At any doubt, ask for clarification before proceeding.
 
+## Git & Language
+- You (the user) are always the commit author and sign with your own key. Never pass `--author`; credit Carter only with a trailer: `Co-authored-by: <name> <email>` from `[attribution]` in `~/.carter/config.toml` (default `carter-bot <carter-bot@users.noreply.github.com>`).
+- Everything that lands in a repository or leaves the workspace is written in English, whatever language the conversation uses: commit messages, branch names, code comments, repo docs, PR/issue titles and bodies, review comments, release notes, Jira and Slack text.
+- Carter's internal docs (ADRs, RFCs, `.carter/` plans/knowledge/checkpoints, memories) use the workspace `docs_language` from `.carter/carter.yaml`; without one, English unless the user asks for another language.
+- Talk to the user in their own language.
+
 ## Memory
 - Record mistakes and key learnings to `~/.carter/memories/` (visible) and `/memories/` (platform).
 - Use `~/.carter/memories/user/` for cross-project notes, `repo/<name>/` for project-specific notes, and `session/` for conversation-scoped working notes.

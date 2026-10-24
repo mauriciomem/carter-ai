@@ -13,6 +13,7 @@ from carter.config import (
     PROFILES,
     ConfigError,
     _validate_agent_suffix,
+    _validate_docs_language,
     generate_default_config,
     load_config,
     parse_policy_comment,
@@ -140,6 +141,12 @@ def install(
     help="Cost profile: 'quality' (all agents on Opus) or 'budget' (Sonnet where safe). "
     "Default: the shipped per-agent tiers.",
 )
+@click.option(
+    "--docs-language",
+    default=None,
+    help="Language for Carter's internal docs (ADRs, RFCs, .carter/ plans and knowledge), "
+    "e.g. 'es' or 'pt-BR' (default: en). Repository output is always English.",
+)
 def init(
     target_dir: str,
     single: bool,
@@ -148,6 +155,7 @@ def init(
     target_tool: str | None,
     agent_suffix: str | None,
     profile: str | None,
+    docs_language: str | None,
 ) -> None:
     """Initialize a Carter workspace."""
     target = Path(target_dir).resolve()
@@ -169,6 +177,12 @@ def init(
     # resolves to the shipped default tiers (click.Choice already rejects a bad value).
     if profile is not None:
         config["profile"] = profile
+    if docs_language is not None:
+        try:
+            _validate_docs_language(docs_language)
+        except ConfigError as e:
+            raise click.BadParameter(str(e), param_hint="--docs-language") from e
+        config["docs_language"] = docs_language
 
     # Create .carter/ structure
     init_workspace(

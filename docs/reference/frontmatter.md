@@ -140,6 +140,19 @@ This is genuinely optional — not half-mandatory.
 
 ---
 
+## Language of Carter's internal docs (`docs_language`)
+
+```yaml
+docs_language: en          # language tag, e.g. en | es | pt-BR (default en)
+```
+
+Applies only to Carter's internal documentation: ADRs, RFCs, everything under
+`.carter/` (plans, knowledge, checkpoints) and memories. Commit messages, branch
+names, code comments, repository docs, PR/issue text, review comments, release notes,
+Jira and Slack content are always English. Validated at load time against
+`^[A-Za-z]{2,3}(-[A-Za-z0-9]{2,8})*$`; a config without the key resolves to `en`.
+Global installs (no `carter.yaml`) default to English unless the user asks otherwise.
+
 ## Configurable thresholds
 
 Numeric splitting thresholds are **defaults in `carter.yaml`** (the `plans:`

@@ -6,6 +6,8 @@ argument-hint: "[decision title or topic]"
 
 <objective>
 Create a structured Architecture Decision Record (ADR) that captures the context, decision, rationale, and consequences of an architectural choice.
+
+**Language:** write in the workspace `docs_language` (`.carter/carter.yaml`); if it is absent, English unless the user chose another language.
 </objective>
 
 <template>

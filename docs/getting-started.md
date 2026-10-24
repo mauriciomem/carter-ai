@@ -75,6 +75,7 @@ carter init ~/my-workspace --name "my-project"
 carter init ~/my-workspace --target all --agent-suffix local
 #   --target copilot|opencode|all   (default copilot)
 #   --agent-suffix <suffix>         (default local; "" for none)
+#   --docs-language <tag>           (default en; internal docs only)
 ```
 
 > The narrator's redaction rules are always rendered; `redaction.categories` in
@@ -151,6 +152,12 @@ agent_suffix: local
 
 # Where to write agents/instructions: copilot | opencode | all
 target: copilot
+
+# Language for Carter's internal docs: ADRs, RFCs, .carter/ plans + knowledge, memories.
+# Commits, code comments, repo docs, PRs/issues, Jira and Slack are always English;
+# Carter still talks to you in your own language. Set at scaffold time with
+# `carter init --docs-language es`.
+docs_language: en
 
 # Risk-based strictness policy (ADR-0005 / ADR-0010). One knob; deny-by-default per agent.
 policy:
@@ -251,7 +258,7 @@ Use PROJ-42 as the ticket reference.
 
 1. Maestro sees the `ops:` prefix and enters operational mode
 2. It **assesses** current state (runs `git status`, `git log`)
-3. It **plans** — shows you the exact commands with bot attribution
+3. It **plans** — shows you the exact commands, with the co-author trailer
 4. It **waits for your approval** before executing anything
 5. After approval, it **executes** the commands
 6. It **audits** — logs the operation
@@ -263,13 +270,13 @@ Use PROJ-42 as the ticket reference.
 **Operation:** git-flow
 **Branch:** feature/PROJ-42-auth-module
 **Message:** feat(auth): add authentication module
-**Attribution:** carter-bot <carter-bot@users.noreply.github.com>, signed
+**Attribution:** authored by you, signed; Co-authored-by: carter-bot <carter-bot@users.noreply.github.com>
 
 Commands:
 1. git checkout main && git pull origin main
 2. git checkout -b feature/PROJ-42-auth-module
 3. git add src/auth.py
-4. git commit --author='carter-bot <...>' -S -m "feat(auth): add authentication module"
+4. git commit -S -m "feat(auth): add authentication module" --trailer "Co-authored-by: carter-bot <...>"
 5. git push -u origin feature/PROJ-42-auth-module
 
 Approve?
@@ -277,7 +284,7 @@ Approve?
 
 You say "yes" and it executes. You say "no" or ask for changes, and it revises the plan.
 
-**Key takeaway:** You always see exactly what will happen before it happens. The bot attribution means you can always tell which commits came from Carter vs. you.
+**Key takeaway:** You always see exactly what will happen before it happens. You stay the commit author; the `Co-authored-by:` trailer marks which commits Carter helped write.
 
 ---
 

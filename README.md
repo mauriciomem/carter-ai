@@ -120,7 +120,8 @@ approve → execute → audit**. Trigger with the `ops:` prefix.
 @carter-maestro ops: create a feature branch, commit my changes, and push
 ```
 
-Carter shows the exact commands (with bot attribution), waits for your approval,
+Carter shows the exact commands (you stay the commit author; the bot is credited with a
+`Co-authored-by:` trailer), waits for your approval,
 executes the commands directly, and records the result with `carter ops audit`.
 
 → Reference: **[docs/carter-ops.md](docs/carter-ops.md)**
@@ -144,6 +145,7 @@ workspace.
 | `agents` | Which agents to generate |
 | `target` | Where to write: `copilot` / `opencode` / `all` |
 | `agent_suffix` | Distinguish workspace agents from global (default `local`) |
+| `docs_language` | Language of Carter's internal docs — ADRs, RFCs, `.carter/` plans and knowledge, memories (default `en`). Everything in the repository or sent outward is always English |
 
 → Config reference and walkthrough: **[docs/getting-started.md](docs/getting-started.md)**
 
