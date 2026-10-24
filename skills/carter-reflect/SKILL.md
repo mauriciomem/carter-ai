@@ -28,10 +28,11 @@ Read accumulated memory (`~/.carter/memories/`) and curated knowledge (`~/.carte
 4. **Map to targets** — For each pattern, identify which file should change:
    | Pattern Type | Target File |
    |-------------|-------------|
-   | Agent behavior issue | `agents/carter-*.md` |
-   | Missing domain knowledge | `skills/carter-*/SKILL.md` |
-   | Global rule gap | `instructions/copilot-instructions.md` |
-   | OpenCode-specific gap | OpenCode `AGENTS.md` |
+   | Agent behavior issue | `templates/agents/carter-*.md.j2` (source; re-render with `carter update` / `carter install`) |
+   | Missing domain knowledge | `skills/carter-*/SKILL.md` (source; installed to `~/.config/opencode/skills/`) |
+   | Global rule gap | `templates/instructions/AGENTS.md.j2` (installed as `~/.config/opencode/AGENTS.md`) |
+
+   Never edit the rendered copies in `~/.config/opencode/agents/` or `.opencode/agents/` — they are overwritten on the next render. Edit the sources in the Carter repository.
 
 5. **Propose changes** — For each improvement, show:
    - **Source evidence**: Which memory/knowledge entries revealed the pattern

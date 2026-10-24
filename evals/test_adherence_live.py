@@ -51,7 +51,7 @@ _DOWNGRADE_SCENARIOS = [
 def _plan_prompt(scenario: dict) -> str:
     """Render the thinker plan as the user message handed to the agent.
 
-    Role-agnostic: the agent's own system prompt (its `agents/carter-<role>.md`) decides
+    Role-agnostic: the agent's own system prompt (its rendered `carter-<role>.md`) decides
     HOW it responds — the engineer writes code, the narrator drafts redacted content, the
     pm produces a plan. This prompt only hands over the plan, its steps, and the required
     outcomes, and asks the agent to work directly without tools (so the transcript is the

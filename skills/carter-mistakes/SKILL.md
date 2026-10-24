@@ -41,7 +41,7 @@ Capture mistakes, failures, and lessons learned into Carter's memory system for 
    - **Tags:** [keywords for searchability]
    ```
 
-   **Secondary (platform)** — Also write the same note to `/memories/` using the platform memory tool (for auto-loading in VS Code). On surfaces where the platform memory tool is unavailable, skip this step.
+   **Secondary (platform)** — Also write the same note to `/memories/` using the platform memory tool. On surfaces where the platform memory tool is unavailable, skip this step.
 
 7. **Suggest distill** — If there are several accumulated notes, suggest running `carter-distill` to promote them to the curated knowledge base.
 
