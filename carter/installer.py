@@ -22,7 +22,6 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from carter import __version__
-from carter.config import resolve_targets
 from carter.install.components import (
     install_agents,
     install_instructions,
@@ -316,7 +315,9 @@ def run(
     """
     set_verbosity(verbosity)
 
-    targets = resolve_targets(target)
+    # Install-time targets until the Copilot install path is removed (ADR-0014
+    # phases 3-5); workspace config no longer has a `target:` key.
+    targets = ["copilot", "opencode"] if target == "all" else [target]
 
     _log(f"\n {bold('Carter Installer')}")
     _log(f" Target: {', '.join(targets)}")

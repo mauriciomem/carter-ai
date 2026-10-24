@@ -21,12 +21,9 @@ import pytest
 import yaml
 
 from carter.config import (
-    RISK_TAXONOMY,
     effective_allowlist,
     generate_default_config,
-    parse_policy_comment,
     policy_native_keys,
-    resolve_model,
 )
 from carter.scaffold import create_env, render_agents
 
@@ -43,17 +40,10 @@ REDACTION_CATEGORIES = (
 
 
 def _parse_frontmatter(text: str) -> dict:
-    """Parse leading YAML frontmatter from an agent markdown file.
-
-    Re-injects the ``policy`` block from the trailing ``carter:policy`` comment so
-    callers see the same shape as before ADR-0005's move of the block off the wire.
-    """
+    """Parse leading YAML frontmatter from an agent markdown file."""
     assert text.startswith("---\n"), "file does not start with '---' frontmatter"
     _, fm, _ = text.split("---", 2)
-    data = yaml.safe_load(fm)
-    policy = parse_policy_comment(text)
-    if policy is not None:
-        data["policy"] = policy
+    data: dict = yaml.safe_load(fm)
     return data
 
 
@@ -285,16 +275,21 @@ class TestRenderedFrontmatterParity:
                 f"{name}: emits temperature (dropped wholesale, ADR-0010 D7)"
             )
 
-    def test_rendered_frontmatter_matches_static(self, static_agents_dir: Path) -> None:
+    def test_rendered_frontmatter_is_v2_native(self) -> None:
+        """ADR-0014 D1/D5: rendered frontmatter carries exactly the V2 keys Carter
+        generates (``description``/``mode``/``model``/``permissions``), never a V1
+        key and never the old policy comment. The static Copilot-shaped ``agents/``
+        tree is NOT compared any more (deleted in a later phase)."""
         cfg = generate_default_config(workspace_name="parity", mode="single")
-        cfg["agent_suffix"] = ""  # match canonical static filenames
-        rendered = render_agents(cfg, create_env())
-        for name, content in rendered.items():
-            static = static_agents_dir / name
-            assert static.exists(), f"no static counterpart for rendered {name}"
-            assert _parse_frontmatter(content) == _parse_frontmatter(static.read_text()), (
-                f"{name}: rendered frontmatter diverges from the static file"
-            )
+        cfg["agent_suffix"] = ""
+        for name, content in render_agents(cfg, create_env()).items():
+            role = name.removeprefix("carter-").removesuffix(".md")
+            fm = _parse_frontmatter(content)
+            assert set(fm) == {"description", "mode", "model", "permissions"}, name
+            native = policy_native_keys(cfg, role)
+            assert fm["permissions"] == native["permissions"], name
+            assert fm["model"] == native["model"], name
+            assert "carter:policy" not in content, name
 
     def test_mode_vocabulary_is_valid_and_orchestrator_only(self, static_agents_dir: Path) -> None:
         """Pure-orchestrator model: maestro is the sole `primary`; every other
@@ -363,80 +358,10 @@ class TestProseMatchesAllowlist:
         )
 
 
-class TestStrictnessPolicyParity:
-    """The baked ``policy:`` frontmatter in the global static agents (ADR-0005 D6)
-    must match the shipped model. Statics carry the ``guarded`` defaults rendered
-    at the default target (``copilot``); this is the N3-style dual-source guard —
-    if the model changes but a static is not re-baked, this fails loudly.
-    """
-
-    def _role(self, agent_path: Path) -> str:
-        return agent_path.stem.removeprefix("carter-")
-
-    def test_static_agents_carry_policy_block(self, static_agents_dir: Path) -> None:
-        for agent in sorted(static_agents_dir.glob("carter-*.md")):
-            fm = _parse_frontmatter(agent.read_text())
-            assert "policy" in fm, f"{agent.name}: missing baked policy block"
-            assert "allow" in fm["policy"] and "gates" in fm["policy"], (
-                f"{agent.name}: policy block missing allow/gates"
-            )
-
-    def test_static_allow_matches_shipped_allowlist(self, static_agents_dir: Path) -> None:
-        allowlist = effective_allowlist(generate_default_config())
-        for agent in sorted(static_agents_dir.glob("carter-*.md")):
-            role = self._role(agent)
-            fm = _parse_frontmatter(agent.read_text())
-            expected = sorted(c for c, on in allowlist[role].items() if on)
-            assert fm["policy"]["allow"] == expected, (
-                f"{agent.name}: baked allow drifted from the shipped allowlist"
-            )
-
-    def test_static_gates_are_guarded(self, static_agents_dir: Path) -> None:
-        for agent in sorted(static_agents_dir.glob("carter-*.md")):
-            fm = _parse_frontmatter(agent.read_text())
-            for cat, gate in fm["policy"]["gates"].items():
-                assert gate == RISK_TAXONOMY[cat]["guarded"], (
-                    f"{agent.name}: gate for {cat} is not the guarded value"
-                )
-
-    def test_static_tools_match_policy_derivation(self, static_agents_dir: Path) -> None:
-        """Copilot is the default target, so statics carry ``tools`` (never the
-        OpenCode ``permission`` map). ``tools`` is the policy-DERIVED allowlist
-        (ADR-0011): the file tools each policy category implies (``read`` →
-        codebase/search/usages/fetch; ``local-write`` → editFiles) + the per-agent
-        MCP scope, with the maestro (primary) additionally carrying ``agent`` ahead
-        of all (ADR-0010 D1). Asserted against ``policy_native_keys`` itself so the
-        static mirror can never re-encode a stale, pre-ADR-0011 shape.
-        """
-        cfg = generate_default_config(workspace_name="parity", mode="single")
-        cfg["agent_suffix"] = ""
-        for agent in sorted(static_agents_dir.glob("carter-*.md")):
-            role = self._role(agent)
-            fm = _parse_frontmatter(agent.read_text())
-            expected = policy_native_keys(cfg, role).get("tools")
-            assert fm.get("tools") == expected, (
-                f"{agent.name}: baked tools drifted from the policy-derived allowlist"
-            )
-            assert "permission" not in fm, (
-                f"{agent.name}: static (copilot default) must not bake opencode permission"
-            )
-
-    def test_static_agents_carry_resolved_model(self, static_agents_dir: Path) -> None:
-        """ADR-0010 D2: every static agent bakes a single per-target ``model:`` string
-        matching the shipped resolution (overrides > tier > default) at the copilot
-        default. A re-bake gap (e.g. a tier rename not propagated to statics) fails
-        here. Thinkers = Opus 5.5; implementers = Sonnet 5.5. Never an array; no effort.
-        """
-        cfg = generate_default_config()
-        cfg["agent_suffix"] = ""  # copilot default, canonical names
-        for agent in sorted(static_agents_dir.glob("carter-*.md")):
-            role = self._role(agent)
-            fm = _parse_frontmatter(agent.read_text())
-            assert "model" in fm, f"{agent.name}: missing baked model"
-            assert isinstance(fm["model"], str), f"{agent.name}: model must be a single string"
-            assert fm["model"] == resolve_model(cfg, role), (
-                f"{agent.name}: baked model drifted from the resolved tier model"
-            )
+class TestStaticBodyParity:
+    """Body-prose invariants of the static agents (ADR-0005 D6 / ADR-0010 D5).
+    The static tree's Copilot-shaped frontmatter is no longer checked (ADR-0014;
+    the tree is deleted in a later phase)."""
 
     def test_static_maestro_carries_policy_gate_table(self, static_agents_dir: Path) -> None:
         """The global static maestro body must carry the always-on policy gate table
@@ -508,17 +433,15 @@ class TestTemplateStaticBlockParity:
         assert not offenders, f"communication block leaked into subagents (D8): {offenders}"
 
     def test_rendered_communication_block_is_maestro_only(self):
-        """Same invariant over rendered output, both targets."""
+        """Same invariant over rendered output."""
         from carter.config import generate_default_config
         from carter.scaffold import create_env, render_agents
 
         cfg = generate_default_config(workspace_name="t", mode="single")
         cfg["agent_suffix"] = ""
-        for target in ("copilot", "opencode"):
-            cfg["target"] = target
-            for name, content in render_agents(cfg, create_env()).items():
-                has_block = "<communication>" in content
-                if name == "carter-maestro.md":
-                    assert has_block, f"{target}/{name}: maestro rendered without the block"
-                else:
-                    assert not has_block, f"{target}/{name}: block leaked into a subagent (D8)"
+        for name, content in render_agents(cfg, create_env()).items():
+            has_block = "<communication>" in content
+            if name == "carter-maestro.md":
+                assert has_block, f"{name}: maestro rendered without the block"
+            else:
+                assert not has_block, f"{name}: block leaked into a subagent (D8)"

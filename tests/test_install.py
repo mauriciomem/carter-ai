@@ -57,7 +57,7 @@ class TestInstallAgents:
     def test_opencode_agents_are_permission_shaped_not_tools_array(self, base_dir: Path) -> None:
         """OpenCode rejects the copilot ``tools:`` ARRAY ("Expected object | undefined,
         got [...]"). The installer must render OpenCode-shaped frontmatter for the
-        opencode target — a ``permission`` block, a ``provider/model`` id, and NO
+        opencode target — a V2 ``permissions`` list, a ``provider/model`` id, and NO
         ``tools`` array — never copy the copilot static file verbatim (ADR-0012). This
         is the regression that broke ``opencode`` CLI on a fresh global install.
         """
@@ -74,7 +74,10 @@ class TestInstallAgents:
                 f"{agent.name}: opencode agent carries a copilot 'tools' key "
                 "(OpenCode rejects the array)"
             )
-            assert "permission" in fm, f"{agent.name}: opencode agent missing 'permission' block"
+            assert isinstance(fm.get("permissions"), list), (
+                f"{agent.name}: opencode agent missing the V2 'permissions' list"
+            )
+            assert "permission" not in fm, f"{agent.name}: opencode agent carries V1 'permission'"
             model = fm.get("model", "")
             assert str(model).startswith("anthropic/"), (
                 f"{agent.name}: opencode agent must use a provider/model id, got {model!r}"

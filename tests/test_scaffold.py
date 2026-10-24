@@ -9,24 +9,13 @@ import pytest
 import yaml
 
 from carter.config import (
-    _CATEGORY_TOOLS,
-    AGENT_MCP_SCOPE,
-    RISK_TAXONOMY,
     ConfigError,
-    effective_allowlist,
     generate_default_config,
     load_config,
-    parse_policy_comment,
-    policy_comment,
-    policy_frontmatter,
     write_config,
 )
 from carter.scaffold import create_env, render_agents, render_instructions, write_rendered_files
 from carter.state import KNOWLEDGE_FILES, add_to_gitignore, init_workspace
-
-# Built-in file tools every agent's `read` policy grants (ADR-0011), in emission
-# order — derived from the code's own map so the assertions can't drift from it.
-_READ_TOOLS = _CATEGORY_TOOLS["read"]
 
 # ─── Fixtures ────────────────────────────────────────────────────────────────
 
@@ -659,31 +648,16 @@ class TestNarrator:
 
 class TestRenderDiscovery:
     """`carter init`/`update` must write agents and instructions to the paths the
-    tools actually discover (ADR-0002): copilot → .github/, opencode → .opencode/
-    + AGENTS.md. Carter-owned agents are (re)written; instruction files are
+    tools actually discover: .opencode/agents/ + AGENTS.md (ADR-0014: OpenCode only).
     skip-if-exists.
     """
 
     def _agent_names(self, config: dict) -> list[str]:
         return [f"carter-{a}.md" for a in config["agents"]]
 
-    def test_copilot_target_writes_github_paths(self, tmp_path, default_config, env):
+    def test_writes_opencode_paths_only(self, tmp_path, default_config, env):
         from carter.cli import _render_and_write
 
-        default_config["target"] = "copilot"
-        _render_and_write(tmp_path, default_config, env)
-
-        agents_dir = tmp_path / ".github" / "agents"
-        for name in self._agent_names(default_config):
-            assert (agents_dir / name).exists()
-        assert (tmp_path / ".github" / "copilot-instructions.md").exists()
-        # Nothing written to the legacy non-discoverable path
-        assert not (tmp_path / "agents").exists()
-
-    def test_opencode_target_writes_opencode_paths(self, tmp_path, default_config, env):
-        from carter.cli import _render_and_write
-
-        default_config["target"] = "opencode"
         _render_and_write(tmp_path, default_config, env)
 
         agents_dir = tmp_path / ".opencode" / "agents"
@@ -691,38 +665,24 @@ class TestRenderDiscovery:
             assert (agents_dir / name).exists()
         assert (tmp_path / "AGENTS.md").exists()
         assert not (tmp_path / ".github").exists()
-
-    def test_all_target_writes_both(self, tmp_path, default_config, env):
-        from carter.cli import _render_and_write
-
-        default_config["target"] = "all"
-        _render_and_write(tmp_path, default_config, env)
-
-        assert (tmp_path / ".github" / "agents" / "carter-maestro.md").exists()
-        assert (tmp_path / ".github" / "copilot-instructions.md").exists()
-        assert (tmp_path / ".opencode" / "agents" / "carter-maestro.md").exists()
-        assert (tmp_path / "AGENTS.md").exists()
+        assert not (tmp_path / "agents").exists()
 
     def test_instructions_skip_if_exists(self, tmp_path, default_config, env):
         from carter.cli import _render_and_write
 
-        default_config["target"] = "copilot"
-        instr = tmp_path / ".github" / "copilot-instructions.md"
-        instr.parent.mkdir(parents=True)
+        instr = tmp_path / "AGENTS.md"
         instr.write_text("USER CONTENT")
 
         _render_and_write(tmp_path, default_config, env)
 
-        # User instruction file preserved, agents still written
         assert instr.read_text() == "USER CONTENT"
-        assert (tmp_path / ".github" / "agents" / "carter-maestro.md").exists()
+        assert (tmp_path / ".opencode" / "agents" / "carter-maestro.md").exists()
 
     def test_agents_rewritten_on_update(self, tmp_path, default_config, env):
         """Carter-owned agents are overwritten so `carter update` refreshes them."""
         from carter.cli import _render_and_write
 
-        default_config["target"] = "copilot"
-        agent = tmp_path / ".github" / "agents" / "carter-maestro.md"
+        agent = tmp_path / ".opencode" / "agents" / "carter-maestro.md"
         agent.parent.mkdir(parents=True)
         agent.write_text("STALE")
 
@@ -730,13 +690,6 @@ class TestRenderDiscovery:
 
         assert agent.read_text() != "STALE"
         assert "Carter Maestro" in agent.read_text()
-
-    def test_resolve_targets(self):
-        from carter.config import resolve_targets
-
-        assert resolve_targets("copilot") == ["copilot"]
-        assert resolve_targets("opencode") == ["opencode"]
-        assert resolve_targets("all") == ["copilot", "opencode"]
 
 
 # ─── Agent name suffix (workspace vs global distinction) ─────────────────────
@@ -822,10 +775,10 @@ class TestAgentSuffix:
         """A real default `carter init` lands suffixed files in the discovery path."""
         from carter.cli import _render_and_write
 
-        cfg = generate_default_config()  # target copilot, suffix local
+        cfg = generate_default_config()  # suffix local
         _render_and_write(tmp_path, cfg, env)
-        assert (tmp_path / ".github" / "agents" / "carter-maestro-local.md").exists()
-        assert (tmp_path / ".github" / "agents" / "carter-engineer-local.md").exists()
+        assert (tmp_path / ".opencode" / "agents" / "carter-maestro-local.md").exists()
+        assert (tmp_path / ".opencode" / "agents" / "carter-engineer-local.md").exists()
 
     def test_invalid_suffix_rejected(self, tmp_path):
         cfg = generate_default_config()
@@ -980,7 +933,7 @@ class TestNarratorRedactionHandoff:
             assert "<redaction_rules>" in body, f"{level}: forced pass missing"
 
 
-# ─── carter init CLI flags (--target / --agent-suffix) ───────────────────────
+# ─── carter init CLI flags (--agent-suffix) ───────────────────────
 
 
 class TestInitFlags:
@@ -994,32 +947,28 @@ class TestInitFlags:
         runner = CliRunner()
         return runner.invoke(main, ["init", str(tmp_path), "--no-git-state", *args])
 
-    def test_target_flag_writes_opencode(self, tmp_path):
-        result = self._run_init(tmp_path, "--target", "opencode")
+    def test_init_writes_opencode(self, tmp_path):
+        result = self._run_init(tmp_path)
         assert result.exit_code == 0, result.output
         assert (tmp_path / ".opencode" / "agents").exists()
         assert (tmp_path / "AGENTS.md").exists()
         assert not (tmp_path / ".github").exists()
-
-    def test_target_flag_persisted_in_config(self, tmp_path):
-        self._run_init(tmp_path, "--target", "all")
-        config = load_config(tmp_path / ".carter" / "carter.yaml")
-        assert config["target"] == "all"
+        assert "target" not in load_config(tmp_path / ".carter" / "carter.yaml")
 
     def test_agent_suffix_flag(self, tmp_path):
         result = self._run_init(tmp_path, "--agent-suffix", "demo")
         assert result.exit_code == 0, result.output
-        assert (tmp_path / ".github" / "agents" / "carter-maestro-demo.md").exists()
+        assert (tmp_path / ".opencode" / "agents" / "carter-maestro-demo.md").exists()
         config = load_config(tmp_path / ".carter" / "carter.yaml")
         assert config["agent_suffix"] == "demo"
 
     def test_empty_agent_suffix_flag(self, tmp_path):
         result = self._run_init(tmp_path, "--agent-suffix", "")
         assert result.exit_code == 0, result.output
-        assert (tmp_path / ".github" / "agents" / "carter-maestro.md").exists()
+        assert (tmp_path / ".opencode" / "agents" / "carter-maestro.md").exists()
 
-    def test_invalid_target_rejected(self, tmp_path):
-        result = self._run_init(tmp_path, "--target", "bogus")
+    def test_target_flag_removed(self, tmp_path):
+        result = self._run_init(tmp_path, "--target", "opencode")
         assert result.exit_code != 0
 
     def test_invalid_agent_suffix_rejected(self, tmp_path):
@@ -1035,285 +984,35 @@ class TestInitFlags:
         assert "NO redaction" not in result.output
 
 
-# ─── Risk-Based Strictness Policy Frontmatter (P2 / ADR-0005) ────────────────
-
-
 _ALL_ROLES = ["maestro", "architect", "engineer", "devops", "pm", "learner", "narrator", "security"]
 
 
-def _policy_config(level: str = "guarded", target: str = "copilot") -> dict:
-    """Default config pinned to a policy level + target, canonical agent names."""
-    cfg = generate_default_config(workspace_name="policy", mode="single")
-    cfg["agent_suffix"] = ""
-    cfg["policy"]["level"] = level
-    cfg["target"] = target
-    return cfg
-
-
-def _policy_block(config: dict, role: str) -> dict:
-    """Parse a role's native frontmatter and re-inject the ``policy`` block from
-    its ``carter:policy`` comment (the block now lives off the wire, ADR-0005)."""
-    block = yaml.safe_load(policy_frontmatter(config, role)) or {}
-    block["policy"] = parse_policy_comment(policy_comment(config, role))
-    return block
-
-
-class TestPolicyFrontmatterModel:
-    """The deterministic ``policy:`` block is the target-agnostic source of truth."""
-
-    @pytest.mark.parametrize("role", _ALL_ROLES)
-    def test_allow_matches_effective_allowlist(self, role):
-        cfg = _policy_config()
-        block = _policy_block(cfg, role)
-        expected = sorted(c for c, on in effective_allowlist(cfg)[role].items() if on)
-        assert block["policy"]["allow"] == expected
-
-    @pytest.mark.parametrize("role", _ALL_ROLES)
-    def test_gates_match_guarded_level(self, role):
-        block = _policy_block(_policy_config(level="guarded"), role)
-        for cat, gate in block["policy"]["gates"].items():
-            assert gate == RISK_TAXONOMY[cat]["guarded"]
-
-    @pytest.mark.parametrize("role", _ALL_ROLES)
-    def test_gates_cover_exactly_allowed_categories(self, role):
-        block = _policy_block(_policy_config(), role)
-        assert sorted(block["policy"]["gates"]) == block["policy"]["allow"]
-
-    def test_devops_holds_all_four_categories(self):
-        block = _policy_block(_policy_config(), "devops")
-        # emitted allow is sorted; devops is the sole remote-write/dangerous holder.
-        assert block["policy"]["allow"] == ["dangerous", "local-write", "read", "remote-write"]
-
-    def test_narrator_holds_read_local_write_only(self):
-        block = _policy_block(_policy_config(), "narrator")
-        # first-class narrator: read + local-write, NOT remote-write (D4).
-        assert block["policy"]["allow"] == ["local-write", "read"]
-
-    def test_orchestrators_hold_read_only(self):
-        for role in ("maestro", "architect", "learner"):
-            block = _policy_block(_policy_config(), role)
-            assert block["policy"]["allow"] == ["read"]
-
-    def test_guarded_gates_are_concrete(self):
-        gates = _policy_block(_policy_config(), "devops")["policy"]["gates"]
-        assert gates["read"] == "allow"
-        assert gates["local-write"] == "allow"
-        assert gates["remote-write"] == "ask"
-        assert gates["dangerous"] == "gate"
-
-    def test_policy_block_emitted_for_every_target(self):
-        for target in ("copilot", "opencode", "all"):
-            block = _policy_block(_policy_config(target=target), "devops")
-            assert "policy" in block
-
-
-class TestPolicyStrictEnabled:
-    """``strict`` emits the real deny maps, backed by the lint (hard ack) and the
-    escape hatch."""
-
-    def test_strict_emits_deny_gates(self):
-        block = _policy_block(_policy_config(level="strict"), "devops")
-        gates = block["policy"]["gates"]
-        assert gates["dangerous"] == "deny"
-        assert gates["remote-write"] == "gate"
-
-    def test_strict_level_is_strict(self):
-        block = _policy_block(_policy_config(level="strict"), "devops")
-        assert block["policy"]["level"] == "strict"
-
-    def test_strict_has_no_pending_marker(self):
-        raw = policy_frontmatter(_policy_config(level="strict"), "devops")
-        assert "pending P3" not in raw
-
-    def test_strict_permission_bash_denies_dangerous(self):
-        block = _policy_block(_policy_config(level="strict", target="opencode"), "devops")
-        bash = block["permission"]["bash"]
-        # devops holds `dangerous` (deny at strict) -> those commands deny on
-        # OpenCode, but local shell stays available so the agent can still work.
-        assert bash["*"] == "allow"
-        assert bash["terraform apply*"] == "deny"
-        assert bash["rm -rf*"] == "deny"
-
-    def test_read_only_agents_unaffected_by_strict(self):
-        # architect holds only `read` (allow at every level) -> no deny leaks in.
-        block = _policy_block(_policy_config(level="strict"), "architect")
-        assert set(block["policy"]["gates"].values()) == {"allow"}
-
-
-class TestStrictGateMatrix:
-    """Step 9: strict emission + lint across targets (the P2->P3 gate proof).
-    Runtime denial itself is out of scope (Q17) — we prove emission + lint."""
-
-    def _installed(self, config: dict) -> dict:
-        installed = {}
-        for role in _ALL_ROLES:
-            fm = yaml.safe_load(policy_frontmatter(config, role)) or {}
-            fm["policy"] = parse_policy_comment(policy_comment(config, role))
-            installed[role] = fm
-        return installed
-
-    def test_strict_on_opencode_lints_clean(self):
-        from carter.scaffold import lint_policy
-
-        cfg = _policy_config(level="strict", target="opencode")
-        errors, _ = lint_policy(cfg, self._installed(cfg))
-        assert errors == []  # OpenCode enforces -> no hard-ack needed
-
-    def test_strict_on_copilot_fails_closed(self):
-        from carter.scaffold import lint_policy
-
-        cfg = _policy_config(level="strict", target="copilot")
-        errors, _ = lint_policy(cfg, self._installed(cfg))
-        assert any("accept-degraded" in e for e in errors)
-
-    def test_strict_on_copilot_passes_with_ack(self):
-        from carter.scaffold import lint_policy
-
-        cfg = _policy_config(level="strict", target="copilot")
-        errors, warnings = lint_policy(cfg, self._installed(cfg), accept_degraded=True)
-        assert errors == []
-        assert any("degrades to advisory" in w for w in warnings)
-
-    def test_strict_emitted_frontmatter_lints_without_drift(self):
-        from carter.scaffold import lint_policy
-
-        cfg = _policy_config(level="strict", target="opencode")
-        errors, _ = lint_policy(cfg, self._installed(cfg))
-        # The emitted strict frontmatter matches the strict model — no drift.
-        assert not [e for e in errors if "drifted" in e]
-
-
-class TestPolicyTargetShaping:
-    """Native enforcement keys follow the resolved target (copilot|opencode|all)."""
-
-    def test_copilot_emits_tools_only(self):
-        block = _policy_block(_policy_config(target="copilot"), "devops")
-        assert "tools" in block
-        assert "permission" not in block
-
-    def test_opencode_emits_permission_only(self):
-        block = _policy_block(_policy_config(target="opencode"), "devops")
-        assert "permission" in block
-        assert "tools" not in block
-
-    def test_all_emits_both_native_forms(self):
-        block = _policy_block(_policy_config(target="all"), "devops")
-        assert "tools" in block
-        assert "permission" in block
-
-    def test_tools_are_policy_file_tools_plus_mcp_scope(self):
-        # ADR-0011: tools = policy-derived file tools (read/local-write) + MCP scope.
-        # devops holds read + local-write, so read tools then editFiles then its scope.
-        assert _policy_block(_policy_config(), "devops")["tools"] == [
-            *_READ_TOOLS,
-            "editFiles",
-            "carter-github/*",
-            "carter-terraform/*",
-        ]
-        # learner holds read only -> read tools + its single MCP server, no editFiles.
-        assert _policy_block(_policy_config(), "learner")["tools"] == [
-            *_READ_TOOLS,
-            "carter-atlassian/*",
-        ]
-
-    def test_specialist_without_mcp_scope_still_emits_file_tools(self):
-        # ADR-0011: a specialist with no MCP scope still emits a `tools` key for the
-        # file tools its policy implies — narrator (read + local-write) gets read
-        # tools + editFiles, so it can read/edit despite wiring no MCP server.
-        block = _policy_block(_policy_config(target="copilot"), "narrator")
-        assert block["tools"] == [*_READ_TOOLS, "editFiles"]
-
-    def test_primary_emits_agent_tool_ahead_of_file_tools(self):
-        # ADR-0010 D1 + ADR-0011: the maestro has no MCP scope but carries `agent`
-        # (native dispatch) ahead of its policy read tools (so it can read to route).
-        block = _policy_block(_policy_config(target="copilot"), "maestro")
-        assert block["tools"] == ["agent", *_READ_TOOLS]
-
-    def test_tools_track_the_scope_constant(self):
-        # Guard the role->servers map from drifting out of the emitted tools, on top
-        # of the policy-derived file tools (read tools always; editFiles iff the agent
-        # holds local-write). The maestro prepends the `agent` dispatch tool.
-        allowlist = effective_allowlist(_policy_config())
-        for role, servers in AGENT_MCP_SCOPE.items():
-            block = _policy_block(_policy_config(target="copilot"), role)
-            file_tools = list(_READ_TOOLS)
-            if allowlist[role].get("local-write"):
-                file_tools.append("editFiles")
-            expected = file_tools + [f"carter-{s}/*" for s in sorted(servers)]
-            if role == "maestro":
-                expected = ["agent", *expected]
-            assert block["tools"] == expected
-
-
-class TestPolicyOpenCodePermission:
-    """Best-effort OpenCode permission map derived from allowlist x gates."""
-
-    def test_devops_permission_guarded(self):
-        perm = _policy_block(_policy_config(target="opencode"), "devops")["permission"]
-        assert perm["edit"] == "allow"
-        assert perm["webfetch"] == "allow"
-        # devops holds remote-write (ask) + dangerous (gate->ask at guarded); local
-        # shell stays open.
-        assert perm["bash"]["*"] == "allow"
-        assert perm["bash"]["git push*"] == "ask"
-        assert perm["bash"]["rm -rf*"] == "ask"
-
-    def test_edit_denied_without_local_write(self):
-        perm = _policy_block(_policy_config(target="opencode"), "architect")["permission"]
-        assert perm["edit"] == "deny"
-
-    def test_local_write_agent_keeps_local_bash_denies_remote(self):
-        # The regression fix: a read+local-write agent (engineer) must run local
-        # shell (pytest, git status/add/commit) yet cannot push/apply/destroy.
-        perm = _policy_block(_policy_config(target="opencode"), "engineer")["permission"]
-        assert perm["bash"]["*"] == "allow"
-        assert perm["bash"]["git push*"] == "deny"
-        assert perm["bash"]["terraform apply*"] == "deny"
-        assert perm["bash"]["rm -rf*"] == "deny"
-
-    def test_read_only_agent_bash_baseline_is_ask(self):
-        # architect holds only `read` (no local-write) -> shell prompts, dangerous deny.
-        perm = _policy_block(_policy_config(target="opencode"), "architect")["permission"]
-        assert perm["bash"]["*"] == "ask"
-        assert perm["bash"]["git push*"] == "deny"
-
-    def test_webfetch_always_allowed(self):
-        for role in _ALL_ROLES:
-            perm = _policy_block(_policy_config(target="opencode"), role)["permission"]
-            assert perm["webfetch"] == "allow"
+# ─── Rendered V2 frontmatter (ADR-0014 D1/D5) ──────────────────────────────
+# The rule-order contract itself lives in tests/test_policy_lint.py.
 
 
 class TestPolicyRenderedIntegration:
-    """The policy block lands in a ``carter:policy`` comment (off the wire), while
-    the frontmatter carries only the target-native enforcement keys."""
+    """Rendered agents carry V2 ``permissions:`` and no ``carter:policy`` comment."""
 
-    def test_rendered_frontmatter_parses_without_policy(self, env):
-        rendered = render_agents(_policy_config(), env)
+    def test_rendered_frontmatter_is_v2(self, env, default_config):
+        rendered = render_agents(default_config, env)
         assert rendered
         for name, content in rendered.items():
             assert content.startswith("---\n"), f"{name}: no frontmatter"
-            _, fm, _ = content.split("---", 2)
+            _, fm, body = content.split("---", 2)
             data = yaml.safe_load(fm)
             assert data["description"], f"{name}: lost description"
             assert data["mode"], f"{name}: lost mode"
-            # The advisory block must NOT leak into the wire-facing frontmatter.
-            assert "policy" not in data, f"{name}: policy leaked into frontmatter"
-            policy = parse_policy_comment(content)
-            assert policy is not None, f"{name}: missing carter:policy comment"
-            assert "allow" in policy and "gates" in policy
+            assert isinstance(data["permissions"], list), name
+            assert "policy" not in data and "permission" not in data, name
+            assert "carter:policy" not in body, name
 
-    def test_rendered_devops_policy_matches_model(self, env):
-        content = render_agents(_policy_config(), env)["carter-devops.md"]
-        policy = parse_policy_comment(content)
-        assert policy["allow"] == ["dangerous", "local-write", "read", "remote-write"]
-        _, fm, _ = content.split("---", 2)
-        data = yaml.safe_load(fm)
-        assert data["tools"] == [
-            *_READ_TOOLS,
-            "editFiles",
-            "carter-github/*",
-            "carter-terraform/*",
-        ]
+    def test_strict_devops_denies_dangerous(self, env, default_config):
+        default_config["policy"]["level"] = "strict"
+        content = render_agents(default_config, env)["carter-devops.md"]
+        rules = yaml.safe_load(content.split("---", 2)[1])["permissions"]
+        assert {"action": "shell", "resource": "rm -rf *", "effect": "deny"} in rules
+        assert rules[-1]["effect"] == "deny"
 
 
 class TestConfigureMcpServersUnchanged:
@@ -1497,8 +1196,8 @@ class TestInitProfileFlag:
         cfg = load_config(tmp_path / ".carter" / "carter.yaml")
         assert cfg["profile"] == "quality"
         # narrator (default Sonnet) is lifted to Opus under quality in the rendered file.
-        narrator = (tmp_path / ".github" / "agents" / "carter-narrator-local.md").read_text()
-        assert "model: Claude Opus 5.5" in narrator
+        narrator = (tmp_path / ".opencode" / "agents" / "carter-narrator-local.md").read_text()
+        assert "model: anthropic/claude-opus-5-5" in narrator
 
     def test_default_init_has_no_profile_key(self, tmp_path):
         result = self._run(tmp_path)
@@ -1506,8 +1205,8 @@ class TestInitProfileFlag:
         cfg = load_config(tmp_path / ".carter" / "carter.yaml")
         assert cfg.get("profile") is None
         # narrator ships on Sonnet by default.
-        narrator = (tmp_path / ".github" / "agents" / "carter-narrator-local.md").read_text()
-        assert "model: Claude Sonnet 5.5" in narrator
+        narrator = (tmp_path / ".opencode" / "agents" / "carter-narrator-local.md").read_text()
+        assert "model: anthropic/claude-sonnet-5-5" in narrator
 
     def test_invalid_profile_is_rejected(self, tmp_path):
         result = self._run(tmp_path, "--profile", "cheapest")

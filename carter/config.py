@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import copy
-import json
 import re
 from pathlib import Path
 from typing import Any
@@ -83,33 +82,21 @@ DEFAULT_CONFIG: dict[str, Any] = {
         "level": "guarded",  # guarded | strict
         "overrides": {},  # category -> gate, explicit per-category override
     },
-    # Per-agent model. Dict-shaped per tier (so `_deep_merge` doesn't
-    # wipe it — same footgun the taxonomy maps avoid). Each tier maps a target to a
-    # single model string: a display name for VS Code/Copilot, a `provider/model` ID
-    # for OpenCode. Resolved `overrides > tier > default` (see `resolve_model`).
-    # Thinkers = Opus 5.5; implementers = Sonnet 5.5; Haiku 5.5 is opt-in via `overrides`.
-    # Effort is NOT here — no target has a per-agent effort field; it is the global
-    # `--effort high` knob. `temperature` is dropped wholesale.
+    # Per-agent model (ADR-0014 D4). Each tier is ONE OpenCode V2 model string,
+    # `provider/model[#variant]`. Resolved `overrides > profile > tier > default`
+    # (see `resolve_model`). Thinkers = Opus 5.5; implementers = Sonnet 5.5; Haiku 5.5
+    # is opt-in via `overrides`. No per-agent effort; `temperature` is never emitted.
     "models": {
-        "default": {"copilot": "Claude Opus 5.5", "opencode": "anthropic/claude-opus-5-5"},
-        "thinkers": {"copilot": "Claude Opus 5.5", "opencode": "anthropic/claude-opus-5-5"},
-        "implementers": {
-            "copilot": "Claude Sonnet 5.5",
-            "opencode": "anthropic/claude-sonnet-5-5",
-        },
-        "overrides": {},  # per-agent, e.g. {engineer: {copilot: "Claude Haiku 5.5", ...}}
+        "default": "anthropic/claude-opus-5-5",
+        "thinkers": "anthropic/claude-opus-5-5",
+        "implementers": "anthropic/claude-sonnet-5-5",
+        "overrides": {},  # per-agent, e.g. {engineer: "anthropic/claude-haiku-5-5"}
     },
-    "target": "copilot",
     # Language for Carter's internal documentation only: ADRs, RFCs, and everything
     # under .carter/ (plans, knowledge, checkpoints) plus memories. Repository output
     # (commits, code comments, docs, PRs, issues, Jira, Slack) is always English.
     "docs_language": "en",
 }
-
-
-def resolve_targets(target: str) -> list[str]:
-    """Resolve a config/CLI ``target`` to concrete tool targets (``all`` = both)."""
-    return ["copilot", "opencode"] if target == "all" else [target]
 
 
 class ConfigError(Exception):
@@ -147,6 +134,35 @@ def _validate_profile(profile: Any) -> None:
             f"Invalid profile: {profile!r}. Must be one of: {', '.join(sorted(PROFILES))} "
             "(or omit the key)."
         )
+
+
+# OpenCode V2 model reference: `provider/model` with an optional `#variant`. The
+# model part may itself contain `/` (e.g. `openrouter/meta/llama-4`).
+_MODEL_RE = re.compile(r"^[^\s/#]+/[^\s#]+(#[^\s#]+)?$")
+
+
+def _validate_no_target(user_config: dict[str, Any], config_path: Path) -> None:
+    """Reject a leftover ``target:`` key (ADR-0014 D4: removed, no shim)."""
+    if "target" in user_config:
+        raise ConfigError(
+            f"Unknown key 'target' in {config_path}. Delete the `target:` key: "
+            "Carter now only supports OpenCode >= 2.1, so there is no target to choose."
+        )
+
+
+def _validate_models(models: Any) -> None:
+    """Validate the ``models`` block: every tier/override is a V2 model string."""
+    if not isinstance(models, dict):
+        raise ConfigError(f"Invalid models block: {models!r} (must be a mapping)")
+    hint = "Must be a single 'provider/model[#variant]' string, e.g. 'anthropic/claude-opus-5-5'."
+    entries = [(f"models.{k}", v) for k, v in models.items() if k != "overrides"]
+    overrides = models.get("overrides") or {}
+    if not isinstance(overrides, dict):
+        raise ConfigError(f"Invalid models.overrides: {overrides!r} (must be a mapping)")
+    entries += [(f"models.overrides.{role}", v) for role, v in overrides.items()]
+    for where, value in entries:
+        if not isinstance(value, str) or not _MODEL_RE.match(value):
+            raise ConfigError(f"Invalid {where}: {value!r}. {hint}")
 
 
 def _validate_policy(policy: Any) -> None:
@@ -199,7 +215,9 @@ def load_config(config_path: Path) -> dict[str, Any]:
     if missing:
         raise ConfigError(f"Missing required keys: {', '.join(sorted(missing))}")
 
+    _validate_no_target(config, config_path)
     merged = _merge_with_defaults(config)
+    _validate_models(merged.get("models"))
     _validate_agent_suffix(merged.get("agent_suffix", ""))
     _validate_policy(merged.get("policy", {}))
     _validate_profile(merged.get("profile"))
@@ -340,28 +358,21 @@ def _profile_tier(config: dict[str, Any], role: str) -> str | None:
 
 
 def resolve_model(config: dict[str, Any], role: str) -> str:
-    """The per-target ``model:`` string for ``role``.
+    """The ``model:`` string (``provider/model[#variant]``) for ``role``.
 
     Resolution order: ``models.overrides[role]`` > active ``profile:`` tier > the role's
-    base tier (``MODEL_TIERS``) > ``models.default`` (the un-tiered catch-all). The value
-    is a SINGLE string — a display name for VS Code/Copilot, a ``provider/model`` id for
-    OpenCode (never an array, which breaks Copilot CLI).
+    base tier (``MODEL_TIERS``) > ``models.default`` (the un-tiered catch-all).
     """
     models = config.get("models") or DEFAULT_CONFIG["models"]
-    target = config.get("target", "copilot")
-    # OpenCode shares the `opencode` key; `all` and any other target map to copilot's
-    # display name (the default emission surface).
-    key = "opencode" if target == "opencode" else "copilot"
-
     override = (models.get("overrides") or {}).get(role)
-    if override and override.get(key):
-        return override[key]
+    if override:
+        return str(override)
     # A `profile:` re-tiers the role; it wins over the base tier but not an explicit
     # per-agent override above.
     tier = _profile_tier(config, role) or MODEL_TIERS.get(role)
-    if tier and (models.get(tier) or {}).get(key):
-        return models[tier][key]
-    return (models.get("default") or {}).get(key, "")
+    if tier and models.get(tier):
+        return str(models[tier])
+    return str(models.get("default") or "")
 
 
 def effective_allowlist(config: dict[str, Any]) -> dict[str, dict[str, bool]]:
@@ -371,43 +382,18 @@ def effective_allowlist(config: dict[str, Any]) -> dict[str, dict[str, bool]]:
 
 
 # ──────────────────────────────────────────────────────────────────────────────
-# Per-target frontmatter emission
+# Agent frontmatter emission (OpenCode V2 `permissions:`, ADR-0014 D1)
 # ──────────────────────────────────────────────────────────────────────────────
-# Carter is a scaffolder, not a runtime: it emits the per-agent allowlist + gates
-# into agent frontmatter using the most authoritative native primitive per target,
-# with a deterministic, target-agnostic `policy:` block as the source of truth the
-# policy lint validates. Per-agent MCP scope lives here (agent frontmatter), never
-# in the global `configure_mcp_servers` wiring.
+# Carter is a scaffolder, not a runtime: it emits each agent's allowlist x gates as
+# an ordered V2 `permissions:` rule list (last match wins). That list is the single
+# enforceable truth; `carter check` compares it with what carter.yaml generates.
 
-# Per-agent MCP server scope, mirroring each static agent's <mcp> block. Feeds the
-# copilot/VS Code `tools:` allowlist alongside the policy-derived file tools below.
-# An agent may wire no MCP servers (the maestro orchestrator; the narrator, which
-# authors via skills) — it still emits a `tools:` key for its policy file tools.
-AGENT_MCP_SCOPE: dict[str, list[str]] = {
-    "maestro": [],
-    "architect": ["github", "terraform"],
-    "engineer": ["github", "terraform"],
-    "devops": ["github", "terraform"],
-    "pm": ["atlassian", "github"],
-    "learner": ["atlassian"],
-    "narrator": [],
-    "security": ["github"],
-}
+# V1 agent frontmatter keys. A file carrying V2 `permissions` is read as V2 and these
+# are ignored with a warning (https://opencode.ai/v2/docs/migrate-v1/), so Carter
+# never emits them and the lint rejects them.
+V1_AGENT_KEYS: tuple[str, ...] = ("permission", "tools", "bash", "task", "name", "temperature")
 
-# Built-in VS Code / Copilot tools each policy category grants. The
-# copilot `tools:` key is a REPLACING allowlist — the host's default file tools are
-# available only if listed — so Carter must enumerate the file tools the agent's
-# policy implies, or the agent (and the chain it delegates to) loses the filesystem.
-# Flat names, consistent with the `agent` / `carter-<server>/*` Carter already emits.
-# `remote-write`/`dangerous` add no *file* tool here (they govern push/shell, gated
-# via `policy:`/`handoffs:`); this map is the single home for a future tool rename.
-_CATEGORY_TOOLS: dict[str, list[str]] = {
-    "read": ["codebase", "search", "usages", "fetch"],
-    "local-write": ["editFiles"],
-}
-
-# OpenCode's permission model has no `gate` tier, so Carter's `gate` degrades to
-# `ask` (the closest "prompt the human" semantics); `allow`/`deny` pass through.
+# V2 effects are allow/deny/ask only, so Carter `gate` is emitted as `ask` (D2).
 _OPENCODE_GATE: dict[str, str] = {
     "allow": "allow",
     "ask": "ask",
@@ -415,55 +401,32 @@ _OPENCODE_GATE: dict[str, str] = {
     "deny": "deny",
 }
 
-# Representative shell commands per shell-risk category, used to gate/deny the
-# OpenCode `bash` path with command globs so it can't bypass the allowlist.
+# Representative shell commands per shell-risk category. V2 glob form: a pattern
+# ending in ` *` also matches the bare command (`git push *` matches `git push`).
 _BASH_COMMANDS: dict[str, tuple[str, ...]] = {
-    "remote-write": ("git push*",),
+    "remote-write": ("git push *",),
     "dangerous": (
-        "terraform apply*",
-        "terraform destroy*",
-        "kubectl apply*",
-        "helm upgrade*",
-        "rm -rf*",
-        "git reset --hard*",
-        "git push --force*",
+        "terraform apply *",
+        "terraform destroy *",
+        "kubectl apply *",
+        "helm upgrade *",
+        "rm -rf *",
+        "git reset --hard *",
+        "git push --force *",
     ),
 }
 
+# Actions every agent may use without prompting (D1 step 2).
+_DISCOVERY_ACTIONS: tuple[str, ...] = ("read", "glob", "grep", "skill", "question")
 
-def _opencode_permission(allowed: list[str], gates: dict[str, str]) -> dict[str, Any]:
-    """Best-effort OpenCode ``permission`` map from an agent's allowlist x gates.
+# The primary orchestrator — the only agent allowed to launch subagents (flat chain).
+PRIMARY_ROLE = "maestro"
 
-    ``edit`` follows ``local-write``. ``bash`` is a command-glob map: local shell
-    stays available (a ``local-write`` agent needs ``pytest``/local ``git``; a
-    read-only agent gets ``ask``), while commands in a shell-risk category the agent
-    does NOT hold are denied — so the bash path can't bypass the declared allowlist.
-    ``webfetch`` is always allowed. Carter ``gate`` degrades to ``ask`` (OpenCode has
-    no gate).
-    """
-    edit = "allow" if "local-write" in allowed else "deny"
-    return {
-        "edit": edit,
-        "bash": _opencode_bash(allowed, gates),
-        "webfetch": "allow",
-    }
+Rule = dict[str, str]
 
 
-def _opencode_bash(allowed: list[str], gates: dict[str, str]) -> dict[str, str]:
-    """OpenCode ``bash`` permission as ``{command-glob: action}`` rules.
-
-    The ``*`` baseline (first, lowest precedence — OpenCode applies the last
-    matching rule) allows local shell for a local-write agent, or ``ask`` for a
-    read-only one. Each shell-risk command then resolves to its category's gate if
-    the agent holds it, or ``deny`` if not.
-    """
-    baseline = "allow" if "local-write" in allowed else "ask"
-    rules: dict[str, str] = {"*": baseline}
-    for cat, commands in _BASH_COMMANDS.items():
-        verdict = _OPENCODE_GATE[gates[cat]] if cat in allowed else "deny"
-        for cmd in commands:
-            rules[cmd] = verdict
-    return rules
+def _rule(action: str, resource: str, effect: str) -> Rule:
+    return {"action": action, "resource": resource, "effect": effect}
 
 
 def _gates_for(
@@ -476,166 +439,66 @@ def _gates_for(
     return {cat: overrides.get(cat, RISK_TAXONOMY[cat][level]) for cat in allowed}
 
 
-# The primary orchestrator (the only router) and the subagent dispatch primitive.
-# Native subagent dispatch is emitted ONLY on the primary, as an
-# EXPLICIT per-specialist allowlist — never `'*'` and never a `carter-*` glob
-# (a security boundary: a glob auto-trusts any future `carter-*` agent; `'*'` lets
-# the maestro delegate to any workspace agent, failure-open). The chain is flat —
-# every specialist carries `agents: []` so the maestro is the only router.
-PRIMARY_ROLE = "maestro"
+def permission_rules(config: dict[str, Any], role: str) -> list[Rule]:
+    """The ordered V2 ``permissions:`` rules for ``role`` (ADR-0014 D1; last match wins).
 
-
-def _suffixed_agent(role: str, config: dict[str, Any]) -> str:
-    """``carter-<role>`` honoring ``agent_suffix`` (e.g. ``carter-engineer-local``).
-
-    The dispatch allowlist must reference the same suffixed files the rest of the
-    rendered agent body does, and the lint recomputes against already-suffixed
-    installed frontmatter — so emission carries the suffix here rather than relying
-    on the post-render rewrite (which is idempotent over these names anyway).
+    1. ``* *`` ask baseline (overrides V2's ``*:*:allow`` base).
+    2. Discovery actions allowed.
+    3. The base ``.env`` read rules re-appended (step 2 would shadow them).
+    4. Carter state under ``~/.carter``: readable by all, memories editable by
+       ``local-write`` holders.
+    5. ``subagent * → deny``; the maestro alone then allows ``carter-*``.
+    6. Category rules from the allowlist x gates; ``gate`` emitted as ``ask``.
+    Anything else (MCP tools, websearch, execute) falls to the baseline ask.
     """
-    raw = (config.get("agent_suffix") or "").strip()
-    return f"carter-{role}{('-' + raw) if raw else ''}"
+    policy = config.get("policy") or {}
+    level = policy.get("level", "guarded")
+    allowed = [cat for cat, on in sorted(effective_allowlist(config).get(role, {}).items()) if on]
+    gates = _gates_for(allowed, level, policy.get("overrides"))
+    writes = "local-write" in allowed
 
-
-def dispatch_specialists(config: dict[str, Any]) -> list[str]:
-    """The explicit per-specialist dispatch allowlist for the primary (sorted).
-
-    Every configured agent except the primary, as suffixed ``carter-<role>`` names.
-    This is the security boundary the fail-closed lint validates.
-    """
-    return sorted(
-        _suffixed_agent(role, config) for role in config.get("agents", []) if role != PRIMARY_ROLE
-    )
+    rules = [_rule("*", "*", "ask")]
+    rules += [_rule(action, "*", "allow") for action in _DISCOVERY_ACTIONS]
+    rules += [
+        _rule("read", "*.env", "ask"),
+        _rule("read", "*.env.*", "ask"),
+        _rule("read", "*.env.example", "allow"),
+    ]
+    rules += [
+        _rule("external_directory", "~/.carter/*", "allow"),
+        _rule("read", "~/.carter/*", "allow"),
+    ]
+    if writes:
+        rules.append(_rule("edit", "~/.carter/memories/*", "allow"))
+    rules.append(_rule("subagent", "*", "deny"))
+    if role == PRIMARY_ROLE:
+        rules.append(_rule("subagent", "carter-*", "allow"))
+    local = "allow" if writes else "ask"
+    rules += [_rule(action, "*", local) for action in ("edit", "shell", "webfetch")]
+    for cat, commands in _BASH_COMMANDS.items():
+        effect = _OPENCODE_GATE[gates[cat]] if cat in allowed else "deny"
+        rules += [_rule("shell", cmd, effect) for cmd in commands]
+    return rules
 
 
 def policy_native_keys(config: dict[str, Any], role: str) -> dict[str, Any]:
-    """The target-native enforcement keys Carter emits for ``role``.
+    """The enforced frontmatter keys Carter emits for ``role``: ``model`` + ``permissions``.
 
-    ``tools`` (copilot/all): the policy-derived file tools (``read`` →
-    ``codebase``/``search``/``usages``/``fetch``; ``local-write`` → ``editFiles``)
-    plus the per-agent MCP server scope; the primary additionally carries the
-    ``agent`` subagent tool (``tools`` is a replacing allowlist, so the
-    file tools the policy implies MUST be listed or the agent loses the filesystem).
-    ``agents``/``handoffs``
-    (copilot/all): native subagent dispatch — an EXPLICIT per-specialist allowlist on
-    the primary, ``[]`` on every specialist (flat chain). ``permission``
-    (opencode/all): the best-effort native gate map; the primary's also carries a
-    ``task`` allowlist (``'*': deny`` + explicit per-specialist ``allow``). Pure
-    function of the model + target — the single source both ``policy_frontmatter``
-    (emission) and ``lint_policy`` (drift detection) derive these enforced keys from.
+    Pure function of carter.yaml — the single source both emission
+    (:func:`policy_frontmatter`) and the lint derive these keys from.
     """
-    target = config.get("target", "copilot")
-    policy = config.get("policy") or {}
-    level = policy.get("level", "guarded")
-    allowed = [cat for cat, on in sorted(effective_allowlist(config).get(role, {}).items()) if on]
-    gates = _gates_for(allowed, level, policy.get("overrides"))
-    is_primary = role == PRIMARY_ROLE
-    specialists = dispatch_specialists(config)
-
     keys: dict[str, Any] = {}
-    # Per-agent model: a SINGLE per-target string on every agent, resolved
-    # overrides > tier > default. Emitted for all targets (the value's shape is
-    # target-specific). `carter check` prints the unverifiable-model advisory.
     model = resolve_model(config, role)
     if model:
         keys["model"] = model
-    if target in ("copilot", "all"):
-        scope = [f"carter-{server}/*" for server in sorted(AGENT_MCP_SCOPE.get(role, []))]
-        # Policy-derived file tools: `tools:` is a replacing allowlist, so
-        # the file tools the agent's policy implies MUST be listed or the agent — and
-        # the chain the maestro delegates to — loses the filesystem. Order: `agent`
-        # (primary dispatch) → file tools (policy order: read, local-write) → MCP scope.
-        held = set(allowed)
-        file_tools = [t for cat, tools_ in _CATEGORY_TOOLS.items() if cat in held for t in tools_]
-        tools = (["agent"] if is_primary else []) + file_tools + scope
-        if tools:
-            keys["tools"] = tools
-        # Native dispatch allowlist (VS Code/Copilot): explicit on the primary, empty
-        # on every specialist (flat one-level chain). `handoffs:` is the user-approved
-        # confirm surface for the same delegation set.
-        if is_primary:
-            # Independent list copies so YAML emits each inline (no &anchor/*alias
-            # that a downstream parser/editor might choke on).
-            keys["agents"] = list(specialists)
-            keys["handoffs"] = list(specialists)
-        else:
-            keys["agents"] = []
-    if target in ("opencode", "all"):
-        permission = _opencode_permission(allowed, gates)
-        if is_primary:
-            # OpenCode `permission.task`: fail-closed `'*': deny` + an explicit allow
-            # per specialist (never a `carter-*` glob).
-            permission["task"] = {"*": "deny", **dict.fromkeys(specialists, "allow")}
-        keys["permission"] = permission
+    keys["permissions"] = permission_rules(config, role)
     return keys
 
 
-def _policy_block(config: dict[str, Any], role: str) -> dict[str, Any]:
-    """The deterministic, target-agnostic policy source of truth for ``role``.
-
-    The agent's allowed risk categories and the active level's gate per allowed
-    category. Emitted as an HTML comment (see :func:`policy_comment`) rather than
-    a frontmatter key so it never reaches a model request body — some strict
-    provider gateways (e.g. IBM Bob) 422 on unknown top-level body properties, and
-    OpenCode forwards non-schema frontmatter keys onto the wire. This is what the
-    policy lint validates.
-    """
-    policy = config.get("policy") or {}
-    level = policy.get("level", "guarded")
-    allowed = [cat for cat, on in sorted(effective_allowlist(config).get(role, {}).items()) if on]
-    gates = _gates_for(allowed, level, policy.get("overrides"))
-    return {"level": level, "allow": allowed, "gates": gates}
-
-
-# Machine-readable marker carrying the policy block outside the wire-facing
-# frontmatter. Compact JSON on a single line; parsed back by ``parse_policy_comment``.
-_POLICY_COMMENT_RE = re.compile(r"<!--\s*carter:policy\s+(.+?)\s*-->")
-
-
-def policy_comment(config: dict[str, Any], role: str) -> str:
-    """Render the policy block as a one-line HTML comment for ``role``.
-
-    Placed just after an agent's frontmatter. Kept out of the YAML frontmatter so
-    it is not forwarded into the model request body by OpenCode (which would 422 on
-    strict gateways); still a visible, machine-parseable source of truth + lint anchor.
-    """
-    payload = json.dumps(_policy_block(config, role), separators=(",", ":"))
-    return f"<!-- carter:policy {payload} -->"
-
-
-def parse_policy_comment(text: str) -> dict[str, Any] | None:
-    """Extract the policy block from an agent file's ``carter:policy`` comment.
-
-    Returns the parsed mapping, or ``None`` when the marker is absent or malformed.
-    The inverse of :func:`policy_comment`; used by ``carter check`` and the parity
-    tests to feed the lint the same ``policy`` dict that used to live in frontmatter.
-    """
-    match = _POLICY_COMMENT_RE.search(text)
-    if not match:
-        return None
-    try:
-        parsed = json.loads(match.group(1))
-    except (ValueError, TypeError):
-        return None
-    return parsed if isinstance(parsed, dict) else None
-
-
 def policy_frontmatter(config: dict[str, Any], role: str) -> str:
-    """Render the per-agent target-native enforcement frontmatter for ``role``.
-
-    Returns YAML lines (no surrounding ``---``, no trailing newline) carrying the
-    ACTUALLY-enforced keys — ``model``, ``tools``/``agents``/``handoffs`` (copilot)
-    and ``permission`` (opencode). The advisory ``policy`` block is emitted
-    separately as an HTML comment (:func:`policy_comment`) so it never lands on the
-    wire. Empty string when a role has no native keys.
-
-    ``strict`` emits its real gate map, gated operationally by the `carter check`
-    hard ack on a non-enforcing target.
-    """
+    """Render ``role``'s enforced frontmatter as YAML lines (no ``---``, no trailing newline)."""
     block = policy_native_keys(config, role)
-    if not block:
-        return ""
-    return yaml.dump(block, sort_keys=False, default_flow_style=None).rstrip("\n")
+    return yaml.safe_dump(block, sort_keys=False, default_flow_style=False).rstrip("\n")
 
 
 def policy_gate_table(config: dict[str, Any]) -> list[dict[str, str]]:

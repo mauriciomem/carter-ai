@@ -71,7 +71,6 @@ def _render_opencode_agents() -> dict[str, str]:
     from carter.scaffold import create_env, render_agents
 
     cfg = generate_default_config(workspace_name="carter", mode="single")
-    cfg["target"] = "opencode"
     cfg["agent_suffix"] = ""
     # Global agents serve every workspace: defer to each workspace's docs_language.
     cfg["docs_language"] = None
