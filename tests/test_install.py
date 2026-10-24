@@ -483,9 +483,10 @@ class TestOfficialGitHubServer:
     def test_token_is_env_placeholder_not_literal(self) -> None:
         for target in ("copilot", "opencode"):
             entry = self._github_cfg(target)
-            env = entry.get("env", {})
+            env = entry.get("env") or entry.get("environment", {})
             # The PAT is passed by env placeholder, never a baked literal.
-            assert any("${" in str(v) for v in env.values()), (
+            # copilot: ${VAR}; opencode: {env:VAR} (OpenCode docs, mcp-servers).
+            assert any("${" in str(v) or "{env:" in str(v) for v in env.values()), (
                 f"{target}: GitHub token must be an env placeholder"
             )
 

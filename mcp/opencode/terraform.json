@@ -1,9 +1,19 @@
 {
   "carter-terraform": {
     "type": "local",
-    "command": ["npx", "-y", "@hashicorp/terraform-mcp-server"],
-    "env": {
-      "TF_TOKEN": "${TF_TOKEN}"
+    "command": [
+      "docker",
+      "run",
+      "-i",
+      "--rm",
+      "-e",
+      "TFE_TOKEN",
+      "-e",
+      "TFE_ADDRESS",
+      "hashicorp/terraform-mcp-server@sha256:11dd418bba6003dd5777e9d0979b68de59929a155b355f338f407947e00e9d80"
+    ],
+    "environment": {
+      "TFE_TOKEN": "{env:TFE_TOKEN}"
     }
   }
 }
