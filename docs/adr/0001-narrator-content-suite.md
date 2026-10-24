@@ -10,6 +10,8 @@ tags: [narrator, skills, documentation]
 
 # ADR-0001: Narrator as a first-class agent with a documentation & storytelling skill suite
 
+> **Status note (2026-10-24):** `redaction.enabled` and the `config_warnings` guard no longer exist; the narrator's redaction rules are always rendered and `redaction.categories` selects them.
+
 **Status:** Accepted
 **Date:** 2026-06-06
 **Deciders:** Carter maintainer (mauriciomem), Carter Maestro

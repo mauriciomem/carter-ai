@@ -10,6 +10,8 @@ tags: [agents, generation, scaffold, parity]
 
 # ADR-0002: Single-source agent definitions via build-time generation
 
+> **Status note (2026-10-24):** `config_warnings` and the `carter check` redaction warning were removed (no-op / dead config); the narrator always renders its redaction rules.
+
 **Status:** Accepted (phase 1 + follow-ups shipped); phase 2 (build-time generation) Won't Do — see Current Status
 **Date:** 2026-06-06 (phase 2 abandoned 2026-06-07)
 **Deciders:** Carter maintainer (mauriciomem), Carter Maestro

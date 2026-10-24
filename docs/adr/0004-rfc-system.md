@@ -295,7 +295,7 @@ implementation-plan Q5; mirrors the plan-vs-just-do pragmatism.)
 ## References
 
 - ADR-0003 §D3 ([0003-knowledge-adr-rfc-plan-storage.md](0003-knowledge-adr-rfc-plan-storage.md)) — deferred this design; RFC ≠ ADR principle
-- implementation-plan §8.7 + Q5 ([docs/analysis/implementation-plan.md](../analysis/implementation-plan.md)) — the lightweight `docs/rfcs/` sketch + single-user rationale
+- implementation-plan §8.7 + Q5 (docs/analysis/implementation-plan.md (record no longer in repo)) — the lightweight `docs/rfcs/` sketch + single-user rationale
 - Rust RFC process (git-as-history, pre-FCP sign-off) — <https://rust-lang.github.io/rfcs/>
 - Python PEP 1 (Post-History + 2026 newest-first Change History, status enum) — <https://peps.python.org/pep-0001/>
 - [docs/reference/frontmatter.md](../reference/frontmatter.md) — canonical schema home

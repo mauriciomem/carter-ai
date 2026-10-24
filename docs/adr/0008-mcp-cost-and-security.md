@@ -22,7 +22,7 @@ Carter is a **scaffolder, not a runtime** — it emits agent/skill/MCP config an
 only the **static payload** it writes, never live in-conversation context.
 
 Verified facts driving this decision (full evidence in
-[RFC-0004](../rfcs/0004-cost-context-optimization/README.md) + its `verification.md`):
+RFC-0004 (record removed 2026-10) + its `verification.md`):
 
 - **Both harnesses are token-metered (since 1-Jun-2026).** Copilot bills **GitHub AI
   Credits** = model × (input+output+cached) tokens, 1 credit = $0.01; OpenCode BYO-key
@@ -56,7 +56,7 @@ sub-decisions:
   over token cost on this credential path** (explicit user decision): the **+68%** token
   cost is accepted for a maintained server + removal of the MCP write-tool surface.
   GitHub **writes go via the shell/`gh` path**, governed by
-  [RFC-0002](../rfcs/0002-risk-based-strictness-policy/README.md) — not via MCP.
+  RFC-0002 (record removed 2026-10) — not via MCP.
 - **D3 — Round-trip guardrails (the low-effort cost half).** Reinforce spec/TDD-first as
   the default posture to cut **retry loops**, and add usage-doc guidance (`@`-mention
   specialists directly; batch file reads) to cut **redundant** hops. The Maestro
@@ -125,11 +125,11 @@ no-Docker fallback.
 
 ## References
 
-- [RFC-0004](../rfcs/0004-cost-context-optimization/README.md) + its
-  [verification.md](../rfcs/0004-cost-context-optimization/verification.md) (V3 token
+- RFC-0004 (record removed 2026-10) + its
+  verification.md (record removed 2026-10) (V3 token
   measurements; V4 transport).
-- [RFC-0002](../rfcs/0002-risk-based-strictness-policy/README.md) (bash-path governance);
-  [RFC-0003](../rfcs/0003-per-agent-scoped-mcp-tokens/README.md) (scoped tokens — separate
+- RFC-0002 (record removed 2026-10) (bash-path governance);
+  RFC-0003 (record removed 2026-10) (scoped tokens — separate
   concern, not addressed here).
 - [ADR-0005](0005-risk-based-strictness-policy.md) (scaffolder posture; global MCP wiring).
 - GitHub — `github/github-mcp-server` (`--tools`, `--read-only`, toolsets):

@@ -11,6 +11,8 @@ tags: [repo, docs, organization, adr, rfc, plans]
 
 # ADR-0006: Relocate carter-ai's own design records to `design/`
 
+> **Status note (2026-10-24):** Partially superseded by ADR-0007 (§D1, §D2). The `design/` tree no longer exists — its completed plans were deleted in 2026-10.
+
 **Status:** Accepted
 **Date:** 2026-06-13
 **Deciders:** Carter maintainer (mauriciomem), Carter Maestro
@@ -105,4 +107,4 @@ of one repo should not ripple into every user's workspace.
 
 - [ADR-0003](0003-knowledge-adr-rfc-plan-storage.md) — product storage layout (unchanged for end-user workspaces)
 - [ADR-0004](0004-rfc-system.md) — RFC system (unchanged)
-- [design/README.md](../README.md) — index of the relocated records
+- design/README.md (record removed 2026-10) — index of the relocated records
