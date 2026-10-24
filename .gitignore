@@ -54,9 +54,8 @@ Thumbs.db
 # External reference repos (vendored for inspection, not carter-ai source)
 /external/
 
-# Project scratch / pre-build notes (kept on disk, out of git — ADR-0006)
+# Project scratch / pre-build notes (kept on disk, out of git)
 /notes/
 
-# carter-ai private plan workspace — versioned in its own nested .carter/.git,
-# never tracked in the main repo (ADR-0007).
+# Private Carter workspace state (versioned in its own nested .carter/.git)
 /.carter/
