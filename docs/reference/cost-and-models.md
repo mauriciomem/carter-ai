@@ -2,7 +2,7 @@
 
 *A plain-language guide to what Carter costs you, why, and how to run it on cheaper
 models without losing quality. The design record is
-[ADR-0008](../adr/0008-mcp-cost-and-security.md); this doc is for people who **use** Carter.*
+ADR-0008; this doc is for people who **use** Carter.*
 
 Last reviewed: 2026-10-24.
 
@@ -96,7 +96,7 @@ carter install --mcp                                 # all three (default)
 
 The GitHub server is the official `github/github-mcp-server` run **read-only** via Docker
 (a security hardening that costs ~68% more GitHub tokens than the old server, accepted
-deliberately — see [ADR-0008](../adr/0008-mcp-cost-and-security.md)). "Read-only" removes the MCP *write* surface only; shell
+deliberately — see ADR-0008). "Read-only" removes the MCP *write* surface only; shell
 `gh`/`git` writes still work, governed by the strictness policy.
 
 ## Choosing a cost profile
@@ -205,4 +205,4 @@ pieces.** You spend frontier-model money once, on the hard thinking, not on ever
 | Check quality held up | `uv run pytest evals -m "not live"` |
 | Avoid MCP token cost | Only `--mcp` the servers you use; only set their tokens |
 | Reduce hops | `@`-mention specialists directly; be specific up front |
-| Understand the trade-offs | Read [ADR-0008](../adr/0008-mcp-cost-and-security.md) |
+| Understand the trade-offs | Read ADR-0008 |

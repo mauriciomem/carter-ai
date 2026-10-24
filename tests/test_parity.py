@@ -10,7 +10,7 @@ sources — the security- and structure-critical contracts, including the YAML
 frontmatter (``description``/``mode``) which both sources must emit identically
 (ADR-0002). ``temperature`` is NOT emitted (ADR-0010 D7 — dead-or-rejected on every
 model Carter pins; effort/temperature are runtime-owned). This is the phase-1
-guardrail from docs/adr/0002-single-source-agent-generation.md.
+guardrail from ADR-0002 (single-source agent generation).
 """
 
 from __future__ import annotations

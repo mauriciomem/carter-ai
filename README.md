@@ -104,7 +104,7 @@ first-class citizen, each the authority in its domain.
 | **DevOps** | CI/CD, IaC, containers, git | Pipelines, Terraform, Packer, deployment — the **only** agent that pushes/mutates infra |
 | **Learner** | Explanation, research, memory | Documentation, mistake capture, topic research |
 | **PM** | Planning, risk, agile | WBS, roadmaps, sprint planning, risk assessment |
-| **Narrator** | External-facing content | The external-content specialist (the way Architect is the design specialist) — drafts + **redacts** outward content (PRs, Jira, docs, announcements); on `guarded`/`strict` substantive outward content routes through the narrator's redaction pass before DevOps transmits it ([ADR-0001](docs/adr/0001-narrator-content-suite.md)) |
+| **Narrator** | External-facing content | The external-content specialist (the way Architect is the design specialist) — drafts + **redacts** outward content (PRs, Jira, docs, announcements); on `guarded`/`strict` substantive outward content routes through the narrator's redaction pass before DevOps transmits it (ADR-0001) |
 | **Security** | Defensive review, threat modeling, authorized methodology | any agent can flag a risk; carter-security specializes in defensive review and *authorized* security methodology. Advisory only (it threat-models, reviews, and triages — it does not run attacks); offensive methodology is authorized-context-gated; it never pushes — remediation is a handoff to devops. |
 
 > Across targets, the per-agent `mode:` (`primary`/`subagent`) is **OpenCode-scoped**:
@@ -152,8 +152,8 @@ workspace.
 ## Strictness policy
 
 Carter's safety posture is **enforced**, not just described. A **risk-based
-strictness policy** ([ADR-0010](docs/adr/0010-agent-platform-refresh.md),
-superseding [ADR-0005](docs/adr/0005-risk-based-strictness-policy.md)) gives each
+strictness policy** (ADR-0010,
+superseding ADR-0005) gives each
 agent a deny-by-default tool allowlist and gates actions across four risk
 categories — **read → local-write → remote-write → dangerous** (secret reads fold
 into `remote-write`; outward content is an enforced redaction handoff, not a
@@ -188,7 +188,7 @@ Plans are directories under `.carter/state/plans/` with machine-readable
 frontmatter and verifiable `must_haves`; a session `checkpoint.md` cursor enables
 "where were we?" recovery. `carter check` validates the frontmatter contract;
 `carter save` commits a recovery snapshot of `.carter/`. carter-ai's own
-architecture decisions live as ADRs in [`docs/adr/`](docs/adr/).
+architecture decisions are ADRs kept maintainer-local under `docs/adr/` (not versioned in this repository).
 
 → Reference: **[docs/plans-and-state.md](docs/plans-and-state.md)**
 
