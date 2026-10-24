@@ -161,7 +161,7 @@ class TestAuditSubcommand:
 
 
 class TestPolicyOverrideSubcommand:
-    """RFC-0002 / ADR-0005 step 8: the single-action override ledger.
+    """ADR-0005: the single-action override ledger.
 
     Override != authorization — the ledger RECORDS a deliberate override of a
     policy gate; it cannot lift a platform deny. One entry per action; no

@@ -94,7 +94,7 @@ def _max_tokens() -> int:
     """Per-call completion ceiling — a hard cost cap for the weekly live cron.
 
     Defaults to 4096 for local runs; the budgeted CI canary sets a low EVAL_MAX_TOKENS
-    so a misbehaving prompt can't run up the bill (ADR-0009 D5, plan 004 step 10).
+    so a misbehaving prompt can't run up the bill (ADR-0009 D5).
     """
     return int(os.environ.get("EVAL_MAX_TOKENS", "4096"))
 

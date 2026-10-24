@@ -381,7 +381,7 @@ class TestScaffold:
     def test_skepticism_off_keeps_policy_drops_calibration(self, default_config, env):
         """Off skepticism keeps the always-on policy gate table (in
         interaction_rules) but drops only the Skepticism Calibration sub-section
-        (RFC-0002 P2 step 5 — the policy gate is independent of skepticism)."""
+        (the policy gate is independent of skepticism)."""
         default_config["personality"]["skepticism"] = "off"
         results = render_agents(default_config, env)
         maestro = results["carter-maestro.md"]
@@ -1343,7 +1343,7 @@ class TestConfigureMcpServersUnchanged:
 
 
 class TestMcpServerOptIn:
-    """RFC-0004 lever 1 / plan 003 step 1: `configure_mcp_servers` installs only the
+    """`configure_mcp_servers` installs only the
     servers a workspace selects; an unused server adds zero tool-schema tokens. Omitting
     the selection preserves today's behaviour (all shipped servers).
     """
@@ -1441,7 +1441,7 @@ class TestMcpServerOptIn:
 
 class TestInitProfileFlag:
     """`carter init --profile` seeds the cost profile into the scaffolded carter.yaml and
-    it flows through to the rendered agent models (RFC-0004 lever 1 / plan 007).
+    it flows through to the rendered agent models.
     """
 
     def _run(self, tmp_path, *args):

@@ -47,7 +47,7 @@ def skill_scenarios(scenarios_dir: Path) -> list[dict]:
 
 
 def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> None:
-    """Persist the live-eval metrics summary for CI artifact upload (plan 004 step 10).
+    """Persist the live-eval metrics summary for CI artifact upload.
 
     The run-level token/latency/cost summary lives in ``evals.metrics._RECORDED``,
     which dies with the pytest process — so the weekly live-eval cron cannot read it

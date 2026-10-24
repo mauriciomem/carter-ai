@@ -407,7 +407,7 @@ class TestMCPMerging:
 
 
 class TestMCPServerSingleSource:
-    """D5 (RFC-0002): the MCP server triple must come from one module constant,
+    """The MCP server triple must come from one module constant,
     not be hardcoded separately in install and uninstall (drift risk).
     """
 
@@ -422,13 +422,13 @@ class TestMCPServerSingleSource:
 
 
 class TestOfficialGitHubServer:
-    """ADR-0008 D2 / plan 003 step 2: the shipped GitHub MCP server is the official
+    """ADR-0008 D2: the shipped GitHub MCP server is the official
     github/github-mcp-server via Docker, digest-pinned, read-only, with a surgical tool
     allowlist. The archived @modelcontextprotocol/server-github must be gone from the
     shipped configs (grep-clean over mcp/).
     """
 
-    # The surgical read-only tool set (RFC-0004 V3; ~6,650 tok, +68% over archived).
+    # The surgical read-only tool set (~6,650 tok, +68% over archived).
     EXPECTED_TOOLS = {
         "get_me",
         "get_file_contents",

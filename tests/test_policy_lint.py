@@ -1,4 +1,4 @@
-"""Tests for the risk-based strictness policy lint (P3, RFC-0002 / ADR-0005).
+"""Tests for the risk-based strictness policy lint (ADR-0005).
 
 Covers ``carter.scaffold.lint_policy`` — the deterministic, offline lint that
 verifies the emitted agent frontmatter still matches the declared policy model —
@@ -174,7 +174,7 @@ class TestHardAck:
         assert "opencode" not in ack_errors[0]  # opencode enforces, not degraded
 
 
-# ─── Fail-closed dispatch lint (P3, RFC-0005 §1 D1.2 / ADR-0010 D1) ──────────
+# ─── Fail-closed dispatch lint (ADR-0010 D1) ──────────
 
 
 class TestDispatchLint:

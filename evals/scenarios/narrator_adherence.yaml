@@ -1,5 +1,5 @@
 # ──────────────────────────────────────────────────────────────────────────────
-# Narrator-adherence scenario (RFC-0004 lever 1 — plan 007 step 1)
+# Narrator-adherence scenario
 # ──────────────────────────────────────────────────────────────────────────────
 # Gates moving carter-narrator from Opus 4.8 → Sonnet 4.6 by default. The narrator's
 # load-bearing contract is REDACTION: substantive outward content must have secrets,

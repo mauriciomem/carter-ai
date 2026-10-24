@@ -274,7 +274,7 @@ AGENT_ALLOWLIST: dict[str, dict[str, bool]] = {
 # cheaper one. A role in no tier resolves to `models.default` (the un-tiered catch-all)
 # so it never resolves empty.
 #
-# narrator + pm are `implementers` (Sonnet) by DEFAULT (RFC-0004 lever 1 / plan 007):
+# narrator + pm are `implementers` (Sonnet) by DEFAULT:
 # their work is structured — narrator's redaction is rule-bound, pm's planning follows
 # carter-plan's schema — and both cleared the adherence gate on Sonnet 4.6 (>=0.90, 0
 # critical). `profile: quality` restores them (and everyone) to Opus; `profile: budget`
@@ -292,14 +292,14 @@ MODEL_TIERS: dict[str, str] = {
 }
 
 
-# Cost profiles (RFC-0004 lever 1 / plan 007, OQ10 — resolved lazily at render, NOT
+# Cost profiles (resolved lazily at render, NOT
 # written as concrete overrides). A `profile:` key in carter.yaml re-tiers roles at
 # resolution time, layered BETWEEN explicit per-agent overrides and the base tier:
 # `models.overrides > profile > tier > default`. The value maps role → tier name, so a
 # profile reuses the same `models:` tier model strings (no per-profile model literals to
 # keep in sync). An absent/unset profile uses the shipped default tiers (MODEL_TIERS).
 #
-#   quality — every agent on the `thinkers` (Opus) tier: restores the pre-RFC-0004
+#   quality — every agent on the `thinkers` (Opus) tier: restores the earlier
 #             default for users who prefer max quality over cost.
 #   budget  — the cheaper default PLUS learner → implementers (Sonnet); the furthest
 #             push that still cleared review. (narrator/pm are already implementers by

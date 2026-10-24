@@ -144,7 +144,7 @@ def configure_mcp_servers(
 ) -> int:
     """Wire the selected MCP servers into each target's config.
 
-    ``servers`` is the opt-in selection (RFC-0004 lever 1): a subset of ``MCP_SERVERS``.
+    ``servers`` is the opt-in selection: a subset of ``MCP_SERVERS``.
     ``None`` (the default) means the full shipped set — today's backward-compatible
     behaviour, so an unused server can be dropped per workspace without adding its
     tool-schema tokens. An unknown server name is a ``ValueError``.
@@ -247,7 +247,7 @@ def run(
 
     This is the programmatic entry point used by the ``carter install``
     command. Parameters mirror the CLI options. ``mcp_servers`` is the opt-in
-    subset (RFC-0004 lever 1); ``None`` installs the full shipped set.
+    subset; ``None`` installs the full shipped set.
     """
     set_verbosity(verbosity)
 

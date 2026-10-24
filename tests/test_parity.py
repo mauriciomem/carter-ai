@@ -316,7 +316,7 @@ class TestNoFalseReadOnlyClaim:
     """ADR-0005 D5: the shared full-scope MCP token makes a 'read-only' claim a
     false guarantee. Neither the static agents nor their templates may assert it
     in prose — actual tool scoping is enforced by the strictness-policy emission,
-    not promised in the body. Closes the frontmatter-parity gap (RFC-0002 N3):
+    not promised in the body. Closes the frontmatter-parity gap:
     the parity tests above check only frontmatter, so a body relapse would slip.
     """
 

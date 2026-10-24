@@ -1,4 +1,4 @@
-"""Tests for the risk-based strictness policy model (RFC-0002 / ADR-0005, P1 step 1).
+"""Tests for the risk-based strictness policy model (ADR-0005).
 
 The model layer only: the `policy` config block, the shipped R0-R6 taxonomy,
 the tool->risk map, and the per-agent allowlist. No emission or enforcement yet.
@@ -181,7 +181,7 @@ class TestPolicyLevelValidation:
 
 
 class TestProfileValidation:
-    """The optional cost `profile:` key (RFC-0004 lever 1 / plan 007) is validated at the
+    """The optional cost `profile:` key is validated at the
     config boundary: unset/None or a known profile name, else a loud ConfigError.
     """
 

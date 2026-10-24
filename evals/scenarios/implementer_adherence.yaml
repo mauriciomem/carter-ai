@@ -1,5 +1,5 @@
 # ──────────────────────────────────────────────────────────────────────────────
-# Implementer-adherence scenario (P4-eval — RFC-0005 §2 D2.5 / ADR-0010 D9)
+# Implementer-adherence scenario (ADR-0010 D9)
 # ──────────────────────────────────────────────────────────────────────────────
 # A thinker-produced plan (the kind an Opus-tier agent authors) handed to the cheaper
 # Sonnet 4.6 implementer tier. The eval grades how faithfully the implementer executes

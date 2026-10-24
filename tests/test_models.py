@@ -25,7 +25,7 @@ from carter.config import (
     resolve_model,
 )
 
-# Default tiers after RFC-0004 lever 1 / plan 007: pm + narrator ship on Sonnet.
+# Default tiers: pm + narrator ship on Sonnet.
 THINKERS = ("maestro", "architect", "learner", "security")
 IMPLEMENTERS = ("engineer", "devops", "pm", "narrator")
 
@@ -96,7 +96,7 @@ class TestResolveModel:
             assert resolve_model(cfg, role) == "Claude Sonnet 5.5", role
 
     def test_narrator_and_pm_default_to_sonnet(self):
-        # RFC-0004 lever 1 / plan 007: pm + narrator ship on Sonnet by DEFAULT (both
+        # pm + narrator ship on Sonnet by DEFAULT (both
         # cleared the adherence gate). A regression here re-inflates the Opus bill.
         for target, sonnet in (
             ("copilot", "Claude Sonnet 5.5"),
@@ -132,7 +132,7 @@ class TestResolveModel:
         assert resolve_model(cfg, "engineer") == "Claude Haiku 5.5"
 
 
-# ─── Cost profiles: overrides > profile > tier > default (plan 007 / OQ10) ────
+# ─── Cost profiles: overrides > profile > tier > default ────
 
 
 class TestProfileResolution:
@@ -140,7 +140,7 @@ class TestProfileResolution:
     SONNET = "Claude Sonnet 5.5"
 
     def test_quality_profile_puts_everyone_on_opus(self):
-        # `quality` restores the pre-RFC-0004 default: all agents, incl. the now-cheap
+        # `quality` restores the earlier all-Opus default: all agents, incl. the now-cheap
         # narrator/pm, resolve to Opus.
         cfg = _config(target="copilot")
         cfg["profile"] = "quality"

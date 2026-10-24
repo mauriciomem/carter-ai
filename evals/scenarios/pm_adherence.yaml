@@ -1,5 +1,5 @@
 # ──────────────────────────────────────────────────────────────────────────────
-# PM-adherence scenario (RFC-0004 lever 1 — plan 007 step 1)
+# PM-adherence scenario
 # ──────────────────────────────────────────────────────────────────────────────
 # Gates moving carter-pm from Opus 4.8 → Sonnet 4.6 by default. The pm's load-bearing
 # contract is PLAN SHAPE: given a project, it must produce a structured plan — scope,

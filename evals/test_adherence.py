@@ -1,4 +1,4 @@
-"""Implementer-adherence eval (P4-eval — RFC-0005 §2 D2.5 / ADR-0010 D9).
+"""Implementer-adherence eval (ADR-0010 D9).
 
 The reliability backstop for the cheap-tier (Sonnet 4.6) implementer default. It runs
 the implementer against a thinker-produced plan with real `must_haves` (named file
@@ -26,10 +26,10 @@ _FIXTURES = Path(__file__).resolve().parent / "fixtures"
 _SCENARIO_FILE = "implementer_adherence.yaml"
 _SCENARIO_NAME = "implementer_adherence_token_bucket"
 
-# Downgrade-gate registry (plan 007 / RFC-0004 lever 1). Each agent moving off Opus →
+# Downgrade-gate registry. Each agent moving off Opus →
 # Sonnet by default carries one recorded adherence scenario; the per-PR gate replays its
 # fixture. `(scenario_file, scenario_name, fixture_file)`. The engineer entry is the
-# pre-existing implementer eval; narrator/pm are added by plan 007.
+# pre-existing implementer eval; narrator/pm were added later.
 _DOWNGRADE_SCENARIOS = [
     (
         "implementer_adherence.yaml",
@@ -162,7 +162,7 @@ class TestNoLiveMarker:
 
 
 # ──────────────────────────────────────────────────────────────────────────────
-# Downgrade-gate scenarios (plan 007 / RFC-0004 lever 1): narrator + pm alongside
+# Downgrade-gate scenarios: narrator + pm alongside
 # the engineer. One recorded Sonnet fixture per agent; the per-PR gate replays it.
 # ──────────────────────────────────────────────────────────────────────────────
 
@@ -170,7 +170,7 @@ class TestNoLiveMarker:
 class TestScopedEvidence:
     """The `scope` marker restricts an item's matching to the text after the marker's
     last occurrence — so an internal redaction audit that restates original values does
-    NOT count as a leak in the shipped artifact (plan 007 narrator scenario).
+    NOT count as a leak in the shipped artifact (narrator scenario).
     """
 
     def test_scoped_evidence_none_ignores_text_before_marker(self) -> None:
@@ -271,9 +271,9 @@ class TestDowngradeScenarioShape:
 )
 class TestDowngradeFixtureClearsTheBar:
     """The recorded Sonnet run for each downgraded agent must clear the pass-bar — the
-    empirical evidence the cheaper default is shippable for that agent (RFC-0004 lever 1).
+    empirical evidence the cheaper default is shippable for that agent.
 
-    Until a fixture is recorded (plan 007 step 2, live on Sonnet), its case is SKIPPED,
+    Until a fixture is recorded (live on Sonnet), its case is SKIPPED,
     not failed — the scenario wiring is correct; only the billed transcript is pending.
     A recorded fixture that does NOT clear the bar is a hard failure (the gate).
     """
@@ -289,7 +289,7 @@ class TestDowngradeFixtureClearsTheBar:
     ) -> None:
         data = self._load_fixture(fixture_file)
         if data is None:
-            pytest.skip(f"fixture {fixture_file} not recorded yet (plan 007 step 2)")
+            pytest.skip(f"fixture {fixture_file} not recorded yet")
         scenario = load_scenario(scenarios_dir / scenario_file, scenario_name)
         result = grade_transcript(scenario, data["transcript"])
         assert result.adherence >= PASS_BAR_MIN_ADHERENCE, (
@@ -306,7 +306,7 @@ class TestDowngradeFixtureClearsTheBar:
     ) -> None:
         data = self._load_fixture(fixture_file)
         if data is None:
-            pytest.skip(f"fixture {fixture_file} not recorded yet (plan 007 step 2)")
+            pytest.skip(f"fixture {fixture_file} not recorded yet")
         assert data["model"] == "claude-sonnet-4-6"
         assert data["passed"] is True
         assert data["adherence"] >= 0.90

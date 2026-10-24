@@ -1,4 +1,4 @@
-"""Tests for native subagent dispatch emission (P3, RFC-0005 §1 / ADR-0010 D1).
+"""Tests for native subagent dispatch emission (ADR-0010 D1).
 
 Carter emits the *real* per-target dispatch primitive on the primary (maestro) and
 nowhere else, as an EXPLICIT per-specialist list (never ``'*'`` or a ``carter-*``
