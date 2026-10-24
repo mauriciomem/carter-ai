@@ -616,7 +616,7 @@ class TestManifest:
             "targets": ["copilot"],
             "files": ["/some/file.md"],
             "file_hashes": {"/some/file.md": "sha256:abc123"},
-            "mcp_servers": ["carter-github"],
+            "mcp_servers": {"copilot": ["carter-github"]},
         }
         install.write_manifest(manifest, base_dir)
         loaded = install.read_manifest(base_dir)
@@ -817,7 +817,8 @@ class TestMCPFlag:
         servers = data["mcp.servers"]
         assert "carter-github" in servers
         assert "carter-terraform" in servers
-        assert "carter-atlassian" in servers
+        # Atlassian ships no Copilot config (no npx bridge) — OpenCode only.
+        assert "carter-atlassian" not in servers
 
     def test_mcp_skipped_when_vscode_absent(self, base_dir: Path, monkeypatch) -> None:
         """No VS Code config dir → settings.json is not created (no phantom file)."""

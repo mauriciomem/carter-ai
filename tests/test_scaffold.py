@@ -1324,11 +1324,9 @@ class TestConfigureMcpServersUnchanged:
 
         manifest = {"files": [], "file_hashes": {}, "mcp_servers": []}
         installer.configure_mcp_servers(["opencode"], tmp_path, manifest, {}, tmp_path / "backup")
-        assert manifest["mcp_servers"] == [
-            "carter-github",
-            "carter-terraform",
-            "carter-atlassian",
-        ]
+        assert manifest["mcp_servers"] == {
+            "opencode": ["carter-github", "carter-terraform", "carter-atlassian"]
+        }
         opencode_cfg = json.loads((tmp_path / "opencode" / "opencode.json").read_text())
         assert {"carter-github", "carter-terraform", "carter-atlassian"} <= set(opencode_cfg["mcp"])
 
@@ -1361,7 +1359,7 @@ class TestMcpServerOptIn:
         assert "carter-github" in wired
         assert "carter-terraform" not in wired
         assert "carter-atlassian" not in wired
-        assert manifest["mcp_servers"] == ["carter-github"]
+        assert manifest["mcp_servers"] == {"opencode": ["carter-github"]}
 
     def test_subset_wires_only_selected_copilot_vscode(self, tmp_path):
         from carter import installer
@@ -1378,7 +1376,7 @@ class TestMcpServerOptIn:
             tmp_path / "backup",
             servers=["github", "terraform"],
         )
-        assert manifest["mcp_servers"] == ["carter-github", "carter-terraform"]
+        assert manifest["mcp_servers"] == {"copilot": ["carter-github", "carter-terraform"]}
 
     def test_default_is_all_servers_backward_compatible(self, tmp_path):
         from carter import installer
@@ -1386,11 +1384,53 @@ class TestMcpServerOptIn:
         manifest = {"files": [], "file_hashes": {}, "mcp_servers": []}
         # No `servers=` arg → today's behaviour: the full shipped set.
         installer.configure_mcp_servers(["opencode"], tmp_path, manifest, {}, tmp_path / "backup")
-        assert manifest["mcp_servers"] == [
-            "carter-github",
-            "carter-terraform",
-            "carter-atlassian",
-        ]
+        assert manifest["mcp_servers"] == {
+            "opencode": ["carter-github", "carter-terraform", "carter-atlassian"]
+        }
+
+    def test_atlassian_skipped_for_copilot_wired_for_opencode(self, tmp_path, capsys):
+        from carter import installer
+
+        settings = tmp_path / "vscode" / "settings.json"
+        settings.parent.mkdir(parents=True)
+        # A stale npx bridge entry from an older install is removed.
+        settings.write_text(json.dumps({"mcp.servers": {"carter-atlassian": {"command": "npx"}}}))
+        manifest = {"files": [], "file_hashes": {}, "mcp_servers": []}
+        count = installer.configure_mcp_servers(
+            ["copilot", "opencode"],
+            tmp_path,
+            manifest,
+            {},
+            tmp_path / "backup",
+            servers=["atlassian"],
+        )
+        assert "carter-atlassian: not available for copilot" in capsys.readouterr().out
+        assert count == 1  # only the OpenCode entry
+        assert manifest["mcp_servers"] == {"copilot": [], "opencode": ["carter-atlassian"]}
+        assert "carter-atlassian" not in json.loads(settings.read_text())["mcp.servers"]
+        opencode_cfg = json.loads((tmp_path / "opencode" / "opencode.json").read_text())
+        assert opencode_cfg["mcp"]["carter-atlassian"]["type"] == "remote"
+
+    def test_cli_atlassian_copilot_only_succeeds(self, tmp_path):
+        from click.testing import CliRunner
+
+        from carter.cli import main
+
+        result = CliRunner().invoke(
+            main,
+            [
+                "install",
+                "--target",
+                "copilot",
+                "--mcp",
+                "--mcp-servers",
+                "atlassian",
+                "--base-dir",
+                str(tmp_path),
+            ],
+        )
+        assert result.exit_code == 0, result.output
+        assert "carter-atlassian: not available for copilot" in result.output
 
     def test_unknown_server_is_rejected(self, tmp_path):
         from carter import installer

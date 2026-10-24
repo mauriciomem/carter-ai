@@ -198,7 +198,7 @@ Configured by `carter install --mcp` into VS Code, Copilot CLI, and OpenCode:
 |--------|---------|
 | `carter-github` | Repos, PRs, issues (read-only) |
 | `carter-terraform` | Terraform Registry, HCP Terraform / TFE workspaces (Docker, `TFE_TOKEN`) |
-| `carter-atlassian` | Jira issues, Confluence pages (official remote server, OAuth) |
+| `carter-atlassian` | Jira issues, Confluence pages (official remote server, OAuth) — **OpenCode only**; not wired for VS Code / Copilot CLI |
 
 **Install only what you use.** MCP tool schemas are the largest per-request token
 surface, so a workspace should wire only the servers it needs:
