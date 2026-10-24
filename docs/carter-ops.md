@@ -104,9 +104,9 @@ carter ops policy-override \
 | Param | Required | Description |
 |-------|----------|-------------|
 | `--category` | Yes | Risk category being overridden: `read`, `local-write`, `remote-write`, `dangerous` |
-| `--action` | Yes | The exact action overridden |
+| `--action` | Yes | The exact action overridden (max 500 chars) |
 | `--tier` | Yes | `native-deny` (relaxed emitted config) · `native-ask` (confirmed a prompt) · `prose-backstop` (proceeded on trust) |
-| `--reason` | No | Free-text justification (recorded, never a secret) |
+| `--reason` | No | Free-text justification (recorded, never a secret; max 500 chars) |
 
 Every entry carries `"authorized": false` and lands in `~/.carter/audit.log`.
 

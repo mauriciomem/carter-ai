@@ -176,7 +176,7 @@ class TestPolicyOverrideSubcommand:
             [
                 "policy-override",
                 "--category",
-                "R2",
+                "remote-write",
                 "--action",
                 "git push origin main",
                 "--tier",
@@ -191,7 +191,7 @@ class TestPolicyOverrideSubcommand:
         assert len(lines) == 1  # exactly one entry per action — not session-wide
         entry = json.loads(lines[0])
         assert entry["event"] == "policy-override"
-        assert entry["category"] == "R2"
+        assert entry["category"] == "remote-write"
         assert entry["action"] == "git push origin main"
         assert entry["tier"] == "native-ask"
         assert entry["reason"] == "hotfix release"
@@ -207,8 +207,65 @@ class TestPolicyOverrideSubcommand:
     def test_override_requires_action(self, capsys: pytest.CaptureFixture) -> None:
         from carter.ops import carter_ops
 
-        rc = carter_ops.main(["policy-override", "--category", "R2", "--tier", "native-ask"])
+        rc = carter_ops.main(
+            ["policy-override", "--category", "remote-write", "--tier", "native-ask"]
+        )
         assert rc == 1
+
+    def test_override_rejects_unknown_category(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
+    ) -> None:
+        from carter.ops import carter_ops
+
+        monkeypatch.setattr(carter_ops, "AUDIT_LOG", tmp_path / "audit.log")
+        rc = carter_ops.main(
+            ["policy-override", "--category", "R2", "--action", "x", "--tier", "native-ask"]
+        )
+        assert rc == 1
+        assert "--category must be one of: read, local-write, remote-write, dangerous" in (
+            capsys.readouterr().err
+        )
+        assert not (tmp_path / "audit.log").exists()
+
+    @pytest.mark.parametrize("flag", ["--action", "--reason"])
+    def test_override_rejects_overlong_text(
+        self,
+        flag: str,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture,
+    ) -> None:
+        from carter.ops import carter_ops
+
+        monkeypatch.setattr(carter_ops, "AUDIT_LOG", tmp_path / "audit.log")
+        args = {"--category": "dangerous", "--action": "x", "--tier": "native-ask"}
+        args[flag] = "a" * (carter_ops.MAX_TEXT_LEN + 1)
+        rc = carter_ops.main(["policy-override", *[t for kv in args.items() for t in kv]])
+        assert rc == 1
+        assert "too long" in capsys.readouterr().err
+        assert not (tmp_path / "audit.log").exists()
+
+    def test_override_accepts_text_at_limit(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from carter.ops import carter_ops
+
+        monkeypatch.setattr(carter_ops, "AUDIT_LOG", tmp_path / "audit.log")
+        reason = "r" * carter_ops.MAX_TEXT_LEN
+        rc = carter_ops.main(
+            [
+                "policy-override",
+                "--category",
+                "dangerous",
+                "--action",
+                "x",
+                "--tier",
+                "native-ask",
+                "--reason",
+                reason,
+            ]
+        )
+        assert rc == 0
 
     def test_override_rejects_unknown_tier(self, capsys: pytest.CaptureFixture) -> None:
         from carter.ops import carter_ops
@@ -217,7 +274,7 @@ class TestPolicyOverrideSubcommand:
             [
                 "policy-override",
                 "--category",
-                "R2",
+                "remote-write",
                 "--action",
                 "x",
                 "--tier",
@@ -236,7 +293,7 @@ class TestPolicyOverrideSubcommand:
             [
                 "policy-override",
                 "--category",
-                "R3",
+                "dangerous",
                 "--action",
                 "terraform apply",
                 "--tier",
@@ -263,7 +320,7 @@ class TestPolicyOverrideSubcommand:
                 [
                     "policy-override",
                     "--category",
-                    "R2",
+                    "remote-write",
                     "--action",
                     "git push",
                     "--tier",
@@ -283,7 +340,7 @@ class TestPolicyOverrideSubcommand:
             [
                 "policy-override",
                 "--category",
-                "R6",
+                "remote-write",
                 "--action",
                 "post release notes",
                 "--tier",

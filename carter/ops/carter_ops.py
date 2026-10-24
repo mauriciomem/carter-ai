@@ -28,6 +28,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from carter.config import RISK_TAXONOMY
 from carter.ops.config import Config
 from carter.ops.output import emit, emit_error
 
@@ -112,6 +113,9 @@ def _handle_audit(params: dict[str, Any]) -> int:
     return 0
 
 
+# Cap on free-text fields recorded in the override ledger (keeps entries one-line sized).
+MAX_TEXT_LEN = 500
+
 _OVERRIDE_TIERS = ("native-deny", "native-ask", "prose-backstop")
 
 
@@ -130,11 +134,23 @@ def _handle_policy_override(params: dict[str, Any]) -> int:
     if not category:
         emit_error("--category is required for policy-override (e.g. remote-write)")
         return 1
+    if category not in RISK_TAXONOMY:
+        emit_error(f"--category must be one of: {', '.join(RISK_TAXONOMY)}")
+        return 1
 
     action = params.get("action", "")
-    if not action:
+    if not action or not isinstance(action, str):
         emit_error("--action is required for policy-override (the action being overridden)")
         return 1
+
+    reason = params.get("reason", "")
+    if not isinstance(reason, str):
+        emit_error("--reason needs a value")
+        return 1
+    for flag, value in (("action", action), ("reason", reason)):
+        if len(value) > MAX_TEXT_LEN:
+            emit_error(f"--{flag} is too long ({len(value)} chars; max {MAX_TEXT_LEN})")
+            return 1
 
     tier = params.get("tier", "")
     if tier not in _OVERRIDE_TIERS:
@@ -151,7 +167,7 @@ def _handle_policy_override(params: dict[str, Any]) -> int:
         "category": category,
         "action": action,
         "tier": tier,
-        "reason": params.get("reason", ""),
+        "reason": reason,
         # The ledger records; it never authorizes or lifts a platform deny.
         "authorized": False,
     }
