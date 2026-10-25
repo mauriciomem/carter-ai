@@ -1,7 +1,6 @@
 ---
 name: carter-reflect
 description: Analyze accumulated memory and knowledge to propose improvements to Carter agent and skill files
-argument-hint: "[optional: focus area or specific agent/skill]"
 ---
 
 <objective>
@@ -30,7 +29,8 @@ Read accumulated memory (`~/.carter/memories/`) and curated knowledge (`~/.carte
    |-------------|-------------|
    | Agent behavior issue | `templates/agents/carter-*.md.j2` (source; re-render with `carter update` / `carter install`) |
    | Missing domain knowledge | `skills/carter-*/SKILL.md` (source; installed to `~/.config/opencode/skills/`) |
-   | Global rule gap | `templates/instructions/AGENTS.md.j2` (installed as `~/.config/opencode/AGENTS.md`) |
+   | Workspace rule gap | `templates/instructions/AGENTS.md.j2` (rendered as the workspace `AGENTS.md` by `carter init` / `carter update`) |
+   | Global rule gap | the `_OPENCODE_*` constants in `carter/install/components.py` (installed as `~/.config/opencode/AGENTS.md`; append the outgoing text to `carter/install/rules_history.py`) |
 
    Never edit the rendered copies in `~/.config/opencode/agents/` or `.opencode/agents/` — they are overwritten on the next render. Edit the sources in the Carter repository.
 

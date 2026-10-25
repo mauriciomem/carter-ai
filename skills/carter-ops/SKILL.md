@@ -1,7 +1,6 @@
 ---
 name: carter-ops
 description: "Deterministic executor for operational tasks. Triggered by the `ops:` keyword prefix."
-argument-hint: "[natural language description of the operation to perform]"
 ---
 
 <objective>

@@ -1,7 +1,6 @@
 ---
 name: carter-packer
 description: Build machine images with HashiCorp Packer following best practices. Covers HCL2 templates, provisioners, builders for AWS/Azure/Windows, and HCP Packer registry.
-argument-hint: "[image type or Packer template to build/review]"
 ---
 
 <objective>

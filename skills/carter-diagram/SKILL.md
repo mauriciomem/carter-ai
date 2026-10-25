@@ -1,7 +1,6 @@
 ---
 name: carter-diagram
 description: Generate architecture diagrams using Mermaid notation from descriptions or code
-argument-hint: "[system or component to diagram]"
 ---
 
 <objective>

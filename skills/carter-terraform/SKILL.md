@@ -1,7 +1,6 @@
 ---
 name: carter-terraform
 description: Write and review Terraform configurations following HashiCorp best practices. Covers HCL style, modules, testing, import/search, and Stacks.
-argument-hint: "[infrastructure component or Terraform config to review]"
 ---
 
 <objective>

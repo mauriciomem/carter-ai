@@ -1,7 +1,6 @@
 ---
 name: carter-test-first
 description: Generate tests before implementation following TDD workflow
-argument-hint: "[feature or function to test]"
 ---
 
 <objective>

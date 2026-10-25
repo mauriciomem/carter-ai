@@ -1,7 +1,6 @@
 ---
 name: carter-explain
 description: Break down complex technical topics into understandable parts with cited sources
-argument-hint: "[topic to explain]"
 ---
 
 <objective>

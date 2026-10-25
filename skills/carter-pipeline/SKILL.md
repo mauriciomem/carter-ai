@@ -1,7 +1,6 @@
 ---
 name: carter-pipeline
 description: Git commands, GitHub CLI, branching strategies, and GitHub Actions CI/CD pipelines. Use for any git operation, gh CLI usage, workflow design, branching advice, or pipeline creation.
-argument-hint: "[git operation, GitHub task, or pipeline to create/review]"
 ---
 
 <objective>

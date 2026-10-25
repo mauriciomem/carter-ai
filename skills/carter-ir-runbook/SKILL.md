@@ -1,7 +1,6 @@
 ---
 name: carter-ir-runbook
 description: Incident-response runbook — scope → contain → eradicate → recover → lessons
-argument-hint: "[incident to run]"
 ---
 
 <objective>

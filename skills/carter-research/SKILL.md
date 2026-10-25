@@ -1,7 +1,6 @@
 ---
 name: carter-research
 description: Fetch and summarize official documentation and best practices on a given topic
-argument-hint: "[topic or technology to research]"
 ---
 
 <objective>

@@ -1,7 +1,6 @@
 ---
 name: carter-design-review
 description: Analyze a proposed architecture for patterns, anti-patterns, scalability, and security
-argument-hint: "[architecture description or repo to review]"
 ---
 
 <objective>
