@@ -1,4 +1,4 @@
-"""Tests for per-agent model emission (ADR-0014 D4).
+"""Tests for per-agent model emission.
 
 Carter pins one ``model:`` string per agent in OpenCode V2 syntax
 (``provider/model[#variant]``), resolved from the ``models:`` block by

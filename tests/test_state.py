@@ -1,4 +1,4 @@
-"""Tests for carter.state git operations — the ADR-0003 recovery primitive.
+"""Tests for carter.state git operations — the recovery primitive.
 
 ``commit_state`` is what makes "I deleted a plan/session" recoverable: the nested
 .carter/.git must carry ongoing history beyond the single init commit.

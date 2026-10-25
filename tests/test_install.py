@@ -134,6 +134,7 @@ class TestInstallSkills:
         for sub in ("github-cli.md", "strategies.md", "actions.md"):
             assert (pl_dir / sub).exists()
 
+
 _SHIPPED_TEXT = "# Carter — Global Instructions (a version Carter shipped)\n"
 
 
@@ -695,6 +696,7 @@ class TestCarterOpsSkill:
         assert stats["updated"] == 0
         assert not backup.exists()
 
+
 class TestOpenCodeRules:
     def test_creates_agents_md(self, base_dir: Path) -> None:
         """OpenCode global rules file should be created."""
@@ -995,6 +997,7 @@ class TestCarterReflectSkill:
         assert "reflect" in content.lower()
         assert "~/.carter/memories/" in content
         assert "~/.carter/knowledge/" in content
+
 
 class TestVisibleMemoryReferences:
     def test_opencode_rules_reference_visible_memory(self, base_dir: Path) -> None:

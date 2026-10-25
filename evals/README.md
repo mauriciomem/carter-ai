@@ -69,7 +69,7 @@ evals/
     └── pm_adherence.yaml             # PM downgrade gate
 ```
 
-### Adherence eval (ADR-0010 D9)
+### Adherence eval
 
 The reliability backstop for the cheap-tier (Sonnet) implementer default; narrator
 and pm have the same gate. The recorded fixtures are Sonnet 4.6 transcripts. It runs

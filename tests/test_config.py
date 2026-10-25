@@ -41,7 +41,7 @@ class TestPolicyBlock:
         assert policy == {"level": "guarded", "overrides": {}}
 
     def test_existing_config_omitting_policy_resolves_guarded(self, tmp_path):
-        """ADR-0010 D3: an existing config with no policy block resolves to `guarded`
+        """An existing config with no policy block resolves to `guarded`
         (the floor and default for everything)."""
         cfg_path = tmp_path / "carter.yaml"
         cfg_path.write_text(yaml.dump(_minimal_existing_config()))
@@ -49,7 +49,7 @@ class TestPolicyBlock:
         assert merged["policy"]["level"] == "guarded"
 
     def test_stale_loose_level_resolves_guarded_silently(self, tmp_path):
-        """ADR-0010 D3: a stale `level: loose` from a prior install loads as
+        """A stale `level: loose` from a prior install loads as
         `guarded` — no error, no migration notice, via the normal default path
         (no dedicated `loose` coercion branch). Any unrecognized level does the same.
         """
@@ -114,7 +114,7 @@ class TestPolicyOverridesAreHonored:
 
 
 class TestPolicyLevelValidation:
-    """ADR-0010 D3: `guarded`/`strict` are the only levels; an out-of-vocabulary
+    """`guarded`/`strict` are the only levels; an out-of-vocabulary
     `policy.level` (a stale `loose`, a typo) normalizes to the `guarded` default at
     the boundary rather than raising — no dedicated migration branch. Override
     category/gate typos still fail fast."""
@@ -230,7 +230,7 @@ class TestProfileValidation:
 
 class TestShippedMapsAreDictShaped:
     def test_taxonomy_is_dict_with_all_levels(self):
-        """The 4-category taxonomy (ADR-0010 D4) is a dict; every category maps both
+        """The 4-category taxonomy is a dict; every category maps both
         levels. Secret-access merged into remote-write; the standalone category and
         the R6 overlay are gone."""
         assert isinstance(RISK_TAXONOMY, dict)
@@ -251,7 +251,7 @@ class TestShippedMapsAreDictShaped:
             assert all(isinstance(v, bool) for v in cats.values())
 
     def test_devops_is_sole_remote_write_and_dangerous_holder(self):
-        """ADR-0010 D4: devops is the sole holder of remote-write AND dangerous (the
+        """Devops is the sole holder of remote-write AND dangerous (the
         single-pusher invariant); narrator is first-class {read, local-write} and
         does NOT hold remote-write — it reaches it only via the redaction handoff to devops."""
         assert AGENT_ALLOWLIST["devops"]["remote-write"] is True
@@ -404,7 +404,7 @@ class TestDocsLanguage:
 
 
 class TestTargetKeyRemoved:
-    """ADR-0014 D4: `target:` is gone with no shim; a leftover key is a validation
+    """`target:` is gone with no shim; a leftover key is a validation
     error whose message says exactly how to fix it."""
 
     def test_default_config_has_no_target(self):

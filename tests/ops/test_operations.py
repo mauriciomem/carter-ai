@@ -157,11 +157,11 @@ class TestAuditSubcommand:
 
 
 class TestPolicyOverrideSubcommand:
-    """ADR-0005: the single-action override ledger.
+    """The single-action override ledger.
 
     Override != authorization — the ledger RECORDS a deliberate override of a
     policy gate; it cannot lift a platform deny. One entry per action; no
-    blanket/session-wide overrides (Q11).
+    blanket/session-wide overrides.
     """
 
     def test_override_logs_one_entry(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

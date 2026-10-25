@@ -1,7 +1,7 @@
-"""OpenCode-only installer behaviour (ADR-0014 phase 3).
+"""OpenCode-only installer behaviour.
 
-Covers the OpenCode >= 2.1 hard gate (D6), the V2 MCP shape, V1 entry migration,
-the Copilot-leftover warning (D7) and the removal of ``--target``.
+Covers the OpenCode >= 2.1 hard gate, the V2 MCP shape, V1 entry migration,
+the warning about Copilot-era leftovers and the removal of ``--target``.
 """
 
 from __future__ import annotations

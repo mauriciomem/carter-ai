@@ -1,4 +1,4 @@
-"""LIVE adherence eval (ADR-0010 D9).
+"""LIVE adherence eval.
 
 Sends a thinker-produced plan to the **Sonnet** implementer tier (the agent's system prompt) via
 the live API and grades the real transcript with the same deterministic grader the

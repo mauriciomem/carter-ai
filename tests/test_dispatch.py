@@ -1,4 +1,4 @@
-"""Tests for native subagent dispatch (ADR-0014 D1 step 5).
+"""Tests for native subagent dispatch (the last step of the permission rule order).
 
 Delegation is a flat chain: every agent gets ``subagent * → deny``; only the
 primary (carter-maestro) additionally gets ``subagent carter-* → allow`` after it,
@@ -51,4 +51,3 @@ def test_rendered_suffixed_maestro_keeps_glob():
         {"action": "subagent", "resource": "*", "effect": "deny"},
         {"action": "subagent", "resource": "carter-*", "effect": "allow"},
     ]
-

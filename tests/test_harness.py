@@ -1,4 +1,4 @@
-"""Harness validation for ``carter check`` (ADR-0014 D6).
+"""Harness validation for ``carter check``.
 
 ``carter check`` runs ``opencode debug agents`` (JSON list on OpenCode 2.1.4) and
 verifies every rendered Carter agent was loaded, with its emitted ``permissions:``

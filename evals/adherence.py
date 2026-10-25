@@ -1,4 +1,4 @@
-"""Implementer-adherence grader (ADR-0010 D9).
+"""Implementer-adherence grader.
 
 Grades how faithfully an implementer transcript executes a thinker-produced plan. The
 grading is deterministic and evidence-pattern based (no model call), so a recorded
@@ -16,7 +16,7 @@ items flagged ``critical: true`` (across truths AND acceptance) that are NOT sat
 a named-file touch, an acceptance check, or a load-bearing intent whose miss breaks the
 plan's truths.
 
-Pass-bar (D9): ``adherence >= 0.90`` AND ``critical_failures == 0``.
+Pass-bar: ``adherence >= 0.90`` AND ``critical_failures == 0``.
 """
 
 from __future__ import annotations
@@ -26,7 +26,7 @@ from pathlib import Path
 
 import yaml
 
-# The D9 pass-bar: >= 90% of must_haves satisfied AND 0 critical-step failures.
+# The pass-bar: >= 90% of must_haves satisfied AND 0 critical-step failures.
 PASS_BAR_MIN_ADHERENCE = 0.90
 
 
@@ -108,7 +108,7 @@ def grade_transcript(scenario: dict, transcript: str) -> AdherenceResult:
             critical_failures += 1
 
     # Acceptance checks contribute to critical_failures only (not to the adherence
-    # fraction, which is the must_haves ratio per D9).
+    # fraction, which is the must_haves ratio).
     for check in acceptance:
         ok = _satisfied(check, transcript)
         (satisfied_ids if ok else failed_ids).append(check["id"])
