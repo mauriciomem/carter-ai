@@ -11,13 +11,10 @@ import pytest
 from carter.config import generate_default_config
 from carter.install import components, legacy, mcp, paths
 from carter.install import uninstall as uninstall_mod
-from carter.install.components import (
-    _OPENCODE_AGENTS_MD,
-    _OPENCODE_AGENTS_MD_LEGACY,
-    _OPENCODE_AGENTS_MD_V2,
-)
+from carter.install.components import _OPENCODE_AGENTS_MD
 from carter.install.files import _sha256
 from carter.install.jsonc import _load_jsonc, _strip_jsonc
+from carter.install.rules_history import SHIPPED_GLOBAL_RULES
 from carter.scaffold import create_env, render_agents
 
 # One namespace over the installer leaves so the tests read like the CLI surface.
@@ -735,31 +732,47 @@ class TestOpenCodeRulesUpgrade:
         assert "Be concise and clear" in content
         assert "## Memory" in content  # legacy content retained
 
-    def test_legacy_file_is_upgraded(self, base_dir: Path) -> None:
+    # SHA-256 of every global rules text Carter ever shipped, recovered from git
+    # history (root install.py, carter/installer.py, carter/install/components.py).
+    # Pinned independently of rules_history so a dropped or edited variant fails.
+    SHIPPED_SHA256 = frozenset(
+        {
+            "f737b33d38e27de99de0ab285e9dd184d24d92642039f80dd2163c52a8b2550d",
+            "8152727edd65eb92789ebdc9a0d96a655597784f2ecead9adec6ee4e27616dfb",
+            "0512edab7f3115cc19d567a6de0fd72b9436772acf2987f9c7e9b4299d96e6fc",
+            "af2473592d128a443584c46acda6c85f905edc0307828edd1c0c33891977150a",
+            "b302f2a6b3e2b8d6bfc8c7be51b585beefaaf44417b9c3e0dba3f9c2a88760fe",
+            "8cfc4fa98b97ea54503d3c36883aee7ce17b795e4460d65271c540aa672cd974",
+            "cf4dc5281042faeeb681b9817cf8ce2665e24761c05929b2396edb4580e0b459",
+            "3c50f9e3fd8488bb36fa3efab23e9fafaf814d9d918e25b7cb3c8c20ca583fd8",
+        }
+    )
+
+    def test_history_covers_every_shipped_version(self) -> None:
+        import hashlib
+
+        got = {hashlib.sha256(t.encode()).hexdigest() for t in SHIPPED_GLOBAL_RULES}
+        assert got == self.SHIPPED_SHA256
+        assert _OPENCODE_AGENTS_MD not in SHIPPED_GLOBAL_RULES
+
+    @pytest.mark.parametrize("old", SHIPPED_GLOBAL_RULES)
+    def test_every_shipped_version_is_upgraded(self, base_dir: Path, old: str) -> None:
         agents_md = base_dir / "opencode" / "AGENTS.md"
         agents_md.parent.mkdir(parents=True, exist_ok=True)
-        agents_md.write_text(_OPENCODE_AGENTS_MD_LEGACY)
+        agents_md.write_text(old)
 
         manifest = {"files": [], "file_hashes": {}}
         install.install_opencode_rules(base_dir, manifest, base_dir / "backup")
 
         content = agents_md.read_text()
-        assert "## Communication" in content
         assert content == _OPENCODE_AGENTS_MD
+        assert str(agents_md) in manifest["files"]
+        assert "notes" not in manifest
 
-    def test_previous_version_is_upgraded(self, base_dir: Path) -> None:
-        agents_md = base_dir / "opencode" / "AGENTS.md"
-        agents_md.parent.mkdir(parents=True, exist_ok=True)
-        agents_md.write_text(_OPENCODE_AGENTS_MD_V2)
-
-        manifest = {"files": [], "file_hashes": {}}
-        install.install_opencode_rules(base_dir, manifest, base_dir / "backup")
-
-        content = agents_md.read_text()
-        assert content == _OPENCODE_AGENTS_MD
-        assert "## Git & Language" in content
-        assert "Co-authored-by:" in content
-        assert "docs_language" in content
+    def test_current_rules_have_no_copilot_leftovers(self) -> None:
+        assert "/memories/` (platform" not in _OPENCODE_AGENTS_MD
+        assert ".copilot" not in _OPENCODE_AGENTS_MD
+        assert "## Git & Language" in _OPENCODE_AGENTS_MD
 
     def test_git_language_section_has_core_rules(self) -> None:
         """The global AGENTS.md Git & Language section keeps its core rules."""
@@ -774,7 +787,7 @@ class TestOpenCodeRulesUpgrade:
     ) -> None:
         agents_md = base_dir / "opencode" / "AGENTS.md"
         agents_md.parent.mkdir(parents=True, exist_ok=True)
-        custom = _OPENCODE_AGENTS_MD_LEGACY + "\n## My own rules\n"
+        custom = SHIPPED_GLOBAL_RULES[0] + "\n## My own rules\n"
         agents_md.write_text(custom)
 
         manifest = {"files": [], "file_hashes": {}}

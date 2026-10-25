@@ -27,6 +27,7 @@ from carter.install.paths import (
     knowledge_dir,
     manifest_path,
 )
+from carter.install.rules_history import SHIPPED_GLOBAL_RULES
 
 
 def install_agents(
@@ -102,15 +103,14 @@ def install_skills(
     return stats
 
 
-_OPENCODE_AGENTS_MD_LEGACY = """\
+_OPENCODE_AGENTS_MD_BASE = """\
 # Carter — Global Rules
 
 When the user's request starts with `ops:`, load the `carter-ops` skill and follow
 its instructions exactly.
 
 ## Memory
-- Record mistakes and key learnings to `~/.carter/memories/` (visible) and
-  `/memories/` (platform, if available).
+- Record mistakes and key learnings to `~/.carter/memories/`.
 - Use `~/.carter/memories/user/` for cross-project notes, `repo/<name>/` for
   project-specific notes, and `session/` for conversation-scoped working notes.
 - Consult `~/.carter/memories/` and `~/.carter/knowledge/` before proposing
@@ -131,10 +131,6 @@ _OPENCODE_COMMUNICATION = (
     "- At any doubt, ask for clarification before proceeding.\n"
 )
 
-# Previously shipped AGENTS.md content (v2 = legacy + Communication). Kept so an
-# unmodified older install upgrades cleanly; user-modified files are never touched.
-_OPENCODE_AGENTS_MD_V2 = _OPENCODE_AGENTS_MD_LEGACY + _OPENCODE_COMMUNICATION
-
 # The "Git & Language" global rules (also rendered into the workspace AGENTS.md).
 _OPENCODE_GIT_LANGUAGE = (
     "\n## Git & Language\n"
@@ -152,10 +148,11 @@ _OPENCODE_GIT_LANGUAGE = (
     "- Talk to the user in their own language.\n"
 )
 
-_OPENCODE_AGENTS_MD = _OPENCODE_AGENTS_MD_V2 + _OPENCODE_GIT_LANGUAGE
+_OPENCODE_AGENTS_MD = _OPENCODE_AGENTS_MD_BASE + _OPENCODE_COMMUNICATION + _OPENCODE_GIT_LANGUAGE
 
 # Unmodified earlier versions that install_opencode_rules may upgrade in place.
-_OPENCODE_AGENTS_MD_KNOWN = (_OPENCODE_AGENTS_MD_LEGACY, _OPENCODE_AGENTS_MD_V2)
+# When the text above changes, append the outgoing version to rules_history.
+_OPENCODE_AGENTS_MD_KNOWN = SHIPPED_GLOBAL_RULES
 
 
 def install_opencode_rules(
