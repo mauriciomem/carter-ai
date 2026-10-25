@@ -2,6 +2,19 @@
 
 <!-- version list -->
 
+## v0.15.2 (2026-10-25)
+
+### Bug Fixes
+
+- Respect an existing opencode.jsonc and support carter ops --help
+  ([#39](https://github.com/mauriciomem/carter-ai/pull/39),
+  [`5932771`](https://github.com/mauriciomem/carter-ai/commit/5932771a74290d771effe0e5a3d792213006fa61))
+
+- **install**: Respect an existing opencode.jsonc
+  ([#39](https://github.com/mauriciomem/carter-ai/pull/39),
+  [`5932771`](https://github.com/mauriciomem/carter-ai/commit/5932771a74290d771effe0e5a3d792213006fa61))
+
+
 ## v0.15.1 (2026-10-25)
 
 ### Bug Fixes
