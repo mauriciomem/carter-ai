@@ -142,7 +142,7 @@ class TestInstallMigrates:
         carter = tmp_path / "carter"
         assert (carter / "knowledge" / "mistakes.md").read_text() == "# my mistakes\n"
         manifest = json.loads((carter / "manifest.json").read_text())
-        assert manifest["targets"] == ["opencode"]
+        assert "targets" not in manifest
         # Nothing new is written under ~/.copilot.
         assert [p.name for p in (tmp_path / "copilot" / "backup").iterdir()] == ["20250101T000000"]
         second = _run("install", "--base-dir", str(tmp_path))

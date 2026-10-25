@@ -1,7 +1,7 @@
 """Environment detection and prerequisite/credential checks.
 
-OpenCode is the only supported harness (ADR-0014): ``require_opencode`` fails the
-install hard when ``opencode`` is missing or older than ``MIN_OPENCODE`` (D6).
+OpenCode is the only supported harness: ``require_opencode`` fails the install
+hard when ``opencode`` is missing or older than ``MIN_OPENCODE``.
 """
 
 from __future__ import annotations
@@ -22,7 +22,7 @@ REQUIRED_ENV_VARS = (
 )
 
 
-# Minimum supported OpenCode release (ADR-0014 D6).
+# Minimum supported OpenCode release (the first with V2 permissions).
 MIN_OPENCODE = (2, 1)
 
 _VERSION_RE = re.compile(r"\bv?(\d+)\.(\d+)(?:\.(\d+))?")
@@ -70,14 +70,12 @@ def require_opencode() -> tuple[int, int, int]:
     return version
 
 
-def check_optional_tools() -> dict[str, bool]:
+def check_optional_tools() -> None:
     """Report optional tools (``gh`` for carter-ops). Never fails the install."""
-    found = bool(_which("gh"))
-    if found:
+    if _which("gh"):
         log_ok("gh CLI", (_cmd_version("gh") or "")[:30])
     else:
         log_warn("gh CLI not found (optional)")
-    return {"gh": found}
 
 
 def _which(cmd: str) -> str | None:
@@ -92,30 +90,19 @@ def _cmd_version(cmd: str, flag: str = "--version") -> str | None:
         return None
 
 
-def detect_environment() -> dict:
+def detect_environment() -> None:
+    """Log the OS, Python and uv versions."""
     log_step("Detecting environment...")
-    info = {
-        "os": platform.system(),
-        "os_version": platform.version().split()[0] if platform.version() else "unknown",
-        "python": platform.python_version(),
-    }
     uv_ver = _cmd_version("uv", "--version")
-    info["uv"] = uv_ver.replace("uv ", "") if uv_ver else "not found"
-    _log(f"  OS: {info['os']} | Python: {info['python']} | uv: {info['uv']}")
-    return info
+    uv = uv_ver.replace("uv ", "") if uv_ver else "not found"
+    _log(f"  OS: {platform.system()} | Python: {platform.python_version()} | uv: {uv}")
 
 
-def check_credentials() -> dict[str, bool]:
+def check_credentials() -> None:
+    """Warn about unset env vars the shipped MCP configs read. Never fails."""
     log_step("Checking credentials...")
-    results: dict[str, bool] = {}
-
     for var in REQUIRED_ENV_VARS:
-        val = os.environ.get(var)
-        if val:
+        if os.environ.get(var):
             log_ok(var)
-            results[var] = True
         else:
             log_warn(var, f'export {var}="your-value"')
-            results[var] = False
-
-    return results

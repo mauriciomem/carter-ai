@@ -1,13 +1,15 @@
 """Filesystem path resolution for the installer.
 
-Every install target's base directory is resolved here. A ``base_dir`` override
-(used by tests) redirects all writes into a temp tree instead of the real home.
+Every directory the installer reads or writes is resolved here. A ``base_dir``
+override (used by tests) redirects all writes into a temp tree instead of the
+real home.
 """
 
 from __future__ import annotations
 
 from pathlib import Path
 
+from carter.home import carter_home
 from carter.resources import data_dir
 
 # Source of the bundled data files (agents/skills/mcp/...). Resolves the same way
@@ -35,17 +37,10 @@ def _carter_base(base_dir: Path | None) -> Path:
     """Return the carter home directory (~/.carter or base_dir/carter)."""
     if base_dir:
         return base_dir / "carter"
-    return _home() / ".carter"
+    return carter_home()
 
 
-def _local_bin(base_dir: Path | None) -> Path:
-    """Return the local bin directory (~/.local/bin or base_dir/local/bin)."""
-    if base_dir:
-        return base_dir / "local" / "bin"
-    return _home() / ".local" / "bin"
-
-
-# Carter-owned state (ADR-0014 D3). Earlier versions kept these under ~/.copilot:
+# Carter-owned state. Earlier versions kept these under ~/.copilot:
 #   ~/.copilot/knowledge/            → ~/.carter/knowledge/
 #   ~/.copilot/.carter-manifest.json → ~/.carter/manifest.json
 #   ~/.copilot/backup/<timestamp>/   → ~/.carter/backups/<timestamp>/
@@ -62,5 +57,5 @@ def backups_dir(base_dir: Path | None) -> Path:
 
 
 def legacy_manifest_path(base_dir: Path | None) -> Path:
-    """The manifest pre-ADR-0014 installs wrote under ~/.copilot (read-only now)."""
+    """The manifest older (Copilot-era) installs wrote under ~/.copilot (read-only now)."""
     return _copilot_base(base_dir) / ".carter-manifest.json"

@@ -12,6 +12,7 @@ import platform
 import shutil
 from pathlib import Path
 
+from carter.home import tilde
 from carter.install.components import read_manifest
 from carter.install.console import _log, log_err, log_ok, log_step, log_warn
 from carter.install.files import _sha256
@@ -66,17 +67,16 @@ def find_legacy_copilot(base_dir: Path | None) -> list[Path]:
     return found
 
 
-def warn_legacy_copilot(base_dir: Path | None) -> list[Path]:
+def warn_legacy_copilot(base_dir: Path | None) -> None:
     """Warn (once) about Copilot/VS Code leftovers. Never deletes anything."""
     found = find_legacy_copilot(base_dir)
     if found:
-        shown = ", ".join(str(p).replace(str(_home()), "~") for p in found)
+        shown = ", ".join(tilde(p) for p in found)
         log_warn(
             f"Copilot/VS Code files from an earlier Carter install are no longer managed: {shown}",
             "They were left in place. Run `carter uninstall --legacy` to remove the "
             "Carter-installed ones (only files listed in the old install manifest).",
         )
-    return found
 
 
 def _remove_json_entries(path: Path, key: str, names: list[str]) -> None:
@@ -84,7 +84,7 @@ def _remove_json_entries(path: Path, key: str, names: list[str]) -> None:
         return
     data = _load_jsonc(path)
     if data is None:
-        log_err(f"Could not parse {_tilde(path)} — skipped to avoid data loss")
+        log_err(f"Could not parse {tilde(path)} — skipped to avoid data loss")
         return
     section = data.get(key)
     if not isinstance(section, dict):
@@ -96,11 +96,7 @@ def _remove_json_entries(path: Path, key: str, names: list[str]) -> None:
         del section[n]
     _write_json_preserving(path, data)
     for n in removed:
-        log_ok(f"Removed {n} from {_tilde(path)}")
-
-
-def _tilde(p: Path) -> str:
-    return str(p).replace(str(_home()), "~")
+        log_ok(f"Removed {n} from {tilde(path)}")
 
 
 def uninstall_legacy(base_dir: Path | None) -> None:
@@ -116,13 +112,13 @@ def uninstall_legacy(base_dir: Path | None) -> None:
     if not manifest_file.is_file():
         found = find_legacy_copilot(base_dir)
         log_warn(
-            f"No old install manifest at {_tilde(manifest_file)}. Nothing was deleted.",
+            f"No old install manifest at {tilde(manifest_file)}. Nothing was deleted.",
             "Carter only removes files it can prove it installed.",
         )
         if found:
             _log("  Remove these by hand if they hold Carter content:")
             for p in found:
-                _log(f"    {_tilde(p)}")
+                _log(f"    {tilde(p)}")
         return
 
     from carter.install.components import normalize_manifest
@@ -145,14 +141,14 @@ def uninstall_legacy(base_dir: Path | None) -> None:
         recorded = hashes.get(entry)
         if hashes:
             if recorded is None or not _hash_matches(path, recorded):
-                log_warn(f"Kept {_tilde(path)}: edited since install (or no recorded hash)")
+                log_warn(f"Kept {tilde(path)}: edited since install (or no recorded hash)")
                 continue
         elif not any(part.startswith("carter-") for part in path.relative_to(copilot).parts):
-            log_warn(f"Kept {_tilde(path)}: not carter-* named and no hash to verify it")
+            log_warn(f"Kept {tilde(path)}: not carter-* named and no hash to verify it")
             continue
         path.unlink()
         removed_any = True
-        log_ok(f"Removed {_tilde(path)}")
+        log_ok(f"Removed {tilde(path)}")
         # Drop now-empty carter-* skill directories (never the roots themselves).
         parent = path.parent
         while parent not in roots and _within(parent, roots) and not any(parent.iterdir()):
@@ -168,7 +164,7 @@ def uninstall_legacy(base_dir: Path | None) -> None:
     if not removed_any and not names:
         log_ok("Nothing to remove")
     _log(
-        f"  The old manifest and {_tilde(copilot / 'knowledge')} are kept "
+        f"  The old manifest and {tilde(copilot / 'knowledge')} are kept "
         "(knowledge was copied to ~/.carter)."
     )
 
@@ -200,7 +196,7 @@ def remove_legacy_opencode_instructions(base_dir: Path | None, backup_root: Path
     with a warning. A symlink is never followed or removed.
     """
     stale = _opencode_base(base_dir) / "instructions" / "copilot-instructions.md"
-    shown = str(stale).replace(str(_home()), "~")
+    shown = tilde(stale)
     if stale.is_symlink():
         log_warn(f"{shown} is a symlink — left untouched (no longer used by OpenCode)")
         return
@@ -218,10 +214,7 @@ def remove_legacy_opencode_instructions(base_dir: Path | None, backup_root: Path
         dest = backup_root / "opencode-instructions" / stale.name
         dest.parent.mkdir(parents=True, exist_ok=True)
         shutil.move(str(stale), dest)
-        log_warn(
-            f"{shown} was modified — moved to {str(dest).replace(str(_home()), '~')} "
-            "(OpenCode does not load it)"
-        )
+        log_warn(f"{shown} was modified — moved to {tilde(dest)} (OpenCode does not load it)")
     else:
         log_warn(f"{shown} was modified — left in place (OpenCode does not load it)")
         return

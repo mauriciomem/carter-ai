@@ -8,16 +8,15 @@ from __future__ import annotations
 
 import os
 import re
+import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 
-
-def _home() -> Path:
-    return Path.home()
+from carter.home import carter_home
 
 
 def _default_config_path() -> Path:
-    return _home() / ".carter" / "config.toml"
+    return carter_home() / "config.toml"
 
 
 def _parse_toml(text: str) -> dict[str, dict[str, str]]:
@@ -57,13 +56,8 @@ class Config:
         cfg = cls()
 
         # Load from TOML file
-        path = config_path or _default_config_path()
-        if path.exists():
-            try:
-                data = _parse_toml(path.read_text())
-            except Exception:
-                data = {}
-
+        data = read_config_toml(config_path or _default_config_path())
+        if data:
             attr = data.get("attribution", {})
             cfg.bot_name = attr.get("name", cfg.bot_name)
             cfg.bot_email = attr.get("email", cfg.bot_email)
@@ -85,10 +79,8 @@ class Config:
         return cfg
 
 
-def _detect_signing_key() -> str:
-    """Try to get signing key from git config."""
-    import subprocess
-
+def git_signing_key() -> str:
+    """Return ``git config user.signingkey`` verbatim, or ``""`` if unset/unavailable."""
     try:
         result = subprocess.run(
             ["git", "config", "user.signingkey"],
@@ -96,16 +88,31 @@ def _detect_signing_key() -> str:
             text=True,
             timeout=5,
         )
-        if result.returncode == 0 and result.stdout.strip():
-            key = result.stdout.strip()
-            expanded = str(Path(key).expanduser())
-            return expanded
     except (subprocess.SubprocessError, FileNotFoundError):
-        pass
+        return ""
+    if result.returncode == 0:
+        return result.stdout.strip()
+    return ""
 
-    # Fallback: check common key locations
+
+def read_config_toml(path: Path) -> dict[str, dict[str, str]]:
+    """Parse ``config.toml`` at ``path``; missing or unreadable files yield ``{}``."""
+    if not path.exists():
+        return {}
+    try:
+        return _parse_toml(path.read_text())
+    except Exception:
+        return {}
+
+
+def _detect_signing_key() -> str:
+    """Try to get signing key from git config, then common SSH key locations."""
+    key = git_signing_key()
+    if key:
+        return str(Path(key).expanduser())
+
     for name in ("id_ed25519", "id_rsa"):
-        p = _home() / ".ssh" / name
+        p = Path.home() / ".ssh" / name
         if p.exists():
             return str(p)
 

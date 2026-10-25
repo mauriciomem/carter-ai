@@ -5,23 +5,17 @@ from __future__ import annotations
 import shutil
 from pathlib import Path
 
+from carter.home import tilde
 from carter.install.components import read_manifest
 from carter.install.console import _log, bold, green, log_ok, log_step, log_warn
 from carter.install.legacy import remove_legacy_opencode_instructions
 from carter.install.mcp import remove_carter_servers
 from carter.install.ownership import _hash_matches, _within
 from carter.install.paths import (
-    _carter_base,
-    _home,
-    _local_bin,
     _opencode_base,
     knowledge_dir,
     manifest_path,
 )
-
-
-def _tilde(p: Path) -> str:
-    return str(p).replace(str(_home()), "~")
 
 
 def _remove_if_owned(
@@ -40,7 +34,7 @@ def _remove_if_owned(
         return
     if recorded is not None:
         if not _hash_matches(path, recorded):
-            log_warn(f"Kept {_tilde(path)}: edited since install")
+            log_warn(f"Kept {tilde(path)}: edited since install")
             return
     else:
         base = opencode_base.resolve()
@@ -48,10 +42,10 @@ def _remove_if_owned(
             part.startswith("carter-") for part in resolved.relative_to(base).parts
         )
         if not owned_by_name:
-            log_warn(f"Kept {_tilde(path)}: no recorded hash to prove it is unmodified")
+            log_warn(f"Kept {tilde(path)}: no recorded hash to prove it is unmodified")
             return
     path.unlink()
-    log_ok(f"Removed {_tilde(path)}")
+    log_ok(f"Removed {tilde(path)}")
     # Drop now-empty carter-* skill directories (never agents/, skills/ or the roots).
     base = opencode_base.resolve()
     keep = (*roots, base / "agents", base / "skills")
@@ -62,7 +56,11 @@ def _remove_if_owned(
 
 
 def uninstall(base_dir: Path | None) -> None:
-    """Remove the OpenCode install. Pre-ADR-0014 leftovers are not touched (D7)."""
+    """Remove the OpenCode install.
+
+    Leftovers of the old Copilot-era install are not touched here; that is
+    ``carter uninstall --legacy``.
+    """
     log_step("Uninstalling Carter...")
     manifest = read_manifest(base_dir)
     opencode_base = _opencode_base(base_dir)
@@ -82,10 +80,10 @@ def uninstall(base_dir: Path | None) -> None:
                 for f in d.glob("carter-*"):
                     if f.is_file():
                         f.unlink()
-                        log_ok(f"Removed {str(f).replace(str(_home()), '~')}")
+                        log_ok(f"Removed {tilde(f)}")
                     elif f.is_dir():
                         shutil.rmtree(f)
-                        log_ok(f"Removed {str(f).replace(str(_home()), '~')}/")
+                        log_ok(f"Removed {tilde(f)}/")
 
     log_step("Removing MCP servers (OpenCode)...")
     for name in remove_carter_servers(opencode_base / "opencode.json"):
@@ -96,16 +94,5 @@ def uninstall(base_dir: Path | None) -> None:
     if path.exists():
         path.unlink()
         log_ok("Removed manifest")
-
-    # Remove carter-ops
-    ops_dir = _carter_base(base_dir) / "ops"
-    if ops_dir.exists():
-        shutil.rmtree(ops_dir)
-        log_ok(f"Removed {str(ops_dir).replace(str(_home()), '~')}/")
-
-    wrapper = _local_bin(base_dir) / "carter-ops"
-    if wrapper.exists():
-        wrapper.unlink()
-        log_ok(f"Removed {str(wrapper).replace(str(_home()), '~')}")
 
     _log(f"\n{green('✓')} {bold('Uninstall complete')}")

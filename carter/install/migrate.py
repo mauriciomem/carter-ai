@@ -27,11 +27,11 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
 
+from carter.home import tilde
 from carter.install.console import log_ok, log_step, log_warn
 from carter.install.paths import (
     _carter_base,
     _copilot_base,
-    _home,
     backups_dir,
     knowledge_dir,
     legacy_manifest_path,
@@ -45,10 +45,6 @@ MARKER_NAME = ".migrated-from-copilot"
 class MigrationResult:
     copied: list[Path] = field(default_factory=list)
     conflicts: list[Path] = field(default_factory=list)
-
-
-def _tilde(p: Path) -> str:
-    return str(p).replace(str(_home()), "~")
 
 
 def _pairs(base_dir: Path | None) -> list[tuple[Path, Path]]:
@@ -93,10 +89,10 @@ def migrate_copilot_state(base_dir: Path | None) -> MigrationResult:
     if result.copied or result.conflicts:
         log_step("Migrating Carter state from ~/.copilot to ~/.carter...")
     if result.copied:
-        log_ok(f"Migrated {len(result.copied)} file(s) to {_tilde(_carter_base(base_dir))}")
+        log_ok(f"Migrated {len(result.copied)} file(s) to {tilde(_carter_base(base_dir))}")
     for dst in result.conflicts:
         log_warn(
-            f"{_tilde(dst)} differs from its ~/.copilot copy — not overwritten",
+            f"{tilde(dst)} differs from its ~/.copilot copy — not overwritten",
             "Merge the two by hand if you need the old content; the ~/.copilot copy is kept.",
         )
 
