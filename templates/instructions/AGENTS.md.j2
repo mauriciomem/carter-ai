@@ -23,7 +23,9 @@ Carter Maestro (`carter-maestro`) is the orchestrator. Direct specialist request
 
 ## Conventions
 
-- **Knowledge**: `.carter/knowledge/` contains workspace-specific knowledge files. Read before acting.
+- **Knowledge**: two sets, read before acting — workspace first, then global.
+  - `.carter/knowledge/` — this workspace's files (gotchas, patterns, decisions).
+  - `~/.carter/knowledge/` — global seeds installed by `carter install` and grown by `carter-distill`; shared across workspaces.
 - **State**: `.carter/state/` contains plans and session checkpoints.
 - **Plans**: Active plans in `.carter/state/plans/active/`. Check at session start.
 - **Current date**: Obtain the current date from a tool or the environment (a
