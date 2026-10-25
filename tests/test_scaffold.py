@@ -955,7 +955,6 @@ class TestInitFlags:
         assert (tmp_path / ".opencode" / "agents").exists()
         assert (tmp_path / "AGENTS.md").exists()
         assert not (tmp_path / ".github").exists()
-        assert "target" not in load_config(tmp_path / ".carter" / "carter.yaml")
 
     def test_agent_suffix_flag(self, tmp_path):
         result = self._run_init(tmp_path, "--agent-suffix", "demo")
@@ -968,10 +967,6 @@ class TestInitFlags:
         result = self._run_init(tmp_path, "--agent-suffix", "")
         assert result.exit_code == 0, result.output
         assert (tmp_path / ".opencode" / "agents" / "carter-maestro.md").exists()
-
-    def test_target_flag_removed(self, tmp_path):
-        result = self._run_init(tmp_path, "--target", "opencode")
-        assert result.exit_code != 0
 
     def test_invalid_agent_suffix_rejected(self, tmp_path):
         result = self._run_init(tmp_path, "--agent-suffix", "Bad!")

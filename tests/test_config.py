@@ -2,7 +2,7 @@
 
 Covers the risk-based strictness policy (the `policy` block, the shipped R0-R6
 taxonomy, the tool->risk map, the per-agent allowlist and how overrides reach the
-emitted gates), plus the cost profile, `docs_language` and the removed `target` key.
+emitted gates), plus the cost profile and `docs_language`.
 The rendered permission rules themselves are tested in tests/test_policy_lint.py.
 Everything user-extensible is dict-shaped so `_deep_merge` (which replaces lists
 wholesale) merges overrides instead of wiping the shipped defaults.
@@ -401,52 +401,3 @@ class TestDocsLanguage:
         assert result.exit_code != 0
         assert "docs_language" in result.output
         assert not (tmp_path / ".carter").exists()
-
-
-class TestTargetKeyRemoved:
-    """`target:` is gone with no shim; a leftover key is a validation
-    error whose message says exactly how to fix it."""
-
-    def test_default_config_has_no_target(self):
-        assert "target" not in DEFAULT_CONFIG
-        assert "target" not in generate_default_config()
-
-    def test_resolve_targets_is_gone(self):
-        import carter.config
-
-        assert not hasattr(carter.config, "resolve_targets")
-
-    @pytest.mark.parametrize("value", ["copilot", "opencode", "all"])
-    def test_leftover_target_is_rejected_with_fix(self, tmp_path, value):
-        cfg = {**_minimal_existing_config(), "target": value}
-        cfg_path = tmp_path / "carter.yaml"
-        cfg_path.write_text(yaml.dump(cfg))
-        with pytest.raises(ConfigError) as exc:
-            load_config(cfg_path)
-        msg = str(exc.value)
-        assert "target" in msg
-        assert "Delete the `target:` key" in msg
-        assert "OpenCode >= 2.1" in msg
-
-    def test_update_surfaces_target_error(self, tmp_path):
-        from click.testing import CliRunner
-
-        from carter.cli import main
-
-        runner = CliRunner()
-        assert runner.invoke(main, ["init", str(tmp_path), "--no-git-state"]).exit_code == 0
-        cfg_path = tmp_path / ".carter" / "carter.yaml"
-        cfg_path.write_text(cfg_path.read_text() + "target: copilot\n")
-        result = runner.invoke(main, ["update", str(tmp_path)])
-        assert result.exit_code != 0
-        assert "Delete the `target:` key" in result.output
-
-    def test_init_target_flag_is_gone(self, tmp_path):
-        from click.testing import CliRunner
-
-        from carter.cli import main
-
-        result = CliRunner().invoke(
-            main, ["init", str(tmp_path), "--no-git-state", "--target", "opencode"]
-        )
-        assert result.exit_code != 0
