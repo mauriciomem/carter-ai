@@ -7,12 +7,10 @@ name: evals-live
 # a low-cost model and records pass-rate + token/latency/cost metrics on a cadence.
 #
 # It tests the PROMPT MARKDOWN sent to a RAW model — a proxy for prompt quality, NOT
-# the real VS Code Copilot tool-calling loop. Read the metrics with that caveat.
+# the real OpenCode tool-calling loop. Read the metrics with that caveat.
 #
-# Auth: CI runners have NO Copilot OAuth token (`gh auth token` there only yields the
-# repo GITHUB_TOKEN, which the Copilot API rejects). We therefore (a) DO NOT expose
-# GITHUB_TOKEN/GH_TOKEN to the run step — so `_get_copilot_token()` returns None and
-# the harness falls through to the key — and (b) provide a dedicated ANTHROPIC_API_KEY
+# Auth: the harness reads only a standard provider key from the environment
+# (ANTHROPIC_API_KEY, else OPENAI_API_KEY), so we provide a dedicated ANTHROPIC_API_KEY
 # repo secret. If the secret is unset the live tests skip cleanly (no failure).
 
 on:

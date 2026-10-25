@@ -84,10 +84,10 @@ uv run pytest evals/ -m "not live" -q                               # offline ev
 ### Why the live evals need an API key (and the PR gate does not)
 
 The live evals (`evals/test_live.py`, marked `live`) send the agent/skill prompt
-markdown to a **raw model** and assert on the response. Locally they can reuse a
-provider token OpenCode already stored (`~/.local/share/opencode/auth.json`) or an
-`ANTHROPIC_API_KEY` / `OPENAI_API_KEY` in your environment. **CI runners have none of
-these**, so running live evals in CI *requires* a dedicated LLM key.
+markdown to a **raw model** and assert on the response. They read a standard
+provider key from your environment — `ANTHROPIC_API_KEY`, else `OPENAI_API_KEY` — and
+skip cleanly when neither is set. They never read stored OpenCode or `gh` credentials,
+so running live evals in CI *requires* a dedicated LLM key.
 
 We do **not** want a key on the PR gate: it would cost money per PR, be
 non-deterministic (a flaky merge gate), and expose a secret to fork PRs. So:
