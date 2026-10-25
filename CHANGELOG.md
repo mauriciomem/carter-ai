@@ -2,6 +2,15 @@
 
 <!-- version list -->
 
+## v0.11.1 (2026-10-25)
+
+### Bug Fixes
+
+- **uninstall**: Never delete user-edited or user-owned files
+  ([#29](https://github.com/mauriciomem/carter-ai/pull/29),
+  [`0b5328c`](https://github.com/mauriciomem/carter-ai/commit/0b5328c0e3b88bcb98929a6a9bc03ed64d843f3c))
+
+
 ## v0.11.0 (2026-10-25)
 
 ### Chores
