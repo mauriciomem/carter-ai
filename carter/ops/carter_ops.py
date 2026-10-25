@@ -25,16 +25,25 @@ from __future__ import annotations
 import json
 import sys
 from datetime import UTC, datetime
-from pathlib import Path
 from typing import Any
 
 from carter.config import RISK_TAXONOMY
+from carter.home import carter_home
 from carter.ops.config import Config
-from carter.ops.output import emit, emit_error
 
-AUDIT_LOG = Path.home() / ".carter" / "audit.log"
+AUDIT_LOG = carter_home() / "audit.log"
 
 USAGE = "Usage: carter ops {audit|policy-override|config --emit} [--key value ...]"
+
+
+def emit(data: dict[str, Any]) -> None:
+    """Write JSON to stdout."""
+    print(json.dumps(data, indent=2))
+
+
+def emit_error(message: str) -> None:
+    """Write a human-readable error to stderr."""
+    print(f"error: {message}", file=sys.stderr)
 
 
 def _audit(entry: dict[str, Any]) -> None:
