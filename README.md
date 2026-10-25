@@ -64,18 +64,6 @@ Carter installed and you have not changed:
 Manifests from older versions may lack content hashes; then knowledge files and
 `AGENTS.md` are kept, and only `carter-*` agents/skills are removed.
 
-### Upgrading from a Copilot-era install
-
-Earlier Carter versions also targeted GitHub Copilot and VS Code. That support is gone.
-
-- **State migrates automatically.** The first `carter install` copies knowledge, the
-  manifest and backups from `~/.copilot/` to `~/.carter/` (nothing is deleted).
-- **Old Copilot/VS Code files stay put.** `carter uninstall --legacy` removes the ones
-  the old manifest lists, skipping anything you edited.
-- **Edit `carter.yaml`:** delete the `target:` key (it is now an error), and collapse
-  each per-target `models:` entry to one OpenCode string, e.g.
-  `thinkers: anthropic/claude-opus-5-5`. Then run `carter update .`.
-
 ## Usage
 
 ```
@@ -295,7 +283,6 @@ evals/         Prompt/skill evals (offline + live)
 | `uv tool upgrade` says "Nothing to upgrade" | Force a reinstall from the latest commit: `uv tool install --force git+https://github.com/mauriciomem/carter-ai.git` |
 | `carter install` fails: opencode not found / too old | Install or upgrade [OpenCode](https://opencode.ai/v2/docs/) to 2.1+ and make sure `opencode --version` works |
 | Agents not appearing in OpenCode | Run `carter check .` — it runs `opencode debug agents` and names any agent OpenCode dropped. Agents load from `~/.config/opencode/agents/` (system) or `.opencode/agents/` (workspace) |
-| `Unknown key 'target'` | Delete `target:` from `.carter/carter.yaml` (see [Upgrading](#upgrading-from-a-copilot-era-install)) |
 | `carter uninstall` left files behind | By design: files you edited (or that existed before install) are kept and listed as `⚠ Kept …`. Delete them by hand if you don't need them (see [Uninstalling](#uninstalling)) |
 | MCP server conflicts | Carter installs alongside existing servers as `carter-*`; remove the original to avoid duplicate tools |
 | Missing tokens for `--mcp` | `carter install --mcp` prints a `⚠` warning for each unset `GITHUB_TOKEN` / `TFE_TOKEN` (hidden by `-q`) and continues — the install never fails on a missing token. Without `--mcp`, tokens are not checked |

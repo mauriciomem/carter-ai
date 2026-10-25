@@ -9,7 +9,7 @@ from types import SimpleNamespace
 import pytest
 
 from carter.config import generate_default_config
-from carter.install import components, files, legacy, mcp, paths
+from carter.install import components, files, mcp, paths
 from carter.install import uninstall as uninstall_mod
 from carter.install.components import _OPENCODE_AGENTS_MD
 from carter.install.files import (
@@ -19,7 +19,6 @@ from carter.install.files import (
     _sha256,
 )
 from carter.install.jsonc import _load_jsonc, _strip_jsonc
-from carter.install.rules_history import SHIPPED_GLOBAL_RULES
 from carter.scaffold import create_env, render_agents
 
 # One namespace over the installer leaves so the tests read like the CLI surface.
@@ -32,7 +31,6 @@ install = SimpleNamespace(
     install_memories=components.install_memories,
     install_ops=components.install_ops,
     install_opencode_rules=components.install_opencode_rules,
-    remove_legacy_opencode_instructions=legacy.remove_legacy_opencode_instructions,
     read_manifest=components.read_manifest,
     write_manifest=components.write_manifest,
     uninstall=uninstall_mod.uninstall,
@@ -133,75 +131,6 @@ class TestInstallSkills:
         pl_dir = skills_dir / "carter-pipeline"
         for sub in ("github-cli.md", "strategies.md", "actions.md"):
             assert (pl_dir / sub).exists()
-
-
-_SHIPPED_TEXT = "# Carter — Global Instructions (a version Carter shipped)\n"
-
-
-class TestInstallInstructions:
-    @pytest.fixture(autouse=True)
-    def _known_shipped(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        import hashlib
-
-        digest = hashlib.sha256(_SHIPPED_TEXT.encode()).hexdigest()
-        monkeypatch.setattr(legacy, "_SHIPPED_INSTRUCTIONS_SHA256", frozenset({f"sha256:{digest}"}))
-
-    @staticmethod
-    def _legacy(base_dir: Path, content: str) -> Path:
-        stale = base_dir / "opencode" / "instructions" / "copilot-instructions.md"
-        stale.parent.mkdir(parents=True)
-        stale.write_text(content)
-        return stale
-
-    @staticmethod
-    def _shipped() -> str:
-        return _SHIPPED_TEXT
-
-    def test_carter_owned_legacy_copy_removed(self, base_dir: Path) -> None:
-        stale = self._legacy(base_dir, self._shipped())
-        install.remove_legacy_opencode_instructions(base_dir, base_dir / "backup")
-        assert not stale.exists()
-        assert not stale.parent.exists()  # empty instructions/ dir removed
-
-    def test_manifest_recorded_hash_counts_as_carter_owned(self, base_dir: Path) -> None:
-        stale = self._legacy(base_dir, "an older shipped version\n")
-        install.write_manifest(
-            {"files": [str(stale)], "file_hashes": {str(stale): _sha256(stale)}}, base_dir
-        )
-        install.remove_legacy_opencode_instructions(base_dir, base_dir / "backup")
-        assert not stale.exists()
-
-    def test_user_modified_copy_backed_up_not_deleted(self, base_dir: Path, capsys) -> None:
-        stale = self._legacy(base_dir, "my own notes\n")
-        (stale.parent / "other.md").write_text("keep")
-        backup = base_dir / "backup"
-        install.remove_legacy_opencode_instructions(base_dir, backup)
-        assert not stale.exists()
-        moved = backup / "opencode-instructions" / "copilot-instructions.md"
-        assert moved.read_text() == "my own notes\n"
-        assert (stale.parent / "other.md").exists()  # non-empty dir kept
-        assert "was modified" in capsys.readouterr().out
-
-    def test_symlink_not_followed(self, base_dir: Path, tmp_path: Path) -> None:
-        target = tmp_path / "elsewhere.md"
-        target.write_text(self._shipped())
-        link = base_dir / "opencode" / "instructions" / "copilot-instructions.md"
-        link.parent.mkdir(parents=True)
-        link.symlink_to(target)
-        install.remove_legacy_opencode_instructions(base_dir, base_dir / "backup")
-        assert link.is_symlink()
-        assert target.read_text() == self._shipped()
-
-    def test_uninstall_without_manifest_removes_carter_owned_copy(self, base_dir: Path) -> None:
-        stale = self._legacy(base_dir, self._shipped())
-        install.uninstall(base_dir)
-        assert not stale.exists()
-
-    def test_uninstall_without_manifest_keeps_modified_copy(self, base_dir: Path, capsys) -> None:
-        stale = self._legacy(base_dir, "my own notes\n")
-        install.uninstall(base_dir)
-        assert stale.read_text() == "my own notes\n"
-        assert "left in place" in capsys.readouterr().out
 
 
 class TestInstallKnowledge:
@@ -449,6 +378,15 @@ class TestManifest:
         assert loaded["version"] == "1.0.0"
         assert loaded["files"] == ["/some/file.md"]
         assert loaded["mcp_servers"] == ["carter-github"]
+
+    def test_read_manifest_fills_missing_lists(self, base_dir: Path) -> None:
+        install.write_manifest({"version": "1.0.0"}, base_dir)
+        loaded = install.read_manifest(base_dir)
+
+        assert loaded is not None
+        assert loaded["files"] == []
+        assert loaded["file_hashes"] == {}
+        assert loaded["mcp_servers"] == []
 
     def test_read_nonexistent_manifest(self, base_dir: Path) -> None:
         assert install.read_manifest(base_dir) is None
@@ -723,11 +661,8 @@ class TestOpenCodeRules:
 
 
 class TestOpenCodeRulesUpgrade:
-    """Upgrade path: ``install_opencode_rules`` used to skip whenever the file
-    existed, so every legacy install would never receive a content fix. Now it
-    content-hashes: byte-identical legacy content is upgraded, user-modified
-    content is never clobbered (matching the installer's SHA-256 idempotency
-    philosophy).
+    """``install_opencode_rules`` writes the global rules once and never clobbers
+    a file whose content differs from the current text (treated as user-modified).
     """
 
     def test_fresh_install_has_communication_section(self, base_dir: Path) -> None:
@@ -737,49 +672,33 @@ class TestOpenCodeRulesUpgrade:
         content = (base_dir / "opencode" / "AGENTS.md").read_text()
         assert "## Communication" in content
         assert "Be concise and clear" in content
-        assert "## Memory" in content  # legacy content retained
+        assert "## Memory" in content
 
-    # SHA-256 of every global rules text Carter ever shipped, recovered from git
-    # history (root install.py, carter/installer.py, carter/install/components.py).
-    # Pinned independently of rules_history so a dropped or edited variant fails.
-    SHIPPED_SHA256 = frozenset(
-        {
-            "f737b33d38e27de99de0ab285e9dd184d24d92642039f80dd2163c52a8b2550d",
-            "8152727edd65eb92789ebdc9a0d96a655597784f2ecead9adec6ee4e27616dfb",
-            "0512edab7f3115cc19d567a6de0fd72b9436772acf2987f9c7e9b4299d96e6fc",
-            "af2473592d128a443584c46acda6c85f905edc0307828edd1c0c33891977150a",
-            "b302f2a6b3e2b8d6bfc8c7be51b585beefaaf44417b9c3e0dba3f9c2a88760fe",
-            "8cfc4fa98b97ea54503d3c36883aee7ce17b795e4460d65271c540aa672cd974",
-            "cf4dc5281042faeeb681b9817cf8ce2665e24761c05929b2396edb4580e0b459",
-            "3c50f9e3fd8488bb36fa3efab23e9fafaf814d9d918e25b7cb3c8c20ca583fd8",
-        }
-    )
-
-    def test_history_covers_every_shipped_version(self) -> None:
-        import hashlib
-
-        got = {hashlib.sha256(t.encode()).hexdigest() for t in SHIPPED_GLOBAL_RULES}
-        assert got == self.SHIPPED_SHA256
-        assert _OPENCODE_AGENTS_MD not in SHIPPED_GLOBAL_RULES
-
-    @pytest.mark.parametrize("old", SHIPPED_GLOBAL_RULES)
-    def test_every_shipped_version_is_upgraded(self, base_dir: Path, old: str) -> None:
+    def test_older_rules_text_is_treated_as_user_modified(self, base_dir: Path) -> None:
+        """Only the current text is recognized; an older one is never overwritten."""
         agents_md = base_dir / "opencode" / "AGENTS.md"
         agents_md.parent.mkdir(parents=True, exist_ok=True)
+        old = _OPENCODE_AGENTS_MD.split("\n## Git & Language", 1)[0] + "\n"
         agents_md.write_text(old)
 
         manifest = {"files": [], "file_hashes": {}}
         install.install_opencode_rules(base_dir, manifest)
 
-        content = agents_md.read_text()
-        assert content == _OPENCODE_AGENTS_MD
+        assert agents_md.read_text() == old
+        assert str(agents_md) not in manifest["files"]
+        assert any("user-modified" in note for note in manifest["notes"])
+
+    def test_current_rules_text_is_left_unchanged(self, base_dir: Path) -> None:
+        agents_md = base_dir / "opencode" / "AGENTS.md"
+        agents_md.parent.mkdir(parents=True, exist_ok=True)
+        agents_md.write_text(_OPENCODE_AGENTS_MD)
+
+        manifest = {"files": [], "file_hashes": {}}
+        install.install_opencode_rules(base_dir, manifest)
+
+        assert agents_md.read_text() == _OPENCODE_AGENTS_MD
         assert str(agents_md) in manifest["files"]
         assert "notes" not in manifest
-
-    def test_current_rules_have_no_copilot_leftovers(self) -> None:
-        assert "/memories/` (platform" not in _OPENCODE_AGENTS_MD
-        assert ".copilot" not in _OPENCODE_AGENTS_MD
-        assert "## Git & Language" in _OPENCODE_AGENTS_MD
 
     def test_git_language_section_has_core_rules(self) -> None:
         """The global AGENTS.md Git & Language section keeps its core rules."""
@@ -794,7 +713,7 @@ class TestOpenCodeRulesUpgrade:
     ) -> None:
         agents_md = base_dir / "opencode" / "AGENTS.md"
         agents_md.parent.mkdir(parents=True, exist_ok=True)
-        custom = SHIPPED_GLOBAL_RULES[0] + "\n## My own rules\n"
+        custom = _OPENCODE_AGENTS_MD + "\n## My own rules\n"
         agents_md.write_text(custom)
 
         manifest = {"files": [], "file_hashes": {}}

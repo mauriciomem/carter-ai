@@ -30,7 +30,6 @@ htmlcov/
 eval-metrics.json
 
 # IDE
-.vscode/
 .idea/
 *.swp
 *.swo

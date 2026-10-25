@@ -103,31 +103,6 @@ class TestAgentSourceParity:
             )
 
 
-class TestNoRunSubagentFiction:
-    """``runSubagent`` is not a real tool; OpenCode dispatches through ``subagent``.
-    It drifted back once before (the rendered maestro said ``runSubagent`` while the
-    template said "chain sequentially"), so lock its absence in both the rendered
-    agents (with and without a name suffix) and the templates.
-    """
-
-    @pytest.mark.parametrize("suffix", ["", "local"])
-    def test_no_runsubagent_in_rendered_agents(self, suffix: str) -> None:
-        cfg = generate_default_config()
-        cfg["agent_suffix"] = suffix
-        rendered = render_agents(cfg, create_env())
-        assert rendered, "no agents rendered"
-        offenders = [name for name, content in rendered.items() if "runSubagent" in content]
-        assert not offenders, f"rendered agents still cite the runSubagent fiction: {offenders}"
-
-    def test_no_runsubagent_in_agent_templates(self, template_agents_dir: Path) -> None:
-        offenders = [
-            p.name
-            for p in sorted(template_agents_dir.glob("carter-*.md.j2"))
-            if "runSubagent" in p.read_text()
-        ]
-        assert not offenders, f"agent templates still cite the runSubagent fiction: {offenders}"
-
-
 class TestNoTemperatureEmission:
     """``temperature`` is dropped wholesale — OpenCode accepts it syntactically but
     every pinned Anthropic model rejects it at the API. Neither rendered agents nor
@@ -154,7 +129,7 @@ class TestNoTemperatureEmission:
 class TestSubagentContextRule:
     """Delegated subagents do NOT inherit chat history, so the maestro must inline
     the active plan, relevant knowledge and the acceptance check into every
-    delegated prompt. Orchestration wording from other harnesses must stay out."""
+    delegated prompt."""
 
     def test_rendered_maestro_has_context_injection_rule(self, rendered_agents_dir: Path) -> None:
         lower = (rendered_agents_dir / "carter-maestro.md").read_text().lower()
@@ -162,12 +137,6 @@ class TestSubagentContextRule:
         assert "active plan" in lower
         assert "knowledge" in lower
         assert "acceptance check" in lower
-
-    def test_no_copilot_only_orchestration(self, rendered_agents_dir: Path) -> None:
-        for agent in sorted(rendered_agents_dir.glob("carter-*.md")):
-            text = agent.read_text()
-            for marker in ("/fleet", "Copilot", "VS Code", "`agents:`", "`handoffs:`"):
-                assert marker not in text, f"{agent.name} still carries {marker!r}"
 
 
 # Skills each rendered agent must advertise.

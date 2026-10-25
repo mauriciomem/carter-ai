@@ -23,9 +23,7 @@ from carter.install.components import (
     write_manifest,
 )
 from carter.install.console import _log, bold, green, log_debug, log_step, set_verbosity
-from carter.install.legacy import remove_legacy_opencode_instructions, warn_legacy_copilot
 from carter.install.mcp import configure_mcp_servers
-from carter.install.migrate import migrate_copilot_state
 from carter.install.paths import backups_dir
 from carter.install.prereqs import (
     check_credentials,
@@ -63,16 +61,11 @@ def run(
     log_step("Checking prerequisites...")
     require_opencode()
     check_optional_tools()
-    warn_legacy_copilot(base_dir)
 
     if mcp:
         check_credentials()
     else:
         log_step("Skipping MCP credentials (no --mcp flag)")
-
-    # Before anything reads or seeds ~/.carter: knowledge seeds must not shadow
-    # the user's migrated knowledge.
-    migrate_copilot_state(base_dir)
 
     now = datetime.now(UTC)
     backup_root = backups_dir(base_dir) / now.strftime("%Y%m%dT%H%M%S")
@@ -94,8 +87,6 @@ def run(
     agent_stats = install_agents(base_dir, manifest, backup_root)
     skill_stats = install_skills(base_dir, manifest, backup_root, bot_name=bot_name)
     remove_retired_skills(base_dir, existing, backup_root)
-    # OpenCode reads AGENTS.md; drop the instructions copy older versions wrote.
-    remove_legacy_opencode_instructions(base_dir, backup_root)
     install_opencode_rules(base_dir, manifest)
     knowledge_count = install_knowledge(base_dir, manifest, backup_root)
     memory_count = install_memories(base_dir, manifest)

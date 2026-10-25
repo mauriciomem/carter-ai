@@ -141,15 +141,6 @@ def _validate_profile(profile: Any) -> None:
 _MODEL_RE = re.compile(r"^[^\s/#]+/[^\s#]+(#[^\s#]+)?$")
 
 
-def _validate_no_target(user_config: dict[str, Any], config_path: Path) -> None:
-    """Reject a leftover ``target:`` key (OpenCode is the only target; no shim)."""
-    if "target" in user_config:
-        raise ConfigError(
-            f"Unknown key 'target' in {config_path}. Delete the `target:` key: "
-            "Carter now only supports OpenCode >= 2.1, so there is no target to choose."
-        )
-
-
 def _validate_models(models: Any) -> None:
     """Validate the ``models`` block: every tier/override is a V2 model string."""
     if not isinstance(models, dict):
@@ -215,7 +206,6 @@ def load_config(config_path: Path) -> dict[str, Any]:
     if missing:
         raise ConfigError(f"Missing required keys: {', '.join(sorted(missing))}")
 
-    _validate_no_target(config, config_path)
     merged = _merge_with_defaults(config)
     _validate_models(merged.get("models"))
     _validate_agent_suffix(merged.get("agent_suffix", ""))

@@ -28,7 +28,6 @@ from carter.install.paths import (
     knowledge_dir,
     manifest_path,
 )
-from carter.install.rules_history import SHIPPED_GLOBAL_RULES
 from carter.ops.config import git_signing_key
 
 
@@ -197,10 +196,6 @@ _OPENCODE_GIT_LANGUAGE = (
 
 _OPENCODE_AGENTS_MD = _OPENCODE_AGENTS_MD_BASE + _OPENCODE_COMMUNICATION + _OPENCODE_GIT_LANGUAGE
 
-# Unmodified earlier versions that install_opencode_rules may upgrade in place.
-# When the text above changes, append the outgoing version to rules_history.
-_OPENCODE_AGENTS_MD_KNOWN = SHIPPED_GLOBAL_RULES
-
 
 def install_opencode_rules(base_dir: Path | None, manifest: dict) -> None:
     """Generate ~/.config/opencode/AGENTS.md for OpenCode global rules."""
@@ -212,10 +207,6 @@ def install_opencode_rules(base_dir: Path | None, manifest: dict) -> None:
     if not dst.exists():
         dst.write_text(_OPENCODE_AGENTS_MD)
         log_ok(shown)
-    elif dst.read_text() in _OPENCODE_AGENTS_MD_KNOWN:
-        # Unmodified earlier content (hash-idempotency philosophy): safe to upgrade.
-        dst.write_text(_OPENCODE_AGENTS_MD)
-        log_ok(f"{shown} (upgraded to the current Carter rules)")
     elif dst.read_text() == _OPENCODE_AGENTS_MD:
         log_skip(f"{shown} (already current)")
     else:
@@ -272,7 +263,7 @@ def install_knowledge(
             log_skip(f"{tilde(dst)} (exists, not overwriting)")
             # Knowledge is user data: an existing file is Carter-owned only if it
             # is byte-identical to the seed. Anything else (user-written, edited,
-            # migrated from ~/.copilot) is never recorded, so uninstall keeps it.
+            # restored from a backup) is never recorded, so uninstall keeps it.
             seed_hash = _sha256(src_file)
             if _sha256(dst) == seed_hash:
                 manifest["files"].append(str(dst))
@@ -327,31 +318,13 @@ def write_manifest(manifest: dict, base_dir: Path | None) -> Path:
     return path
 
 
-def normalize_manifest(data: dict) -> dict:
-    """Accept both manifest shapes.
-
-    Manifests from multi-target versions kept ``mcp_servers`` as ``{target: [names]}``; the
-    current shape is a flat list. Old dicts are flattened (de-duplicated, order
-    kept) so callers only ever see the list form.
-    """
-    servers = data.get("mcp_servers")
-    if isinstance(servers, dict):
-        flat: list[str] = []
-        for names in servers.values():
-            for name in names or []:
-                if name not in flat:
-                    flat.append(name)
-        data["mcp_servers"] = flat
-    elif servers is None:
-        data["mcp_servers"] = []
-    data.setdefault("files", [])
-    data.setdefault("file_hashes", {})
-    return data
-
-
 def read_manifest(base_dir: Path | None) -> dict | None:
-    """Read ``~/.carter/manifest.json`` (either shape), or ``None`` if absent."""
+    """Read ``~/.carter/manifest.json``, or ``None`` if absent."""
     path = manifest_path(base_dir)
     if path.exists():
-        return normalize_manifest(json.loads(path.read_text()))
+        data: dict = json.loads(path.read_text())
+        data.setdefault("files", [])
+        data.setdefault("file_hashes", {})
+        data.setdefault("mcp_servers", [])
+        return data
     return None
