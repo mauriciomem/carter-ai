@@ -1,135 +1,99 @@
-# Carter Eval Framework
+# Carter evals
 
-A testing framework for evaluating the effectiveness and accuracy of Carter agents and skills.
+The evals check that Carter's agent and skill prompts say the right things and that
+models follow them. They complement the unit tests in `tests/`
+([Testing](../docs/contributing/testing.md)).
 
-## Overview
+There are two kinds:
 
-The eval framework operates in two modes:
+| Kind | Checks | Cost | Runs |
+|------|--------|------|------|
+| **Offline** | Prompt structure: routing tables, skill content, recorded sessions | Free, about a second | Every PR |
+| **Live** | How a real model responds to the prompts | API charges, ~30 s per scenario | Weekly, or on demand |
 
-| Mode | What it tests | Speed | Cost | CI-safe |
-|------|--------------|-------|------|---------|
-| **Offline** | Structural correctness of prompts, routing tables, skill patterns | Fast (~1s) | Free | Yes |
-| **Live** | Actual model behavior when given agent/skill prompts | Slow (~30s per scenario) | API costs | Periodic only |
+## Run them
 
-## Quick Start
+Always pass the `evals` path: `evals/pytest.ini` registers the `live` marker, and the
+root configuration only collects `tests/`.
 
 ```bash
-uv sync --extra dev   # once: pytest, pyyaml, httpx
-
-# Run offline evals (fast, no auth needed)
-uv run pytest evals -m "not live" -v
-
-# Run live evals only (needs ANTHROPIC_API_KEY or OPENAI_API_KEY; skip otherwise)
-uv run pytest evals -m live -v
-
-# Run only routing / skill correctness evals
-uv run pytest evals/test_routing.py -v
-uv run pytest evals/test_skills.py -v
-
-# Override model for live evals
-EVAL_MODEL=gpt-4o uv run pytest evals/test_live.py -v
+uv sync --extra dev                          # once
+uv run pytest evals -m "not live" -v         # offline
+uv run pytest evals -m live -v               # live (needs an API key)
+uv run pytest evals/test_routing.py -v       # one file
+EVAL_MODEL=<model-id> uv run pytest evals/test_live.py -v
 ```
 
-Pass the `evals` path: `evals/pytest.ini` registers the `live` marker, and the
-repo-root config only collects `tests/`.
+Live evals read `ANTHROPIC_API_KEY`, or else `OPENAI_API_KEY`, from the environment
+and skip when neither is set. They never use stored OpenCode or `gh` credentials.
 
-## Authentication
+| Variable | Purpose | Default |
+|----------|---------|---------|
+| `EVAL_MODEL` | Model for live evals | `claude-sonnet-5-5` (set in `metrics.py`) |
+| `EVAL_MAX_TOKENS` | Output cap per call | `4096` |
+| `EVAL_METRICS_OUT` | Write a JSON summary of tokens, latency and cost here | not set |
+| `EVAL_RECORD` | Re-record the adherence fixtures from a live run | not set |
 
-Live evals need an LLM provider API key from the environment, checked in this order:
+## Layout
 
-1. **ANTHROPIC_API_KEY** — env var with an Anthropic key
-2. **OPENAI_API_KEY** — env var with an OpenAI key
-
-With neither set, the live tests skip cleanly. Live evals are opt-in (`-m live`).
-
-## Architecture
-
-```
+```text
 evals/
-├── conftest.py            # Shared fixtures (repo paths, scenario loading)
-├── pytest.ini             # Pytest config (live marker)
-├── adherence.py           # Adherence grader (deterministic, no model call)
-├── metrics.py             # Token/latency/cost normalization + run summary
-├── test_routing.py        # Offline: routing table completeness & accuracy
-├── test_skills.py         # Offline: skill content correctness
-├── test_metrics.py        # Offline: metrics normalization
-├── test_adherence.py      # Offline: replay the recorded adherence fixtures
-├── test_live.py           # Live: actual model behavior evaluation
-├── test_adherence_live.py # Live: Sonnet vs a thinker plan, graded against the bar
-├── fixtures/              # Recorded Sonnet 4.6 runs (offline replay)
-│   ├── implementer_adherence_sonnet.json
-│   ├── narrator_adherence_sonnet.json
-│   └── pm_adherence_sonnet.json
-└── scenarios/
-    ├── routing.yaml                  # Routing dispatch scenarios
-    ├── carter_ops.yaml               # Carter-ops workflow scenarios
-    ├── skills.yaml                   # Skill correctness scenarios
-    ├── implementer_adherence.yaml    # Thinker plan + must_haves (engineer)
-    ├── narrator_adherence.yaml       # Narrator downgrade gate
-    └── pm_adherence.yaml             # PM downgrade gate
+├── conftest.py            shared fixtures (paths, scenario loading)
+├── pytest.ini             registers the live marker
+├── adherence.py           adherence grader (deterministic, no model call)
+├── metrics.py             token, latency and cost summary
+├── test_routing.py        offline: routing table
+├── test_skills.py         offline: skill content
+├── test_metrics.py        offline: metrics
+├── test_adherence.py      offline: replays recorded sessions
+├── test_live.py           live: model behavior
+├── test_adherence_live.py live: a real session, graded
+├── fixtures/              recorded sessions (engineer, narrator, pm)
+└── scenarios/             YAML scenarios (routing, ops, skills, adherence)
 ```
 
-### Adherence eval
+## What they check
 
-The reliability backstop for the cheap-tier (Sonnet) implementer default; narrator
-and pm have the same gate. The recorded fixtures are Sonnet 4.6 transcripts. It runs
-the implementer against a **thinker-produced plan** carrying real `must_haves` (named
-file paths, acceptance checks, step-level instructions) and grades adherence: the
-fraction of `must_haves` satisfied + whether any **critical** step (a named-file touch,
-an acceptance check, or a load-bearing intent) was missed.
+**Routing** (`test_routing.py`): every agent has a row in Maestro's routing table,
+no keyword routes to two agents, every scenario matches the table, and every agent
+carries the `ops:` trigger line.
 
-**Pass-bar: ≥ 90% of `must_haves` satisfied AND 0 critical-step failures.** Below the
-bar is a regression in *either* the model tier *or* the doc quality — and the
-documentation-quality contract is fixed: choosing the cheaper model does **not** license
-relaxing doc accuracy/detail (the plan stays at the Opus bar regardless of executor).
+**Skills** (`test_skills.py`): the `ops:` flow lists its six phases in order
+(assess, plan, approve, execute, audit, report); commits are signed, authored by the
+user and credited with a `Co-authored-by:` trailer, never `--author`; skills have
+frontmatter and cover their core topics; no skill teaches a retired approach.
 
-- **Per-PR (offline, free):** `test_adherence.py` replays the recorded transcripts in
-  `fixtures/` and grades them deterministically — no
-  API call. Runs in the `ci.yml` offline-eval step (`-m "not live"`).
-- **Weekly/manual (billed):** `test_adherence_live.py` (carries the `live` marker)
-  sends the plan to the live model (`EVAL_MODEL`) and grades the real transcript. Runs only on
-  the `evals-live` cron / `workflow_dispatch` — **never** on the per-PR gate.
-- **Re-record the fixture:** run the live test with `EVAL_RECORD=1` to overwrite the
-  fixture with the fresh transcript + grade.
+**Live** (`test_live.py`): does the model show a plan and wait for approval, refuse
+to run destructive commands on its own, route to the right agent, and follow the
+skill's patterns?
 
-## What Each Test Layer Covers
+## Adherence eval
 
-### Offline: Routing (`test_routing.py`)
+This eval decides whether an agent can run on a cheaper model. It gives the agent a
+plan written by a stronger model, with concrete `must_haves` (file paths, acceptance
+checks, step instructions), and grades the result.
 
-Tests the structural integrity of the routing system:
+**It passes when at least 90% of the `must_haves` are met and no critical step is
+missed.** A critical step is touching a named file, an acceptance check, or a key
+instruction. A failure means either the model or the plan is not good enough; a
+cheaper executor doesn't lower the bar for the plan.
 
-- **Table completeness** — Every agent file has a route in carter-maestro
-- **No ambiguous triggers** — No keyword maps to multiple agents
-- **Scenario coverage** — All routing scenarios match actual routing table entries
-- **ops: trigger** — Every agent has the `ops:` one-liner
+- `test_adherence.py` replays the recorded sessions in `fixtures/` on every PR, with
+  no API call.
+- `test_adherence_live.py` runs a real session on the weekly schedule only.
+- `EVAL_RECORD=1` with the live test overwrites the fixture with a fresh recording.
 
-### Offline: Skills (`test_skills.py`)
-
-Tests that skill files contain the correct instructional content:
-
-- **Workflow phases** — Carter-ops teaches ASSESS→PLAN→APPROVE→EXECUTE→AUDIT→REPORT in order
-- **Attribution** — signed (`-S`), human-authored commits with a `Co-authored-by:` trailer; never `--author`
-- **No anti-patterns** — Skills don't teach legacy/deprecated approaches
-- **Structural requirements** — All skills have frontmatter, adequate content
-- **Domain coverage** — Each skill covers its core patterns (Terraform has resources, Go has error handling, etc.)
-
-### Live: Model Behavior (`test_live.py`)
-
-Tests actual model responses when given agent/skill prompts:
-
-- **Carter-ops workflow** — Does the model show a plan, ask approval, include audit?
-- **Approval gate** — Does the model refuse to auto-execute destructive operations?
-- **Routing accuracy** — Does maestro dispatch to the correct agent?
-- **Skill adherence** — Does the model follow skill-taught patterns?
+The Engineer, Narrator and PM run on the cheaper model by default because they pass
+this eval.
 
 ## Scenarios
 
-Scenarios are YAML files in `evals/scenarios/`. Each scenario has:
+Scenarios live in `evals/scenarios/*.yaml`:
 
 ```yaml
 - name: unique_identifier
   input: "The user message to send"
-  config:                    # Optional: template vars for carter-ops
+  config:                    # optional template values for the ops skill
     bot_name: test-bot
     bot_email: test-bot@users.noreply.github.com
   expect:
@@ -140,46 +104,17 @@ Scenarios are YAML files in `evals/scenarios/`. Each scenario has:
     response_not_contains: ["anti-pattern"]
 ```
 
-### Adding a New Scenario
+To add one:
 
-1. Add the YAML entry to the appropriate scenario file
-2. For offline tests: the existing test classes pick it up automatically (if using parametrize) or add a test method
-3. For live tests: add a test method that loads and evaluates the scenario
+- **Routing:** add it to `scenarios/routing.yaml`; `TestRoutingScenarios` picks it up.
+- **Skill:** add it to `scenarios/skills.yaml`, add a content check to
+  `TestSkillPatternCoverage` in `test_skills.py`, and optionally a live check to
+  `TestLiveSkillCorrectness` in `test_live.py`.
 
-## Environment Variables
+## In CI
 
-| Variable | Purpose | Default |
-|----------|---------|---------|
-| `EVAL_MODEL` | Model to use for live evals | `claude-sonnet-5-5` (single-sourced in `evals/metrics.py`) |
-| `EVAL_MAX_TOKENS` | Per-call completion cap | `4096` |
-| `EVAL_METRICS_OUT` | Write the run's metrics summary JSON here | unset |
-| `EVAL_RECORD` | Re-record adherence fixtures from a live run | unset |
-| `ANTHROPIC_API_KEY` | API key for Anthropic (preferred) | — |
-| `OPENAI_API_KEY` | API key for OpenAI (fallback) | — |
-
-Note: no stored OpenCode/`gh` credentials are read — set a key explicitly.
-
-## CI Integration
-
-For CI, run only offline evals (no API costs, deterministic):
-
-```yaml
-- name: Carter Evals (offline)
-  run: uv run pytest evals/ -m "not live" -v
-```
-
-Live evals run on a weekly cron in
-[`.github/workflows/evals-live.yml`](../.github/workflows/evals-live.yml).
-
-## Extending the Framework
-
-### Adding a new skill eval
-
-1. Add scenario to `evals/scenarios/skills.yaml`
-2. Add offline content check to `TestSkillPatternCoverage` in `test_skills.py`
-3. (Optional) Add live eval to `TestLiveSkillCorrectness` in `test_live.py`
-
-### Adding a new routing scenario
-
-1. Add scenario to `evals/scenarios/routing.yaml`
-2. The existing `TestRoutingScenarios` class picks it up automatically
+- [`ci.yml`](../.github/workflows/ci.yml) runs `pytest evals/ -m "not live"` on every
+  PR.
+- [`evals-live.yml`](../.github/workflows/evals-live.yml) runs the live evals every
+  Monday with a repository secret and a capped budget, and uploads the metrics as an
+  artifact.
