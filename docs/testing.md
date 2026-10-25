@@ -105,7 +105,7 @@ non-deterministic (a flaky merge gate), and expose a secret to fork PRs. So:
 > as an accuracy/cost trend, not a pass/fail merge signal.
 
 The agent-generation drift check described in
-[ADR-0002](adr/0002-single-source-agent-generation.md) is deferred until the
+ADR-0002 is deferred until the
 static/template sources are reconciled; until then, `tests/test_parity.py` is the
 drift guardrail.
 

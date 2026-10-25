@@ -85,7 +85,7 @@ decision change, and is permitted.
 
 ## RFC frontmatter
 
-An RFC (design proposal, [ADR-0004](../adr/0004-rfc-system.md)) is a **directory**
+An RFC (design proposal, ADR-0004) is a **directory**
 under `docs/rfcs/NNNN-name/`; its `README.md` carries frontmatter + a human header
 block. Status lives in frontmatter; the directory never moves.
 
@@ -173,8 +173,8 @@ repo, outside any `.carter/`, so `carter.yaml` cannot govern them. It is a
 
 ## Risk-based strictness policy (`policy` block)
 
-The risk-based strictness policy ([ADR-0005](../adr/0005-risk-based-strictness-policy.md), refreshed by
-[ADR-0010](../adr/0010-agent-platform-refresh.md)) adds a `policy` block to
+The risk-based strictness policy (ADR-0005, refreshed by
+ADR-0010) adds a `policy` block to
 `carter.yaml`. `guarded` is the floor and the default for everything: a new install,
 an existing config that omits the block, and an unrecognized level all resolve to
 `guarded`.
@@ -265,7 +265,7 @@ a warning.
 **Global agents (no `carter.yaml` in scope).** Globally-installed static
 `agents/*.md` carry baked hand-edited `guarded` defaults, kept honest by a
 `test_parity` extension (Q14 / ADR-0005 D6 — build-time generation is WON'T-DO per
-[ADR-0002](../adr/0002-single-source-agent-generation.md)).
+ADR-0002).
 
 ## Per-agent model (`models` block)
 
@@ -304,4 +304,4 @@ the thinkers), raised per-session (e.g. `xhigh`) for thinker-heavy RFC/ADR/plan 
 
 ## See also
 
-- [ADR-0003](../adr/0003-knowledge-adr-rfc-plan-storage.md) — the decision of record
+- ADR-0003 — the decision of record
