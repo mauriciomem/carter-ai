@@ -25,14 +25,21 @@ dev = [
 requires = ["hatchling", "hatch-vcs"]
 build-backend = "hatchling.build"
 
-# Tag-driven version (ADR-0009 D1): the latest vX.Y.Z git tag is the ONLY version
+# Tag-driven version: the latest vX.Y.Z git tag is the ONLY version
 # source. No literal in source, no version-file written back. With no tag yet, the
-# backend emits a PEP 440 dev version (e.g. 0.1.dev<N>+g<sha>) until v2.0.0 lands.
+# backend emits a PEP 440 dev version (e.g. 0.1.dev<N>+g<sha>) for any
+# commit that is not exactly on a release tag.
 [tool.hatch.version]
 source = "vcs"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+# Register the `live` marker here too: evals/pytest.ini registers it for
+# `pytest evals/ ...` (that ini wins when evals/ is the only path), but a combined
+# `pytest tests evals` run uses this config and would warn "unknown mark live".
+markers = [
+    "live: marks tests as requiring an API key for live model calls (deselect with '-m \"not live\"')",
+]
 
 [tool.ruff]
 target-version = "py311"
@@ -64,9 +71,9 @@ disallow_untyped_calls = true
 warn_return_any = true
 extra_checks = true
 
-# python-semantic-release (PSR) — release automation (ADR-0009).
-# Verified against PSR 10.7.x (2026-10). The git tag is the SINGLE version source
-# (ADR-0009 D1): PSR derives the current version from the latest `v{version}` tag
+# python-semantic-release (PSR) — release automation.
+# Verified against PSR 10.7.x (2026-10). The git tag is the SINGLE version source:
+# PSR derives the current version from the latest `v{version}` tag
 # and we set NEITHER `version_toml` NOR `version_variables`, so NO version file is
 # written back. PSR's job here is purely to compute the bump, create the tag,
 # update the CHANGELOG, and publish the GitHub Release.
@@ -78,7 +85,7 @@ commit_parser = "conventional"
 # is `git+https@vX.Y.Z`, and the wheel build is already verified by the `install-smoke`
 # CI job. PSR only needs to tag, write the CHANGELOG, and cut the GitHub Release.
 build_command = ""
-# Stay pre-1.0 (ADR-0009 D3, amended): PSR's `allow_zero_version` defaults to FALSE,
+# Stay pre-1.0: PSR's `allow_zero_version` defaults to FALSE,
 # which would force-graduate the v0.1.0 baseline straight to 1.0.0. Keep 0.y.z, and
 # with `major_on_zero = false` a breaking change bumps the MINOR (0.x → 0.x+1) instead
 # of cutting 1.0.0 — 1.0.0 is a deliberate, manual stability declaration, not automatic.
