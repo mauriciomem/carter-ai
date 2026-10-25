@@ -215,8 +215,14 @@ Creates:
 - `~/.carter/config.toml` (carter-ops attribution settings)
 - `~/.carter/knowledge/` with six seed files — header + entry-format comment only, no
   entries (existing files are never overwritten)
-- Records all paths in `~/.carter/manifest.json` for clean uninstall; backups of
-  replaced files go to `~/.carter/backups/<timestamp>/`
+- Records the files Carter wrote, with content hashes, in `~/.carter/manifest.json`
+  for clean uninstall; backups of replaced files go to `~/.carter/backups/<timestamp>/`
+
+`carter uninstall` (same as `carter install --uninstall`) treats knowledge as user
+data: a knowledge file is removed only if it still matches the seed Carter shipped.
+Edited files, files you wrote, and files migrated from `~/.copilot/knowledge/` are
+kept with a `⚠ Kept …` warning. Memories, `config.toml` and `audit.log` are never
+removed. With a manifest from an older version (no hashes), all knowledge files are kept.
 
 ### Upgrading from a Copilot-era install
 
