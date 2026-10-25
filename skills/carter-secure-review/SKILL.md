@@ -1,7 +1,6 @@
 ---
 name: carter-secure-review
 description: Security-focused code review — injection, authz, secrets, crypto-misuse, deserialization, SSRF
-argument-hint: "[code or change to review]"
 ---
 
 <objective>

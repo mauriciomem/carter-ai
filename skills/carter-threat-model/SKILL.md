@@ -1,7 +1,6 @@
 ---
 name: carter-threat-model
 description: STRIDE / attack-tree threat modeling of a design or change
-argument-hint: "[system or change to threat-model]"
 ---
 
 <objective>

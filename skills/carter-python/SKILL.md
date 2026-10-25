@@ -1,7 +1,6 @@
 ---
 name: carter-python
 description: Python coding standards, best practices, and enforcement checklist
-argument-hint: "[Python code or project to review]"
 ---
 
 <objective>

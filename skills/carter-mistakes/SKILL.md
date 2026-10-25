@@ -1,7 +1,6 @@
 ---
 name: carter-mistakes
 description: Record mistakes and lessons learned to Carter's memory system
-argument-hint: "[mistake or lesson to record]"
 ---
 
 <objective>
@@ -40,8 +39,6 @@ Capture mistakes, failures, and lessons learned into Carter's memory system for 
    - **Lesson:** [what to do differently]
    - **Tags:** [keywords for searchability]
    ```
-
-   **Secondary (platform)** — Also write the same note to `/memories/` using the platform memory tool. On surfaces where the platform memory tool is unavailable, skip this step.
 
 7. **Suggest distill** — If there are several accumulated notes, suggest running `carter-distill` to promote them to the curated knowledge base.
 

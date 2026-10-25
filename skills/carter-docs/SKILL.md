@@ -1,7 +1,6 @@
 ---
 name: carter-docs
 description: Write and maintain developer documentation — READMEs, changelogs, API docs, contribution guides — and audit docs for staleness. Use when creating or updating repository documentation.
-argument-hint: "[doc type, file, or 'audit' to check for stale/missing docs]"
 ---
 
 <objective>

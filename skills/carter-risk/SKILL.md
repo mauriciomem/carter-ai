@@ -1,7 +1,6 @@
 ---
 name: carter-risk
 description: Identify risks, assess impact and probability, and design mitigation strategies
-argument-hint: "[project or initiative to assess risks for]"
 ---
 
 <objective>

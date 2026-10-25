@@ -1,7 +1,6 @@
 ---
 name: carter-code-review
 description: Review code for quality, design patterns, security, and testability
-argument-hint: "[file, PR, or code to review]"
 ---
 
 <objective>

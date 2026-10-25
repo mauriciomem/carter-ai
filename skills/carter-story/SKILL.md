@@ -1,7 +1,6 @@
 ---
 name: carter-story
 description: Write warm, precise, audience-aware public-facing narrative — announcements, launch posts, release narratives, and external storytelling. Use for outward-facing prose, not internal docs.
-argument-hint: "[what to announce or narrate, and the audience]"
 ---
 
 <objective>

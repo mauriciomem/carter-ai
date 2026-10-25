@@ -1,7 +1,6 @@
 ---
 name: carter-vuln-triage
 description: CVE / advisory / scanner-finding triage — reachability, severity, remediation, FP filtering
-argument-hint: "[CVE, advisory, or finding]"
 ---
 
 <objective>

@@ -183,7 +183,7 @@ EXPECTED_SKILLS = {
     "engineer": ("carter-code-review", "carter-test-first", "carter-python", "carter-golang"),
     "learner": ("carter-explain", "carter-mistakes", "carter-research"),
     "pm": ("carter-plan", "carter-risk"),
-    "maestro": ("carter-ops", "carter-triage", "carter-distill", "carter-reflect"),
+    "maestro": ("carter-ops", "carter-distill", "carter-reflect"),
     "narrator": ("carter-docs", "carter-story", "carter-atlassian", "carter-diagram"),
     "security": (
         "carter-threat-model",

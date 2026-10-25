@@ -1,7 +1,6 @@
 ---
 name: carter-rfc
 description: Propose and review a design before building it — a lightweight RFC with multi-expert reviews
-argument-hint: "[design proposal title or topic]"
 ---
 
 <objective>
@@ -142,9 +141,8 @@ or missing reviews — *before* the decision is presented. The **user decides.**
 
 <guidelines>
 - **Fetch the current date before writing the RFC.** The frontmatter `created:`/
-  `decided:` fields must use the real current date — obtain it from a native
-  harness date variable where the target exposes one, otherwise run `date`. Do this
-  **before writing any dated frontmatter**; never guess from your training cutoff.
+  `decided:` fields must use the real current date — get today's date with
+  `date +%F`. Do this **before writing any dated frontmatter**; never guess from your training cutoff.
 - One RFC = one coherent proposal. Keep it focused; split a sprawling proposal.
 - **Size budget: an RFC `README.md` > 400 lines MUST be split or tightened** (skill
   constant, mirroring the ADR budget — RFCs live in the main repo, outside `.carter/`).

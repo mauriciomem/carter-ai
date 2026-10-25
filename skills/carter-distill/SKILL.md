@@ -1,11 +1,10 @@
 ---
 name: carter-distill
-description: Promote notes from ~/.carter/memories/ and /memories/ into curated knowledge entries in ~/.carter/knowledge/
-argument-hint: "[optional: topic filter]"
+description: Promote notes from ~/.carter/memories/ into curated knowledge entries in ~/.carter/knowledge/
 ---
 
 <objective>
-Review recent notes in `~/.carter/memories/` (visible memory) and `/memories/` (platform memory) and promote valuable learnings into structured, curated entries in `~/.carter/knowledge/`.
+Review recent notes in `~/.carter/memories/` and promote valuable learnings into structured, curated entries in `~/.carter/knowledge/`.
 
 **Language:** write knowledge and memory entries in the workspace `docs_language` (`.carter/carter.yaml`); if it is absent, English unless the user chose another language.
 </objective>
@@ -18,7 +17,6 @@ Review recent notes in `~/.carter/memories/` (visible memory) and `/memories/` (
    - `~/.carter/memories/user/` — persistent cross-project notes
    - `~/.carter/memories/repo/` — project-specific notes (all repos)
    - `~/.carter/memories/session/` — conversation working notes
-   - `/memories/` — platform memory (if available on this surface)
 
 2. **Classify** — For each note, determine which knowledge topic it belongs to:
    | Topic File | Content Type |
@@ -50,7 +48,6 @@ Review recent notes in `~/.carter/memories/` (visible memory) and `/memories/` (
 7. **Suggest cleanup** — Recommend which notes can be deleted now that they've been promoted:
    - Session files (`~/.carter/memories/session/`) that were fully promoted — offer to delete with confirmation.
    - User/repo files that were fully promoted — flag them but require explicit confirmation before deleting.
-   - Platform `/memories/` notes that were promoted — suggest deletion.
 
 8. **Suggest reflect** — If multiple patterns or recurring mistakes were promoted, suggest running `carter-reflect` to check whether agent or skill files should be updated.
 
@@ -61,5 +58,5 @@ Review recent notes in `~/.carter/memories/` (visible memory) and `/memories/` (
 - Preserve the user's original intent — don't rephrase so aggressively that meaning is lost.
 - When in doubt about classification, ask the user.
 - If a note spans multiple topics, create entries in each relevant file.
-- Deduplicate across both memory sources — a note may exist in both `~/.carter/memories/` and `/memories/`.
+- Deduplicate across `user/`, `repo/` and `session/` — the same note may appear in more than one.
 </guidelines>

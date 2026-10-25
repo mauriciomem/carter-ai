@@ -1,7 +1,6 @@
 ---
 name: carter-atlassian
 description: Manage Jira tickets and follow best practices for writing stories, bugs, tasks, and epics. Use when creating, updating, commenting on, or querying Jira issues.
-argument-hint: "[Jira ticket key, operation, or issue type to create]"
 ---
 
 <objective>

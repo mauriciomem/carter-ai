@@ -32,6 +32,12 @@
     agent: carter-learner
     triggers: [explain]
 
+- name: repo_docs_route_to_narrator
+  input: "Document the new --dry-run flag in the README and the changelog"
+  expect:
+    agent: carter-narrator
+    triggers: [document, README, changelog]
+
 - name: project_plan_routes_to_pm
   input: "Create a project plan for migrating to Kubernetes"
   expect:
