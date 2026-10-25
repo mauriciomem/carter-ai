@@ -127,7 +127,7 @@ jobs:
       - name: carter install (throwaway home) + assert files
         run: |
           carter install --base-dir "$RUNNER_TEMP/fake-home"
-          count=$(ls "$RUNNER_TEMP/fake-home/opencode/agents/"*.md 2>/dev/null | wc -l)
+          count=$(find "$RUNNER_TEMP/fake-home/opencode/agents" -maxdepth 1 -name '*.md' 2>/dev/null | wc -l)
           echo "opencode agents: $count"
           test "$count" -ge 8 || { echo "::error::expected >=8 opencode agent files"; exit 1; }
           test ! -e "$RUNNER_TEMP/fake-home/copilot" || { echo "::error::wrote to copilot"; exit 1; }
