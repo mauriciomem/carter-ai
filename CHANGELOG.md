@@ -2,6 +2,21 @@
 
 <!-- version list -->
 
+## v0.16.1 (2026-10-25)
+
+### Bug Fixes
+
+- **config**: Validate policy.allowlist entries; restructure the user docs
+  ([#41](https://github.com/mauriciomem/carter-ai/pull/41),
+  [`4b240db`](https://github.com/mauriciomem/carter-ai/commit/4b240dbe5428eca31a0b697a432415f942bd65f9))
+
+### Documentation
+
+- Rewrite the README, add task-oriented guides, reference and contributing pages, restyle the evals
+  README, remove superseded pages ([#41](https://github.com/mauriciomem/carter-ai/pull/41),
+  [`4b240db`](https://github.com/mauriciomem/carter-ai/commit/4b240dbe5428eca31a0b697a432415f942bd65f9))
+
+
 ## v0.16.0 (2026-10-25)
 
 ### Refactoring
