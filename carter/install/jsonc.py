@@ -1,4 +1,4 @@
-"""JSONC parsing (JSON with Comments, as used by ``opencode.json`` and VS Code settings)."""
+"""JSONC parsing (JSON with Comments, as used by ``opencode.jsonc``)."""
 
 from __future__ import annotations
 

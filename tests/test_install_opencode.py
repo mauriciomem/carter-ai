@@ -1,7 +1,6 @@
 """OpenCode-only installer behaviour.
 
-Covers the OpenCode >= 2.1 hard gate, the V2 MCP shape, V1 entry migration,
-the warning about Copilot-era leftovers and the removal of ``--target``.
+Covers the OpenCode >= 2.1 hard gate, the V2 MCP shape and V1 entry migration.
 """
 
 from __future__ import annotations
@@ -85,21 +84,6 @@ class TestInstallGate:
             "carter-terraform",
             "carter-atlassian",
         }
-
-    def test_nothing_written_to_copilot_locations(self, fake_opencode, tmp_path: Path) -> None:
-        fake_opencode()
-        base = tmp_path / "home"
-        assert _install(base, "--mcp").exit_code == 0
-        assert not (base / "copilot" / "agents").exists()
-        assert not (base / "copilot" / "skills").exists()
-        assert not (base / "copilot" / "instructions").exists()
-        assert not (base / "vscode").exists()
-
-    def test_target_flag_removed(self, fake_opencode, tmp_path: Path) -> None:
-        fake_opencode()
-        result = _install(tmp_path, "--target", "opencode")
-        assert result.exit_code == 2
-        assert "No such option" in result.output and "--target" in result.output
 
     def test_uninstall_flag_removed(self, fake_opencode, tmp_path: Path) -> None:
         fake_opencode()
@@ -236,40 +220,6 @@ class TestMergeIntoUserConfig:
         path = self._cfg(tmp_path, json.dumps({"theme": "x"}))
         merge_mcp_servers(path, {"carter-github": {}}, tmp_path / "backup")
         assert json.loads((tmp_path / "backup" / "opencode.json").read_text()) == {"theme": "x"}
-
-
-class TestLegacyCopilotWarning:
-    def _leftovers(self, base: Path) -> None:
-        agents = base / "copilot" / "agents"
-        agents.mkdir(parents=True)
-        (agents / "carter-engineer.md").write_text("old")
-        settings = base / "vscode" / "settings.json"
-        settings.parent.mkdir(parents=True)
-        settings.write_text(json.dumps({"mcp.servers": {"carter-github": {}}}))
-        (base / "copilot" / "mcp-config.json").write_text(
-            json.dumps({"mcpServers": {"carter-terraform": {}}})
-        )
-
-    def test_warns_once_and_deletes_nothing(self, fake_opencode, tmp_path: Path) -> None:
-        fake_opencode()
-        base = tmp_path / "home"
-        self._leftovers(base)
-        result = _install(base, "--mcp")
-        assert result.exit_code == 0, result.output
-        assert result.output.count("no longer managed") == 1
-        assert "carter uninstall --legacy" in result.output
-        assert (base / "copilot" / "agents" / "carter-engineer.md").read_text() == "old"
-        assert (
-            "carter-github"
-            in json.loads((base / "vscode" / "settings.json").read_text())["mcp.servers"]
-        )
-        assert (base / "copilot" / "mcp-config.json").exists()
-
-    def test_no_warning_on_clean_home(self, fake_opencode, tmp_path: Path) -> None:
-        fake_opencode()
-        result = _install(tmp_path / "home")
-        assert result.exit_code == 0, result.output
-        assert "no longer managed" not in result.output
 
 
 class TestUninstallV2:

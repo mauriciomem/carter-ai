@@ -8,7 +8,6 @@ from pathlib import Path
 from carter.home import tilde
 from carter.install.components import read_manifest
 from carter.install.console import _log, bold, green, log_ok, log_step, log_warn
-from carter.install.legacy import remove_legacy_opencode_instructions
 from carter.install.mcp import global_config_files, remove_carter_servers
 from carter.install.ownership import _hash_matches, _within
 from carter.install.paths import (
@@ -56,11 +55,7 @@ def _remove_if_owned(
 
 
 def uninstall(base_dir: Path | None) -> None:
-    """Remove the OpenCode install.
-
-    Leftovers of the old Copilot-era install are not touched here; that is
-    ``carter uninstall --legacy``.
-    """
+    """Remove the OpenCode install."""
     log_step("Uninstalling Carter...")
     manifest = read_manifest(base_dir)
     opencode_base = _opencode_base(base_dir)
@@ -72,8 +67,6 @@ def uninstall(base_dir: Path | None) -> None:
             _remove_if_owned(Path(f), hashes.get(f), managed_roots, opencode_base)
     else:
         # No manifest — remove by convention
-        # Written by Carter versions that copied instructions for OpenCode.
-        remove_legacy_opencode_instructions(base_dir, backup_root=None)
         for pattern_dir in ["agents", "skills"]:
             d = opencode_base / pattern_dir
             if d.exists():

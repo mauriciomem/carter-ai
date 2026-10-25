@@ -21,12 +21,6 @@ def _home() -> Path:
     return Path.home()
 
 
-def _copilot_base(base_dir: Path | None) -> Path:
-    if base_dir:
-        return base_dir / "copilot"
-    return _home() / ".copilot"
-
-
 def _opencode_base(base_dir: Path | None) -> Path:
     if base_dir:
         return base_dir / "opencode"
@@ -40,10 +34,7 @@ def _carter_base(base_dir: Path | None) -> Path:
     return carter_home()
 
 
-# Carter-owned state. Earlier versions kept these under ~/.copilot:
-#   ~/.copilot/knowledge/            → ~/.carter/knowledge/
-#   ~/.copilot/.carter-manifest.json → ~/.carter/manifest.json
-#   ~/.copilot/backup/<timestamp>/   → ~/.carter/backups/<timestamp>/
+# Carter-owned state under ~/.carter.
 def knowledge_dir(base_dir: Path | None) -> Path:
     return _carter_base(base_dir) / "knowledge"
 
@@ -54,8 +45,3 @@ def manifest_path(base_dir: Path | None) -> Path:
 
 def backups_dir(base_dir: Path | None) -> Path:
     return _carter_base(base_dir) / "backups"
-
-
-def legacy_manifest_path(base_dir: Path | None) -> Path:
-    """The manifest older (Copilot-era) installs wrote under ~/.copilot (read-only now)."""
-    return _copilot_base(base_dir) / ".carter-manifest.json"

@@ -3,7 +3,7 @@
 ``carter check`` runs ``opencode debug agents`` in the workspace. On OpenCode 2.1.4
 that prints a JSON list of agents (``id``, ``permissions`` as ``{action, resource,
 effect}`` rules, ...). OpenCode silently drops an agent file it rejects (malformed
-YAML, a Copilot ``tools:`` list, ...), so a missing id is the signal.
+YAML, a V1 ``tools:`` list, ...), so a missing id is the signal.
 
 Behaviour notes:
 
@@ -133,7 +133,7 @@ def _diff(
         if loaded is None:
             missing.append(
                 f"{name}: not loaded by OpenCode — its agent file is likely malformed "
-                "or uses a key OpenCode rejects (e.g. a Copilot `tools:` list). "
+                "or uses a key OpenCode rejects (e.g. a V1 `tools:` list). "
                 "Run `carter update` to re-render it."
             )
             continue

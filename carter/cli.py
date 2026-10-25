@@ -115,26 +115,16 @@ def install(
 
 @main.command()
 @click.option(
-    "--legacy",
-    is_flag=True,
-    help="Remove Copilot/VS Code files an earlier Carter install listed in its manifest.",
-)
-@click.option(
     "--base-dir",
     type=click.Path(file_okay=False, path_type=Path),
     default=None,
     help="Override install base directory (for testing).",
 )
-def uninstall(legacy: bool, base_dir: Path | None) -> None:
-    """Remove the Carter OpenCode install, or with --legacy the old Copilot leftovers."""
-    if legacy:
-        from carter.install.legacy import uninstall_legacy
+def uninstall(base_dir: Path | None) -> None:
+    """Remove the Carter OpenCode install."""
+    from carter.install.uninstall import uninstall as run_uninstall
 
-        uninstall_legacy(base_dir)
-    else:
-        from carter.install.uninstall import uninstall as run_uninstall
-
-        run_uninstall(base_dir)
+    run_uninstall(base_dir)
 
 
 @main.command()
