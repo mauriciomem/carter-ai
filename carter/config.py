@@ -405,8 +405,25 @@ _OPENCODE_GATE: dict[str, str] = {
 
 # Representative shell commands per shell-risk category. V2 glob form: a pattern
 # ending in ` *` also matches the bare command (`git push *` matches `git push`).
+# A representative list, not a sandbox: anything unlisted falls to the agent's
+# broad `shell` rule. `gh api *` is denied wholesale (incl. read-only calls) to
+# non-devops agents; `vault read *` is a secret read, hence remote-write.
 _BASH_COMMANDS: dict[str, tuple[str, ...]] = {
-    "remote-write": ("git push *",),
+    "remote-write": (
+        "git push *",
+        "gh pr create *",
+        "gh pr merge *",
+        "gh pr comment *",
+        "gh pr review *",
+        "gh pr edit *",
+        "gh issue create *",
+        "gh issue comment *",
+        "gh issue edit *",
+        "gh release *",
+        "gh api *",
+        "vault read *",
+        "vault write *",
+    ),
     "dangerous": (
         "terraform apply *",
         "terraform destroy *",

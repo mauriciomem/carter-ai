@@ -57,8 +57,25 @@ _DANGEROUS = (
 )
 
 
+_REMOTE_WRITE = (
+    "git push *",
+    "gh pr create *",
+    "gh pr merge *",
+    "gh pr comment *",
+    "gh pr review *",
+    "gh pr edit *",
+    "gh issue create *",
+    "gh issue comment *",
+    "gh issue edit *",
+    "gh release *",
+    "gh api *",
+    "vault read *",
+    "vault write *",
+)
+
+
 def _shell(remote_write: str, dangerous: str) -> list[dict[str, str]]:
-    return [_r("shell", "git push *", remote_write)] + [
+    return [_r("shell", cmd, remote_write) for cmd in _REMOTE_WRITE] + [
         _r("shell", cmd, dangerous) for cmd in _DANGEROUS
     ]
 
@@ -117,18 +134,26 @@ class TestRuleOrder:
     def test_devops_guarded_gate_emitted_as_ask(self):
         # guarded: remote-write ask, dangerous gate -> ask (D2).
         rules = permission_rules(_config("guarded"), "devops")
-        assert rules[-8:] == _shell("ask", "ask")
+        assert rules[-len(_REMOTE_WRITE) - len(_DANGEROUS) :] == _shell("ask", "ask")
 
     def test_devops_strict(self):
         # strict: remote-write gate -> ask, dangerous deny.
         rules = permission_rules(_config("strict"), "devops")
-        assert rules[-8:] == _shell("ask", "deny")
+        assert rules[-len(_REMOTE_WRITE) - len(_DANGEROUS) :] == _shell("ask", "deny")
 
     def test_overrides_are_honored(self):
         cfg = _config()
         cfg["policy"]["overrides"] = {"remote-write": "deny"}
         rules = permission_rules(cfg, "devops")
         assert _r("shell", "git push *", "deny") in rules
+        assert _r("shell", "vault read *", "deny") in rules
+
+    @pytest.mark.parametrize("cmd", ["gh pr create *", "gh api *", "vault read *"])
+    def test_engineer_remote_denies_follow_shell_allow(self, cmd):
+        # last match wins: the deny must come after the broad shell allow.
+        rules = permission_rules(_config(), "engineer")
+        allow_idx = rules.index(_r("shell", "*", "allow"))
+        assert rules.index(_r("shell", cmd, "deny")) > allow_idx
 
     @pytest.mark.parametrize("role", _ALL_ROLES)
     def test_baseline_first(self, role):
