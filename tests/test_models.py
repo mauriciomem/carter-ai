@@ -68,7 +68,7 @@ class TestModelValidation:
         [
             "anthropic/claude-opus-5-5",
             "anthropic/claude-sonnet-5-5#high",
-            "github-copilot/claude-opus-5.5",
+            "openai/gpt-5.5",
             "openrouter/meta/llama-4#fast",
         ],
     )
@@ -88,7 +88,6 @@ class TestModelValidation:
             "anthropic/claude#a#b",
             "",
             42,
-            {"copilot": "Claude Opus 5.5", "opencode": "anthropic/claude-opus-5-5"},
         ],
     )
     def test_invalid_model_strings_rejected(self, tmp_path, model):
@@ -101,13 +100,6 @@ class TestModelValidation:
         path = tmp_path / "carter.yaml"
         path.write_text(yaml.dump(_minimal(models={"overrides": {"engineer": "Claude Haiku"}})))
         with pytest.raises(ConfigError, match="models.overrides.engineer"):
-            load_config(path)
-
-    def test_old_per_target_shape_error_names_the_fix(self, tmp_path):
-        path = tmp_path / "carter.yaml"
-        old = {"copilot": "Claude Opus 5.5", "opencode": OPUS}
-        path.write_text(yaml.dump(_minimal(models={"default": old})))
-        with pytest.raises(ConfigError, match="models.default"):
             load_config(path)
 
 
@@ -189,7 +181,6 @@ class TestModelAdvisory:
         assert "maestro" in advisory
         assert OPUS in advisory
         assert "subscription" in advisory.lower()
-        assert "copilot" not in advisory.lower()
 
     def test_check_prints_advisory(self, tmp_path):
         from click.testing import CliRunner

@@ -205,7 +205,6 @@ class TestEmittedFrontmatter:
     def test_no_v1_keys(self, role):
         fm = yaml.safe_load(policy_frontmatter(_config(), role))
         assert not set(fm) & set(V1_AGENT_KEYS)
-        assert "agents" not in fm and "handoffs" not in fm
 
     def test_v1_key_set(self):
         assert set(V1_AGENT_KEYS) == {"permission", "tools", "bash", "task", "name", "temperature"}

@@ -1,4 +1,4 @@
-"""Skill sources carry no Copilot-era leftovers."""
+"""Skill sources carry only what OpenCode V2 reads."""
 
 from __future__ import annotations
 
