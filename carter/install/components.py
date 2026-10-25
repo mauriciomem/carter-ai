@@ -8,6 +8,7 @@ Plus the install manifest read/write. OpenCode is the only install target
 from __future__ import annotations
 
 import json
+import shutil
 import subprocess
 from pathlib import Path
 
@@ -19,6 +20,7 @@ from carter.install.files import (
     _install_templated_file,
     _sha256,
 )
+from carter.install.ownership import _hash_matches
 from carter.install.paths import (
     REPO_ROOT,
     _carter_base,
@@ -101,6 +103,49 @@ def install_skills(
             stats[status] += 1
 
     return stats
+
+
+def remove_retired_skills(
+    base_dir: Path | None,
+    previous: dict | None,
+    backup_root: Path,
+) -> int:
+    """Remove ``carter-*`` skills Carter no longer ships, if still Carter-owned.
+
+    A retired skill directory is deleted only when every file in it is listed in
+    the previous install manifest and still has its recorded hash. Otherwise it is
+    kept and the user is told how to remove it. Non-``carter-*`` skills and skills
+    Carter still ships are never touched. Returns the number of skills removed.
+    """
+    skills_root = _opencode_base(base_dir) / "skills"
+    if not skills_root.is_dir():
+        return 0
+    shipped = {d.name for d in (REPO_ROOT / "skills").iterdir() if (d / "SKILL.md").is_file()}
+    hashes: dict = (previous or {}).get("file_hashes") or {}
+    removed = 0
+    for skill in sorted(skills_root.iterdir()):
+        if not skill.name.startswith("carter-") or skill.name in shipped:
+            continue
+        shown = str(skill).replace(str(_home()), "~")
+        if skill.is_symlink() or not skill.is_dir():
+            owned = False
+        else:
+            files = [f for f in skill.rglob("*") if not f.is_dir()]
+            owned = bool(files) and all(
+                not f.is_symlink() and str(f) in hashes and _hash_matches(f, str(hashes[str(f)]))
+                for f in files
+            )
+        if not owned:
+            log_warn(
+                f"{shown} (no longer shipped by Carter; edited or not recorded, kept)",
+                hint=f"remove it manually if unused: rm -r {shown}",
+            )
+            continue
+        shutil.copytree(skill, backup_root / "retired-skills" / skill.name, dirs_exist_ok=True)
+        shutil.rmtree(skill)
+        log_ok(f"{shown} (removed: no longer shipped by Carter)")
+        removed += 1
+    return removed
 
 
 _OPENCODE_AGENTS_MD_BASE = """\

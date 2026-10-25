@@ -1025,3 +1025,65 @@ class TestVisibleMemoryReferences:
         """The rendered maestro lists carter-reflect."""
         maestro = render_agents(generate_default_config(), create_env())["carter-maestro-local.md"]
         assert "carter-reflect" in maestro
+
+
+class TestRetiredSkills:
+    """Skills Carter no longer ships are removed only when provably Carter-owned."""
+
+    @staticmethod
+    def _seed(base_dir: Path, name: str, record: bool = True) -> tuple[Path, dict]:
+        skill = base_dir / "opencode" / "skills" / name
+        (skill / "ref").mkdir(parents=True)
+        files = [skill / "SKILL.md", skill / "ref" / "notes.md"]
+        for f in files:
+            f.write_text(f"# {name} {f.name}\n")
+        manifest: dict = {"files": [], "file_hashes": {}}
+        if record:
+            for f in files:
+                manifest["files"].append(str(f))
+                manifest["file_hashes"][str(f)] = _sha256(f)
+        return skill, manifest
+
+    def test_retired_unmodified_skill_is_removed(self, base_dir: Path) -> None:
+        skill, previous = self._seed(base_dir, "carter-triage")
+        components.remove_retired_skills(base_dir, previous, base_dir / "backup")
+        assert not skill.exists()
+
+    def test_retired_edited_skill_is_kept_with_warning(
+        self, base_dir: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        skill, previous = self._seed(base_dir, "carter-triage")
+        (skill / "SKILL.md").write_text("my edits\n")
+        components.remove_retired_skills(base_dir, previous, base_dir / "backup")
+        assert (skill / "SKILL.md").read_text() == "my edits\n"
+        out = capsys.readouterr().out
+        assert "carter-triage" in out and "rm -r" in out
+
+    def test_retired_skill_without_recorded_hash_is_kept(
+        self, base_dir: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        skill, previous = self._seed(base_dir, "carter-triage", record=False)
+        components.remove_retired_skills(base_dir, previous, base_dir / "backup")
+        assert skill.exists()
+        assert "carter-triage" in capsys.readouterr().out
+
+    def test_retired_skill_with_extra_user_file_is_kept(self, base_dir: Path) -> None:
+        skill, previous = self._seed(base_dir, "carter-triage")
+        (skill / "mine.md").write_text("user file\n")
+        components.remove_retired_skills(base_dir, previous, base_dir / "backup")
+        assert (skill / "mine.md").exists()
+
+    def test_no_previous_manifest_keeps_everything(self, base_dir: Path) -> None:
+        skill, _ = self._seed(base_dir, "carter-triage")
+        components.remove_retired_skills(base_dir, None, base_dir / "backup")
+        assert skill.exists()
+
+    def test_non_carter_skill_is_untouched(self, base_dir: Path) -> None:
+        skill, previous = self._seed(base_dir, "my-skill")
+        components.remove_retired_skills(base_dir, previous, base_dir / "backup")
+        assert (skill / "SKILL.md").exists()
+
+    def test_current_skill_is_untouched(self, base_dir: Path) -> None:
+        skill, previous = self._seed(base_dir, "carter-adr")
+        components.remove_retired_skills(base_dir, previous, base_dir / "backup")
+        assert (skill / "SKILL.md").exists()

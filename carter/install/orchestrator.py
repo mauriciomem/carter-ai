@@ -18,6 +18,7 @@ from carter.install.components import (
     install_ops,
     install_skills,
     read_manifest,
+    remove_retired_skills,
     write_manifest,
 )
 from carter.install.console import _log, bold, green, log_debug, log_step, set_verbosity
@@ -98,6 +99,7 @@ def run(
 
     agent_stats = install_agents(base_dir, manifest, backup_root)
     skill_stats = install_skills(base_dir, manifest, backup_root, bot_name=bot_name)
+    remove_retired_skills(base_dir, existing, backup_root)
     # OpenCode reads AGENTS.md; drop the instructions copy older versions wrote.
     remove_legacy_opencode_instructions(base_dir, backup_root)
     install_opencode_rules(base_dir, manifest, backup_root)
