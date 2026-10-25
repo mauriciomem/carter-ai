@@ -21,10 +21,15 @@ from typing import Any
 # here; override per-run with EVAL_MODEL (e.g. a Haiku-class model on the weekly cron).
 DEFAULT_MODEL = "claude-sonnet-5-5"
 
-# USD price per 1M tokens: model -> (input, output). Unlisted models => cost_usd None.
-# TODO: add the Claude 5.5 family once its pricing is confirmed; until then a 5.5 run
-# reports cost_usd None rather than a guessed figure.
-PRICE_PER_1M: dict[str, tuple[float, float]] = {
+# USD price per 1M tokens: model -> (input, output), optionally followed by a
+# long-prompt tier (threshold, input, output): when a request's prompt exceeds the
+# threshold, the whole request is billed at the tier prices. Unlisted => cost_usd None.
+# Claude 5.5 rates: https://platform.claude.com/docs/en/about-claude/pricing (fetched 2026-10-25).
+Price = tuple[float, float] | tuple[float, float, int, float, float]
+PRICE_PER_1M: dict[str, Price] = {
+    "claude-opus-5-5": (4.0, 20.0),
+    "claude-sonnet-5-5": (2.0, 10.0),
+    "claude-haiku-5-5": (0.10, 0.50, 100_000, 0.50, 2.50),
     "claude-sonnet-4-6": (3.0, 15.0),  # the recorded adherence fixtures are 4.6 transcripts
     "gpt-4o": (2.5, 10.0),  # the documented OpenAI live-eval example
 }
@@ -55,7 +60,9 @@ def _cost(model: str, prompt_tokens: int, completion_tokens: int) -> float | Non
                 stacklevel=2,
             )
         return None
-    in_price, out_price = price
+    in_price, out_price = price[0], price[1]
+    if len(price) == 5 and prompt_tokens > price[2]:
+        in_price, out_price = price[3], price[4]
     return (prompt_tokens / 1_000_000 * in_price) + (completion_tokens / 1_000_000 * out_price)
 
 
