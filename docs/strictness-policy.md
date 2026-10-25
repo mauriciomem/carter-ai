@@ -5,9 +5,10 @@ Carter's safety posture is emitted as OpenCode
 OpenCode enforces it at runtime. This tutorial shows what each level does, how it is
 emitted, where it stops, and how to customize, audit, and override it.
 
-> Background: ADR-0014 (OpenCode-only emission) builds on the categories from
-> ADR-0005 / ADR-0010. The config schema lives in
-> [reference/frontmatter.md](reference/frontmatter.md).
+> This page teaches the policy step by step. The canonical tables — risk taxonomy,
+> per-agent allowlist, and the emitted rule order — live in
+> [reference/frontmatter.md](reference/frontmatter.md#risk-based-strictness-policy-policy-block);
+> on any discrepancy, the reference wins.
 
 ---
 
@@ -28,19 +29,17 @@ and the agent's allowlist.
 
 ### The risk categories
 
-| Category | Meaning | Examples |
-|----------|---------|----------|
-| **read** | reads, never mutates | file read, glob/grep, `git status/log/diff` |
-| **local-write** | local-only changes | file edit, `git add/commit`, run tests |
-| **remote-write** | publishes to a remote / reads secrets | `git push`, `gh pr`/`gh issue` writes, `gh release`, `gh api`, `vault read/write` |
-| **dangerous** | infra-mutating or irreversible | `terraform apply/destroy`, `kubectl apply`, `helm upgrade`, `rm -rf`, `git reset --hard`, `git push --force` |
+| Category | Meaning |
+|----------|---------|
+| **read** | reads, never mutates — file read, search, `git status/log/diff` |
+| **local-write** | local-only changes — file edit, `git add/commit`, run tests |
+| **remote-write** | publishes to a remote or reads secrets — `git push`, `gh` PR/issue writes, `vault` |
+| **dangerous** | infra-mutating or irreversible — `terraform apply`, `rm -rf`, `git push --force` |
 
-The enforced `remote-write` shell globs are: `git push *`, `gh pr create *`, `gh pr merge *`, `gh pr comment *`, `gh pr review *`, `gh pr edit *`, `gh issue create *`, `gh issue comment *`, `gh issue edit *`, `gh release *`, `gh api *`, `vault read *`, `vault write *`. This is a representative
-command list, not a sandbox — any other command falls to the agent's `shell` rule.
-`gh api *` is denied as a whole to non-devops agents, including read-only API calls
-(use the `carter-github` MCP server or `gh pr view`/`gh issue list` for reads).
-The only secret-read rules are the `.env` read asks (every agent) and `vault read *`
-(remote-write). MCP tool calls get no category rule and always ask (see Step 2).
+The exact shell globs for each category are listed in the
+[reference](reference/frontmatter.md#emitted-agent-frontmatter). They are a
+representative command list, not a sandbox — any other command falls to the agent's
+`shell` rule. MCP tool calls get no category rule and always ask (see Step 2).
 Outward content is **not** a category — it is an advisory redaction handoff (see Step 5).
 
 ### The gate vocabulary
@@ -53,23 +52,20 @@ Outward content is **not** a category — it is an advisory redaction handoff (s
 
 ### How the levels map categories to gates
 
-| Category | `guarded` | `strict` |
-|----------|-----------|----------|
-| read | allow | allow |
-| local-write | allow | allow |
-| remote-write | ask | gate |
-| dangerous | gate | **deny** |
+In short: under `guarded`, `remote-write` asks and `dangerous` is gated (asks);
+under `strict`, `dangerous` is **denied**. `read` and `local-write` are allowed at
+both levels. The full table is in the
+[reference](reference/frontmatter.md#risk-based-strictness-policy-policy-block).
 
 `guarded` is the floor — in-scope risky actions pause for you; nothing is silently
 allowed past `read`/`local-write`.
 
 ### Who can do what (the shipped allowlist)
 
-| Agent | Allowed categories | In plain terms |
-|-------|--------------------|----------------|
-| maestro, architect, learner | read | read only |
-| pm, narrator, engineer, security | read, local-write | read + local work |
-| **devops** | read, local-write, remote-write, dangerous | the **only** pusher / infra-mutator |
+Maestro, architect and learner are read-only; pm, narrator, engineer and security
+also get local work; **devops** alone holds every category, so it is the **only**
+pusher / infra-mutator. The exact table is in the
+[reference](reference/frontmatter.md#risk-based-strictness-policy-policy-block).
 
 So an engineer asking to `terraform apply` is out of scope at any level — that is
 devops's category. The narrator authors outward content locally but does **not**
@@ -110,8 +106,7 @@ carter update .
 You'll see the policy notice (both levels enforce gates):
 
 ```
-ℹ  Strictness policy is 'guarded': remote-write and dangerous (infra-mutate /
-   destructive) actions are gated per the risk taxonomy.
+ℹ  Strictness policy is 'guarded': remote-write and dangerous (infra-mutate / destructive) actions are gated per the risk taxonomy (see the maestro policy table).
 ```
 
 ---
@@ -120,21 +115,18 @@ You'll see the policy notice (both levels enforce gates):
 
 Carter is a **scaffolder, not a runtime** — it can't intercept a tool call itself.
 It writes each agent's policy as an ordered V2 `permissions:` list in the agent's
-frontmatter, and OpenCode enforces it. **The last matching rule wins.** Every agent
-gets these rules, in this order:
+frontmatter, and OpenCode enforces it. **The last matching rule wins.** In outline:
 
-1. `*` / `*` → **ask** — the baseline. Anything not listed below prompts you.
-2. `read`, `glob`, `grep`, `skill`, `question` → allow.
-3. Reading `*.env` / `*.env.*` → ask again; `*.env.example` → allow.
-4. `~/.carter/*` → `external_directory` + `read` allowed; agents holding
-   `local-write` may also `edit` `~/.carter/memories/*`.
-5. `subagent *` → deny. Maestro alone then gets `subagent carter-*` → allow (a flat
-   chain: specialists never re-delegate).
-6. Category rules: `edit`, `shell`, `webfetch` → allow for `local-write` holders,
-   ask for read-only agents. Then risky shell globs (`git push *`, `gh pr create *`,
-   `gh api *`, `vault read *`, `terraform apply *`,
-   `rm -rf *`, `git push --force *`, …) take their category's effect, or **deny** if
-   the agent doesn't hold that category.
+1. A baseline `ask` for everything.
+2. Reading and searching allowed; `.env` files ask again.
+3. Access to `~/.carter/` (and memory edits for agents with local-write).
+4. Subagent launches denied, except Maestro → `carter-*`.
+5. `edit` / `shell` / `webfetch` allowed for agents with local-write (ask otherwise),
+   then the risky shell globs take their category's gate — or **deny** if the agent
+   doesn't hold that category.
+
+The exact rules, in order, are in the
+[rule-order table](reference/frontmatter.md#emitted-agent-frontmatter).
 
 MCP tools, `websearch`, `execute` and any other action have no explicit rule, so
 they fall to the `ask` baseline.
@@ -193,7 +185,8 @@ It fails if:
   would ignore next to `permissions`;
 - OpenCode doesn't load an agent, or loads it with different rules. Carter runs
   `opencode debug agents` for this; it skips the step with a warning if `opencode`
-  isn't on `PATH`, and `--no-harness` skips it explicitly.
+  isn't on `PATH`, and `--no-harness` skips it explicitly. See
+  [how the harness check behaves](reference/frontmatter.md#harness-check-opencode-debug-agents).
 
 This proves what Carter wrote matches what you declared, and that OpenCode accepted
 it. It cannot prove a human never clicked "Allow always".
@@ -285,7 +278,6 @@ carter ops policy-override \
 
 ## See also
 
-- ADR-0014 (emission) and ADR-0005 (categories) — the decisions and their rationale
-- [reference/frontmatter.md](reference/frontmatter.md) — canonical `policy` schema
+- [reference/frontmatter.md](reference/frontmatter.md) — canonical `policy` schema, taxonomy, allowlist and rule order
 - [carter-ops.md](carter-ops.md) — the override ledger + write-operation protocol
 - [getting-started.md](getting-started.md) — overall setup walkthrough

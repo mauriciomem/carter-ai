@@ -26,7 +26,7 @@ Agent loads the carter-ops skill
 
 **Key principle:** the model runs git / `gh` / `curl` commands directly. The `carter ops` subcommand is only a small utility around that: it prints config values, records audit entries, and records policy overrides. It does not execute operations itself.
 
-The protocol lives in a single skill, `skills/carter-ops/SKILL.md`. It is triggered by the `ops:` prefix: every agent rendered from `templates/` and the global and workspace `AGENTS.md` carry the one-liner *"When the user's request starts with `ops:`, load the `carter-ops` skill and follow its instructions exactly."*
+The protocol lives in a single skill, `skills/carter-ops/SKILL.md`. It is triggered by the `ops:` prefix: every agent rendered from `templates/` (global and workspace) and the global `~/.config/opencode/AGENTS.md` carry the one-liner *"When the user's request starts with `ops:`, load the `carter-ops` skill and follow its instructions exactly."*
 
 ## Setup
 
@@ -34,7 +34,7 @@ The protocol lives in a single skill, `skills/carter-ops/SKILL.md`. It is trigge
 
 ```bash
 carter install                       # bot name: carter-bot
-carter install --bot-name "acme-bot" # author: acme-bot <acme-bot@users.noreply.github.com>
+carter install --bot-name "acme-bot" # co-author: acme-bot <acme-bot@users.noreply.github.com>
 ```
 
 ### Config file

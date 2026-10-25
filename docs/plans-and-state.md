@@ -15,7 +15,7 @@ the exact frontmatter schemas live in [reference/frontmatter.md](reference/front
 
 In this repository ADRs are **maintainer-local** — kept under `docs/adr/` but
 gitignored, so they are not versioned. Plans/sessions are per-workspace execution state, kept in the nested
-`.carter/.git` so they don't clutter the project history (ADR-0003 D5).
+`.carter/.git` so they don't clutter the project history.
 
 ## Plans
 
@@ -67,7 +67,7 @@ stopping points; a deleted plan is then restorable from `.carter/.git`.
 ## Decisions (ADRs)
 
 Architecture Decision Records are written by the `carter-adr` skill into
-`docs/adr/` (in this repository they are kept maintainer-local and not versioned). Rules (ADR-0003 D4):
+`docs/adr/` (in this repository they are kept maintainer-local and not versioned). Rules:
 
 - **One ADR = one coherent decision** (interdependent sub-decisions `D1..Dn` may
   bundle if they share one rationale).
@@ -79,5 +79,4 @@ Each ADR carries YAML frontmatter (machine-readable) *and* the human Status bloc
 ## See also
 
 - [reference/frontmatter.md](reference/frontmatter.md) — the canonical schemas
-- ADR-0003 — the decision of record
 - [memory-and-knowledge.md](memory-and-knowledge.md) — knowledge & memory layers

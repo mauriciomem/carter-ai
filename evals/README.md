@@ -86,7 +86,7 @@ relaxing doc accuracy/detail (the plan stays at the Opus bar regardless of execu
 - **Per-PR (offline, free):** `test_adherence.py` replays the recorded transcripts in
   `fixtures/` and grades them deterministically — no
   API call. Runs in the `ci.yml` offline-eval step (`-m "not live"`).
-- **Nightly/manual (billed):** `test_adherence_live.py` (carries the `live` marker)
+- **Weekly/manual (billed):** `test_adherence_live.py` (carries the `live` marker)
   sends the plan to the live model (`EVAL_MODEL`) and grades the real transcript. Runs only on
   the `evals-live` cron / `workflow_dispatch` — **never** on the per-PR gate.
 - **Re-record the fixture:** run the live test with `EVAL_RECORD=1` to overwrite the

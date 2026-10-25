@@ -61,7 +61,7 @@ Run `carter save` at natural stopping points to commit a recovery snapshot of `.
 
 ### Optional Entry Metadata (`scope` / `tags`)
 
-The five workspace knowledge files keep their plain-Markdown shape. Individual entries **may** optionally carry lightweight YAML metadata when portability or filtering matters (per ADR-0003 D1):
+The five workspace knowledge files keep their plain-Markdown shape. Individual entries **may** optionally carry lightweight YAML metadata when portability or filtering matters :
 
 ```yaml
 scope: workspace     # universal | workspace — does this apply everywhere, or just here?
@@ -130,8 +130,8 @@ Plain Markdown files on disk that both you and Carter can browse and edit:
 
 Every agent may read `~/.carter/*`, and agents holding `local-write` may edit `~/.carter/memories/*` without a prompt (see the emitted `permissions:` in [strictness-policy.md](strictness-policy.md)).
 
-The global rules mention a platform `/memories/` directory "if available"; OpenCode
-has none, so `~/.carter/memories/` is the source of truth.
+`~/.carter/memories/` is the only memory location; the global rules point agents
+there.
 
 ---
 
