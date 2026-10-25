@@ -2,6 +2,19 @@
 
 <!-- version list -->
 
+## v0.14.0 (2026-10-25)
+
+### Refactoring
+
+- Remove dead code and duplicates in the carter package, drop install --uninstall
+  ([#32](https://github.com/mauriciomem/carter-ai/pull/32),
+  [`152fe46`](https://github.com/mauriciomem/carter-ai/commit/152fe4658441a3b0d6faa386f09db18cf0884481))
+
+- **install**: Remove dead code and deduplicate installer helpers
+  ([#32](https://github.com/mauriciomem/carter-ai/pull/32),
+  [`152fe46`](https://github.com/mauriciomem/carter-ai/commit/152fe4658441a3b0d6faa386f09db18cf0884481))
+
+
 ## v0.13.0 (2026-10-25)
 
 ### Bug Fixes
