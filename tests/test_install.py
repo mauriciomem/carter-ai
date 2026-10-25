@@ -65,22 +65,11 @@ class TestInstallAgents:
         actual = sorted(f.name for f in agents_dir.glob("carter-*.md"))
         assert actual == expected
 
-    def test_creates_opencode_agents(self, base_dir: Path) -> None:
-        manifest = {"files": [], "file_hashes": {}}
-        backup = base_dir / "backup"
-        install.install_agents(base_dir, manifest, backup)
-
-        agents_dir = base_dir / "opencode" / "agents"
-        assert agents_dir.exists()
-        actual = sorted(f.name for f in agents_dir.glob("carter-*.md"))
-        assert len(actual) == 8
-
     def test_opencode_agents_are_permission_shaped_not_tools_array(self, base_dir: Path) -> None:
-        """OpenCode rejects the copilot ``tools:`` ARRAY ("Expected object | undefined,
-        got [...]"). The installer must render OpenCode-shaped frontmatter for the
-        opencode target — a V2 ``permissions`` list, a ``provider/model`` id, and NO
-        ``tools`` array — never copy the copilot static file verbatim (ADR-0012). This
-        is the regression that broke ``opencode`` CLI on a fresh global install.
+        """OpenCode rejects a ``tools:`` ARRAY ("Expected object | undefined, got
+        [...]"). Installed agents must carry a V2 ``permissions`` list, a
+        ``provider/model`` id, and no ``tools`` key. This guards the regression that
+        broke the ``opencode`` CLI on a fresh global install.
         """
         import yaml
 
@@ -92,8 +81,7 @@ class TestInstallAgents:
         for agent in sorted(agents_dir.glob("carter-*.md")):
             fm = yaml.safe_load(agent.read_text().split("---")[1])
             assert "tools" not in fm, (
-                f"{agent.name}: opencode agent carries a copilot 'tools' key "
-                "(OpenCode rejects the array)"
+                f"{agent.name}: agent carries a 'tools' key (OpenCode rejects the array)"
             )
             assert isinstance(fm.get("permissions"), list), (
                 f"{agent.name}: opencode agent missing the V2 'permissions' list"
@@ -144,16 +132,6 @@ class TestInstallSkills:
         pl_dir = skills_dir / "carter-pipeline"
         for sub in ("github-cli.md", "strategies.md", "actions.md"):
             assert (pl_dir / sub).exists()
-
-    def test_creates_opencode_skills(self, base_dir: Path) -> None:
-        manifest = {"files": [], "file_hashes": {}}
-        backup = base_dir / "backup"
-        install.install_skills(base_dir, manifest, backup)
-
-        skills_dir = base_dir / "opencode" / "skills"
-        skill_dirs = sorted(d.name for d in skills_dir.iterdir() if d.is_dir())
-        assert len(skill_dirs) == 27
-
 
 _SHIPPED_TEXT = "# Carter — Global Instructions (a version Carter shipped)\n"
 
@@ -297,12 +275,7 @@ class TestIdempotency:
 
 
 # ──────────────────────────────────────────────────────────────────────────────
-# MCP merging
-# ──────────────────────────────────────────────────────────────────────────────
-
-
-# ──────────────────────────────────────────────────────────────────────────────
-# MCP server list — single source (D5)
+# MCP server list — single source
 # ──────────────────────────────────────────────────────────────────────────────
 
 
@@ -323,7 +296,7 @@ class TestMCPServerSingleSource:
 
 
 class TestOfficialGitHubServer:
-    """ADR-0008 D2: the shipped GitHub MCP server is the official
+    """The shipped GitHub MCP server is the official
     github/github-mcp-server via Docker, digest-pinned, read-only, with a surgical tool
     allowlist. The archived @modelcontextprotocol/server-github must be gone from the
     shipped configs (grep-clean over mcp/).
@@ -343,8 +316,8 @@ class TestOfficialGitHubServer:
         "list_pull_requests",
     }
 
-    def _github_cfg(self, target: str) -> dict:
-        path = install.REPO_ROOT / "mcp" / target / "github.json"
+    def _github_cfg(self) -> dict:
+        path = install.REPO_ROOT / "mcp" / "opencode" / "github.json"
         return json.loads(path.read_text())["carter-github"]
 
     def _command_str(self, entry: dict) -> str:
@@ -360,36 +333,30 @@ class TestOfficialGitHubServer:
                 f"{cfg}: still references the archived GitHub MCP server"
             )
 
-    def test_opencode_use_official_docker_image(self) -> None:
-        for target in ("opencode",):
-            cmd = self._command_str(self._github_cfg(target))
-            assert "docker" in cmd, f"{target}: not a docker invocation"
-            assert "ghcr.io/github/github-mcp-server@sha256:" in cmd, (
-                f"{target}: official image must be pinned by digest, not a tag"
-            )
-            assert ":latest" not in cmd, f"{target}: must not use :latest"
+    def test_uses_official_docker_image(self) -> None:
+        cmd = self._command_str(self._github_cfg())
+        assert "docker" in cmd, "not a docker invocation"
+        assert "ghcr.io/github/github-mcp-server@sha256:" in cmd, (
+            "official image must be pinned by digest, not a tag"
+        )
+        assert ":latest" not in cmd, "must not use :latest"
 
-    def test_opencode_are_read_only(self) -> None:
-        for target in ("opencode",):
-            cmd = self._command_str(self._github_cfg(target))
-            assert "--read-only" in cmd, f"{target}: missing --read-only"
+    def test_is_read_only(self) -> None:
+        assert "--read-only" in self._command_str(self._github_cfg())
 
-    def test_opencode_carry_surgical_tool_allowlist(self) -> None:
-        for target in ("opencode",):
-            cmd = self._command_str(self._github_cfg(target))
-            assert "--tools" in cmd, f"{target}: missing --tools allowlist"
-            for tool in self.EXPECTED_TOOLS:
-                assert tool in cmd, f"{target}: surgical tool {tool!r} absent"
+    def test_carries_surgical_tool_allowlist(self) -> None:
+        cmd = self._command_str(self._github_cfg())
+        assert "--tools" in cmd, "missing --tools allowlist"
+        for tool in self.EXPECTED_TOOLS:
+            assert tool in cmd, f"surgical tool {tool!r} absent"
 
     def test_token_is_env_placeholder_not_literal(self) -> None:
-        for target in ("opencode",):
-            entry = self._github_cfg(target)
-            env = entry.get("env") or entry.get("environment", {})
-            # The PAT is passed by env placeholder, never a baked literal.
-            # opencode: {env:VAR} (OpenCode docs, mcp-servers).
-            assert any("{env:" in str(v) for v in env.values()), (
-                f"{target}: GitHub token must be an env placeholder"
-            )
+        entry = self._github_cfg()
+        env = entry.get("env") or entry.get("environment", {})
+        # The PAT is passed by env placeholder ({env:VAR}), never a baked literal.
+        assert any("{env:" in str(v) for v in env.values()), (
+            "GitHub token must be an env placeholder"
+        )
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -432,8 +399,8 @@ class TestJSONCParsing:
         f = tmp_path / "missing.json"
         assert _load_jsonc(f) is None
 
-    def test_realistic_vscode_settings(self) -> None:
-        """Parse a realistic VS Code settings.json with mixed JSONC features."""
+    def test_realistic_jsonc_document(self) -> None:
+        """Parse a realistic JSONC document mixing comments, nesting and trailing commas."""
         text = """{
   "workbench.colorTheme": "Lunar-dark-theme",
   // Font settings
@@ -468,10 +435,9 @@ class TestManifest:
         manifest = {
             "version": "1.0.0",
             "installed_at": "2026-05-09T10:00:00+00:00",
-            "targets": ["copilot"],
             "files": ["/some/file.md"],
             "file_hashes": {"/some/file.md": "sha256:abc123"},
-            "mcp_servers": {"copilot": ["carter-github"]},
+            "mcp_servers": ["carter-github"],
         }
         install.write_manifest(manifest, base_dir)
         loaded = install.read_manifest(base_dir)
@@ -479,6 +445,7 @@ class TestManifest:
         assert loaded is not None
         assert loaded["version"] == "1.0.0"
         assert loaded["files"] == ["/some/file.md"]
+        assert loaded["mcp_servers"] == ["carter-github"]
 
     def test_read_nonexistent_manifest(self, base_dir: Path) -> None:
         assert install.read_manifest(base_dir) is None
@@ -689,16 +656,6 @@ class TestBotName:
         assert 'footer = "This comment was generated by acme-bot."' in content
 
 
-# ──────────────────────────────────────────────────────────────────────────────
-# MCP flag
-# ──────────────────────────────────────────────────────────────────────────────
-
-
-# ──────────────────────────────────────────────────────────────────────────────
-# Cross-platform path + prerequisite resolution (macOS / Linux)
-# ──────────────────────────────────────────────────────────────────────────────
-
-
 class TestCarterOpsSkill:
     def test_carter_ops_skill_installed(self, base_dir: Path) -> None:
         """carter-ops skill should be installed alongside other skills."""
@@ -736,16 +693,6 @@ class TestCarterOpsSkill:
         assert stats["updated"] == 0
         assert not backup.exists()
 
-    def test_carter_ops_skill_opencode(self, base_dir: Path) -> None:
-        """carter-ops skill should be installed for OpenCode target too."""
-        manifest = {"files": [], "file_hashes": {}}
-        backup = base_dir / "backup"
-        install.install_skills(base_dir, manifest, backup)
-
-        skill_md = base_dir / "opencode" / "skills" / "carter-ops" / "SKILL.md"
-        assert skill_md.exists()
-
-
 class TestOpenCodeRules:
     def test_creates_agents_md(self, base_dir: Path) -> None:
         """OpenCode global rules file should be created."""
@@ -772,7 +719,7 @@ class TestOpenCodeRules:
 
 
 class TestOpenCodeRulesUpgrade:
-    """D3 upgrade path: ``install_opencode_rules`` used to skip whenever the file
+    """Upgrade path: ``install_opencode_rules`` used to skip whenever the file
     existed, so every legacy install would never receive a content fix. Now it
     content-hashes: byte-identical legacy content is upgraded, user-modified
     content is never clobbered (matching the installer's SHA-256 idempotency
@@ -856,18 +803,6 @@ class TestOpenCodeRulesUpgrade:
 
 
 class TestOpsOneLiner:
-    def test_agents_have_ops_oneliner(self, base_dir: Path) -> None:
-        """All static agent files should contain the ops: one-liner.
-
-        The installer renders agents from templates now; the static `agents/` set is
-        checked at the source until it is folded into templates (ADR-0014 phase 5).
-        """
-        agents_dir = install.REPO_ROOT / "agents"
-        for agent_file in agents_dir.glob("carter-*.md"):
-            content = agent_file.read_text()
-            assert "ops:" in content, f"{agent_file.name} missing ops: reference"
-            assert "carter-ops" in content, f"{agent_file.name} missing carter-ops reference"
-
     def test_no_critical_section_in_agents(self, base_dir: Path) -> None:
         """Agent files should not have the old CRITICAL section."""
         manifest = {"files": [], "file_hashes": {}}
@@ -897,7 +832,7 @@ class TestOpsOneLiner:
 
 
 class TestNarratorAgent:
-    """ADR-0001: narrator is a first-class, always-installed agent."""
+    """The narrator is a first-class, always-installed agent."""
 
     def test_narrator_installed(self, base_dir: Path) -> None:
         manifest = {"files": [], "file_hashes": {}}
@@ -938,7 +873,7 @@ class TestNarratorAgent:
 
 
 class TestContentSkills:
-    """ADR-0001: carter-docs and carter-story skills with anti-drift delegation."""
+    """carter-docs and carter-story skills with anti-drift delegation."""
 
     def test_content_skills_installed(self, base_dir: Path) -> None:
         manifest = {"files": [], "file_hashes": {}}
@@ -980,7 +915,7 @@ class TestContentSkills:
 
 
 class TestTimeAwareness:
-    """ADR-0010 D6: agents author dated frontmatter but have a training cutoff, so
+    """Agents author dated frontmatter but have a training cutoff, so
     they cannot know today's date unaided. The authoring skills + global
     instructions carry a REQUIRED date-fetch checklist item: obtain the current
     date (native harness var or `date`) BEFORE writing any dated frontmatter. No
@@ -1012,7 +947,7 @@ class TestTimeAwareness:
             text = tmpl.read_text().lower()
             if "today is" in text:
                 offenders.append(tmpl.name)
-        assert not offenders, f"templates bake a literal date (ADR-0010 D6): {offenders}"
+        assert not offenders, f"templates bake a literal date (stale on render): {offenders}"
 
 
 class TestInstallMemories:
@@ -1055,16 +990,6 @@ class TestCarterReflectSkill:
         assert "reflect" in content.lower()
         assert "~/.carter/memories/" in content
         assert "~/.carter/knowledge/" in content
-
-    def test_reflect_skill_opencode(self, base_dir: Path) -> None:
-        """carter-reflect skill should be installed for OpenCode target too."""
-        manifest = {"files": [], "file_hashes": {}}
-        backup = base_dir / "backup"
-        install.install_skills(base_dir, manifest, backup)
-
-        skill_md = base_dir / "opencode" / "skills" / "carter-reflect" / "SKILL.md"
-        assert skill_md.exists()
-
 
 class TestVisibleMemoryReferences:
     def test_opencode_rules_reference_visible_memory(self, base_dir: Path) -> None:

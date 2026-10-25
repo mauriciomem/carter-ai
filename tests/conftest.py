@@ -15,7 +15,7 @@ def repo_root() -> Path:
 
 @pytest.fixture
 def base_dir(tmp_path: Path) -> Path:
-    """Temporary base directory for testing (overrides ~/.copilot etc.)."""
+    """Temporary base directory for testing (overrides ~/.config, ~/.carter etc.)."""
     return tmp_path
 
 

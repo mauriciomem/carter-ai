@@ -994,20 +994,8 @@ _ALL_ROLES = ["maestro", "architect", "engineer", "devops", "pm", "learner", "na
 
 
 class TestPolicyRenderedIntegration:
-    """Rendered agents carry V2 ``permissions:`` and no ``carter:policy`` comment."""
-
-    def test_rendered_frontmatter_is_v2(self, env, default_config):
-        rendered = render_agents(default_config, env)
-        assert rendered
-        for name, content in rendered.items():
-            assert content.startswith("---\n"), f"{name}: no frontmatter"
-            _, fm, body = content.split("---", 2)
-            data = yaml.safe_load(fm)
-            assert data["description"], f"{name}: lost description"
-            assert data["mode"], f"{name}: lost mode"
-            assert isinstance(data["permissions"], list), name
-            assert "policy" not in data and "permission" not in data, name
-            assert "carter:policy" not in body, name
+    """Strict policy reaches the rendered frontmatter. The V2 shape of every
+    rendered agent is checked in tests/test_parity.py."""
 
     def test_strict_devops_denies_dangerous(self, env, default_config):
         default_config["policy"]["level"] = "strict"
@@ -1017,37 +1005,9 @@ class TestPolicyRenderedIntegration:
         assert rules[-1]["effect"] == "deny"
 
 
-class TestConfigureMcpServersUnchanged:
-    """Per-agent MCP scope lives in agent frontmatter, NOT the global wiring."""
-
-    def _wire(self, tmp_path, servers=None):
-        from carter.install.mcp import configure_mcp_servers
-
-        manifest: dict = {}
-        configure_mcp_servers(tmp_path, manifest, tmp_path / "backup", servers=servers)
-        cfg = json.loads((tmp_path / "opencode" / "opencode.json").read_text())
-        return manifest, cfg["mcp"]["servers"]
-
-    def test_global_server_set_is_the_shipped_triple(self, tmp_path):
-        manifest, servers = self._wire(tmp_path)
-        assert manifest["mcp_servers"] == ["carter-github", "carter-terraform", "carter-atlassian"]
-        assert {"carter-github", "carter-terraform", "carter-atlassian"} <= set(servers)
-
-    def test_no_per_agent_dimension_in_global_wiring(self, tmp_path):
-        _, servers = self._wire(tmp_path)
-        for role in _ALL_ROLES:
-            assert role not in servers
-
-
 class TestMcpServerOptIn:
-    """`configure_mcp_servers` installs only the servers a workspace selects; an
-    unused server adds zero tool-schema tokens. Omitting the selection installs all.
-    """
-
-    def test_subset_wires_only_selected(self, tmp_path):
-        manifest, servers = TestConfigureMcpServersUnchanged()._wire(tmp_path, ["github"])
-        assert set(servers) == {"carter-github"}
-        assert manifest["mcp_servers"] == ["carter-github"]
+    """`carter install --mcp-servers` wires only the selected servers (the
+    function-level wiring is covered in tests/test_install_opencode.py)."""
 
     def test_cli_mcp_servers_subset(self, tmp_path, fake_opencode):
         from click.testing import CliRunner

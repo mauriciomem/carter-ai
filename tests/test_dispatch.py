@@ -52,7 +52,3 @@ def test_rendered_suffixed_maestro_keeps_glob():
         {"action": "subagent", "resource": "carter-*", "effect": "allow"},
     ]
 
-
-def test_no_runsubagent_fiction_anywhere():
-    for content in render_agents(_config(suffix="local"), create_env()).values():
-        assert "runSubagent" not in content

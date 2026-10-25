@@ -1,7 +1,9 @@
-"""Tests for the risk-based strictness policy model (ADR-0005).
+"""Tests for carter.yaml configuration loading and validation.
 
-The model layer only: the `policy` config block, the shipped R0-R6 taxonomy,
-the tool->risk map, and the per-agent allowlist. No emission or enforcement yet.
+Covers the risk-based strictness policy (the `policy` block, the shipped R0-R6
+taxonomy, the tool->risk map, the per-agent allowlist and how overrides reach the
+emitted gates), plus the cost profile, `docs_language` and the removed `target` key.
+The rendered permission rules themselves are tested in tests/test_policy_lint.py.
 Everything user-extensible is dict-shaped so `_deep_merge` (which replaces lists
 wholesale) merges overrides instead of wiping the shipped defaults.
 """

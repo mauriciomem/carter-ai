@@ -49,8 +49,7 @@ def _parse_frontmatter(text: str) -> dict:
 @pytest.fixture
 def rendered_agents_dir(tmp_path: Path) -> Path:
     """Agents rendered from the templates with the default config — exactly what
-    ``carter install`` / ``carter init`` write (the static ``agents/`` tree is gone,
-    ADR-0014 phase 5)."""
+    ``carter install`` / ``carter init`` write."""
     out = tmp_path / "rendered-agents"
     out.mkdir()
     cfg = generate_default_config()
@@ -102,19 +101,19 @@ class TestAgentSourceParity:
 
 
 class TestNoRunSubagentFiction:
-    """ADR-0010 D1/D8: ``runSubagent`` is a fiction — it exists on no target. It
-    drifted back once before (the rendered maestro said ``runSubagent`` while the
-    template said "chain sequentially", S3), so lock its absence across BOTH
-    sources and the routing skill. Native dispatch (``agent``/``agents:``/
-    ``permission.task``) is P3; here we only assert the fiction is gone.
+    """``runSubagent`` is not a real tool; OpenCode dispatches through ``subagent``.
+    It drifted back once before (the rendered maestro said ``runSubagent`` while the
+    template said "chain sequentially"), so lock its absence in both the rendered
+    agents (with and without a name suffix) and the templates.
     """
 
-    def test_no_runsubagent_in_rendered_agents(self, rendered_agents_dir: Path) -> None:
-        offenders = [
-            p.name
-            for p in sorted(rendered_agents_dir.glob("carter-*.md"))
-            if "runSubagent" in p.read_text()
-        ]
+    @pytest.mark.parametrize("suffix", ["", "local"])
+    def test_no_runsubagent_in_rendered_agents(self, suffix: str) -> None:
+        cfg = generate_default_config()
+        cfg["agent_suffix"] = suffix
+        rendered = render_agents(cfg, create_env())
+        assert rendered, "no agents rendered"
+        offenders = [name for name, content in rendered.items() if "runSubagent" in content]
         assert not offenders, f"rendered agents still cite the runSubagent fiction: {offenders}"
 
     def test_no_runsubagent_in_agent_templates(self, template_agents_dir: Path) -> None:
@@ -325,37 +324,27 @@ class TestNarratorParity:
 
 
 class TestRenderedFrontmatterParity:
-    """Templates must render install-ready frontmatter matching the static files.
+    """Templates must render install-ready frontmatter.
 
-    This is the ADR-0002 scaffold-bug fix: ``carter init`` previously produced
-    agents with no frontmatter, dropping the ``description`` OpenCode requires and
-    the ``mode`` the runtimes honor. ``temperature`` is dropped entirely (ADR-0010
-    D7) — it must NOT appear in any emitted frontmatter.
+    ``carter init`` once produced agents with no frontmatter, dropping the
+    ``description`` OpenCode requires and the ``mode`` the runtimes honor.
     """
 
-    def test_rendered_agents_have_valid_frontmatter(self) -> None:
+    def test_rendered_frontmatter_is_v2_native(self) -> None:
+        """Rendered frontmatter carries exactly the V2 keys Carter generates
+        (``description``/``mode``/``model``/``permissions``): no V1 key (``permission``,
+        ``tools``, ``temperature``…), no ``policy`` key, and no ``carter:policy``
+        comment anywhere in the file."""
         cfg = generate_default_config(workspace_name="parity", mode="single")
+        cfg["agent_suffix"] = ""
         rendered = render_agents(cfg, create_env())
         assert rendered, "no agents rendered"
         for name, content in rendered.items():
-            fm = _parse_frontmatter(content)
-            assert fm.get("description"), f"{name}: rendered without a description"
-            assert fm.get("mode"), f"{name}: rendered without a mode"
-            assert "temperature" not in fm, (
-                f"{name}: emits temperature (dropped wholesale, ADR-0010 D7)"
-            )
-
-    def test_rendered_frontmatter_is_v2_native(self) -> None:
-        """ADR-0014 D1/D5: rendered frontmatter carries exactly the V2 keys Carter
-        generates (``description``/``mode``/``model``/``permissions``), never a V1
-        key and never the old policy comment. The static Copilot-shaped ``agents/``
-        tree is NOT compared any more (deleted in a later phase)."""
-        cfg = generate_default_config(workspace_name="parity", mode="single")
-        cfg["agent_suffix"] = ""
-        for name, content in render_agents(cfg, create_env()).items():
             role = name.removeprefix("carter-").removesuffix(".md")
             fm = _parse_frontmatter(content)
             assert set(fm) == {"description", "mode", "model", "permissions"}, name
+            assert fm["description"], f"{name}: rendered without a description"
+            assert isinstance(fm["permissions"], list) and fm["permissions"], name
             native = policy_native_keys(cfg, role)
             assert fm["permissions"] == native["permissions"], name
             assert fm["model"] == native["model"], name

@@ -210,13 +210,6 @@ class TestEmittedFrontmatter:
     def test_v1_key_set(self):
         assert set(V1_AGENT_KEYS) == {"permission", "tools", "bash", "task", "name", "temperature"}
 
-    def test_rendered_files_have_no_policy_comment(self):
-        for name, content in render_agents(_config(), create_env()).items():
-            assert "carter:policy" not in content, name
-            fm = yaml.safe_load(content.split("---", 2)[1])
-            assert fm["permissions"], name
-            assert "policy" not in fm, name
-
 
 # ─── Lint (ADR-0014 D5) ──────────────────────────────────────────────────────
 
