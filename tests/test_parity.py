@@ -56,13 +56,17 @@ def rendered_agents_dir(tmp_path: Path) -> Path:
     cfg["agent_suffix"] = ""  # as `carter install` renders the global agents
     for name, content in render_agents(cfg, create_env()).items():
         (out / name).write_text(content)
+    # Every per-agent loop below would pass vacuously over an empty directory.
+    assert any(out.glob("carter-*.md")), "no agents rendered"
     return out
 
 
 @pytest.fixture
 def template_agents_dir(repo_root: Path) -> Path:
     """Jinja agent templates rendered by ``carter init`` / ``update``."""
-    return repo_root / "templates" / "agents"
+    path = repo_root / "templates" / "agents"
+    assert any(path.glob("carter-*.md.j2")), f"no agent templates in {path}"
+    return path
 
 
 class TestAgentSourceParity:

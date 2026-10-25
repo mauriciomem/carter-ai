@@ -19,7 +19,7 @@ def repo_root() -> Path:
 @pytest.fixture
 def agents_dir(tmp_path: Path) -> Path:
     """Agents rendered from ``templates/`` exactly as ``carter install`` writes them
-    (no suffix). The static ``agents/`` tree is gone (ADR-0014 phase 5)."""
+    (no suffix)."""
     from carter.config import generate_default_config
     from carter.scaffold import create_env, render_agents
 
@@ -29,13 +29,16 @@ def agents_dir(tmp_path: Path) -> Path:
     out.mkdir()
     for name, content in render_agents(cfg, create_env()).items():
         (out / name).write_text(content)
+    assert any(out.glob("carter-*.md")), "no agents rendered"
     return out
 
 
 @pytest.fixture
 def skills_dir(repo_root: Path) -> Path:
-    """Path to skill definitions."""
-    return repo_root / "skills"
+    """Path to skill definitions (never empty, so per-skill loops cannot pass vacuously)."""
+    path = repo_root / "skills"
+    assert any(path.glob("carter-*/SKILL.md")), f"no skills in {path}"
+    return path
 
 
 @pytest.fixture

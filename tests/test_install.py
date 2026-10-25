@@ -77,8 +77,9 @@ class TestInstallAgents:
         backup = base_dir / "backup"
         install.install_agents(base_dir, manifest, backup)
 
-        agents_dir = base_dir / "opencode" / "agents"
-        for agent in sorted(agents_dir.glob("carter-*.md")):
+        agents = sorted((base_dir / "opencode" / "agents").glob("carter-*.md"))
+        assert agents, "no agents installed"
+        for agent in agents:
             fm = yaml.safe_load(agent.read_text().split("---")[1])
             assert "tools" not in fm, (
                 f"{agent.name}: agent carries a 'tools' key (OpenCode rejects the array)"
@@ -327,8 +328,9 @@ class TestOfficialGitHubServer:
         return " ".join(parts)
 
     def test_no_archived_server_in_shipped_configs(self) -> None:
-        mcp_dir = install.REPO_ROOT / "mcp"
-        for cfg in mcp_dir.rglob("*.json"):
+        configs = sorted((install.REPO_ROOT / "mcp").rglob("*.json"))
+        assert configs, "no shipped MCP configs found"
+        for cfg in configs:
             assert "@modelcontextprotocol/server-github" not in cfg.read_text(), (
                 f"{cfg}: still references the archived GitHub MCP server"
             )
@@ -809,8 +811,9 @@ class TestOpsOneLiner:
         backup = base_dir / "backup"
         install.install_agents(base_dir, manifest, backup)
 
-        agents_dir = base_dir / "opencode" / "agents"
-        for agent_file in agents_dir.glob("carter-*.md"):
+        agents = sorted((base_dir / "opencode" / "agents").glob("carter-*.md"))
+        assert agents, "no agents installed"
+        for agent_file in agents:
             content = agent_file.read_text()
             assert "## CRITICAL: Write Operations" not in content, (
                 f"{agent_file.name} still has CRITICAL section"
@@ -942,8 +945,10 @@ class TestTimeAwareness:
         """`Today is <date>` (or any baked literal date) must never appear in a
         template — it is stale the moment it renders and invalidates the cache.
         """
+        templates = sorted((repo_root / "templates").rglob("*.j2"))
+        assert templates, "no templates found"
         offenders = []
-        for tmpl in (repo_root / "templates").rglob("*.j2"):
+        for tmpl in templates:
             text = tmpl.read_text().lower()
             if "today is" in text:
                 offenders.append(tmpl.name)
