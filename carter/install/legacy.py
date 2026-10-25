@@ -7,7 +7,6 @@ deleted by ``carter install``; it only warns once per run. ``carter uninstall
 
 from __future__ import annotations
 
-import hashlib
 import json
 import platform
 import shutil
@@ -17,6 +16,7 @@ from carter.install.components import read_manifest
 from carter.install.console import _log, log_err, log_ok, log_step, log_warn
 from carter.install.files import _sha256
 from carter.install.jsonc import _load_jsonc, _write_json_preserving
+from carter.install.ownership import _hash_matches, _within
 from carter.install.paths import _copilot_base, _home, _opencode_base, legacy_manifest_path
 
 
@@ -77,15 +77,6 @@ def warn_legacy_copilot(base_dir: Path | None) -> list[Path]:
             "Carter-installed ones (only files listed in the old install manifest).",
         )
     return found
-
-
-def _hash_matches(path: Path, recorded: str) -> bool:
-    digest = hashlib.sha256(path.read_bytes()).hexdigest()
-    return recorded.removeprefix("sha256:") == digest
-
-
-def _within(path: Path, roots: tuple[Path, ...]) -> bool:
-    return any(path.is_relative_to(r) for r in roots)
 
 
 def _remove_json_entries(path: Path, key: str, names: list[str]) -> None:

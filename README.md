@@ -36,7 +36,7 @@ Then choose how to use Carter:
 ```bash
 carter install                  # agents, skills, rules, knowledge seeds
 carter install --mcp            # also configure MCP servers (needs tokens)
-carter install --uninstall      # remove
+carter uninstall                # remove (same as: carter install --uninstall)
 
 mkdir -p ~/my-project                          # the directory must exist
 carter init ~/my-project --name "my-project"   # scaffold a workspace
@@ -46,6 +46,22 @@ For MCP servers, set the relevant tokens first (`GITHUB_TOKEN`, `TFE_TOKEN`);
 the Atlassian server authenticates via OAuth in your client. See [.env.example](.env.example).
 
 → Full walkthrough: **[docs/getting-started.md](docs/getting-started.md)**
+
+### Uninstalling
+
+`carter uninstall` (equivalent to `carter install --uninstall`) removes only what
+Carter installed and you have not changed:
+
+- **Removed:** `carter-*` agents and skills, the global `~/.config/opencode/AGENTS.md`
+  Carter wrote, untouched knowledge seed files, `carter-*` MCP entries in
+  `opencode.json`, and `~/.carter/manifest.json`.
+- **Kept:** `~/.carter/memories/`, `~/.carter/config.toml`, `~/.carter/audit.log`,
+  backups, and any file you edited or wrote yourself — knowledge files, an
+  `AGENTS.md` Carter skipped as user-modified, and edited agents/skills. Each
+  edited file that is kept is reported with a `⚠ Kept …` warning.
+
+Manifests from older versions may lack content hashes; then knowledge files and
+`AGENTS.md` are kept, and only `carter-*` agents/skills are removed.
 
 ### Upgrading from a Copilot-era install
 
@@ -272,6 +288,7 @@ evals/         Prompt/skill evals (offline + live)
 | `carter install` fails: opencode not found / too old | Install or upgrade [OpenCode](https://opencode.ai/v2/docs/) to 2.1+ and make sure `opencode --version` works |
 | Agents not appearing in OpenCode | Run `carter check .` — it runs `opencode debug agents` and names any agent OpenCode dropped. Agents load from `~/.config/opencode/agents/` (system) or `.opencode/agents/` (workspace) |
 | `Unknown key 'target'` | Delete `target:` from `.carter/carter.yaml` (see [Upgrading](#upgrading-from-a-copilot-era-install)) |
+| `carter uninstall` left files behind | By design: files you edited (or that existed before install) are kept and listed as `⚠ Kept …`. Delete them by hand if you don't need them (see [Uninstalling](#uninstalling)) |
 | MCP server conflicts | Carter installs alongside existing servers as `carter-*`; remove the original to avoid duplicate tools |
 | Missing tokens for `--mcp` | Run `carter install --mcp -v` to see which env vars are unset |
 

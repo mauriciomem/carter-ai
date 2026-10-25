@@ -17,6 +17,7 @@ from carter.install.files import (
     _install_file,
     _install_rendered_file,
     _install_templated_file,
+    _sha256,
 )
 from carter.install.paths import (
     REPO_ROOT,
@@ -167,6 +168,7 @@ def install_opencode_rules(
     dst = _opencode_base(base_dir) / "AGENTS.md"
     dst.parent.mkdir(parents=True, exist_ok=True)
     shown = str(dst).replace(str(_home()), "~")
+    owned = True
     if not dst.exists():
         dst.write_text(_OPENCODE_AGENTS_MD)
         log_ok(shown)
@@ -185,7 +187,11 @@ def install_opencode_rules(
         manifest.setdefault("notes", []).append(
             f"{shown}: user-modified, current Carter rules not installed"
         )
-    manifest["files"].append(str(dst))
+        owned = False
+    if owned:
+        # Recorded with its hash so uninstall can tell if the user edits it later.
+        manifest["files"].append(str(dst))
+        manifest["file_hashes"][str(dst)] = _sha256(dst)
 
 
 def install_memories(
@@ -224,7 +230,13 @@ def install_knowledge(
         dst = dst_dir / src_file.name
         if dst.exists():
             log_skip(f"{str(dst).replace(str(_home()), '~')} (exists, not overwriting)")
-            manifest["files"].append(str(dst))
+            # Knowledge is user data: an existing file is Carter-owned only if it
+            # is byte-identical to the seed. Anything else (user-written, edited,
+            # migrated from ~/.copilot) is never recorded, so uninstall keeps it.
+            seed_hash = _sha256(src_file)
+            if _sha256(dst) == seed_hash:
+                manifest["files"].append(str(dst))
+                manifest["file_hashes"][str(dst)] = seed_hash
         else:
             _install_file(src_file, dst, manifest, backup_root)
             count += 1
