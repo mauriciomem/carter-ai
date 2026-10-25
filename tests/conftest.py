@@ -31,19 +31,31 @@ def fake_opencode(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
         version_output: str | None = "opencode v2.1.4",
         agents_output: str = "[]",
         agents_exit: int = 0,
+        agents_sequence: list[str] | None = None,
     ) -> Path:
-        """``agents_output``/``agents_exit`` drive ``opencode debug agents``."""
+        """``agents_output``/``agents_exit`` drive ``opencode debug agents``.
+
+        ``agents_sequence`` serves one output per call (repeating the last), to
+        mimic OpenCode's service returning stale data before fresh data.
+        """
         bindir = tmp_path / "fakebin"
         bindir.mkdir(exist_ok=True)
         script = bindir / "opencode"
         if version_output is None:
             script.unlink(missing_ok=True)
         else:
-            agents_file = bindir / "agents.out"
-            agents_file.write_text(agents_output)
+            outputs = agents_sequence or [agents_output]
+            for i, out in enumerate(outputs, 1):
+                (bindir / f"agents.{i}.out").write_text(out)
+            counter = bindir / "agents.calls"
+            counter.write_text("0")
             script.write_text(
                 "#!/bin/sh\n"
-                f'if [ "$1" = debug ]; then /bin/cat "{agents_file}"; exit {agents_exit}; fi\n'
+                'if [ "$1" = debug ]; then\n'
+                f'  n=$(( $(/bin/cat "{counter}") + 1 )); echo "$n" > "{counter}"\n'
+                f'  [ "$n" -gt {len(outputs)} ] && n={len(outputs)}\n'
+                f'  /bin/cat "{bindir}/agents.$n.out"; exit {agents_exit}\n'
+                "fi\n"
                 f"printf '%s\\n' '{version_output}'\n"
             )
             script.chmod(0o755)

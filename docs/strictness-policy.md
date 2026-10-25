@@ -183,7 +183,7 @@ It fails if:
   generates (rule order counts), e.g. someone hand-edited a rule;
 - an agent file carries V1 keys (`permission`, `tools`, `bash`, …) that OpenCode
   would ignore next to `permissions`;
-- OpenCode doesn't load an agent, or loads it with different rules. Carter runs
+- OpenCode doesn't load an agent, or loads it with a different description, model or rules. Carter runs
   `opencode debug agents` for this; it skips the step with a warning if `opencode`
   isn't on `PATH`, and `--no-harness` skips it explicitly. See
   [how the harness check behaves](reference/frontmatter.md#harness-check-opencode-debug-agents).

@@ -190,7 +190,7 @@ Shared fixtures live in `tests/conftest.py`; suites define local fixtures where 
 |---------|------|-------------|
 | `repo_root` | `Path` | Absolute path to the Carter repository root. Used when tests need to reference source files. |
 | `base_dir` | `Path` | A fresh `tmp_path` directory. Every installer function accepts this as a parameter, so all file writes go here instead of real user directories. |
-| `fake_opencode` | factory | Puts a fake `opencode` on an isolated `PATH`. Call it with the `--version` output (or `None` for "not installed") and optionally the `debug agents` output and exit code. |
+| `fake_opencode` | factory | Puts a fake `opencode` on an isolated `PATH`. Call it with the `--version` output (or `None` for "not installed") and optionally the `debug agents` output and exit code, or `agents_sequence` (one output per call) to simulate stale-then-fresh service answers. |
 | `_no_real_opencode` | autouse | Stops `carter check` from running a developer's real `opencode`; skipped for tests that request `fake_opencode`. |
 
 ### How `base_dir` Isolation Works

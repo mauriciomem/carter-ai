@@ -214,7 +214,8 @@ carter check . --no-harness # skip the OpenCode step (e.g. on a machine without 
 `carter.yaml` generates, then asks OpenCode which agents it actually loaded. If
 `opencode` isn't on `PATH`, that last step is skipped with a warning. See
 [how the harness check behaves](reference/frontmatter.md#harness-check-opencode-debug-agents)
-(it may start OpenCode's background service and can take a few seconds).
+(it may start OpenCode's background service, leaves it running, and can take a few
+seconds).
 
 ---
 

@@ -7,10 +7,16 @@ YAML, a Copilot ``tools:`` list, ...), so a missing id is the signal.
 
 Behaviour notes:
 
-- The first call can return ``[]`` while OpenCode's per-user background service
-  starts, so an empty or incomplete result is retried with bounded backoff.
-- ``debug agents`` starts that background service if it is not running. It is the
-  user's shared service; ``carter check`` leaves it running and never stops it.
+- ``debug agents`` is answered by OpenCode's per-user background service and
+  starts it if it is not running. It is the user's shared service; ``carter
+  check`` leaves it running and never stops it. (``--standalone`` exists only on
+  the root command and is rejected by ``debug agents`` on 2.1.0-2.1.4.)
+- The service reloads agent files from a file watcher, so right after an edit it
+  can still answer with the previous list (observed: stale for < 0.4 s), and the
+  first call after start-up can return ``[]``. Two guards: wait until the newest
+  agent file is ``settle`` seconds old before the first call, and treat a result
+  as stale unless every agent's description, model and permission block match
+  what was rendered — retrying with bounded backoff until they do.
 - Effective permissions are OpenCode's base rules followed by the agent's emitted
   rules (with ``~`` expanded); OpenCode may append its own rules after them. The
   check therefore requires the emitted rules as one contiguous, in-order block.
@@ -23,7 +29,7 @@ import os
 import shutil
 import subprocess
 import time
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Literal
@@ -32,6 +38,12 @@ DEFAULT_ATTEMPTS = 5
 # Waits between attempts: 0.5 + 1 + 2 + 4 = 7.5 s worst case (plus call time).
 DEFAULT_BACKOFF = (0.5, 1.0, 2.0, 4.0)
 DEFAULT_TIMEOUT = 30.0
+# Minimum age of the newest agent file before the first call (file-watcher lag).
+DEFAULT_SETTLE = 1.5
+STALE_HINT = (
+    "OpenCode may be serving stale agent config (its background service reloads "
+    "files asynchronously); re-run `carter check` to confirm."
+)
 
 Rule = dict[str, Any]
 
@@ -41,6 +53,18 @@ class HarnessResult:
     status: Literal["ok", "fail", "skipped"]
     errors: list[str] = field(default_factory=list)
     warning: str | None = None
+
+
+@dataclass(frozen=True)
+class Expected:
+    """What one rendered agent should look like once OpenCode loads it.
+
+    ``None`` fields are not compared. ``model`` is ``provider/model[#variant]``.
+    """
+
+    rules: list[Rule] | None = None
+    description: str | None = None
+    model: str | None = None
 
 
 class _CallError(Exception):
@@ -91,22 +115,70 @@ def _call(opencode: str, cwd: Path, runner: Callable[..., Any], timeout: float) 
     return [a for a in data if isinstance(a, dict)]
 
 
+def _model_string(model: Any) -> str | None:
+    if not isinstance(model, dict):
+        return None
+    out = f"{model.get('providerID')}/{model.get('id')}"
+    return f"{out}#{model['variant']}" if model.get("variant") else out
+
+
+def _diff(
+    agents: dict[str, dict], expected: dict[str, Expected], home: str | None
+) -> tuple[list[str], dict[str, list[str]]]:
+    """Return (not-loaded errors, field mismatches per listed agent)."""
+    missing: list[str] = []
+    mismatched: dict[str, list[str]] = {}
+    for name, exp in expected.items():
+        loaded = agents.get(name)
+        if loaded is None:
+            missing.append(
+                f"{name}: not loaded by OpenCode — its agent file is likely malformed "
+                "or uses a key OpenCode rejects (e.g. a Copilot `tools:` list). "
+                "Run `carter update` to re-render it."
+            )
+            continue
+        errors: list[str] = []
+        if exp.description is not None and loaded.get("description") != exp.description:
+            errors.append(f"{name}: OpenCode reports a different description than the agent file.")
+        if exp.model is not None and _model_string(loaded.get("model")) != exp.model:
+            errors.append(
+                f"{name}: OpenCode reports model {_model_string(loaded.get('model'))!r}, "
+                f"the agent file sets {exp.model!r}."
+            )
+        effective = loaded.get("permissions")
+        if exp.rules is not None and isinstance(effective, list):
+            block = [_expand(r, home) for r in exp.rules if isinstance(r, dict)]
+            got = [_expand(r, None) for r in effective if isinstance(r, dict)]
+            if not _contains_block(got, block):
+                errors.append(
+                    f"{name}: effective OpenCode permissions do not contain the emitted "
+                    "`permissions:` rules in order after OpenCode's base rules."
+                )
+        if errors:
+            mismatched[name] = errors
+    return missing, mismatched
+
+
 def validate_agents(
     workspace: Path,
-    expected: dict[str, list[Rule] | None],
+    expected: Mapping[str, Expected | list[Rule] | None],
     *,
     runner: Callable[..., Any] = subprocess.run,
     which: Callable[[str], str | None] | None = None,
     sleep: Callable[[float], None] | None = None,
+    clock: Callable[[], float] = time.time,
     attempts: int = DEFAULT_ATTEMPTS,
     backoff: Sequence[float] = DEFAULT_BACKOFF,
     timeout: float = DEFAULT_TIMEOUT,
+    settle: float = DEFAULT_SETTLE,
+    newest_change: float | None = None,
     home: str | None = None,
 ) -> HarnessResult:
-    """Check that OpenCode loads every agent in ``expected`` with its emitted rules.
+    """Check that OpenCode loads every agent in ``expected`` as rendered.
 
-    ``expected`` maps agent id (file stem, suffix included) to its emitted
-    ``permissions:`` list, or ``None`` to check presence only.
+    ``expected`` maps agent id (file stem, suffix included) to an ``Expected``;
+    a bare rule list (or ``None``) checks permissions (or presence) only.
+    ``newest_change`` is the newest agent-file mtime (``clock`` time base).
     """
     opencode = (which or _which)("opencode")
     if not opencode:
@@ -116,10 +188,19 @@ def validate_agents(
             "(`opencode debug agents`).",
         )
     do_sleep = sleep or time.sleep
+    want = {k: v if isinstance(v, Expected) else Expected(rules=v) for k, v in expected.items()}
+
+    if newest_change is not None:
+        wait = settle - (clock() - newest_change)
+        if wait > 0:
+            do_sleep(min(wait, settle))
 
     agents: dict[str, dict] = {}
+    missing: list[str] = []
+    mismatched: dict[str, list[str]] = {}
     last_error: str | None = None
-    for attempt in range(max(1, attempts)):
+    tries = max(1, attempts)
+    for attempt in range(tries):
         if attempt:
             do_sleep(backoff[min(attempt - 1, len(backoff) - 1)] if backoff else 0)
         try:
@@ -130,33 +211,19 @@ def validate_agents(
         except _CallError as exc:
             last_error = str(exc)
             continue
-        if all(name in agents for name in expected):
-            break
+        missing, mismatched = _diff(agents, want, home)
+        if not missing and not mismatched:
+            return HarnessResult("ok")
 
     if last_error:
         return HarnessResult("fail", [last_error])
     if not agents:
         return HarnessResult(
-            "fail", [f"`opencode debug agents` listed no agents after {max(1, attempts)} attempts"]
+            "fail", [f"`opencode debug agents` listed no agents after {tries} attempts"]
         )
-
-    errors: list[str] = []
-    for name, rules in expected.items():
-        loaded = agents.get(name)
-        if loaded is None:
-            errors.append(
-                f"{name}: not loaded by OpenCode — its agent file is likely malformed "
-                "or uses a key OpenCode rejects (e.g. a Copilot `tools:` list). "
-                "Run `carter update` to re-render it."
-            )
-            continue
-        effective = loaded.get("permissions")
-        if rules is None or not isinstance(effective, list):
-            continue
-        block = [_expand(r, home) for r in rules if isinstance(r, dict)]
-        if not _contains_block([_expand(r, None) for r in effective if isinstance(r, dict)], block):
-            errors.append(
-                f"{name}: effective OpenCode permissions do not contain the emitted "
-                "`permissions:` rules in order after OpenCode's base rules."
-            )
-    return HarnessResult("fail" if errors else "ok", errors)
+    errors = list(missing)
+    if mismatched:
+        errors += [e for errs in mismatched.values() for e in errs]
+        names = ", ".join(mismatched)
+        errors.append(f"{STALE_HINT} (affects {names}; {tries} attempts made)")
+    return HarnessResult("fail", errors)
