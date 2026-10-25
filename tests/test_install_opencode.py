@@ -101,9 +101,17 @@ class TestInstallGate:
         assert result.exit_code == 2
         assert "No such option" in result.output and "--target" in result.output
 
+    def test_uninstall_flag_removed(self, fake_opencode, tmp_path: Path) -> None:
+        fake_opencode()
+        result = _install(tmp_path, "--uninstall")
+        assert result.exit_code == 2
+        assert "No such option" in result.output and "--uninstall" in result.output
+        assert not (tmp_path / "carter").exists()
+
     def test_uninstall_does_not_require_opencode(self, fake_opencode, tmp_path: Path) -> None:
         fake_opencode(None)
-        assert _install(tmp_path, "--uninstall").exit_code == 0
+        result = CliRunner().invoke(main, ["uninstall", "--base-dir", str(tmp_path)])
+        assert result.exit_code == 0, result.output
 
 
 class TestV2McpShape:
@@ -263,7 +271,7 @@ class TestUninstallV2:
         data["mcp"]["servers"]["mine"] = {"type": "remote", "url": "https://a"}
         cfg.write_text(json.dumps(data))
 
-        assert _install(base, "--uninstall").exit_code == 0
+        assert CliRunner().invoke(main, ["uninstall", "--base-dir", str(base)]).exit_code == 0
         mcp = json.loads(cfg.read_text())["mcp"]
         assert mcp == {"servers": {"mine": {"type": "remote", "url": "https://a"}}}
         assert not list((base / "opencode" / "agents").glob("carter-*.md"))

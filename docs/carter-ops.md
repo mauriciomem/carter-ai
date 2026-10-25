@@ -162,4 +162,4 @@ carter/ops/
 └── memories/       # created by the installer
 ```
 
-> **Legacy note:** earlier versions copied the executor to `~/.carter/ops/` and installed a `~/.local/bin/carter-ops` wrapper. `carter install --uninstall` still removes them if present.
+> **Legacy note:** earlier versions copied the executor to `~/.carter/ops/` and installed a `~/.local/bin/carter-ops` wrapper. Carter no longer touches them; if they are still present, delete them by hand (`rm -r ~/.carter/ops ~/.local/bin/carter-ops`).

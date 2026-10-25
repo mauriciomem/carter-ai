@@ -33,24 +33,22 @@ from carter.install.prereqs import (
     detect_environment,
     require_opencode,
 )
-from carter.install.uninstall import uninstall
 
 
 def run(
     mcp: bool = False,
     bot_name: str = "carter-bot",
-    uninstall_flag: bool = False,
     base_dir: Path | None = None,
     verbosity: int = 1,
     mcp_servers: list[str] | None = None,
 ) -> None:
-    """Run the Carter system-level install (or uninstall) for OpenCode.
+    """Run the Carter system-level install for OpenCode.
 
     Parameters mirror the ``carter install`` options. ``mcp_servers`` is the
     opt-in subset; ``None`` installs the full shipped set.
 
     Raises:
-        PrerequisiteError: OpenCode is missing or older than 2.1 (install only).
+        PrerequisiteError: OpenCode is missing or older than 2.1.
     """
     set_verbosity(verbosity)
 
@@ -60,10 +58,6 @@ def run(
     if mcp:
         _mcp_label = "yes" + (f" ({', '.join(mcp_servers)})" if mcp_servers else " (all)")
     _log(f" MCP servers: {_mcp_label}")
-
-    if uninstall_flag:
-        uninstall(base_dir)
-        return
 
     detect_environment()
     log_step("Checking prerequisites...")

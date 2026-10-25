@@ -52,7 +52,6 @@ def main() -> None:
     default="carter-bot",
     help="Git commit author name for carter-ops attribution.",
 )
-@click.option("--uninstall", "uninstall_flag", is_flag=True, help="Remove Carter installation.")
 @click.option(
     "--base-dir",
     type=click.Path(file_okay=False, path_type=Path),
@@ -66,7 +65,6 @@ def install(
     mcp: bool,
     mcp_servers: str | None,
     bot_name: str,
-    uninstall_flag: bool,
     base_dir: Path | None,
     quiet: bool,
     verbose: bool,
@@ -102,7 +100,6 @@ def install(
         run_install(
             mcp=mcp,
             bot_name=bot_name,
-            uninstall_flag=uninstall_flag,
             base_dir=base_dir,
             verbosity=verbosity,
             mcp_servers=servers,
