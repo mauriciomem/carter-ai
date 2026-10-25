@@ -1,7 +1,7 @@
-"""OpenCode-only installer behaviour (ADR-0014 phase 3).
+"""OpenCode-only installer behaviour.
 
-Covers the OpenCode >= 2.1 hard gate (D6), the V2 MCP shape, V1 entry migration,
-the Copilot-leftover warning (D7) and the removal of ``--target``.
+Covers the OpenCode >= 2.1 hard gate, the V2 MCP shape, V1 entry migration,
+the warning about Copilot-era leftovers and the removal of ``--target``.
 """
 
 from __future__ import annotations
@@ -140,11 +140,23 @@ class TestV2McpShape:
             "url": "https://mcp.atlassian.com/v2/mcp",
         }
 
-    def test_manifest_lists_wired_servers(self, tmp_path: Path) -> None:
+    def test_default_wires_the_shipped_triple(self, tmp_path: Path) -> None:
+        """Omitting the selection wires all servers. Per-agent MCP scope lives in agent
+        frontmatter, so the global wiring has exactly the server keys, no role keys."""
+        manifest: dict = {}
+        configure_mcp_servers(tmp_path, manifest, tmp_path / "backup")
+        triple = ["carter-github", "carter-terraform", "carter-atlassian"]
+        assert manifest["mcp_servers"] == triple
+        servers = json.loads((tmp_path / "opencode" / "opencode.json").read_text())["mcp"]
+        assert set(servers["servers"]) == set(triple)
+
+    def test_subset_wires_only_selected(self, tmp_path: Path) -> None:
+        """An unselected server adds zero tool-schema tokens."""
         manifest: dict = {}
         count = configure_mcp_servers(tmp_path, manifest, servers=["github"])
         assert count == 1
         assert manifest["mcp_servers"] == ["carter-github"]
+        assert set(self._wire(tmp_path, ["github"])["mcp"]["servers"]) == {"carter-github"}
 
     def test_unknown_server_rejected(self, tmp_path: Path) -> None:
         with pytest.raises(ValueError, match="bogus"):

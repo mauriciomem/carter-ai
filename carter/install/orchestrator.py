@@ -110,11 +110,10 @@ def run(
     manifest_path = write_manifest(manifest, base_dir)
 
     total_agents = agent_stats["created"] + agent_stats["updated"] + agent_stats["unchanged"]
-    total_skills = skill_stats["created"] + skill_stats["updated"] + skill_stats["unchanged"]
 
     _log(f"\n{green('✓')} {bold('Installation complete')}")
     _log(f"  Agents: {total_agents}")
-    _log(f"  Skills: {total_skills}")
+    _log(f"  Skills: {skill_stats['skills']}")
     _log(f"  Ops config: {'created' if ops_created else 'kept'}")
     _log(f"  MCP servers: {mcp_count}")
     _log(f"  Knowledge files: {knowledge_count} new")

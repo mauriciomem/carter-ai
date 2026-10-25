@@ -1,7 +1,7 @@
 """Unit tests for eval metrics normalization (key-free, offline).
 
 Verifies that EvalMetrics.from_response extracts a uniform metrics shape from each
-provider's response (copilot/openai use `prompt_tokens`/`completion_tokens`;
+provider's response (openai uses `prompt_tokens`/`completion_tokens`;
 anthropic uses `input_tokens`/`output_tokens`), and that cost is computed when the
 model is priced and is None otherwise.
 """
@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from evals.metrics import EvalMetrics, from_response
 
-# OpenAI-compatible shape (GitHub Copilot + OpenAI both use this).
+# OpenAI-compatible shape.
 _OPENAI_RAW = {
     "model": "gpt-4o",
     "usage": {"prompt_tokens": 100, "completion_tokens": 50, "total_tokens": 150},
@@ -29,11 +29,6 @@ def test_openai_shape_normalizes():
     m = from_response("openai", _OPENAI_RAW, latency_s=1.5)
     assert (m.prompt_tokens, m.completion_tokens, m.total_tokens) == (100, 50, 150)
     assert m.latency_s == 1.5
-
-
-def test_copilot_shape_normalizes():
-    m = from_response("copilot", _OPENAI_RAW, latency_s=0.9)
-    assert (m.prompt_tokens, m.completion_tokens, m.total_tokens) == (100, 50, 150)
 
 
 def test_anthropic_shape_normalizes_and_sums_total():

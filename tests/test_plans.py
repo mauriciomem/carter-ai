@@ -1,8 +1,8 @@
-"""Tests for carter.plans — the ADR-0003 plan frontmatter validator.
+"""Tests for carter.plans — the plan frontmatter validator.
 
-The validator enforces the contract in docs/reference/frontmatter.md (D6):
+The validator enforces the contract in docs/reference/frontmatter.md:
 required keys, status/push_policy enums, id↔directory match, must_haves shape,
-the O6 rule (an ``active`` plan must declare >= 1 must_haves entry), and the
+the active-plan rule (an ``active`` plan must declare >= 1 must_haves entry), and the
 configurable size/step thresholds.
 """
 

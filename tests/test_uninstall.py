@@ -129,3 +129,13 @@ def test_old_manifest_without_hashes(installed: Path) -> None:
     assert know.exists()
     assert _agents_md(installed).exists()
     assert not agent.exists()
+
+
+def test_install_summary_counts_skill_directories(
+    base_dir: Path, fake_opencode, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """The summary counts skills (directories), not the files inside them."""
+    fake_opencode()
+    orchestrator.run(base_dir=base_dir, verbosity=1)
+    shipped = sum(1 for d in (paths.REPO_ROOT / "skills").iterdir() if (d / "SKILL.md").exists())
+    assert f"  Skills: {shipped}\n" in capsys.readouterr().out

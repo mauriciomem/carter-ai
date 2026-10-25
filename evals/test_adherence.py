@@ -1,11 +1,11 @@
-"""Implementer-adherence eval (ADR-0010 D9).
+"""Implementer-adherence eval.
 
 The reliability backstop for the cheap-tier (Sonnet 4.6) implementer default. It runs
 the implementer against a thinker-produced plan with real `must_haves` (named file
 paths, acceptance checks, step-level instructions) and grades adherence: the fraction
 of must_haves satisfied + whether any CRITICAL step was missed.
 
-Pass-bar (D9): >= 90% of must_haves satisfied AND 0 critical-step failures.
+Pass-bar: >= 90% of must_haves satisfied AND 0 critical-step failures.
 
 Cadence (NOT per-PR live): the LIVE run (test_adherence_live.py / the weekly cron) hits
 the billed API; THIS file replays a RECORDED transcript fixture for determinism, so the
@@ -59,7 +59,7 @@ def recorded_transcript() -> str:
 
 
 class TestScenarioShape:
-    """The thinker-produced plan must carry the executable shape D9 fixes at the Opus bar."""
+    """The thinker-produced plan must carry the executable shape fixed at the Opus bar."""
 
     def test_scenario_has_plan_with_named_files(self, scenario: dict) -> None:
         plan = scenario["plan"]
@@ -75,7 +75,7 @@ class TestScenarioShape:
         assert scenario["acceptance"], "plan must carry hard acceptance checks"
 
     def test_doc_quality_contract_is_stated(self, scenario: dict) -> None:
-        # D9: the doc-quality contract is part of the eval (docs stay at the Opus bar).
+        # The doc-quality contract is part of the eval (docs stay at the Opus bar).
         assert "Opus bar" in scenario["doc_quality_contract"]
 
 
@@ -126,7 +126,7 @@ class TestGrader:
 
 class TestRecordedFixtureClearsTheBar:
     """The recorded Sonnet 4.6 run must clear >=90% must_haves + 0 critical failures —
-    the empirical evidence the cheap-tier default is shippable (D9). This is the
+    the empirical evidence the cheap-tier default is shippable. This is the
     deterministic, offline, per-PR-safe replay.
     """
 

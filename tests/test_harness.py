@@ -1,4 +1,4 @@
-"""Harness validation for ``carter check`` (ADR-0014 D6).
+"""Harness validation for ``carter check``.
 
 ``carter check`` runs ``opencode debug agents`` (JSON list on OpenCode 2.1.4) and
 verifies every rendered Carter agent was loaded, with its emitted ``permissions:``
@@ -182,7 +182,9 @@ def _loaded(ws: Path, drop: str | None = None) -> str:
     import yaml
 
     agents = []
-    for f in sorted((ws / ".opencode" / "agents").glob("*.md")):
+    files = sorted((ws / ".opencode" / "agents").glob("*.md"))
+    assert files, f"no agents rendered in {ws}"
+    for f in files:
         if f.stem == drop:
             continue
         rules = yaml.safe_load(f.read_text().split("---", 2)[1])["permissions"]

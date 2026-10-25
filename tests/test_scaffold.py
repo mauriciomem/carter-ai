@@ -648,7 +648,7 @@ class TestNarrator:
 
 class TestRenderDiscovery:
     """`carter init`/`update` must write agents and instructions to the paths the
-    tools actually discover: .opencode/agents/ + AGENTS.md (ADR-0014: OpenCode only).
+    tools actually discover: .opencode/agents/ + AGENTS.md (OpenCode only).
     skip-if-exists.
     """
 
@@ -800,7 +800,7 @@ class TestAgentSuffix:
         assert agent_filename("engineer", cfg) == "carter-engineer-demo.md"
 
 
-# ─── Policy gate table + notice + redaction handoff (P2 / ADR-0010 D4/D5) ──────
+# ─── Policy gate table + notice + redaction handoff ───────────────────────────
 
 
 class TestPolicyGateTable:
@@ -843,7 +843,7 @@ class TestPolicyGateTable:
     def test_missing_policy_defaults_guarded(self):
         from carter.config import policy_gate_table
 
-        # ADR-0010 D3: an absent policy block resolves to guarded (the floor).
+        # An absent policy block resolves to guarded (the floor).
         gates = {r["category"]: r["gate"] for r in policy_gate_table({})}
         assert gates["remote-write"] == "ask"
         assert gates["dangerous"] == "gate"
@@ -876,7 +876,7 @@ class TestMaestroPolicyTable:
 
 
 class TestPolicyNotice:
-    """`policy_notice` surfaces the active-level notice. ADR-0010 D3: both shipped
+    """`policy_notice` surfaces the active-level notice. Both shipped
     levels enforce gates, so the notice always fires (no quiet advisory level)."""
 
     def test_notice_fires_for_guarded(self):
@@ -897,8 +897,8 @@ class TestPolicyNotice:
 
 
 class TestNarratorRedactionHandoff:
-    """The narrator template wires the redaction handoff (ADR-0010 D5; prompt-level
-    guidance, not harness-enforced per ADR-0014 D2): narrator drafts + redacts locally,
+    """The narrator template wires the redaction handoff (prompt-level
+    guidance, not harness-enforced): narrator drafts + redacts locally,
     devops (sole remote-write holder) transmits. No R6 overlay; narrator is first-class."""
 
     def test_narrator_describes_devops_transmit_handoff(self):
@@ -908,11 +908,11 @@ class TestNarratorRedactionHandoff:
         assert "devops" in body
         assert "transmit" in body
         assert "redaction handoff" in body
-        assert "gate`-tier" not in body  # not harness-enforced (ADR-0014 D2)
+        assert "gate`-tier" not in body  # not harness-enforced
         assert "remote-write" in body  # narrator does not hold it
 
     def test_maestro_encodes_redaction_handoff(self):
-        # ADR-0010 D5: substantive outward content is a narrator redaction handoff
+        # Substantive outward content is a narrator redaction handoff
         # routed to devops to transmit; one-liners = ask + inline check. No R6 overlay.
         cfg = generate_default_config()
         cfg["agent_suffix"] = ""
@@ -924,7 +924,7 @@ class TestNarratorRedactionHandoff:
         assert "R6 overlay" not in body and "external-publish" not in body
 
     def test_force_pass_is_decoupled_from_r6(self):
-        # ADR-0010 D5.2: the guarded/strict forced redaction pass is retained and
+        # The guarded/strict forced redaction pass is retained and
         # independent of the dropped R6 — it hangs off policy.level, not a category.
         cfg = generate_default_config()
         cfg["agent_suffix"] = ""
@@ -989,25 +989,13 @@ class TestInitFlags:
 _ALL_ROLES = ["maestro", "architect", "engineer", "devops", "pm", "learner", "narrator", "security"]
 
 
-# ─── Rendered V2 frontmatter (ADR-0014 D1/D5) ──────────────────────────────
+# ─── Rendered V2 frontmatter ─────────────────────────────────────────────────
 # The rule-order contract itself lives in tests/test_policy_lint.py.
 
 
 class TestPolicyRenderedIntegration:
-    """Rendered agents carry V2 ``permissions:`` and no ``carter:policy`` comment."""
-
-    def test_rendered_frontmatter_is_v2(self, env, default_config):
-        rendered = render_agents(default_config, env)
-        assert rendered
-        for name, content in rendered.items():
-            assert content.startswith("---\n"), f"{name}: no frontmatter"
-            _, fm, body = content.split("---", 2)
-            data = yaml.safe_load(fm)
-            assert data["description"], f"{name}: lost description"
-            assert data["mode"], f"{name}: lost mode"
-            assert isinstance(data["permissions"], list), name
-            assert "policy" not in data and "permission" not in data, name
-            assert "carter:policy" not in body, name
+    """Strict policy reaches the rendered frontmatter. The V2 shape of every
+    rendered agent is checked in tests/test_parity.py."""
 
     def test_strict_devops_denies_dangerous(self, env, default_config):
         default_config["policy"]["level"] = "strict"
@@ -1017,37 +1005,9 @@ class TestPolicyRenderedIntegration:
         assert rules[-1]["effect"] == "deny"
 
 
-class TestConfigureMcpServersUnchanged:
-    """Per-agent MCP scope lives in agent frontmatter, NOT the global wiring."""
-
-    def _wire(self, tmp_path, servers=None):
-        from carter.install.mcp import configure_mcp_servers
-
-        manifest: dict = {}
-        configure_mcp_servers(tmp_path, manifest, tmp_path / "backup", servers=servers)
-        cfg = json.loads((tmp_path / "opencode" / "opencode.json").read_text())
-        return manifest, cfg["mcp"]["servers"]
-
-    def test_global_server_set_is_the_shipped_triple(self, tmp_path):
-        manifest, servers = self._wire(tmp_path)
-        assert manifest["mcp_servers"] == ["carter-github", "carter-terraform", "carter-atlassian"]
-        assert {"carter-github", "carter-terraform", "carter-atlassian"} <= set(servers)
-
-    def test_no_per_agent_dimension_in_global_wiring(self, tmp_path):
-        _, servers = self._wire(tmp_path)
-        for role in _ALL_ROLES:
-            assert role not in servers
-
-
 class TestMcpServerOptIn:
-    """`configure_mcp_servers` installs only the servers a workspace selects; an
-    unused server adds zero tool-schema tokens. Omitting the selection installs all.
-    """
-
-    def test_subset_wires_only_selected(self, tmp_path):
-        manifest, servers = TestConfigureMcpServersUnchanged()._wire(tmp_path, ["github"])
-        assert set(servers) == {"carter-github"}
-        assert manifest["mcp_servers"] == ["carter-github"]
+    """`carter install --mcp-servers` wires only the selected servers (the
+    function-level wiring is covered in tests/test_install_opencode.py)."""
 
     def test_cli_mcp_servers_subset(self, tmp_path, fake_opencode):
         from click.testing import CliRunner

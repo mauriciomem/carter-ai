@@ -1,19 +1,19 @@
 # ──────────────────────────────────────────────────────────────────────────────
-# Implementer-adherence scenario (ADR-0010 D9)
+# Implementer-adherence scenario
 # ──────────────────────────────────────────────────────────────────────────────
 # A thinker-produced plan (the kind an Opus-tier agent authors) handed to the cheaper
 # Sonnet 4.6 implementer tier. The eval grades how faithfully the implementer executes
 # it: the fraction of `must_haves` satisfied + whether any CRITICAL step (a named-file
 # touch, an acceptance check, or a load-bearing intent) was missed.
 #
-# Pass-bar (D9): >= 90% of must_haves satisfied AND 0 critical-step failures. Below the
+# Pass-bar: >= 90% of must_haves satisfied AND 0 critical-step failures. Below the
 # bar = a regression in EITHER the model tier OR the doc quality — the eval catches both
 # and gates keeping/shipping the cheap tier as default.
 #
 # The plan deliberately carries the precise, executable shape the thinker templates
 # enforce (named file paths, acceptance checks, step-level instructions) — the
-# documentation-quality contract stays at the Opus bar regardless of which model executes
-# (D9). Grading evidence is text-pattern based so the recorded transcript replays
+# documentation-quality contract stays at the Opus bar regardless of which model executes.
+# Grading evidence is text-pattern based so the recorded transcript replays
 # deterministically offline (no live API on the PR gate).
 
 - name: implementer_adherence_token_bucket

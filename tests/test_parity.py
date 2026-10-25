@@ -2,14 +2,13 @@
 
 Carter's agents have a single source, ``templates/agents/carter-*.md.j2``, rendered
 by ``carter install`` (global, no suffix) and ``carter init`` / ``carter update``
-(workspace). The static ``agents/`` tree was deleted in ADR-0014 phase 5; tests
-that once checked it now check the rendered output (``rendered_agents_dir``).
+(workspace). There is no static agent tree; tests check the rendered output
+(``rendered_agents_dir``) and the templates.
 
 These tests lock the security- and structure-critical contracts, including the
-YAML frontmatter (``description``/``mode``) (ADR-0002). ``temperature`` is NOT
-emitted (ADR-0010 D7 — dead-or-rejected on every model Carter pins;
-effort/temperature are runtime-owned). This is the phase-1 guardrail from
-ADR-0002 (single-source agent generation).
+YAML frontmatter (``description``/``mode``). ``temperature`` is NOT emitted (it is
+ignored or rejected by every model Carter pins; effort/temperature are
+runtime-owned).
 """
 
 from __future__ import annotations
@@ -49,21 +48,24 @@ def _parse_frontmatter(text: str) -> dict:
 @pytest.fixture
 def rendered_agents_dir(tmp_path: Path) -> Path:
     """Agents rendered from the templates with the default config — exactly what
-    ``carter install`` / ``carter init`` write (the static ``agents/`` tree is gone,
-    ADR-0014 phase 5)."""
+    ``carter install`` / ``carter init`` write."""
     out = tmp_path / "rendered-agents"
     out.mkdir()
     cfg = generate_default_config()
     cfg["agent_suffix"] = ""  # as `carter install` renders the global agents
     for name, content in render_agents(cfg, create_env()).items():
         (out / name).write_text(content)
+    # Every per-agent loop below would pass vacuously over an empty directory.
+    assert any(out.glob("carter-*.md")), "no agents rendered"
     return out
 
 
 @pytest.fixture
 def template_agents_dir(repo_root: Path) -> Path:
     """Jinja agent templates rendered by ``carter init`` / ``update``."""
-    return repo_root / "templates" / "agents"
+    path = repo_root / "templates" / "agents"
+    assert any(path.glob("carter-*.md.j2")), f"no agent templates in {path}"
+    return path
 
 
 class TestAgentSourceParity:
@@ -72,7 +74,7 @@ class TestAgentSourceParity:
     def test_rendered_and_template_agent_sets_match(
         self, rendered_agents_dir: Path, template_agents_dir: Path
     ) -> None:
-        """Guards the ADR-0001 drift: the narrator once had a template but no
+        """Guards a past drift: the narrator once had a template but no
         static file, so ``carter install`` silently shipped 6 agents instead of 7.
         """
         rendered = {p.stem for p in rendered_agents_dir.glob("carter-*.md")}
@@ -102,19 +104,19 @@ class TestAgentSourceParity:
 
 
 class TestNoRunSubagentFiction:
-    """ADR-0010 D1/D8: ``runSubagent`` is a fiction — it exists on no target. It
-    drifted back once before (the rendered maestro said ``runSubagent`` while the
-    template said "chain sequentially", S3), so lock its absence across BOTH
-    sources and the routing skill. Native dispatch (``agent``/``agents:``/
-    ``permission.task``) is P3; here we only assert the fiction is gone.
+    """``runSubagent`` is not a real tool; OpenCode dispatches through ``subagent``.
+    It drifted back once before (the rendered maestro said ``runSubagent`` while the
+    template said "chain sequentially"), so lock its absence in both the rendered
+    agents (with and without a name suffix) and the templates.
     """
 
-    def test_no_runsubagent_in_rendered_agents(self, rendered_agents_dir: Path) -> None:
-        offenders = [
-            p.name
-            for p in sorted(rendered_agents_dir.glob("carter-*.md"))
-            if "runSubagent" in p.read_text()
-        ]
+    @pytest.mark.parametrize("suffix", ["", "local"])
+    def test_no_runsubagent_in_rendered_agents(self, suffix: str) -> None:
+        cfg = generate_default_config()
+        cfg["agent_suffix"] = suffix
+        rendered = render_agents(cfg, create_env())
+        assert rendered, "no agents rendered"
+        offenders = [name for name, content in rendered.items() if "runSubagent" in content]
         assert not offenders, f"rendered agents still cite the runSubagent fiction: {offenders}"
 
     def test_no_runsubagent_in_agent_templates(self, template_agents_dir: Path) -> None:
@@ -127,9 +129,9 @@ class TestNoRunSubagentFiction:
 
 
 class TestNoTemperatureEmission:
-    """ADR-0010 D7: ``temperature`` is dropped wholesale — VS Code ignores it,
-    OpenCode accepts it syntactically but every pinned Anthropic model rejects it
-    at the API. Neither static source nor template may emit it in frontmatter.
+    """``temperature`` is dropped wholesale — OpenCode accepts it syntactically but
+    every pinned Anthropic model rejects it at the API. Neither rendered agents nor
+    templates may emit it in frontmatter.
     """
 
     def test_no_temperature_in_rendered_frontmatter(self, rendered_agents_dir: Path) -> None:
@@ -138,7 +140,7 @@ class TestNoTemperatureEmission:
             for p in sorted(rendered_agents_dir.glob("carter-*.md"))
             if "temperature" in _parse_frontmatter(p.read_text())
         ]
-        assert not offenders, f"rendered agents still emit temperature (ADR-0010 D7): {offenders}"
+        assert not offenders, f"rendered agents still emit temperature: {offenders}"
 
     def test_no_temperature_in_agent_templates(self, template_agents_dir: Path) -> None:
         offenders = [
@@ -146,14 +148,13 @@ class TestNoTemperatureEmission:
             for p in sorted(template_agents_dir.glob("carter-*.md.j2"))
             if "temperature:" in p.read_text()
         ]
-        assert not offenders, f"agent templates still emit temperature (ADR-0010 D7): {offenders}"
+        assert not offenders, f"agent templates still emit temperature: {offenders}"
 
 
 class TestSubagentContextRule:
-    """ADR-0010 D1.D2 (kept under ADR-0014): delegated subagents do NOT inherit chat
-    history, so the maestro must inline the active plan, relevant knowledge and the
-    acceptance check into every delegated prompt. The Copilot ``/fleet`` wording is
-    gone (ADR-0014 phase 5)."""
+    """Delegated subagents do NOT inherit chat history, so the maestro must inline
+    the active plan, relevant knowledge and the acceptance check into every
+    delegated prompt. Orchestration wording from other harnesses must stay out."""
 
     def test_rendered_maestro_has_context_injection_rule(self, rendered_agents_dir: Path) -> None:
         lower = (rendered_agents_dir / "carter-maestro.md").read_text().lower()
@@ -169,8 +170,7 @@ class TestSubagentContextRule:
                 assert marker not in text, f"{agent.name} still carries {marker!r}"
 
 
-# Skills each rendered agent must advertise (migrated from the deleted static
-# ``agents/`` tree, ADR-0014 phase 5).
+# Skills each rendered agent must advertise.
 EXPECTED_SKILLS = {
     "architect": ("carter-design-review", "carter-diagram", "carter-adr", "carter-rfc"),
     "devops": (
@@ -234,7 +234,7 @@ class TestMigratedAgentContent:
 
 
 class TestMaestroInjectionGuard:
-    """ADR-0011 non-regression: giving the maestro read tools means it now opens
+    """Non-regression: giving the maestro read tools means it now opens
     untrusted files directly, so its prompt-injection posture is MORE load-bearing.
     Both maestro sources MUST keep asserting that file contents are data to analyze,
     never instructions to act on (the stance the maestro correctly took when asked to
@@ -325,37 +325,27 @@ class TestNarratorParity:
 
 
 class TestRenderedFrontmatterParity:
-    """Templates must render install-ready frontmatter matching the static files.
+    """Templates must render install-ready frontmatter.
 
-    This is the ADR-0002 scaffold-bug fix: ``carter init`` previously produced
-    agents with no frontmatter, dropping the ``description`` OpenCode requires and
-    the ``mode`` the runtimes honor. ``temperature`` is dropped entirely (ADR-0010
-    D7) — it must NOT appear in any emitted frontmatter.
+    ``carter init`` once produced agents with no frontmatter, dropping the
+    ``description`` OpenCode requires and the ``mode`` the runtimes honor.
     """
 
-    def test_rendered_agents_have_valid_frontmatter(self) -> None:
+    def test_rendered_frontmatter_is_v2_native(self) -> None:
+        """Rendered frontmatter carries exactly the V2 keys Carter generates
+        (``description``/``mode``/``model``/``permissions``): no V1 key (``permission``,
+        ``tools``, ``temperature``…), no ``policy`` key, and no ``carter:policy``
+        comment anywhere in the file."""
         cfg = generate_default_config(workspace_name="parity", mode="single")
+        cfg["agent_suffix"] = ""
         rendered = render_agents(cfg, create_env())
         assert rendered, "no agents rendered"
         for name, content in rendered.items():
-            fm = _parse_frontmatter(content)
-            assert fm.get("description"), f"{name}: rendered without a description"
-            assert fm.get("mode"), f"{name}: rendered without a mode"
-            assert "temperature" not in fm, (
-                f"{name}: emits temperature (dropped wholesale, ADR-0010 D7)"
-            )
-
-    def test_rendered_frontmatter_is_v2_native(self) -> None:
-        """ADR-0014 D1/D5: rendered frontmatter carries exactly the V2 keys Carter
-        generates (``description``/``mode``/``model``/``permissions``), never a V1
-        key and never the old policy comment. The static Copilot-shaped ``agents/``
-        tree is NOT compared any more (deleted in a later phase)."""
-        cfg = generate_default_config(workspace_name="parity", mode="single")
-        cfg["agent_suffix"] = ""
-        for name, content in render_agents(cfg, create_env()).items():
             role = name.removeprefix("carter-").removesuffix(".md")
             fm = _parse_frontmatter(content)
             assert set(fm) == {"description", "mode", "model", "permissions"}, name
+            assert fm["description"], f"{name}: rendered without a description"
+            assert isinstance(fm["permissions"], list) and fm["permissions"], name
             native = policy_native_keys(cfg, role)
             assert fm["permissions"] == native["permissions"], name
             assert fm["model"] == native["model"], name
@@ -380,7 +370,7 @@ class TestRenderedFrontmatterParity:
 
 
 class TestNoFalseReadOnlyClaim:
-    """ADR-0005 D5: the shared full-scope MCP token makes a 'read-only' claim a
+    """The shared full-scope MCP token makes a 'read-only' claim a
     false guarantee. Neither the rendered agents nor their templates may assert it
     in prose — actual tool scoping is enforced by the strictness-policy emission,
     not promised in the body. Closes the frontmatter-parity gap:
@@ -394,7 +384,7 @@ class TestNoFalseReadOnlyClaim:
             if "read-only" in p.read_text().lower()
         ]
         assert not offenders, (
-            f"rendered agents still claim 'read-only' (false guarantee, ADR-0005 D5): {offenders}"
+            f"rendered agents still claim 'read-only' (false guarantee): {offenders}"
         )
 
     def test_no_agent_template_claims_read_only(self, template_agents_dir: Path) -> None:
@@ -404,16 +394,16 @@ class TestNoFalseReadOnlyClaim:
             if "read-only" in p.read_text().lower()
         ]
         assert not offenders, (
-            f"agent templates still claim 'read-only' (false guarantee, ADR-0005 D5): {offenders}"
+            f"agent templates still claim 'read-only' (false guarantee): {offenders}"
         )
 
 
 class TestProseMatchesAllowlist:
     """The inverse of the read-only bug: an agent whose allowlist lacks
     ``remote-write`` must not claim 'Full access' in its Tool Access prose. On a
-    non-enforcing target the advisory prose wins, so an over-claim would let a
+    non-enforcing harness the advisory prose wins, so an over-claim would let a
     non-pusher remote-write — breaking the single-pusher invariant (only devops
-    holds ``remote-write``). ADR-0005 D1/D4; ADR-0010 D4.
+    holds ``remote-write``).
     """
 
     def test_non_pusher_agents_dont_claim_full_access(self, rendered_agents_dir: Path) -> None:
@@ -426,49 +416,47 @@ class TestProseMatchesAllowlist:
                 offenders.append(agent.name)
         assert not offenders, (
             "non-pusher agents claim 'Full access' (prose over-claims remote-write the "
-            f"allowlist denies, ADR-0005 D1/D4 / ADR-0010 D4): {offenders}"
+            f"allowlist denies): {offenders}"
         )
 
 
 class TestRenderedBodyParity:
-    """Body-prose invariants of the rendered agents (ADR-0005 D6 / ADR-0010 D5).
-    The static tree's Copilot-shaped frontmatter is no longer checked (ADR-0014;
-    the tree is deleted in a later phase)."""
+    """Body-prose invariants of the rendered agents."""
 
     def test_rendered_maestro_carries_policy_gate_table(self, rendered_agents_dir: Path) -> None:
         """The global rendered maestro body must carry the always-on policy gate table
-        (ADR-0005 D6) and the narrator -> devops redaction handoff (ADR-0010 D5;
-        prompt-level per ADR-0014 D2) — frontmatter parity can't catch a body relapse."""
+        and the narrator -> devops redaction handoff (prompt-level guidance) —
+        frontmatter parity can't catch a body relapse."""
         body = (rendered_agents_dir / "carter-maestro.md").read_text()
         assert "Strictness Policy" in body
         assert "remote-write" in body  # a 4-category taxonomy row is present
         assert "dangerous" in body
         # Redaction handoff (no R6 overlay): substantive outward content routes
-        # narrator -> devops. Prompt-level guidance, not harness-enforced (ADR-0014 D2).
+        # narrator -> devops. Prompt-level guidance, not harness-enforced.
         assert "redaction handoff" in body
         assert "gate`-tier" not in body
         assert "carter-narrator" in body and "carter-devops" in body
 
     def test_rendered_narrator_carries_redaction_handoff(self, rendered_agents_dir: Path) -> None:
         """The global rendered narrator body must wire the author/transmit
-        handoff (ADR-0010 D5) — narrator authors + redacts, devops
+        handoff — narrator authors + redacts, devops
         transmits as the sole remote-write holder."""
         body = (rendered_agents_dir / "carter-narrator.md").read_text().lower()
         assert "transmit" in body
         assert "devops" in body
         assert "remote-write" in body  # narrator does NOT hold it; devops does
         assert "redaction handoff" in body
-        assert "gate`-tier" not in body  # not harness-enforced (ADR-0014 D2)
+        assert "gate`-tier" not in body  # not harness-enforced
 
 
 class TestTemplateRenderedBlockParity:
-    """Every named content block a template defines must exist in the matching
-    static file (ADR-0002 dual-source drift guard). Byte-equality is NOT asserted
+    """Every named content block a template defines must exist in the rendered
+    agent. Byte-equality is NOT asserted
     — section presence is. Drift class: rendered maestro shipped without
     session_bootstrap/quality_gate/knowledge_capture and rendered engineer without
     tdd_workflow while the templates had them (found 2026-08-01)."""
 
-    # block name -> a literal marker string that must appear in the static file
+    # block name -> a literal marker string that must appear in the rendered agent
     MAESTRO_BLOCKS = {
         "session_bootstrap": "<session_bootstrap>",
         "quality_gate": "<quality_gate>",
@@ -487,22 +475,22 @@ class TestTemplateRenderedBlockParity:
             assert marker in text, f"rendered engineer missing template block {block}"
 
     def test_rendered_maestro_carries_communication_block(self, rendered_agents_dir):
-        """The dual-register communication block is MAESTRO-ONLY (maintainer
-        decision D8, superseding D1-amended): the human-facing registers matter
+        """The dual-register communication block is MAESTRO-ONLY (a maintainer
+        decision): the human-facing registers matter
         where a human is actually talking, and subagents keep the global baseline
         from the global AGENTS.md §Communication."""
         text = (rendered_agents_dir / "carter-maestro.md").read_text()
         assert "<communication>" in text, "rendered maestro missing the communication block"
 
     def test_rendered_subagents_do_not_carry_communication_block(self, rendered_agents_dir):
-        """Inverse of the above — locks D8 so the block cannot silently drift back
+        """Inverse of the above — locks the decision so the block cannot silently drift back
         into the 7 subagents (it would cost ~570 tokens per subagent invocation)."""
         offenders = [
             p.name
             for p in sorted(rendered_agents_dir.glob("carter-*.md"))
             if p.stem != "carter-maestro" and "<communication>" in p.read_text()
         ]
-        assert not offenders, f"communication block leaked into subagents (D8): {offenders}"
+        assert not offenders, f"communication block leaked into subagents: {offenders}"
 
     def test_rendered_communication_block_is_maestro_only(self):
         """Same invariant over rendered output."""
@@ -516,4 +504,4 @@ class TestTemplateRenderedBlockParity:
             if name == "carter-maestro.md":
                 assert has_block, f"{name}: maestro rendered without the block"
             else:
-                assert not has_block, f"{name}: block leaked into a subagent (D8)"
+                assert not has_block, f"{name}: block leaked into a subagent"

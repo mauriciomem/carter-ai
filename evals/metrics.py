@@ -1,6 +1,6 @@
 """Eval metrics — normalize token usage / latency / cost across providers.
 
-The live-eval providers (GitHub Copilot, OpenAI, Anthropic) already RETURN a
+The live-eval providers (OpenAI, Anthropic) already RETURN a
 `usage` block on every response; historically the harness discarded it. This module
 normalizes those differing shapes into a single ``EvalMetrics`` record and computes
 an estimated USD cost from a small per-model price table.
@@ -25,12 +25,8 @@ DEFAULT_MODEL = "claude-sonnet-5-5"
 # TODO: add the Claude 5.5 family once its pricing is confirmed; until then a 5.5 run
 # reports cost_usd None rather than a guessed figure.
 PRICE_PER_1M: dict[str, tuple[float, float]] = {
-    "claude-opus-4-8": (5.0, 25.0),
-    "claude-sonnet-5": (2.0, 10.0),
-    "claude-sonnet-4-6": (3.0, 15.0),  # kept: the recorded adherence fixture is a 4.6 transcript
-    "claude-haiku-4-5": (1.0, 5.0),
-    "gpt-4o": (2.5, 10.0),
-    "gpt-4o-mini": (0.15, 0.60),
+    "claude-sonnet-4-6": (3.0, 15.0),  # the recorded adherence fixtures are 4.6 transcripts
+    "gpt-4o": (2.5, 10.0),  # the documented OpenAI live-eval example
 }
 
 # Models already warned about (warn once per model per run, not per call).
@@ -66,7 +62,7 @@ def _cost(model: str, prompt_tokens: int, completion_tokens: int) -> float | Non
 def from_response(provider: str, raw: dict[str, Any], latency_s: float) -> EvalMetrics:
     """Normalize a raw provider response into ``EvalMetrics``.
 
-    - copilot / openai: ``usage.prompt_tokens`` / ``completion_tokens`` / ``total_tokens``.
+    - openai: ``usage.prompt_tokens`` / ``completion_tokens`` / ``total_tokens``.
     - anthropic: ``usage.input_tokens`` / ``output_tokens`` (total = their sum).
 
     ``cost_usd`` is computed from ``raw["model"]`` against ``PRICE_PER_1M`` (None if
@@ -77,7 +73,7 @@ def from_response(provider: str, raw: dict[str, Any], latency_s: float) -> EvalM
         prompt = int(usage.get("input_tokens", 0))
         completion = int(usage.get("output_tokens", 0))
         total = prompt + completion
-    else:  # copilot / openai (OpenAI-compatible)
+    else:  # openai (OpenAI-compatible)
         prompt = int(usage.get("prompt_tokens", 0))
         completion = int(usage.get("completion_tokens", 0))
         total = int(usage.get("total_tokens", prompt + completion))

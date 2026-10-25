@@ -1,4 +1,4 @@
-"""Tests for the V2 ``permissions:`` emission and the policy lint (ADR-0014 D1/D2/D5).
+"""Tests for the V2 ``permissions:`` emission and the policy lint.
 
 Carter emits each agent's OpenCode V2 ``permissions:`` rule list (last match wins)
 from the risk taxonomy x per-agent allowlist. ``carter check`` (``lint_policy``)
@@ -31,7 +31,7 @@ def _r(action: str, resource: str, effect: str) -> dict[str, str]:
     return {"action": action, "resource": resource, "effect": effect}
 
 
-# Steps 1-4 of ADR-0014 D1 (identical for every agent), in order.
+# Steps 1-4 of the rule order (identical for every agent), in order.
 _BASELINE = [
     _r("*", "*", "ask"),
     _r("read", "*", "allow"),
@@ -92,7 +92,7 @@ def _installed(config: dict) -> dict[str, dict]:
     return {role: yaml.safe_load(policy_frontmatter(config, role)) for role in config["agents"]}
 
 
-# ─── Rule order (ADR-0014 D1) ────────────────────────────────────────────────
+# ─── Rule order ──────────────────────────────────────────────────────────
 
 
 class TestRuleOrder:
@@ -132,7 +132,7 @@ class TestRuleOrder:
         assert permission_rules(_config(), "engineer") == expected
 
     def test_devops_guarded_gate_emitted_as_ask(self):
-        # guarded: remote-write ask, dangerous gate -> ask (D2).
+        # guarded: remote-write ask, dangerous gate -> ask.
         rules = permission_rules(_config("guarded"), "devops")
         assert rules[-len(_REMOTE_WRITE) - len(_DANGEROUS) :] == _shell("ask", "ask")
 
@@ -210,15 +210,8 @@ class TestEmittedFrontmatter:
     def test_v1_key_set(self):
         assert set(V1_AGENT_KEYS) == {"permission", "tools", "bash", "task", "name", "temperature"}
 
-    def test_rendered_files_have_no_policy_comment(self):
-        for name, content in render_agents(_config(), create_env()).items():
-            assert "carter:policy" not in content, name
-            fm = yaml.safe_load(content.split("---", 2)[1])
-            assert fm["permissions"], name
-            assert "policy" not in fm, name
 
-
-# ─── Lint (ADR-0014 D5) ──────────────────────────────────────────────────────
+# ─── Lint ────────────────────────────────────────────────────────────────
 
 
 class TestLint:

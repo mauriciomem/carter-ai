@@ -1,4 +1,4 @@
-"""Version is single-sourced from VCS via hatch-vcs (ADR-0009 D1).
+"""Version is single-sourced from VCS via hatch-vcs.
 
 No SemVer literal lives in source: ``[project].version`` is dropped in favour of
 ``dynamic = ["version"]`` and ``carter.__version__`` derives from package metadata.

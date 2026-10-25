@@ -31,7 +31,7 @@ def routing_table(maestro_content: str) -> dict[str, list[str]]:
     """Parse the maestro routing table into {agent: [triggers]}."""
     table: dict[str, list[str]] = {}
     # Match table rows: | Domain | agent | triggers |
-    for match in re.finditer(r"\|\s*[^|]+\|\s*@?(carter-\w+)\s*\|\s*([^|]+)\|", maestro_content):
+    for match in re.finditer(r"\|\s*[^|]+\|\s*(carter-\w+)\s*\|\s*([^|]+)\|", maestro_content):
         agent = match.group(1)
         triggers = [t.strip() for t in match.group(2).split(",")]
         table[agent] = triggers

@@ -1,7 +1,7 @@
 """Carter state migration ``~/.copilot`` → ``~/.carter`` and ``uninstall --legacy``.
 
-ADR-0014 D3 (copy-only, idempotent, content-compared migration) and D7
-(``carter uninstall --legacy`` removes only manifest-listed Carter files).
+The migration is copy-only, idempotent and content-compared;
+``carter uninstall --legacy`` removes only manifest-listed Carter files.
 """
 
 from __future__ import annotations
@@ -22,7 +22,7 @@ def _h(text: str) -> str:
 
 
 def _seed_old_install(base: Path, *, hashes: bool = True) -> dict:
-    """Lay out what a pre-ADR-0014 Carter install left under ``base``."""
+    """Lay out what a Copilot-era Carter install left under ``base``."""
     cop = base / "copilot"
     (cop / "knowledge").mkdir(parents=True)
     (cop / "knowledge" / "mistakes.md").write_text("# my mistakes\n")
