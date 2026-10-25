@@ -1,6 +1,6 @@
 """Carter-ops — audit ledger and config helper for operational tasks.
 
-The model executes write operations (git, gh, Jira) directly in the terminal
+The model executes write operations (git, gh) directly in the terminal
 with bot attribution flags, following the ``carter-ops`` skill. This CLI only
 provides the deterministic side-channel around that:
 
@@ -193,9 +193,6 @@ def _handle_config_emit() -> int:
             "bot_email": cfg.bot_email,
             "signing_key": cfg.signing_key,
             "footer": cfg.footer,
-            "jira_url": cfg.jira_url,
-            "jira_email": cfg.jira_email,
-            "has_jira_token": bool(cfg.jira_token),
             "has_github_token": bool(cfg.github_token),
         }
     )

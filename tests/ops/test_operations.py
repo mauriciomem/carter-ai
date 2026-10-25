@@ -42,14 +42,10 @@ class TestConfig:
     def test_env_vars_override(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         from carter.ops.config import Config
 
-        monkeypatch.setenv("ATLASSIAN_URL", "https://test.atlassian.net")
-        monkeypatch.setenv("ATLASSIAN_EMAIL", "test@test.com")
-        monkeypatch.setenv("JIRA_TOKEN", "secret123")
+        monkeypatch.setenv("GITHUB_TOKEN", "secret123")
 
         cfg = Config.load(tmp_path / "nonexistent.toml")
-        assert cfg.jira_url == "https://test.atlassian.net"
-        assert cfg.jira_email == "test@test.com"
-        assert cfg.jira_token == "secret123"
+        assert cfg.github_token == "secret123"
 
 
 # ──────────────────────────────────────────────────────────────────────────────

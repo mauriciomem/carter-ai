@@ -224,7 +224,8 @@ A category not in an agent's allowlist is denied for that agent (deny-by-default
 
 `allow` = silent · `ask` = confirm with the human · `gate` = confirm **+** handoff
 to the owning agent / checkpoint artifact · `deny` = blocked (explicit single-action
-override required, audited via `carter ops`).
+override required, audited via `carter ops`). The harness emits `gate` as `ask`;
+the handoff is routing guidance you follow, not something the harness enforces.
 
 **`devops` is the sole holder of `remote-write` and `dangerous`** — the single
 pusher / infra-mutator. Every other agent works locally and hands off to devops to
@@ -257,7 +258,7 @@ one-liners (a one-line commit note, "LGTM") stay `ask` + an inline redaction che
 
 ## Available Skills
 
-- `carter-ops` — Deterministic executor for deterministic operations (`ops:` prefix). **Execute directly, do not delegate.**
+- `carter-ops` — Deterministic executor for deterministic operations (`ops:` prefix). Execute the **local** steps directly (status, add, commit, branch, audit); route **remote** steps (push, PR/issue writes, releases, Jira writes) to carter-devops — via carter-narrator first when there is outward text.
 - `carter-triage` — Classify and route requests (this is your primary skill)
 - `carter-distill` — Promote memory notes to curated `~/.carter/knowledge/` entries
 - `carter-reflect` — Analyze accumulated memory and knowledge to propose improvements to agent/skill files
