@@ -22,13 +22,13 @@ The diff defines the scope. Locally, use `git diff <base>...<head> --name-only` 
 
 ### 2. Scope the search
 
-- Use `git grep -n "pattern"` (searches tracked files only) — never `grep -rn "pattern" .`, which walks `.venv/`, `node_modules/`, `__pycache__/`, `.vscode/`, and build output.
+- Use `git grep -n "pattern"` (searches tracked files only) — never `grep -rn "pattern" .`, which walks `.venv/`, `node_modules/`, `__pycache__/`, `.idea/`, and build output.
 - For PR-only impact, prefer searching within the changed-file set rather than all tracked files.
 
 ### 3. Gate every finding
 
 - A finding must be **attributable to the change** — either located in a changed file/line, or it must name the specific change that breaks an otherwise-untouched file (e.g. "this PR renames `foo()` but its caller here still uses the old signature").
-- Filter ignored/untracked artifacts as a **class**: once you dismiss one (e.g. `__pycache__/`), apply the same rule to every hit in the pass (`.vscode/`, `dist/`, etc.). Use `git check-ignore <path>` to settle borderline cases.
+- Filter ignored/untracked artifacts as a **class**: once you dismiss one (e.g. `__pycache__/`), apply the same rule to every hit in the pass (`.idea/`, `dist/`, etc.). Use `git check-ignore <path>` to settle borderline cases.
 - A finding that is neither in the change nor attributable to it is **out of scope** — drop it.
 
 </scope-gate>
