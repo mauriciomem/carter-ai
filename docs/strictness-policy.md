@@ -32,11 +32,15 @@ and the agent's allowlist.
 |----------|---------|----------|
 | **read** | reads, never mutates | file read, glob/grep, `git status/log/diff` |
 | **local-write** | local-only changes | file edit, `git add/commit`, run tests |
-| **remote-write** | publishes to a remote / reads secrets | `git push`, PR/issue create·merge, `vault read` |
+| **remote-write** | publishes to a remote / reads secrets | `git push`, `gh pr`/`gh issue` writes, `gh release`, `gh api`, `vault read/write` |
 | **dangerous** | infra-mutating or irreversible | `terraform apply/destroy`, `kubectl apply`, `helm upgrade`, `rm -rf`, `git reset --hard`, `git push --force` |
 
-Secret reads fold into `remote-write` (they gate identically); `.env` reads ask for
-every agent. MCP tool calls get no category rule and always ask (see Step 2).
+The enforced `remote-write` shell globs are: `git push *`, `gh pr create *`, `gh pr merge *`, `gh pr comment *`, `gh pr review *`, `gh pr edit *`, `gh issue create *`, `gh issue comment *`, `gh issue edit *`, `gh release *`, `gh api *`, `vault read *`, `vault write *`. This is a representative
+command list, not a sandbox — any other command falls to the agent's `shell` rule.
+`gh api *` is denied as a whole to non-devops agents, including read-only API calls
+(use the `carter-github` MCP server or `gh pr view`/`gh issue list` for reads).
+The only secret-read rules are the `.env` read asks (every agent) and `vault read *`
+(remote-write). MCP tool calls get no category rule and always ask (see Step 2).
 Outward content is **not** a category — it is an advisory redaction handoff (see Step 5).
 
 ### The gate vocabulary
@@ -127,7 +131,8 @@ gets these rules, in this order:
 5. `subagent *` → deny. Maestro alone then gets `subagent carter-*` → allow (a flat
    chain: specialists never re-delegate).
 6. Category rules: `edit`, `shell`, `webfetch` → allow for `local-write` holders,
-   ask for read-only agents. Then risky shell globs (`git push *`, `terraform apply *`,
+   ask for read-only agents. Then risky shell globs (`git push *`, `gh pr create *`,
+   `gh api *`, `vault read *`, `terraform apply *`,
    `rm -rf *`, `git push --force *`, …) take their category's effect, or **deny** if
    the agent doesn't hold that category.
 
@@ -147,6 +152,7 @@ permissions:
 # ... discovery, .env, ~/.carter and subagent rules ...
 - {action: shell, resource: '*', effect: allow}
 - {action: shell, resource: git push *, effect: ask}
+# ... gh pr/issue/release/api and vault globs, also ask ...
 - {action: shell, resource: terraform apply *, effect: ask}   # dangerous: gate -> ask
 ---
 ```
@@ -165,7 +171,8 @@ Be clear about what this does **not** guarantee:
   ([permissions](https://opencode.ai/v2/docs/permissions/)). That applies to every
   `ask`, including gated ones. Use "Allow once" for risky actions.
 - **Shell globs are representative, not exhaustive.** A command that isn't in the
-  list falls to the agent's `shell` rule (allow for `local-write` holders).
+  list falls to the agent's `shell` rule (allow for `local-write` holders) — e.g.
+  `curl -X POST` to a remote API is not caught. This is not a sandbox.
 - **The redaction handoff is advisory** (see Step 5).
 
 `deny` rules hold; use `strict` (or a `deny` override) where an ask is not enough.

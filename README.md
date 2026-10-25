@@ -137,7 +137,10 @@ first-class citizen, each the authority in its domain.
 ## Carter-Ops — write operations
 
 Write operations (git, GitHub, Jira) run through an approval gate: **plan →
-approve → execute → audit**. Trigger with the `ops:` prefix.
+approve → execute → audit**. Trigger with the `ops:` prefix. Local steps (branch,
+commit) run in whichever agent gets `ops:`; remote steps (push, PRs/issues,
+releases, Jira writes) are done only by DevOps, with outward text redacted by the
+Narrator first. Jira goes through the `carter-atlassian` MCP server (OAuth).
 
 ```
 @carter-maestro ops: create a feature branch, commit my changes, and push
@@ -188,7 +191,10 @@ agent. One `policy.level` knob sets how strict:
 | `strict` | Regulated / prod-critical — remote-write asks, dangerous is denied |
 
 `devops` is the **sole pusher** — the only agent holding `remote-write`/`dangerous`;
-risky shell commands are denied for everyone else.
+risky shell commands are denied for everyone else. The enforced `remote-write` globs
+are `git push *`, `gh pr create *`, `gh pr merge *`, `gh pr comment *`, `gh pr review *`, `gh pr edit *`, `gh issue create *`, `gh issue comment *`, `gh issue edit *`, `gh release *`, `gh api *`, `vault read *`, `vault write *` — a representative list, not a sandbox (other commands fall to the
+agent's `shell` rule). `gh api *` is blocked for non-devops agents, read-only calls
+included.
 
 **Limits, stated plainly.** OpenCode has only `allow`/`ask`/`deny`, so Carter's
 `gate` tier is emitted as `ask`. Choosing **"Allow always"** at a prompt saves a

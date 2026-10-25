@@ -195,7 +195,7 @@ so `gate` is emitted as `ask`.
 |----------|---------|---------|--------|
 | read | reads, `git status/log/diff` | allow | allow |
 | local-write | file edit, `git add/commit`, run tests | allow | allow |
-| remote-write | `git push`, PR/issue write, secret reads | ask | gate (→ ask) |
+| remote-write | `git push`, `gh` PR/issue/release/api writes, `vault read/write` | ask | gate (→ ask) |
 | dangerous | `terraform apply/destroy`, `kubectl apply`, `helm upgrade`, `rm -rf`, `git reset --hard`, `git push --force` | gate (→ ask) | deny |
 
 **Per-agent allowlist (deny-by-default).** A category absent for an agent is not
@@ -235,7 +235,11 @@ Every agent file Carter writes carries exactly these V2 keys
 | 4 | `external_directory` + `read` `~/.carter/*`; `edit` `~/.carter/memories/*` (local-write holders only) | allow |
 | 5 | `subagent` `*`; then `subagent` `carter-*` (maestro only) | deny; allow |
 | 6 | `edit`, `shell`, `webfetch` / `*` | allow with local-write, else ask |
-| 7 | `shell` risky globs: `git push *` (remote-write); `terraform apply *`, `terraform destroy *`, `kubectl apply *`, `helm upgrade *`, `rm -rf *`, `git reset --hard *`, `git push --force *` (dangerous) | the category's gate if held, else deny |
+| 7 | `shell` risky globs: `git push *`, `gh pr create *`, `gh pr merge *`, `gh pr comment *`, `gh pr review *`, `gh pr edit *`, `gh issue create *`, `gh issue comment *`, `gh issue edit *`, `gh release *`, `gh api *`, `vault read *`, `vault write *` (remote-write); `terraform apply *`, `terraform destroy *`, `kubectl apply *`, `helm upgrade *`, `rm -rf *`, `git reset --hard *`, `git push --force *` (dangerous) | the category's gate if held, else deny |
+
+Rule 7 is a representative command list, not a sandbox: a shell command not listed
+falls to rule 6. `gh api *` is denied to non-devops agents even for read-only calls.
+The only secret-read rules are the `.env` asks (rule 3) and `vault read *` (rule 7).
 
 Anything unlisted (MCP tools, `websearch`, `execute`, …) falls to rule 1. Choosing
 "Allow always" at any ask saves a project-scoped allow that bypasses it later.
