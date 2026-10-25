@@ -2,6 +2,15 @@
 
 <!-- version list -->
 
+## v0.15.1 (2026-10-25)
+
+### Bug Fixes
+
+- **check**: Validate against fresh OpenCode agent data
+  ([#37](https://github.com/mauriciomem/carter-ai/pull/37),
+  [`a10fb8d`](https://github.com/mauriciomem/carter-ai/commit/a10fb8d8e315bcf9384b0f6f421f94c902570e48))
+
+
 ## v0.15.0 (2026-10-25)
 
 ### Chores
