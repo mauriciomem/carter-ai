@@ -86,7 +86,7 @@
 
 ### Features
 
-- **skills**: Retire carter-triage, upgrade old global rules and drop Copilot-era leftovers
+- **skills**: Retire carter-triage, upgrade old global rules and drop obsolete leftovers
   ([#31](https://github.com/mauriciomem/carter-ai/pull/31),
   [`12575f3`](https://github.com/mauriciomem/carter-ai/commit/12575f34bb92e124b6d322d3a1aad0d02d1e21f0))
 
@@ -129,9 +129,8 @@
 
 ### Breaking Changes
 
-- GitHub Copilot and VS Code support are removed. Carter requires OpenCode >= 2.1; the `target`
-  config key and `--target` flag are gone; Carter state moves from ~/.copilot to ~/.carter (migrated
-  automatically on install).
+- Carter supports only OpenCode and requires OpenCode >= 2.1; the `target` config key and
+  `--target` flag are gone; Carter state lives in ~/.carter.
 
 
 ## v0.10.0 (2026-10-24)
@@ -169,7 +168,7 @@
   ([#19](https://github.com/mauriciomem/carter-ai/pull/19),
   [`eeaa864`](https://github.com/mauriciomem/carter-ai/commit/eeaa864292167bf4304171ccd82ab4e8c16a53ee))
 
-- **mcp**: Drop the Copilot Atlassian bridge (supply-chain)
+- **mcp**: Drop the third-party Atlassian bridge (supply-chain)
   ([#19](https://github.com/mauriciomem/carter-ai/pull/19),
   [`eeaa864`](https://github.com/mauriciomem/carter-ai/commit/eeaa864292167bf4304171ccd82ab4e8c16a53ee))
 
@@ -373,7 +372,7 @@
 
 ### Bug Fixes
 
-- **adr-0011**: Derive VS Code tools: from policy so the agent chain keeps filesystem access
+- **adr-0011**: Derive agent tools from policy so the agent chain keeps filesystem access
   ([`2521337`](https://github.com/mauriciomem/carter-ai/commit/25213373f6787e660b26261710a83b69511f6741))
 
 ### Documentation
@@ -408,7 +407,7 @@
 - **005**: P2 4-category taxonomy + first-class narrator + enforced redaction (step 3)
   ([`b437465`](https://github.com/mauriciomem/carter-ai/commit/b4374651de1ed0c4ddefa9a6f3904f5132aba847))
 
-- **005**: P3 native subagent dispatch + fail-closed lint + /fleet rule (step 4)
+- **005**: P3 native subagent dispatch + fail-closed lint (step 4)
   ([`0a2bc9b`](https://github.com/mauriciomem/carter-ai/commit/0a2bc9b4b3b0d08a770571dc6f4ac7735840e5a5))
 
 - **005**: P4 per-agent model via models: block + name table + advisory (step 5)
