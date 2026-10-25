@@ -240,3 +240,26 @@ class TestCheckCli:
         fake_opencode(agents_output="garbage", agents_exit=2)
         result = CliRunner().invoke(main, ["check", str(ws), "--no-harness"])
         assert result.exit_code == 0, result.output
+
+
+class TestCheckWorkspaceFiles:
+    """`carter check` file checks that run before the harness step."""
+
+    def test_reports_every_missing_knowledge_file(self, tmp_path):
+        from carter.state import KNOWLEDGE_FILES
+
+        ws = _init(tmp_path)
+        for name in KNOWLEDGE_FILES:
+            (ws / ".carter" / "knowledge" / name).unlink()
+        result = CliRunner().invoke(main, ["check", str(ws), "--no-harness"])
+        assert result.exit_code == 1
+        for name in KNOWLEDGE_FILES:
+            assert f"Missing knowledge file: .carter/knowledge/{name}" in result.output
+
+    def test_agent_frontmatter_with_bom_is_parsed(self, tmp_path):
+        ws = _init(tmp_path)
+        agent = next((ws / ".opencode" / "agents").glob("carter-*.md"))
+        agent.write_text("\ufeff" + agent.read_text())
+        result = CliRunner().invoke(main, ["check", str(ws), "--no-harness"])
+        assert result.exit_code == 0, result.output
+        assert "Unparseable frontmatter" not in result.output

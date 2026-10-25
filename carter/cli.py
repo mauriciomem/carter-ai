@@ -6,7 +6,6 @@ from datetime import UTC
 from pathlib import Path
 
 import click
-import yaml
 from jinja2 import Environment
 
 from carter.config import (
@@ -18,7 +17,7 @@ from carter.config import (
     load_config,
 )
 from carter.harness import validate_agents
-from carter.plans import validate_checkpoint, validate_plans_dir
+from carter.plans import parse_frontmatter, validate_checkpoint, validate_plans_dir
 from carter.scaffold import (
     agent_filename,
     create_env,
@@ -29,7 +28,13 @@ from carter.scaffold import (
     render_instructions,
     write_rendered_files,
 )
-from carter.state import StateError, add_to_gitignore, commit_state, init_workspace
+from carter.state import (
+    KNOWLEDGE_FILES,
+    StateError,
+    add_to_gitignore,
+    commit_state,
+    init_workspace,
+)
 
 
 @click.group()
@@ -276,7 +281,7 @@ def check(target_dir: str, no_harness: bool) -> None:
         if not agent_file.exists():
             errors.append(f"Missing agent file: {agent_file.relative_to(target)}")
             continue
-        parsed = _parse_agent_frontmatter(agent_file.read_text())
+        parsed = parse_frontmatter(agent_file.read_text())
         if parsed is None:
             errors.append(f"Unparseable frontmatter: {agent_file.relative_to(target)}")
         else:
@@ -288,7 +293,7 @@ def check(target_dir: str, no_harness: bool) -> None:
 
     # Check knowledge files
     knowledge_dir = target / ".carter" / "knowledge"
-    for filename in ["lessons-learned.md", "gotchas.md", "tools.md", "decisions.md", "patterns.md"]:
+    for filename in KNOWLEDGE_FILES:
         if not (knowledge_dir / filename).exists():
             errors.append(f"Missing knowledge file: .carter/knowledge/{filename}")
 
@@ -366,36 +371,16 @@ def save(target_dir: str, message: str | None) -> None:
 
 # OpenCode discovery paths (relative to the workspace root): agents in
 # .opencode/agents/*.md, instructions in AGENTS.md at the project root.
-_AGENT_DIR = (".opencode", "agents")
-_INSTRUCTION_PATH = ("AGENTS.md",)
+_AGENT_DIR = Path(".opencode") / "agents"
+_INSTRUCTION_PATH = Path("AGENTS.md")
 
 
 def _agents_dir(target_root: Path) -> Path:
-    return target_root.joinpath(*_AGENT_DIR)
+    return target_root / _AGENT_DIR
 
 
 def _instructions_path(target_root: Path) -> Path:
-    return target_root.joinpath(*_INSTRUCTION_PATH)
-
-
-def _parse_agent_frontmatter(text: str) -> dict | None:
-    """Parse the leading YAML frontmatter from an agent markdown file.
-
-    Returns the parsed mapping, or ``None`` if the file has no parseable
-    ``---``-delimited frontmatter block.
-    """
-    if not text.startswith("---"):
-        return None
-    parts = text.split("---", 2)
-    if len(parts) < 3:
-        return None
-    try:
-        data = yaml.safe_load(parts[1])
-    except yaml.YAMLError:
-        return None
-    if not isinstance(data, dict):
-        return None
-    return data
+    return target_root / _INSTRUCTION_PATH
 
 
 def _write_if_absent(path: Path, content: str) -> bool:
