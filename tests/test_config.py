@@ -182,6 +182,68 @@ class TestPolicyLevelValidation:
             load_config(path)
 
 
+class TestAllowlistValidation:
+    """``policy.allowlist`` typos fail fast with a clear ConfigError, not a KeyError."""
+
+    def _write(self, tmp_path, allowlist):
+        cfg = {
+            "version": "2",
+            "workspace": {"name": "x", "mode": "umbrella"},
+            "identity": {"git_account": "y"},
+            "agents": ["maestro", "engineer", "devops"],
+            "policy": {"level": "guarded", "allowlist": allowlist},
+        }
+        path = tmp_path / "carter.yaml"
+        path.write_text(yaml.dump(cfg))
+        return path
+
+    def test_typo_category_raises(self, tmp_path):
+        path = self._write(tmp_path, {"engineer": {"remote-wirte": True}})
+        with pytest.raises(
+            ConfigError, match=r"policy\.allowlist\.engineer category 'remote-wirte'"
+        ):
+            load_config(path)
+
+    def test_unknown_agent_raises(self, tmp_path):
+        path = self._write(tmp_path, {"enginer": {"read": True}})
+        with pytest.raises(ConfigError, match=r"policy\.allowlist agent 'enginer'"):
+            load_config(path)
+
+    def test_non_bool_value_raises(self, tmp_path):
+        path = self._write(tmp_path, {"engineer": {"remote-write": "yes"}})
+        with pytest.raises(ConfigError, match="true or false"):
+            load_config(path)
+
+    def test_non_mapping_raises(self, tmp_path):
+        path = self._write(tmp_path, ["engineer"])
+        with pytest.raises(ConfigError, match="mapping"):
+            load_config(path)
+
+    def test_valid_override_and_false_drop_render(self, tmp_path):
+        path = self._write(tmp_path, {"engineer": {"remote-write": True, "local-write": False}})
+        effective = effective_allowlist(load_config(path))
+        assert effective["engineer"]["remote-write"] is True
+        assert effective["engineer"]["local-write"] is False
+
+    def test_update_reports_typo_without_traceback(self, tmp_path):
+        from click.testing import CliRunner
+
+        from carter.cli import main
+
+        runner = CliRunner()
+        assert runner.invoke(main, ["init", str(tmp_path), "--no-git-state"]).exit_code == 0
+        cfg_path = tmp_path / ".carter" / "carter.yaml"
+        cfg = yaml.safe_load(cfg_path.read_text())
+        cfg.setdefault("policy", {})["allowlist"] = {"engineer": {"remote-wirte": True}}
+        cfg_path.write_text(yaml.dump(cfg))
+
+        result = runner.invoke(main, ["update", str(tmp_path)])
+        assert result.exit_code != 0
+        assert "remote-wirte" in result.output
+        assert "Traceback" not in result.output
+        assert not isinstance(result.exception, KeyError)
+
+
 class TestProfileValidation:
     """The optional cost `profile:` key is validated at the
     config boundary: unset/None or a known profile name, else a loud ConfigError.

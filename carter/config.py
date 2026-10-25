@@ -156,11 +156,12 @@ def _validate_models(models: Any) -> None:
             raise ConfigError(f"Invalid {where}: {value!r}. {hint}")
 
 
-def _validate_policy(policy: Any) -> None:
+def _validate_policy(policy: Any, agents: list[str] | None = None) -> None:
     """Validate the ``policy`` block at the config boundary.
 
     Normalizes an out-of-vocabulary ``policy.level`` to the ``guarded`` default
-    and catches an override category/gate that isn't a known keyword,
+    and catches an override category/gate or allowlist agent/category/value that
+    isn't known,
     so a typo there fails fast with a clear ``ConfigError`` instead of a raw
     ``KeyError`` deep in rendering. ``GATE_SEVERITY``/``POLICY_LEVELS`` are defined
     below in the policy-model section.
@@ -185,6 +186,31 @@ def _validate_policy(policy: Any) -> None:
                 f"Invalid policy.overrides[{cat!r}]: {gate!r}. "
                 f"Must be one of: {', '.join(GATE_SEVERITY)}."
             )
+    _validate_allowlist(policy.get("allowlist") or {}, agents or [])
+
+
+def _validate_allowlist(allowlist: Any, agents: list[str]) -> None:
+    """Validate ``policy.allowlist``: configured agents -> {known category: bool}."""
+    if not isinstance(allowlist, dict):
+        raise ConfigError(f"Invalid policy.allowlist: {allowlist!r} (must be a mapping)")
+    for agent, cats in allowlist.items():
+        if agent not in agents:
+            raise ConfigError(
+                f"Invalid policy.allowlist agent {agent!r}. "
+                f"Must be one of the configured agents: {', '.join(agents)}."
+            )
+        if not isinstance(cats, dict):
+            raise ConfigError(f"Invalid policy.allowlist.{agent}: {cats!r} (must be a mapping)")
+        for cat, on in cats.items():
+            if cat not in RISK_TAXONOMY:
+                raise ConfigError(
+                    f"Invalid policy.allowlist.{agent} category {cat!r}. "
+                    f"Must be one of: {', '.join(RISK_TAXONOMY)}."
+                )
+            if not isinstance(on, bool):
+                raise ConfigError(
+                    f"Invalid policy.allowlist.{agent}[{cat!r}]: {on!r}. Must be true or false."
+                )
 
 
 def load_config(config_path: Path) -> dict[str, Any]:
@@ -209,7 +235,7 @@ def load_config(config_path: Path) -> dict[str, Any]:
     merged = _merge_with_defaults(config)
     _validate_models(merged.get("models"))
     _validate_agent_suffix(merged.get("agent_suffix", ""))
-    _validate_policy(merged.get("policy", {}))
+    _validate_policy(merged.get("policy", {}), merged.get("agents"))
     _validate_profile(merged.get("profile"))
     _validate_docs_language(merged.get("docs_language"))
     return merged
