@@ -307,7 +307,7 @@ def check(target_dir: str, no_harness: bool) -> None:
     # Lint emitted `permissions:`/`model` against what carter.yaml generates.
     errors.extend(lint_policy(config, installed))
 
-    # Harness validation (ADR-0014 D6): OpenCode must actually load every agent.
+    # Harness validation: OpenCode must actually load every agent.
     if not no_harness:
         expected: dict[str, list | None] = {}
         for role in config["agents"]:

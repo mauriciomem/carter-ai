@@ -1,4 +1,4 @@
-"""JSONC parsing (JSON with Comments, as used by editor ``settings.json`` files)."""
+"""JSONC parsing (JSON with Comments, as used by ``opencode.json`` and VS Code settings)."""
 
 from __future__ import annotations
 
@@ -57,9 +57,7 @@ def _strip_jsonc(text: str) -> str:
         i += 1
 
     # Remove trailing commas before } or ]
-    cleaned = "".join(result)
-    cleaned = re.sub(r",\s*([}\]])", r"\1", cleaned)
-    return cleaned
+    return re.sub(r",\s*([}\]])", r"\1", "".join(result))
 
 
 def _load_jsonc(path: Path) -> dict | None:
@@ -73,12 +71,10 @@ def _load_jsonc(path: Path) -> dict | None:
         return None
 
 
-def _write_json_preserving(path: Path, data: dict) -> None:
-    """Write JSON data to a file.
+def _write_json(path: Path, data: dict) -> None:
+    """Write ``data`` as 2-space-indented JSON.
 
-    If the original file used JSONC features (comments, trailing commas),
-    we cannot preserve those through a round-trip. We write clean JSON
-    with the same indent style.
+    Comments and trailing commas of a JSONC original are not preserved.
     """
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(data, indent=2) + "\n")

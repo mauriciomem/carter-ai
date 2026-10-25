@@ -1,4 +1,4 @@
-"""One-shot migration of Carter state from ``~/.copilot`` to ``~/.carter`` (ADR-0014 D3).
+"""One-shot migration of Carter state from ``~/.copilot`` to ``~/.carter``.
 
 Copied (never moved — sources stay in place):
 

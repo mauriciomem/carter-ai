@@ -1,4 +1,4 @@
-"""Harness validation: does OpenCode actually load Carter's agents? (ADR-0014 D6)
+"""Harness validation: does OpenCode actually load Carter's agents?
 
 ``carter check`` runs ``opencode debug agents`` in the workspace. On OpenCode 2.1.4
 that prints a JSON list of agents (``id``, ``permissions`` as ``{action, resource,

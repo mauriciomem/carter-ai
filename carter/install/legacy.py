@@ -1,4 +1,4 @@
-"""Detect Copilot/VS Code leftovers from earlier Carter installs (ADR-0014 D7).
+"""Detect Copilot/VS Code leftovers from earlier Carter installs.
 
 Carter no longer installs into Copilot or VS Code locations. Leftovers are never
 deleted by ``carter install``; it only warns once per run. ``carter uninstall
@@ -16,7 +16,7 @@ from carter.home import tilde
 from carter.install.components import read_manifest
 from carter.install.console import _log, log_err, log_ok, log_step, log_warn
 from carter.install.files import _sha256
-from carter.install.jsonc import _load_jsonc, _write_json_preserving
+from carter.install.jsonc import _load_jsonc, _write_json
 from carter.install.ownership import _hash_matches, _within
 from carter.install.paths import _copilot_base, _home, _opencode_base, legacy_manifest_path
 
@@ -94,13 +94,13 @@ def _remove_json_entries(path: Path, key: str, names: list[str]) -> None:
         return
     for n in removed:
         del section[n]
-    _write_json_preserving(path, data)
+    _write_json(path, data)
     for n in removed:
         log_ok(f"Removed {n} from {tilde(path)}")
 
 
 def uninstall_legacy(base_dir: Path | None) -> None:
-    """Remove Carter files an old install put in Copilot/VS Code locations (D7).
+    """Remove Carter files an old install put in Copilot/VS Code locations.
 
     Only entries listed in the old ``~/.copilot/.carter-manifest.json`` are touched.
     Files whose content no longer matches the recorded hash were edited by the user
@@ -170,7 +170,7 @@ def uninstall_legacy(base_dir: Path | None) -> None:
 
 
 # sha256 of every ``instructions/copilot-instructions.md`` Carter ever shipped (the
-# file itself was deleted in ADR-0014 phase 5). Used only to prove ownership of
+# file itself is no longer shipped). Used only to prove ownership of
 # stale copies left in ~/.config/opencode/instructions/.
 _SHIPPED_INSTRUCTIONS_SHA256 = frozenset(
     {

@@ -129,7 +129,7 @@ def model_advisory(config: dict[str, Any]) -> str:
 
 
 # ──────────────────────────────────────────────────────────────────────────────
-# Policy lint (ADR-0014 D5)
+# Policy lint
 # ──────────────────────────────────────────────────────────────────────────────
 # `carter check` runs `lint_policy` to verify each emitted agent's `permissions:` and
 # `model` still equal what carter.yaml generates, and that no V1 key is present. This
