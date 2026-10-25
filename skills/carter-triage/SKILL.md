@@ -38,6 +38,6 @@ carter-maestro is the router itself (it runs this classification); it never appe
 
 4. **Trivial** — If the request is a simple factual question or clarification, answer directly without delegation.
 
-5. **Knowledge check** — Before delegating, check `~/.copilot/knowledge/` for relevant past decisions or lessons that should be passed as context to the specialist.
+5. **Knowledge check** — Before delegating, check `~/.carter/knowledge/` for relevant past decisions or lessons that should be passed as context to the specialist.
 
 </rules>

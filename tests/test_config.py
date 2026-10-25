@@ -75,15 +75,14 @@ class TestPolicyOverridesAreHonored:
     gate map and the gate table — not silently no-op (audit HIGH-1)."""
 
     def test_override_tightens_emitted_gate(self):
-        from carter.config import parse_policy_comment, policy_comment
+        from carter.config import permission_rules
 
         cfg = generate_default_config()
         cfg["agent_suffix"] = ""
         cfg["policy"]["level"] = "guarded"
         cfg["policy"]["overrides"] = {"remote-write": "deny"}  # tighten ask -> deny
-        # The policy block lives in the carter:policy comment (off the wire, ADR-0005).
-        policy = parse_policy_comment(policy_comment(cfg, "devops"))
-        assert policy["gates"]["remote-write"] == "deny"
+        rules = permission_rules(cfg, "devops")
+        assert {"action": "shell", "resource": "git push *", "effect": "deny"} in rules
 
     def test_override_reflected_in_gate_table(self):
         from carter.config import policy_gate_table
@@ -252,7 +251,7 @@ class TestShippedMapsAreDictShaped:
     def test_devops_is_sole_remote_write_and_dangerous_holder(self):
         """ADR-0010 D4: devops is the sole holder of remote-write AND dangerous (the
         single-pusher invariant); narrator is first-class {read, local-write} and
-        does NOT hold remote-write — it reaches it only via the gate-tier handoff."""
+        does NOT hold remote-write — it reaches it only via the redaction handoff to devops."""
         assert AGENT_ALLOWLIST["devops"]["remote-write"] is True
         assert AGENT_ALLOWLIST["devops"]["dangerous"] is True
         for role, cats in AGENT_ALLOWLIST.items():
@@ -320,8 +319,7 @@ class TestLegacyConfigKeysTolerated:
             }
         )
 
-    @pytest.mark.parametrize("target", ["opencode", "copilot"])
-    def test_legacy_keys_survive_update_and_check(self, tmp_path, target):
+    def test_legacy_keys_survive_update_and_check(self, tmp_path):
         """End to end through the real CLI: an older carter.yaml carrying every
         removed key still updates and passes `carter check` (drift lint included)."""
         from click.testing import CliRunner
@@ -329,7 +327,7 @@ class TestLegacyConfigKeysTolerated:
         from carter.cli import main
 
         runner = CliRunner()
-        result = runner.invoke(main, ["init", str(tmp_path), "--no-git-state", "--target", target])
+        result = runner.invoke(main, ["init", str(tmp_path), "--no-git-state"])
         assert result.exit_code == 0, result.output
 
         cfg_path = tmp_path / ".carter" / "carter.yaml"
@@ -339,12 +337,10 @@ class TestLegacyConfigKeysTolerated:
 
         result = runner.invoke(main, ["update", str(tmp_path)])
         assert result.exit_code == 0, result.output
-        agents_dir = tmp_path / (".opencode/agents" if target == "opencode" else ".github/agents")
+        agents_dir = tmp_path / ".opencode" / "agents"
         assert len(list(agents_dir.glob("carter-*.md"))) == len(cfg["agents"])
-        instructions = tmp_path / (
-            "AGENTS.md" if target == "opencode" else ".github/copilot-instructions.md"
-        )
-        assert instructions.is_file()
+        assert (tmp_path / "AGENTS.md").is_file()
+        assert not (tmp_path / ".github").exists()
 
         result = runner.invoke(main, ["check", str(tmp_path)])
         assert result.exit_code == 0, result.output
@@ -403,3 +399,52 @@ class TestDocsLanguage:
         assert result.exit_code != 0
         assert "docs_language" in result.output
         assert not (tmp_path / ".carter").exists()
+
+
+class TestTargetKeyRemoved:
+    """ADR-0014 D4: `target:` is gone with no shim; a leftover key is a validation
+    error whose message says exactly how to fix it."""
+
+    def test_default_config_has_no_target(self):
+        assert "target" not in DEFAULT_CONFIG
+        assert "target" not in generate_default_config()
+
+    def test_resolve_targets_is_gone(self):
+        import carter.config
+
+        assert not hasattr(carter.config, "resolve_targets")
+
+    @pytest.mark.parametrize("value", ["copilot", "opencode", "all"])
+    def test_leftover_target_is_rejected_with_fix(self, tmp_path, value):
+        cfg = {**_minimal_existing_config(), "target": value}
+        cfg_path = tmp_path / "carter.yaml"
+        cfg_path.write_text(yaml.dump(cfg))
+        with pytest.raises(ConfigError) as exc:
+            load_config(cfg_path)
+        msg = str(exc.value)
+        assert "target" in msg
+        assert "Delete the `target:` key" in msg
+        assert "OpenCode >= 2.1" in msg
+
+    def test_update_surfaces_target_error(self, tmp_path):
+        from click.testing import CliRunner
+
+        from carter.cli import main
+
+        runner = CliRunner()
+        assert runner.invoke(main, ["init", str(tmp_path), "--no-git-state"]).exit_code == 0
+        cfg_path = tmp_path / ".carter" / "carter.yaml"
+        cfg_path.write_text(cfg_path.read_text() + "target: copilot\n")
+        result = runner.invoke(main, ["update", str(tmp_path)])
+        assert result.exit_code != 0
+        assert "Delete the `target:` key" in result.output
+
+    def test_init_target_flag_is_gone(self, tmp_path):
+        from click.testing import CliRunner
+
+        from carter.cli import main
+
+        result = CliRunner().invoke(
+            main, ["init", str(tmp_path), "--no-git-state", "--target", "opencode"]
+        )
+        assert result.exit_code != 0

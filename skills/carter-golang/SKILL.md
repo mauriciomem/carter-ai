@@ -23,7 +23,7 @@ This file covers core Go conventions. For depth in a specific domain, use `read_
 | `performance.md` | `pprof` (cpu/mem/block/mutex), `benchstat`, `b.Loop()`, allocation reduction, `sync.Pool`, `GOGC`/`GOMEMLIMIT`, escape analysis, and when NOT to optimize |
 | `errors-safety.md` | error wrapping (`%w`), sentinels, custom error types, `errors.Join`, `context.Cause`, nil/slice-aliasing/overflow safety, panic/recover boundaries, safety linters |
 
-**How to load:** derive the directory path from this SKILL.md's location and read the sibling file. For example, if this file is at `~/.copilot/skills/carter-golang/SKILL.md`, read `~/.copilot/skills/carter-golang/networking.md`.
+**How to load:** derive the directory path from this SKILL.md's location and read the sibling file. For example, if this file is at `~/.config/opencode/skills/carter-golang/SKILL.md`, read `~/.config/opencode/skills/carter-golang/networking.md`.
 
 If the request does not match any specialized topic, use the core standards below without loading additional files.
 

@@ -1,14 +1,14 @@
 """Live eval runner — calls an LLM with agent/skill context and evaluates responses.
 
-Authentication (checked in this order):
-  1. GitHub Copilot — uses your existing `gh` or OpenCode auth (no extra keys needed)
-  2. ANTHROPIC_API_KEY env var
-  3. OPENAI_API_KEY env var
+Authentication: a standard provider API key from the environment, checked in order:
+  1. ANTHROPIC_API_KEY
+  2. OPENAI_API_KEY
+Tests skip cleanly when neither is set. No editor/IDE OAuth tokens are read.
 
 Usage:
   uv sync --extra dev                      # once: pytest, pyyaml, httpx
 
-  # Run all live evals (uses Copilot auth automatically)
+  # Run all live evals (needs ANTHROPIC_API_KEY or OPENAI_API_KEY)
   uv run pytest evals -m live -v
 
   # Run specific scenario
@@ -22,9 +22,7 @@ The live tests are marked with @pytest.mark.live and skipped when no auth is ava
 
 from __future__ import annotations
 
-import json
 import os
-import subprocess
 import time
 from pathlib import Path
 
@@ -35,56 +33,17 @@ from evals.metrics import DEFAULT_MODEL, from_response, record
 # Skip entire module if no API key
 pytestmark = pytest.mark.live
 
-# GitHub Copilot API (OpenAI-compatible)
-_COPILOT_API_URL = "https://api.githubcopilot.com/chat/completions"
-_COPILOT_AUTH_FILE = Path.home() / ".local/share/opencode/auth.json"
-
-
-def _get_copilot_token() -> str | None:
-    """Get a GitHub Copilot OAuth token from available sources.
-
-    Checks (in order):
-      1. OpenCode auth file (~/.local/share/opencode/auth.json)
-      2. GitHub CLI (gh auth token)
-    """
-    # Try OpenCode auth file first
-    if _COPILOT_AUTH_FILE.exists():
-        try:
-            data = json.loads(_COPILOT_AUTH_FILE.read_text())
-            token = data.get("github-copilot", {}).get("access")
-            if token:
-                return token
-        except (json.JSONDecodeError, KeyError):
-            pass
-
-    # Fall back to gh CLI token
-    try:
-        result = subprocess.run(
-            ["gh", "auth", "token"],
-            capture_output=True,
-            text=True,
-            timeout=5,
-        )
-        if result.returncode == 0 and result.stdout.strip():
-            return result.stdout.strip()
-    except (subprocess.TimeoutExpired, FileNotFoundError):
-        pass
-
-    return None
-
 
 def _get_api_key() -> tuple[str, str]:
     """Return (provider, key) or skip the test.
 
-    Priority: copilot > anthropic > openai
+    Priority: anthropic > openai
     """
-    if token := _get_copilot_token():
-        return "copilot", token
     if key := os.environ.get("ANTHROPIC_API_KEY"):
         return "anthropic", key
     if key := os.environ.get("OPENAI_API_KEY"):
         return "openai", key
-    pytest.skip("No auth available (Copilot, ANTHROPIC_API_KEY, or OPENAI_API_KEY)")
+    pytest.skip("No auth available (set ANTHROPIC_API_KEY or OPENAI_API_KEY)")
 
 
 def _get_model() -> str:
@@ -113,32 +72,7 @@ def _call_model(system_prompt: str, user_message: str) -> str:
     model = _get_model()
 
     t0 = time.perf_counter()
-    if provider == "copilot":
-        resp = httpx.post(
-            _COPILOT_API_URL,
-            headers={
-                "Authorization": f"Bearer {api_key}",
-                "Content-Type": "application/json",
-                "Editor-Version": "vscode/1.118.0",
-                "Copilot-Integration-Id": "carter-evals",
-            },
-            json={
-                "model": model,
-                "max_tokens": _max_tokens(),
-                "temperature": 0,
-                "messages": [
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": user_message},
-                ],
-            },
-            timeout=60,
-        )
-        resp.raise_for_status()
-        data = resp.json()
-        record(from_response(provider, data, time.perf_counter() - t0))
-        return data["choices"][0]["message"]["content"]
-
-    elif provider == "anthropic":
+    if provider == "anthropic":
         if "EVAL_MODEL" not in os.environ:
             model = DEFAULT_MODEL
         resp = httpx.post(

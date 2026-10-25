@@ -87,7 +87,7 @@ def _install_templated_file(
     for placeholder, value in template_vars.items():
         content = content.replace(placeholder, value)
 
-    content_hash = hashlib.sha256(content.encode()).hexdigest()
+    content_hash = f"sha256:{hashlib.sha256(content.encode()).hexdigest()}"
 
     if dst.exists():
         dst_hash = _sha256(dst)
@@ -118,9 +118,8 @@ def _install_rendered_file(
 ) -> str:
     """Write already-rendered ``content`` to ``dst`` (no source file to copy).
 
-    Used to install per-target-rendered output — e.g. OpenCode-shaped agent
-    frontmatter, which differs from the copilot static ``agents/*.md`` (OpenCode
-    rejects the copilot ``tools:`` array; it wants a ``permission`` block). Mirrors
+    Used to install rendered output — e.g. agents rendered from ``templates/``
+    with OpenCode V2 ``permissions:`` frontmatter. Mirrors
     ``_install_file``'s backup/manifest/hash semantics; the hash carries the same
     ``sha256:`` prefix as ``_sha256`` so the unchanged-check matches on re-install.
     """

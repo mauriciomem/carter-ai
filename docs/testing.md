@@ -8,18 +8,20 @@ The test suite validates these systems:
 
 | System | Test File | What It Covers |
 |--------|-----------|----------------|
-| **Installer** | `tests/test_install.py` | File copying, MCP merging, manifest tracking, idempotency |
+| **Installer** | `tests/test_install.py`, `tests/test_install_opencode.py` | File copying, OpenCode >= 2.1 gate, V2 `mcp.servers` merging, manifest tracking, idempotency |
+| **Migration** | `tests/test_migration.py` | `~/.copilot` → `~/.carter` state copy, `carter uninstall --legacy` |
+| **Harness check** | `tests/test_harness.py` | `carter check` running `opencode debug agents` (faked) |
 | **Scaffold (CLI + Templates)** | `tests/test_scaffold.py` | Config loading, template rendering, quality gates, **policy emission**, workspace init |
-| **Policy model** | `tests/test_config.py` | The `policy` block, risk taxonomy, per-agent allowlist, overrides, legacy-key tolerance |
-| **Policy lint** | `tests/test_policy_lint.py` | `carter check` drift detection, dispatch lint, hard ack |
+| **Policy model** | `tests/test_config.py` | The `policy` block, risk taxonomy, per-agent allowlist, overrides, `permissions:` rule order, `target:` rejection |
+| **Policy lint** | `tests/test_policy_lint.py` | `carter check` drift detection on emitted `permissions:`/`model`, V1-key rejection |
 | **Models** | `tests/test_models.py` | Per-agent model resolution and emission |
 | **Dispatch** | `tests/test_dispatch.py` | Native subagent dispatch emission |
-| **Agent parity** | `tests/test_parity.py` | Static↔template invariants, baked policy, no false claims |
+| **Agent parity** | `tests/test_parity.py` | Rendered-template invariants, emitted frontmatter, no false claims |
 | **Plans & state** | `tests/test_plans.py`, `tests/test_state.py` | Plan frontmatter contract, checkpoint recovery, `.carter/` git state |
 | **Carter-Ops** | `tests/ops/test_operations.py` | `carter ops` audit, policy-override ledger, config emit |
 | **Version** | `tests/test_version.py` | `carter.__version__` derives from package metadata |
 
-The tests run in full isolation using temporary directories — they never touch your real `~/.copilot/`, `~/.config/opencode/`, or any workspace paths.
+The tests run in full isolation using temporary directories — they never touch your real `~/.carter/`, `~/.config/opencode/`, or any workspace paths. No test needs a real `opencode` binary.
 
 ## Prerequisites
 
@@ -67,7 +69,7 @@ every PR, and a budgeted live-accuracy canary on a weekly cron.
 
 | Tier | Workflow | Trigger | Key? | What it proves |
 |------|----------|---------|------|----------------|
-| **PR gate** (required) | [ci.yml](../.github/workflows/ci.yml) | every push to `main` + every PR | none | Functionality + structural accuracy: `ruff check`, `ruff format --check`, `mypy`, unit tests + offline evals (py3.11, 3.14 & 3.15), and a real `install-smoke` (`uv tool install` → `carter --version`/`init`/`check`) on Linux + macOS |
+| **PR gate** (required) | [ci.yml](../.github/workflows/ci.yml) | every push to `main` + every PR | none | Functionality + structural accuracy: `ruff check`, `ruff format --check`, `mypy`, unit tests + offline evals (py3.11, 3.14 & 3.15), and a real `install-smoke` (`uv tool install` → `carter --version`/`init`/`check`/`install`) on Linux + macOS |
 | **Live canary** (informational) | [evals-live.yml](../.github/workflows/evals-live.yml) | weekly cron + manual dispatch | one repo secret | Prompt-quality accuracy + token/latency/cost against a budgeted low-cost model |
 
 The PR gate, in full:
@@ -82,12 +84,10 @@ uv run pytest evals/ -m "not live" -q                               # offline ev
 ### Why the live evals need an API key (and the PR gate does not)
 
 The live evals (`evals/test_live.py`, marked `live`) send the agent/skill prompt
-markdown to a **raw model** and assert on the response. Locally they reuse your
-GitHub Copilot OAuth token (via OpenCode's `auth.json` or `gh auth token`), so no
-extra key is needed. **CI runners cannot do this:** there is no Copilot OAuth token
-on a runner — `gh auth token` there yields only the repo `GITHUB_TOKEN`, which the
-Copilot API rejects, and there is no `opencode/auth.json`. Running live evals in CI
-therefore *requires* a dedicated LLM key.
+markdown to a **raw model** and assert on the response. They read a standard
+provider key from your environment — `ANTHROPIC_API_KEY`, else `OPENAI_API_KEY` — and
+skip cleanly when neither is set. They never read stored OpenCode or `gh` credentials,
+so running live evals in CI *requires* a dedicated LLM key.
 
 We do **not** want a key on the PR gate: it would cost money per PR, be
 non-deterministic (a flaky merge gate), and expose a secret to fork PRs. So:
@@ -101,13 +101,11 @@ non-deterministic (a flaky merge gate), and expose a secret to fork PRs. So:
   only in repo secrets.**
 
 > **Read the canary honestly:** it measures the prompt sent to a raw model — a proxy
-> for *prompt quality*, **not** the real VS Code Copilot tool-calling loop. Treat it
+> for *prompt quality*, **not** the real OpenCode tool-calling loop. Treat it
 > as an accuracy/cost trend, not a pass/fail merge signal.
 
-The agent-generation drift check described in
-ADR-0002 is deferred until the
-static/template sources are reconciled; until then, `tests/test_parity.py` is the
-drift guardrail.
+Agents have one source (`templates/`); `tests/test_parity.py` guards what the
+rendered files claim and emit.
 
 ## Tools & Libraries
 
@@ -128,12 +126,15 @@ No external mocking libraries are used. Both the installer and the scaffold acce
 tests/
 ├── conftest.py             # Shared fixtures (repo_root, base_dir)
 ├── test_install.py         # Installer
+├── test_install_opencode.py # OpenCode >= 2.1 gate, V2 MCP shape
+├── test_migration.py       # ~/.copilot -> ~/.carter, uninstall --legacy
+├── test_harness.py         # opencode debug agents validation
 ├── test_scaffold.py        # Scaffold + policy emission
 ├── test_config.py          # Policy model: taxonomy, allowlist, overrides
-├── test_policy_lint.py     # carter check policy lint + hard ack
+├── test_policy_lint.py     # carter check policy lint
 ├── test_models.py          # Per-agent model resolution
 ├── test_dispatch.py        # Native subagent dispatch
-├── test_parity.py          # Agent source-parity + baked policy
+├── test_parity.py          # Rendered agent invariants
 ├── test_plans.py           # Plan frontmatter contract + recovery
 ├── test_state.py           # .carter/ git state
 ├── test_version.py         # Version metadata
@@ -154,7 +155,7 @@ Shared fixtures live in `tests/conftest.py`; suites define local fixtures where 
 
 The installer's functions (e.g., `install_agents`, `install_skills`) accept a `base_dir` argument. In production, this defaults to the user's home directory. In tests, it's always `tmp_path` — a unique temporary directory that pytest creates and cleans up per test. This means:
 
-- Tests never read or write to `~/.copilot/`
+- Tests never read or write to your real home directory
 - Every test starts with a clean filesystem
 - Tests can run in parallel without conflicts
 
@@ -181,7 +182,7 @@ Add tests when you:
 
 - Add a new installer function (e.g., `install_themes()`)
 - Add a new file type that gets installed (e.g., a new agent or skill)
-- Change merge logic (e.g., adding OpenCode MCP support)
+- Change merge logic (e.g., the `mcp.servers` merge)
 - Modify manifest structure
 - Add new CLI flags
 
@@ -206,10 +207,10 @@ def test_my_new_feature(self, base_dir: Path) -> None:
     backup = base_dir / "backup"
 
     # Call the installer function with base_dir
-    install.my_new_function(["copilot"], base_dir, manifest, backup)
+    install.my_new_function(base_dir, manifest, backup)
 
     # Assert the expected outcome
-    output = base_dir / "copilot" / "my_feature" / "output.md"
+    output = base_dir / "opencode" / "my_feature" / "output.md"
     assert output.exists()
     assert "expected content" in output.read_text()
 ```
@@ -218,7 +219,7 @@ def test_my_new_feature(self, base_dir: Path) -> None:
 
 ```python
 def test_my_merge_logic(self, base_dir: Path) -> None:
-    settings = base_dir / "vscode" / "settings.json"
+    settings = base_dir / "opencode" / "opencode.json"
     settings.parent.mkdir(parents=True, exist_ok=True)
     settings.write_text(json.dumps({"existing.key": "value"}))
 
@@ -236,10 +237,10 @@ def test_idempotent(self, base_dir: Path) -> None:
     manifest = {"files": [], "file_hashes": {}}
     backup = base_dir / "backup"
 
-    install.my_function(["copilot"], base_dir, manifest, backup)
+    install.my_function(base_dir, manifest, backup)
 
     manifest2 = {"files": [], "file_hashes": {}}
-    stats = install.my_function(["copilot"], base_dir, manifest2, backup)
+    stats = install.my_function(base_dir, manifest2, backup)
 
     assert stats["unchanged"] > 0
     assert stats["created"] == 0
@@ -268,7 +269,7 @@ Fixtures can depend on other fixtures (like `base_dir` above). Pytest resolves t
 
 ```python
 actual = sorted(f.name for f in some_dir.glob("carter-*.md"))
-assert len(actual) == 6
+assert len(actual) == 8
 ```
 
 ### Verifying file content
@@ -295,8 +296,8 @@ assert existing.read_text() == "custom content\n"
 
 ```python
 data = json.loads(settings.read_text())
-assert "new-key" in data["mcp.servers"]  # added
-assert "old-key" in data["mcp.servers"]  # preserved
+assert "new-key" in data["mcp"]["servers"]  # added
+assert "old-key" in data["mcp"]["servers"]  # preserved
 ```
 
 ## Troubleshooting

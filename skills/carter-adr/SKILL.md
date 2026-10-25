@@ -86,8 +86,8 @@ tags: []
   obtain it from a native harness date variable where the target exposes one,
   otherwise run `date`. Do this **before writing any dated frontmatter**; never
   guess from your training cutoff.
-- Always check `~/.copilot/knowledge/decisions.md` for related past decisions.
-- After creating an ADR, offer to record the decision in `~/.copilot/knowledge/decisions.md` via carter-distill.
+- Always check `~/.carter/knowledge/decisions.md` for related past decisions.
+- After creating an ADR, offer to record the decision in `~/.carter/knowledge/decisions.md` via carter-distill.
 - ADRs should be stored in the project repository (e.g., `docs/adr/` or `adr/`).
 - Number ADRs sequentially within the project.
 - Keep the Context section factual — save opinions for the Rationale.

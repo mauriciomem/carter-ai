@@ -173,11 +173,10 @@ repo, outside any `.carter/`, so `carter.yaml` cannot govern them. It is a
 
 ## Risk-based strictness policy (`policy` block)
 
-The risk-based strictness policy (ADR-0005, refreshed by
-ADR-0010) adds a `policy` block to
-`carter.yaml`. `guarded` is the floor and the default for everything: a new install,
-an existing config that omits the block, and an unrecognized level all resolve to
-`guarded`.
+The risk-based strictness policy (ADR-0014; categories from ADR-0005 / ADR-0010)
+is a `policy` block in `carter.yaml`. `guarded` is the floor and the default for
+everything: a new install, an existing config that omits the block, and an
+unrecognized level all resolve to `guarded`.
 
 ```yaml
 policy:
@@ -188,25 +187,21 @@ policy:
   allowlist: {}             # agent -> {category: bool}, e.g. {engineer: {remote-write: true}}
 ```
 
-**Risk taxonomy (shipped, fixed — 4 categories, ADR-0010 D4).** Each maps a
-strictness level to a gate (`allow` | `ask` | `gate` | `deny`).
+**Risk taxonomy (shipped, fixed — 4 categories).** Each maps a strictness level to
+a Carter gate (`allow` | `ask` | `gate` | `deny`). OpenCode has no `gate` effect,
+so `gate` is emitted as `ask`.
 
 | Category | Meaning | guarded | strict |
 |----------|---------|---------|--------|
-| read | reads, `git status/log/diff`, MCP GET | allow | allow |
+| read | reads, `git status/log/diff` | allow | allow |
 | local-write | file edit, `git add/commit`, run tests | allow | allow |
-| remote-write | `git push`, PR/issue write, MCP POST/PATCH/DELETE, secret reads (`vault read`, `.env`) | ask | gate |
-| dangerous | `terraform apply/destroy`, `kubectl apply`, `rm -rf`, `git reset --hard`, `--force` | gate | deny |
+| remote-write | `git push`, PR/issue write, secret reads | ask | gate (→ ask) |
+| dangerous | `terraform apply/destroy`, `kubectl apply`, `helm upgrade`, `rm -rf`, `git reset --hard`, `git push --force` | gate (→ ask) | deny |
 
-Secret reads fold into `remote-write` (they gate identically). Outward content is
-**not** a category — it is an enforced `gate`-tier redaction handoff (ADR-0010 D5):
-substantive outward content must pass the narrator's redaction pass before devops
-(the sole `remote-write` holder) transmits it.
-
-**Per-agent allowlist (deny-by-default).** A category absent for an agent is denied
-for that agent. The shipped default keeps `devops` the sole holder of `remote-write`
-and `dangerous` (the single pusher); the narrator is first-class (`read` +
-`local-write`) and reaches a remote only via the redaction handoff to devops:
+**Per-agent allowlist (deny-by-default).** A category absent for an agent is not
+granted: its risky shell globs are `deny`, and (for read-only agents) `edit`,
+`shell` and `webfetch` ask. `devops` is the sole holder of `remote-write` and
+`dangerous`:
 
 | Agent | Allowed categories |
 |-------|--------------------|
@@ -214,94 +209,85 @@ and `dangerous` (the single pusher); the narrator is first-class (`read` +
 | pm, narrator, engineer, security | read, local-write |
 | devops | read, local-write, remote-write, dangerous |
 
-**Per-agent emission.** Carter writes the agent's allowlist + gates as a
-`<!-- carter:policy {"level":…,"allow":[…],"gates":{…}} -->` comment right after the
-frontmatter (the declared model `carter check` lints against), and emits native
-frontmatter keys per target:
+Outward content is **not** a category. The narrator → devops redaction handoff is
+prompt-level guidance; OpenCode does not enforce it.
 
-- **OpenCode:** `permission` (edit / bash command-globs / webfetch) + per-agent
-  MCP scope via tool-name patterns.
-- **VS Code / Copilot:** an enforced `tools:` allowlist **derived from the policy
-  categories** (ADR-0011) — `tools:` is a *replacing* allowlist, so the file tools each
-  category implies MUST be listed or the agent (and the chain it delegates to) loses the
-  filesystem: `read` → `codebase`/`search`/`usages`/`fetch`; `local-write` → `editFiles`;
-  the primary additionally carries `agent`; plus the per-agent MCP scope.
+### Emitted agent frontmatter
 
-Per-agent MCP scope is emitted in **agent frontmatter**, never the global
-`configure_mcp_servers` wiring.
+Every agent file Carter writes carries exactly these V2 keys
+([OpenCode agents](https://opencode.ai/v2/docs/agents/)):
 
-**Native subagent dispatch (P3, ADR-0010 D1).** Carter emits the target's real
-delegation primitive on the **primary** (maestro) — never a fictional `runSubagent`.
-The dispatch allowlist is a **security boundary**: an **explicit per-specialist
-list**, never `'*'` and never a `carter-*` glob (a glob auto-trusts any future
-`carter-*` agent; `'*'` lets the primary delegate to any workspace agent). The chain
-is **flat** — every specialist carries `agents: []`, so the maestro is the only
-router. The emitted names honor `agent_suffix` (e.g. `carter-engineer-local`).
+| Key | Value |
+|-----|-------|
+| `description` | One-line role summary |
+| `mode` | `primary` (maestro) or `subagent` (everyone else) |
+| `model` | One `provider/model[#variant]` string (see below) |
+| `permissions` | Ordered rule list, `{action, resource, effect}`; last match wins |
 
-- **VS Code / Copilot:** the `agent` subagent tool (ahead of the maestro's policy file
-  tools, ADR-0011) + an explicit `agents: [carter-architect, …]` allowlist + `handoffs:`
-  (the user-approved gate-confirm buttons for gate-tier actions).
-- **OpenCode:** a `permission.task` block — `'*': deny` plus an explicit `allow` per
-  specialist.
-- **Copilot CLI:** orchestration is runtime (`/fleet` + `@`-mention), so there is no
-  frontmatter change — but the maestro prose **must** inject the active-plan +
-  knowledge context into every `/fleet` prompt (subagents do not inherit chat
-  history).
+`permissions` is built in this order
+([OpenCode permissions](https://opencode.ai/v2/docs/permissions/)):
 
-```yaml
-# maestro, copilot target  (tools: is policy-derived — agent + read file tools, ADR-0011)
-tools: [agent, codebase, search, usages, fetch]
-agents: [carter-architect, carter-devops, carter-engineer, carter-learner, carter-narrator, carter-pm, carter-security]
-handoffs: [carter-architect, carter-devops, carter-engineer, carter-learner, carter-narrator, carter-pm, carter-security]
-# maestro, opencode target
-permission:
-  task: {'*': deny, carter-architect: allow, carter-devops: allow, ...}
-```
+| # | Rule(s) | Effect |
+|---|---------|--------|
+| 1 | `*` / `*` | ask (baseline) |
+| 2 | `read`, `glob`, `grep`, `skill`, `question` / `*` | allow |
+| 3 | `read` `*.env`, `*.env.*` / `read` `*.env.example` | ask / allow |
+| 4 | `external_directory` + `read` `~/.carter/*`; `edit` `~/.carter/memories/*` (local-write holders only) | allow |
+| 5 | `subagent` `*`; then `subagent` `carter-*` (maestro only) | deny; allow |
+| 6 | `edit`, `shell`, `webfetch` / `*` | allow with local-write, else ask |
+| 7 | `shell` risky globs: `git push *` (remote-write); `terraform apply *`, `terraform destroy *`, `kubectl apply *`, `helm upgrade *`, `rm -rf *`, `git reset --hard *`, `git push --force *` (dangerous) | the category's gate if held, else deny |
 
-`carter check` runs a **fail-closed dispatch lint**: it **errors (exit non-zero)** if
-the primary's emitted `agents:` / `permission.task` is `'*'`, a glob, or absent — not
-a warning.
+Anything unlisted (MCP tools, `websearch`, `execute`, …) falls to rule 1. Choosing
+"Allow always" at any ask saves a project-scoped allow that bypasses it later.
 
-**Global agents (no `carter.yaml` in scope).** Globally-installed static
-`agents/*.md` carry baked hand-edited `guarded` defaults, kept honest by a
-`test_parity` extension (Q14 / ADR-0005 D6 — build-time generation is WON'T-DO per
-ADR-0002).
+Carter never emits V1 keys (`permission`, `tools`, `bash`, `task`, `name`,
+`temperature`): OpenCode ignores them next to `permissions`. There is no policy
+comment in the agent body; the emitted `permissions:` is the single source of truth.
+
+**`carter check` lint.** For each agent it fails if `permissions` or `model` is
+missing or differs from what `carter.yaml` generates (exact, ordered match), or if a
+V1 key is present. It then runs `opencode debug agents` and fails if OpenCode didn't
+load an agent or loaded different rules (skipped with a warning when `opencode`
+isn't on `PATH`; `--no-harness` skips it).
+
+**Global agents.** `carter install` renders the same templates with the shipped
+`guarded` defaults and no suffix into `~/.config/opencode/agents/`.
 
 ## Per-agent model (`models` block)
 
-The `models` block (ADR-0010 D2) is orthogonal to `policy:` — it maps role tiers to a
-per-target model string. Carter emits a **single** `model:` string on each agent (an
-array breaks Copilot CLI): a display name for VS Code/Copilot, a `provider/model` id
-for OpenCode. It is **dict-shaped** so a user override deep-merges rather than wiping
-the shipped tiers.
+Each tier is **one** OpenCode model string, `provider/model[#variant]`. The block is
+dict-shaped so a user override deep-merges rather than wiping the shipped tiers.
 
 ```yaml
 models:
-  default:      { copilot: "Claude Opus 5.5",   opencode: "anthropic/claude-opus-5-5" }
-  thinkers:     { copilot: "Claude Opus 5.5",   opencode: "anthropic/claude-opus-5-5" }
-  implementers: { copilot: "Claude Sonnet 5.5", opencode: "anthropic/claude-sonnet-5-5" }
-  overrides: {}   # per-agent, e.g. {engineer: {copilot: "Claude Haiku 5.5", opencode: "anthropic/claude-haiku-5-5"}}
+  default:      anthropic/claude-opus-5-5
+  thinkers:     anthropic/claude-opus-5-5
+  implementers: anthropic/claude-sonnet-5-5
+  overrides: {}   # per-agent, e.g. {engineer: anthropic/claude-haiku-5-5}
 ```
+
+Any other shape (a per-target mapping, a list, a string without `provider/`) is a
+config error.
 
 **Resolution: `overrides` > `profile` > tier > `default`.** Thinkers (maestro,
 architect, learner, security) = Opus 5.5; implementers (engineer, devops, pm, narrator)
 = Sonnet 5.5; `default` is the un-tiered catch-all so a future agent never resolves to
 an empty model. A `profile:` (`quality` | `budget`) re-tiers roles at resolve time (see
 [cost-and-models.md](cost-and-models.md)). **Haiku is opt-in via `overrides` only.**
-A test asserts every shipped role resolves to a non-empty model string.
 
-**`carter check` model advisory (required).** Carter cannot verify the user's
-Copilot/OpenCode subscription includes a pinned model, so it **emits the pin anyway**
-and `carter check` always prints an advisory naming each agent's model + the
-can't-verify caveat — an unavailable model is silently ignored frontmatter otherwise.
+**`carter check` model advisory.** Carter cannot verify that your OpenCode provider
+offers a pinned model, so `carter check` always prints each agent's model with that
+caveat.
 
-**Effort and temperature are NOT emitted.** No target has a per-agent effort field, so
-effort is the global `output_config.effort` knob — set per-session on the harness
-(`copilot --effort high`). Carter's docs recommend a single global default of **`high`**
-(the safe all-rounder: `medium` under-serves
-the thinkers), raised per-session (e.g. `xhigh`) for thinker-heavy RFC/ADR/plan work.
-`temperature` is dropped wholesale (D7) — dead or rejected on every pinned model.
+**Effort and temperature are not emitted.** Use a `#variant` in the model string or
+OpenCode's settings for reasoning level; `temperature` is never written.
+
+## Removed keys
+
+`target:` is gone (OpenCode is the only harness). A leftover `target:` in
+`carter.yaml` fails with an error telling you to delete it.
 
 ## See also
 
-- ADR-0003 — the decision of record
+- ADR-0003 — the decision of record (artifact schemas)
+- ADR-0014 — OpenCode-only emission (`permissions`, `models`)

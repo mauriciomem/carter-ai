@@ -1,12 +1,12 @@
 """Locate Carter's bundled data files.
 
-Carter ships static content (agents, skills, instructions, knowledge, MCP
-configs, and templates) that must be available both when running from a repo
-checkout (development) and when installed as a wheel via ``uv tool install``.
+Carter ships static content (skills, knowledge, MCP configs, and templates)
+that must be available both when running from a repo checkout (development)
+and when installed as a wheel via ``uv tool install``.
 
 In an installed wheel the data lives at ``carter/_data/``. In a development
 checkout it lives at the repository root. ``data_dir()`` resolves whichever
-layout is present so callers can simply use ``data_dir() / "agents"`` etc.
+layout is present so callers can simply use ``data_dir() / "templates"`` etc.
 """
 
 from __future__ import annotations
@@ -31,12 +31,12 @@ def data_dir() -> Path:
         return packaged
 
     repo_root = _PACKAGE_DIR.parent
-    if (repo_root / "agents").is_dir():
+    if (repo_root / "templates").is_dir():
         return repo_root
 
     raise FileNotFoundError(
         "Could not locate Carter data files. Expected either "
-        f"{packaged} (installed) or {repo_root}/agents (development checkout)."
+        f"{packaged} (installed) or {repo_root}/templates (development checkout)."
     )
 
 
