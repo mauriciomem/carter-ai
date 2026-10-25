@@ -22,7 +22,7 @@ This file covers core Git command best practices. For specialized topics, use `r
 | `strategies.md` | branching strategies, GitHub Flow, Git Flow, trunk-based, branch naming, commit messages, merge conflicts |
 | `actions.md` | GitHub Actions workflows, CI/CD pipelines, workflow YAML, jobs, caching, secrets, deployment |
 
-**How to load:** derive the directory path from this SKILL.md's location and read the sibling file. For example, if this file is at `~/.copilot/skills/carter-pipeline/SKILL.md`, read `~/.copilot/skills/carter-pipeline/github-cli.md`.
+**How to load:** derive the directory path from this SKILL.md's location and read the sibling file. For example, if this file is at `~/.config/opencode/skills/carter-pipeline/SKILL.md`, read `~/.config/opencode/skills/carter-pipeline/github-cli.md`.
 
 If the request does not match any specialized topic, use the core guidelines below without loading additional files.
 

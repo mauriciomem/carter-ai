@@ -61,18 +61,40 @@ jobs:
         run: uv run pytest evals/ -m "not live" -q
 
   install-smoke:
-    name: install-smoke (${{ matrix.os }})
+    # `floor` = minimum supported OpenCode (required). `latest` = newest 2.x
+    # (informational; allowed to fail so upstream drift doesn't block PRs).
+    name: install-smoke (${{ matrix.os }}, opencode ${{ matrix.label }} ${{ matrix.opencode }})
     runs-on: ${{ matrix.os }}
+    continue-on-error: ${{ matrix.experimental }}
     permissions:
       contents: read
     strategy:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, macos-latest]
+        label: [floor, latest]
+        include:
+          # Bump the OpenCode floor HERE (keep in sync with carter's minimum version gate).
+          - label: floor
+            opencode: "2.1.0"
+            experimental: false
+          - label: latest
+            opencode: "2" # npm range: newest published 2.x
+            experimental: true
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0 # hatch-vcs needs full history + tags to derive the version
+
+      - name: Set up Node
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "lts/*"
+
+      - name: Install OpenCode ${{ matrix.opencode }} (npm, official V2 method)
+        run: |
+          npm install -g "@opencode/cli@${{ matrix.opencode }}"
+          opencode --version
 
       - name: Install uv
         uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2
@@ -99,14 +121,13 @@ jobs:
       - name: carter init + check (fresh workspace)
         run: |
           mkdir -p "$RUNNER_TEMP/smoke-ws"
-          carter init "$RUNNER_TEMP/smoke-ws" --target all
+          carter init "$RUNNER_TEMP/smoke-ws"
           carter check "$RUNNER_TEMP/smoke-ws"
 
       - name: carter install (throwaway home) + assert files
         run: |
-          carter install --base-dir "$RUNNER_TEMP/fake-home" --target all
-          for tool in copilot opencode; do
-            count=$(ls "$RUNNER_TEMP/fake-home/$tool/agents/"*.md 2>/dev/null | wc -l)
-            echo "$tool agents: $count"
-            test "$count" -ge 7 || { echo "::error::expected >=7 $tool agent files"; exit 1; }
-          done
+          carter install --base-dir "$RUNNER_TEMP/fake-home"
+          count=$(ls "$RUNNER_TEMP/fake-home/opencode/agents/"*.md 2>/dev/null | wc -l)
+          echo "opencode agents: $count"
+          test "$count" -ge 8 || { echo "::error::expected >=8 opencode agent files"; exit 1; }
+          test ! -e "$RUNNER_TEMP/fake-home/copilot" || { echo "::error::wrote to copilot"; exit 1; }

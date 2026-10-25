@@ -5,7 +5,7 @@ argument-hint: "[optional: focus area or specific agent/skill]"
 ---
 
 <objective>
-Read accumulated memory (`~/.carter/memories/`) and curated knowledge (`~/.copilot/knowledge/`) to identify recurring patterns, then propose concrete improvements to Carter's agent definitions or skill files.
+Read accumulated memory (`~/.carter/memories/`) and curated knowledge (`~/.carter/knowledge/`) to identify recurring patterns, then propose concrete improvements to Carter's agent definitions or skill files.
 
 **Language:** proposals and notes follow the workspace `docs_language` (`.carter/carter.yaml`; default English); edits to agent and skill files are always English.
 </objective>
@@ -16,7 +16,7 @@ Read accumulated memory (`~/.carter/memories/`) and curated knowledge (`~/.copil
 
 1. **Read memory** — Scan all files in `~/.carter/memories/` (user, session, and repo scopes).
 
-2. **Read knowledge** — Scan all files in `~/.copilot/knowledge/`, focusing on `mistakes.md`, `patterns.md`, and `debugging.md`.
+2. **Read knowledge** — Scan all files in `~/.carter/knowledge/`, focusing on `mistakes.md`, `patterns.md`, and `debugging.md`.
 
 3. **Identify patterns** — Look for:
    - Mistakes that recur across conversations (same root cause, different surface)
@@ -28,10 +28,11 @@ Read accumulated memory (`~/.carter/memories/`) and curated knowledge (`~/.copil
 4. **Map to targets** — For each pattern, identify which file should change:
    | Pattern Type | Target File |
    |-------------|-------------|
-   | Agent behavior issue | `agents/carter-*.md` |
-   | Missing domain knowledge | `skills/carter-*/SKILL.md` |
-   | Global rule gap | `instructions/copilot-instructions.md` |
-   | OpenCode-specific gap | OpenCode `AGENTS.md` |
+   | Agent behavior issue | `templates/agents/carter-*.md.j2` (source; re-render with `carter update` / `carter install`) |
+   | Missing domain knowledge | `skills/carter-*/SKILL.md` (source; installed to `~/.config/opencode/skills/`) |
+   | Global rule gap | `templates/instructions/AGENTS.md.j2` (installed as `~/.config/opencode/AGENTS.md`) |
+
+   Never edit the rendered copies in `~/.config/opencode/agents/` or `.opencode/agents/` — they are overwritten on the next render. Edit the sources in the Carter repository.
 
 5. **Propose changes** — For each improvement, show:
    - **Source evidence**: Which memory/knowledge entries revealed the pattern
@@ -41,7 +42,7 @@ Read accumulated memory (`~/.carter/memories/`) and curated knowledge (`~/.copil
 
 6. **Apply with approval** — Present all proposals to the user. Apply only the changes the user approves.
 
-7. **Record** — After applying changes, record the improvement in `~/.copilot/knowledge/decisions.md` as an architecture decision.
+7. **Record** — After applying changes, record the improvement in `~/.carter/knowledge/decisions.md` as an architecture decision.
 
 </workflow>
 

@@ -1,281 +1,254 @@
-"""Tests for the risk-based strictness policy lint (ADR-0005).
+"""Tests for the V2 ``permissions:`` emission and the policy lint (ADR-0014 D1/D2/D5).
 
-Covers ``carter.scaffold.lint_policy`` — the deterministic, offline lint that
-verifies the emitted agent frontmatter still matches the declared policy model —
-and the ``carter check --accept-degraded`` CLI integration.
+Carter emits each agent's OpenCode V2 ``permissions:`` rule list (last match wins)
+from the risk taxonomy x per-agent allowlist. ``carter check`` (``lint_policy``)
+compares the emitted ``permissions:``/``model`` with what carter.yaml generates and
+rejects any V1 frontmatter key. There is no ``<!-- carter:policy -->`` comment.
 """
 
 from __future__ import annotations
 
+import pytest
 import yaml
 from click.testing import CliRunner
 
 from carter.config import (
+    V1_AGENT_KEYS,
     generate_default_config,
     load_config,
-    parse_policy_comment,
-    policy_comment,
+    permission_rules,
     policy_frontmatter,
     write_config,
 )
-from carter.scaffold import lint_policy
+from carter.scaffold import create_env, lint_policy, render_agents
+
+_ALL_ROLES = ["maestro", "architect", "engineer", "devops", "pm", "learner", "narrator", "security"]
+_READ_ONLY = ("maestro", "architect", "learner")
+_LOCAL_WRITE = ("engineer", "devops", "pm", "narrator", "security")
 
 
-def _config(level: str = "guarded", target: str = "copilot") -> dict:
-    """Default config pinned to a policy level + target, canonical agent names."""
+def _r(action: str, resource: str, effect: str) -> dict[str, str]:
+    return {"action": action, "resource": resource, "effect": effect}
+
+
+# Steps 1-4 of ADR-0014 D1 (identical for every agent), in order.
+_BASELINE = [
+    _r("*", "*", "ask"),
+    _r("read", "*", "allow"),
+    _r("glob", "*", "allow"),
+    _r("grep", "*", "allow"),
+    _r("skill", "*", "allow"),
+    _r("question", "*", "allow"),
+    _r("read", "*.env", "ask"),
+    _r("read", "*.env.*", "ask"),
+    _r("read", "*.env.example", "allow"),
+    _r("external_directory", "~/.carter/*", "allow"),
+    _r("read", "~/.carter/*", "allow"),
+]
+_MEMORIES_EDIT = _r("edit", "~/.carter/memories/*", "allow")
+_DANGEROUS = (
+    "terraform apply *",
+    "terraform destroy *",
+    "kubectl apply *",
+    "helm upgrade *",
+    "rm -rf *",
+    "git reset --hard *",
+    "git push --force *",
+)
+
+
+def _shell(remote_write: str, dangerous: str) -> list[dict[str, str]]:
+    return [_r("shell", "git push *", remote_write)] + [
+        _r("shell", cmd, dangerous) for cmd in _DANGEROUS
+    ]
+
+
+def _config(level: str = "guarded") -> dict:
     cfg = generate_default_config(workspace_name="lint", mode="single")
     cfg["agent_suffix"] = ""
     cfg["policy"]["level"] = level
-    cfg["target"] = target
     return cfg
 
 
 def _installed(config: dict) -> dict[str, dict]:
-    """Build the {role: parsed frontmatter} map the way ``carter check`` does:
-    parse each role's native frontmatter and re-inject the ``policy`` block from
-    its ``carter:policy`` comment (which is where the block now lives, off the wire).
-    """
-    installed = {}
-    for role in config["agents"]:
-        fm = yaml.safe_load(policy_frontmatter(config, role)) or {}
-        fm["policy"] = parse_policy_comment(policy_comment(config, role))
-        installed[role] = fm
-    return installed
+    """{role: parsed frontmatter} as ``carter check`` builds it."""
+    return {role: yaml.safe_load(policy_frontmatter(config, role)) for role in config["agents"]}
 
 
-# ─── Drift detection (emitted frontmatter ↔ declared model) ──────────────────
+# ─── Rule order (ADR-0014 D1) ────────────────────────────────────────────────
 
 
-class TestLintClean:
-    """A matching install — emitted frontmatter == declared model — lints clean."""
+class TestRuleOrder:
+    def test_architect_read_only_exact_rules(self):
+        expected = [
+            *_BASELINE,
+            _r("subagent", "*", "deny"),
+            _r("edit", "*", "ask"),
+            _r("shell", "*", "ask"),
+            _r("webfetch", "*", "ask"),
+            *_shell("deny", "deny"),
+        ]
+        assert permission_rules(_config(), "architect") == expected
 
-    def test_matching_install_has_no_errors(self):
-        cfg = _config(level="guarded", target="copilot")
-        errors, _ = lint_policy(cfg, _installed(cfg))
-        assert errors == []
+    def test_maestro_exact_rules(self):
+        expected = [
+            *_BASELINE,
+            _r("subagent", "*", "deny"),
+            _r("subagent", "carter-*", "allow"),
+            _r("edit", "*", "ask"),
+            _r("shell", "*", "ask"),
+            _r("webfetch", "*", "ask"),
+            *_shell("deny", "deny"),
+        ]
+        assert permission_rules(_config(), "maestro") == expected
 
-    def test_matching_install_has_no_warnings(self):
-        cfg = _config(level="guarded", target="copilot")  # not strict
-        _, warnings = lint_policy(cfg, _installed(cfg))
-        assert warnings == []
+    def test_engineer_local_write_exact_rules(self):
+        expected = [
+            *_BASELINE,
+            _MEMORIES_EDIT,
+            _r("subagent", "*", "deny"),
+            _r("edit", "*", "allow"),
+            _r("shell", "*", "allow"),
+            _r("webfetch", "*", "allow"),
+            *_shell("deny", "deny"),
+        ]
+        assert permission_rules(_config(), "engineer") == expected
 
-    def test_guarded_opencode_install_is_clean(self):
-        # guarded on an enforcing target (opencode): no hard-ack → clean.
-        cfg = _config(level="guarded", target="opencode")
-        errors, warnings = lint_policy(cfg, _installed(cfg))
-        assert errors == []
-        assert warnings == []
+    def test_devops_guarded_gate_emitted_as_ask(self):
+        # guarded: remote-write ask, dangerous gate -> ask (D2).
+        rules = permission_rules(_config("guarded"), "devops")
+        assert rules[-8:] == _shell("ask", "ask")
+
+    def test_devops_strict(self):
+        # strict: remote-write gate -> ask, dangerous deny.
+        rules = permission_rules(_config("strict"), "devops")
+        assert rules[-8:] == _shell("ask", "deny")
+
+    def test_overrides_are_honored(self):
+        cfg = _config()
+        cfg["policy"]["overrides"] = {"remote-write": "deny"}
+        rules = permission_rules(cfg, "devops")
+        assert _r("shell", "git push *", "deny") in rules
+
+    @pytest.mark.parametrize("role", _ALL_ROLES)
+    def test_baseline_first(self, role):
+        assert permission_rules(_config(), role)[: len(_BASELINE)] == _BASELINE
+
+    @pytest.mark.parametrize("role", _ALL_ROLES)
+    def test_effects_are_v2_vocabulary(self, role):
+        for level in ("guarded", "strict"):
+            for rule in permission_rules(_config(level), role):
+                assert set(rule) == {"action", "resource", "effect"}
+                assert rule["effect"] in {"allow", "ask", "deny"}
+
+    @pytest.mark.parametrize("role", _ALL_ROLES)
+    def test_v2_action_names_only(self, role):
+        actions = {r["action"] for r in permission_rules(_config(), role)}
+        assert not actions & {"bash", "task"}
+
+    @pytest.mark.parametrize("role", _LOCAL_WRITE)
+    def test_memories_edit_only_for_local_write(self, role):
+        assert _MEMORIES_EDIT in permission_rules(_config(), role)
+
+    @pytest.mark.parametrize("role", _READ_ONLY)
+    def test_no_memories_edit_for_read_only(self, role):
+        assert _MEMORIES_EDIT not in permission_rules(_config(), role)
+
+    @pytest.mark.parametrize("role", _ALL_ROLES)
+    def test_no_mcp_websearch_or_execute_rules(self, role):
+        actions = {r["action"] for r in permission_rules(_config(), role)}
+        assert not actions & {"websearch", "execute"}
+
+    @pytest.mark.parametrize("role", [r for r in _ALL_ROLES if r != "maestro"])
+    def test_specialists_cannot_launch_subagents(self, role):
+        sub = [r for r in permission_rules(_config(), role) if r["action"] == "subagent"]
+        assert sub == [_r("subagent", "*", "deny")]
+
+    def test_maestro_glob_survives_agent_suffix(self):
+        cfg = _config()
+        cfg["agent_suffix"] = "local"
+        rendered = render_agents(cfg, create_env())["carter-maestro-local.md"]
+        fm = yaml.safe_load(rendered.split("---", 2)[1])
+        assert _r("subagent", "carter-*", "allow") in fm["permissions"]
 
 
-class TestLintDrift:
-    """Tampering with emitted frontmatter is flagged as drift (an error)."""
+# ─── Emitted frontmatter shape ───────────────────────────────────────────────
 
-    def test_allowlist_mismatch_is_error(self):
+
+class TestEmittedFrontmatter:
+    @pytest.mark.parametrize("role", _ALL_ROLES)
+    def test_no_v1_keys(self, role):
+        fm = yaml.safe_load(policy_frontmatter(_config(), role))
+        assert not set(fm) & set(V1_AGENT_KEYS)
+        assert "agents" not in fm and "handoffs" not in fm
+
+    def test_v1_key_set(self):
+        assert set(V1_AGENT_KEYS) == {"permission", "tools", "bash", "task", "name", "temperature"}
+
+    def test_rendered_files_have_no_policy_comment(self):
+        for name, content in render_agents(_config(), create_env()).items():
+            assert "carter:policy" not in content, name
+            fm = yaml.safe_load(content.split("---", 2)[1])
+            assert fm["permissions"], name
+            assert "policy" not in fm, name
+
+
+# ─── Lint (ADR-0014 D5) ──────────────────────────────────────────────────────
+
+
+class TestLint:
+    def test_matching_install_is_clean(self):
+        for level in ("guarded", "strict"):
+            cfg = _config(level)
+            assert lint_policy(cfg, _installed(cfg)) == []
+
+    def test_permissions_tamper_is_drift(self):
         cfg = _config()
         installed = _installed(cfg)
-        installed["devops"]["policy"]["allow"] = ["R0"]  # tampered
-        errors, _ = lint_policy(cfg, installed)
-        assert any("devops" in e and "allow" in e.lower() for e in errors)
-        assert any("drifted from declared allowlist" in e for e in errors)
+        installed["devops"]["permissions"][-1]["effect"] = "allow"
+        errors = lint_policy(cfg, installed)
+        assert any("devops" in e and "permissions" in e and "drifted" in e for e in errors)
 
-    def test_gate_mismatch_is_error(self):
+    def test_reordered_rules_are_drift(self):
         cfg = _config()
         installed = _installed(cfg)
-        installed["devops"]["policy"]["gates"]["R2"] = "allow"  # guarded R2 is ask
-        errors, _ = lint_policy(cfg, installed)
-        assert any("devops" in e and "gate" in e.lower() for e in errors)
+        installed["architect"]["permissions"].reverse()
+        assert any("architect" in e for e in lint_policy(cfg, installed))
 
-    def test_missing_policy_block_is_error(self):
+    def test_missing_permissions_is_error(self):
         cfg = _config()
         installed = _installed(cfg)
-        del installed["maestro"]["policy"]
-        errors, _ = lint_policy(cfg, installed)
-        assert any("maestro" in e and "policy" in e.lower() for e in errors)
+        del installed["engineer"]["permissions"]
+        assert any("engineer" in e and "permissions" in e for e in lint_policy(cfg, installed))
+
+    def test_specialist_subagent_allow_is_error(self):
+        cfg = _config()
+        installed = _installed(cfg)
+        installed["engineer"]["permissions"].append(_r("subagent", "*", "allow"))
+        assert any("engineer" in e for e in lint_policy(cfg, installed))
+
+    def test_model_drift_is_error(self):
+        cfg = _config()
+        installed = _installed(cfg)
+        installed["pm"]["model"] = "openai/gpt-x"
+        assert any("pm" in e and "model" in e for e in lint_policy(cfg, installed))
+
+    @pytest.mark.parametrize("key", ["permission", "tools", "bash", "task", "name", "temperature"])
+    def test_v1_key_is_error(self, key):
+        cfg = _config()
+        installed = _installed(cfg)
+        installed["learner"][key] = "x"
+        errors = lint_policy(cfg, installed)
+        assert any("learner" in e and key in e and "V1" in e for e in errors)
 
     def test_absent_role_is_not_an_error(self):
-        # A role in the model but not in `installed` is not lint's concern —
-        # missing-file is handled by the existing `carter check` logic.
         cfg = _config()
         installed = _installed(cfg)
         del installed["learner"]
-        errors, _ = lint_policy(cfg, installed)
-        assert not any("learner" in e for e in errors)
+        assert not any("learner" in e for e in lint_policy(cfg, installed))
 
 
-class TestLintNativeKeyDrift:
-    """The lint must also guard the ENFORCED native keys — OpenCode ``permission``
-    and copilot ``tools`` — not only the advisory ``policy`` block (audit HIGH-2).
-    """
-
-    def test_permission_tamper_is_error(self):
-        cfg = _config(level="strict", target="opencode")
-        installed = _installed(cfg)
-        # devops bash is `deny` at strict; tamper it to a permissive value.
-        installed["devops"]["permission"]["bash"] = "allow"
-        errors, _ = lint_policy(cfg, installed, accept_degraded=True)
-        assert any("devops" in e and "permission" in e.lower() for e in errors)
-
-    def test_tools_tamper_is_error(self):
-        cfg = _config(level="guarded", target="copilot")
-        installed = _installed(cfg)
-        installed["devops"]["tools"] = ["carter-github/*", "carter-evil/*"]  # widened
-        errors, _ = lint_policy(cfg, installed)
-        assert any("devops" in e and "tools" in e.lower() for e in errors)
-
-    def test_missing_permission_on_opencode_is_error(self):
-        cfg = _config(level="guarded", target="opencode")
-        installed = _installed(cfg)
-        del installed["devops"]["permission"]
-        errors, _ = lint_policy(cfg, installed)
-        assert any("devops" in e and "permission" in e.lower() for e in errors)
-
-    def test_matching_native_keys_are_clean(self):
-        cfg = _config(level="strict", target="all")
-        errors, _ = lint_policy(cfg, _installed(cfg), accept_degraded=True)
-        assert not [e for e in errors if "permission" in e.lower() or "tools" in e.lower()]
-
-    def test_overridden_install_has_no_false_drift(self):
-        # A legitimately-overridden install emits gates the lint must accept.
-        cfg = _config(level="guarded", target="opencode")
-        cfg["policy"]["overrides"] = {"R2": "deny", "R3": "ask"}
-        errors, _ = lint_policy(cfg, _installed(cfg))
-        assert errors == []
-
-
-# ─── HARD ACK (Q15): strict on a non-enforcing target fails closed ───────────
-
-
-class TestHardAck:
-    """``strict`` on a target that cannot enforce gates requires an explicit ack."""
-
-    def test_strict_on_copilot_fails_closed(self):
-        cfg = _config(level="strict", target="copilot")
-        errors, _ = lint_policy(cfg, _installed(cfg), accept_degraded=False)
-        assert any("accept-degraded" in e for e in errors)
-
-    def test_strict_on_copilot_acknowledged(self):
-        cfg = _config(level="strict", target="copilot")
-        errors, warnings = lint_policy(cfg, _installed(cfg), accept_degraded=True)
-        assert errors == []
-        assert any("degrades to advisory" in w and "acknowledged" in w for w in warnings)
-
-    def test_strict_on_opencode_no_degraded(self):
-        cfg = _config(level="strict", target="opencode")  # opencode enforces
-        errors, warnings = lint_policy(cfg, _installed(cfg), accept_degraded=False)
-        assert not any("accept-degraded" in e for e in errors)
-        assert not any("degrades to advisory" in w for w in warnings)
-
-    def test_strict_on_all_degrades_only_on_copilot(self):
-        cfg = _config(level="strict", target="all")
-        errors, _ = lint_policy(cfg, _installed(cfg), accept_degraded=False)
-        ack_errors = [e for e in errors if "accept-degraded" in e]
-        assert len(ack_errors) == 1
-        assert "copilot" in ack_errors[0]
-        assert "opencode" not in ack_errors[0]  # opencode enforces, not degraded
-
-
-# ─── Fail-closed dispatch lint (ADR-0010 D1) ──────────
-
-
-class TestDispatchLint:
-    """The primary's dispatch allowlist is a security boundary: a ``'*'``, a glob,
-    or an absent ``agents:``/``permission.task`` on the maestro is a fail-closed
-    ERROR (exit non-zero), never a warning. An explicit per-specialist list passes.
-    """
-
-    def test_explicit_copilot_dispatch_is_clean(self):
-        cfg = _config(level="guarded", target="copilot")
-        errors, _ = lint_policy(cfg, _installed(cfg))
-        assert not any("dispatch" in e.lower() for e in errors)
-
-    def test_explicit_opencode_dispatch_is_clean(self):
-        cfg = _config(level="guarded", target="opencode")
-        errors, _ = lint_policy(cfg, _installed(cfg))
-        assert not any("dispatch" in e.lower() for e in errors)
-
-    def test_star_agents_is_error(self):
-        cfg = _config(level="guarded", target="copilot")
-        installed = _installed(cfg)
-        installed["maestro"]["agents"] = ["*"]  # failure-open glob
-        errors, _ = lint_policy(cfg, installed)
-        assert any("maestro" in e and "agents" in e for e in errors)
-
-    def test_glob_agents_is_error(self):
-        cfg = _config(level="guarded", target="copilot")
-        installed = _installed(cfg)
-        installed["maestro"]["agents"] = ["carter-*"]  # auto-trusts future agents
-        errors, _ = lint_policy(cfg, installed)
-        assert any("maestro" in e and "agents" in e for e in errors)
-
-    def test_absent_agents_is_error(self):
-        cfg = _config(level="guarded", target="copilot")
-        installed = _installed(cfg)
-        del installed["maestro"]["agents"]
-        errors, _ = lint_policy(cfg, installed)
-        assert any("maestro" in e and "agents" in e for e in errors)
-
-    def test_star_permission_task_is_error(self):
-        cfg = _config(level="guarded", target="opencode")
-        installed = _installed(cfg)
-        installed["maestro"]["permission"]["task"] = {"*": "allow"}  # failure-open
-        errors, _ = lint_policy(cfg, installed)
-        assert any("maestro" in e and "task" in e for e in errors)
-
-    def test_glob_permission_task_is_error(self):
-        cfg = _config(level="guarded", target="opencode")
-        installed = _installed(cfg)
-        installed["maestro"]["permission"]["task"] = {"*": "deny", "carter-*": "allow"}
-        errors, _ = lint_policy(cfg, installed)
-        assert any("maestro" in e and "task" in e for e in errors)
-
-    def test_absent_permission_task_is_error(self):
-        cfg = _config(level="guarded", target="opencode")
-        installed = _installed(cfg)
-        installed["maestro"]["permission"].pop("task", None)
-        errors, _ = lint_policy(cfg, installed)
-        assert any("maestro" in e and "task" in e for e in errors)
-
-    def test_dispatch_violation_is_error_not_warning(self):
-        cfg = _config(level="guarded", target="copilot")
-        installed = _installed(cfg)
-        installed["maestro"]["agents"] = ["*"]
-        errors, warnings = lint_policy(cfg, installed)
-        assert any("dispatch" in e.lower() or "agents" in e for e in errors)
-        assert not any("*" in w for w in warnings), "must be an error, never a warning"
-
-    def test_check_fails_on_star_dispatch(self, tmp_path):
-        from carter.cli import main
-
-        runner = CliRunner()
-        result = runner.invoke(main, ["init", str(tmp_path), "--no-git-state"])
-        assert result.exit_code == 0, result.output
-        maestro = next((tmp_path / ".github" / "agents").glob("carter-maestro*.md"))
-        # Rewrite the maestro frontmatter so its dispatch allowlist is the
-        # failure-open glob `'*'` — parse, tamper, re-emit (robust to flow-style).
-        text = maestro.read_text()
-        _, fm_raw, body = text.split("---", 2)
-        fm = yaml.safe_load(fm_raw)
-        fm["agents"] = ["*"]
-        maestro.write_text(f"---\n{yaml.safe_dump(fm, sort_keys=False)}---{body}")
-        result = runner.invoke(main, ["check", str(tmp_path)])
-        assert result.exit_code == 1, result.output
-        assert "maestro" in result.output
-
-
-# ─── N2: no false "server not wired" warning ─────────────────────────────────
-
-
-class TestNoFalseMcpWarning:
-    """The lint reads per-agent frontmatter scope only; global MCP wiring is out
-    of scope, so it must never warn that a server is "not wired"."""
-
-    def test_valid_config_emits_no_server_wiring_warning(self):
-        cfg = _config()  # agents carry valid frontmatter
-        _, warnings = lint_policy(cfg, _installed(cfg))
-        assert not any("wired" in w.lower() or "mcp server" in w.lower() for w in warnings)
-
-
-# ─── carter check --accept-degraded CLI integration ──────────────────────────
+# ─── carter check CLI integration ────────────────────────────────────────────
 
 
 class TestCheckCliIntegration:
@@ -287,58 +260,58 @@ class TestCheckCliIntegration:
         assert result.exit_code == 0, result.output
         return runner, main
 
-    def test_check_fails_on_drifted_agent_frontmatter(self, tmp_path):
-        runner, main = self._init(tmp_path)  # default: copilot, guarded
-        agent = next((tmp_path / ".github" / "agents").glob("carter-devops*.md"))
-        # The policy block now lives in the carter:policy comment (compact JSON),
-        # off the wire; tamper it there to simulate drift.
-        tampered = agent.read_text().replace('"remote-write":"ask"', '"remote-write":"allow"', 1)
-        agent.write_text(tampered)
-        result = runner.invoke(main, ["check", str(tmp_path)])
-        assert result.exit_code == 1, result.output
-        assert "devops" in result.output
-        assert "drifted" in result.output
-
-    def test_accept_degraded_flag_is_accepted(self, tmp_path):
+    def test_fresh_init_checks_ok(self, tmp_path):
         runner, main = self._init(tmp_path)
-        result = runner.invoke(main, ["check", str(tmp_path), "--accept-degraded"])
+        result = runner.invoke(main, ["check", str(tmp_path)])
         assert result.exit_code == 0, result.output
         assert "Workspace OK" in result.output
 
-    def test_strict_on_copilot_fails_closed_without_ack(self, tmp_path):
-        runner, main = self._init(tmp_path)  # copilot, guarded
+    def test_check_fails_on_tampered_permissions(self, tmp_path):
+        runner, main = self._init(tmp_path)
+        agent = next((tmp_path / ".opencode" / "agents").glob("carter-devops*.md"))
+        _, fm_raw, body = agent.read_text().split("---", 2)
+        fm = yaml.safe_load(fm_raw)
+        fm["permissions"].append(_r("shell", "*", "allow"))
+        fm["permissions"].append(_r("shell", "git push *", "allow"))
+        agent.write_text(f"---\n{yaml.safe_dump(fm, sort_keys=False)}---{body}")
+        result = runner.invoke(main, ["check", str(tmp_path)])
+        assert result.exit_code == 1, result.output
+        assert "devops" in result.output and "drifted" in result.output
+
+    def test_check_fails_on_widened_maestro_dispatch(self, tmp_path):
+        runner, main = self._init(tmp_path)
+        maestro = next((tmp_path / ".opencode" / "agents").glob("carter-maestro*.md"))
+        _, fm_raw, body = maestro.read_text().split("---", 2)
+        fm = yaml.safe_load(fm_raw)
+        fm["permissions"].append(_r("subagent", "*", "allow"))
+        maestro.write_text(f"---\n{yaml.safe_dump(fm, sort_keys=False)}---{body}")
+        result = runner.invoke(main, ["check", str(tmp_path)])
+        assert result.exit_code == 1, result.output
+        assert "maestro" in result.output
+
+    def test_accept_degraded_flag_is_gone(self, tmp_path):
+        runner, main = self._init(tmp_path)
+        result = runner.invoke(main, ["check", str(tmp_path), "--accept-degraded"])
+        assert result.exit_code != 0
+
+    def test_strict_checks_ok_after_update(self, tmp_path):
+        runner, main = self._init(tmp_path)
         cfg_path = tmp_path / ".carter" / "carter.yaml"
         config = load_config(cfg_path)
         config["policy"]["level"] = "strict"
         write_config(cfg_path, config)
-        # Re-emit agents at the new level so there is no drift — isolating the
-        # hard-ack check (changing policy.level requires `carter update`).
         assert runner.invoke(main, ["update", str(tmp_path)]).exit_code == 0
-
-        failed = runner.invoke(main, ["check", str(tmp_path)])
-        assert failed.exit_code == 1, failed.output
-        assert "accept-degraded" in failed.output
-
-        ok = runner.invoke(main, ["check", str(tmp_path), "--accept-degraded"])
-        assert ok.exit_code == 0, ok.output
+        result = runner.invoke(main, ["check", str(tmp_path)])
+        assert result.exit_code == 0, result.output
 
     def test_init_surfaces_guarded_policy_notice(self, tmp_path):
-        from carter.cli import main
-
-        runner = CliRunner()
-        result = runner.invoke(main, ["init", str(tmp_path), "--no-git-state"])
-        assert result.exit_code == 0, result.output
-        # New installs default to guarded → the policy notice surfaces.
+        runner, main = self._init(tmp_path)
+        result = runner.invoke(main, ["update", str(tmp_path)])
         assert "Strictness policy is 'guarded'" in result.output
 
     def test_stale_loose_resolves_guarded_on_update(self, tmp_path):
-        # ADR-0010 D3: a stale `level: loose` in carter.yaml resolves to guarded
-        # silently (no error, no migration message). On update the guarded notice
-        # then fires like any guarded workspace.
         runner, main = self._init(tmp_path)
         cfg_path = tmp_path / ".carter" / "carter.yaml"
-        # Write a stale loose level directly (bypassing validation) as a prior
-        # install would have left it.
         raw = cfg_path.read_text().replace("level: guarded", "level: loose")
         cfg_path.write_text(raw)
         result = runner.invoke(main, ["update", str(tmp_path)])

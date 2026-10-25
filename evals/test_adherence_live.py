@@ -51,7 +51,7 @@ _DOWNGRADE_SCENARIOS = [
 def _plan_prompt(scenario: dict) -> str:
     """Render the thinker plan as the user message handed to the agent.
 
-    Role-agnostic: the agent's own system prompt (its `agents/carter-<role>.md`) decides
+    Role-agnostic: the agent's own system prompt (its rendered `carter-<role>.md`) decides
     HOW it responds — the engineer writes code, the narrator drafts redacted content, the
     pm produces a plan. This prompt only hands over the plan, its steps, and the required
     outcomes, and asks the agent to work directly without tools (so the transcript is the
@@ -114,9 +114,8 @@ def _record_fixture(scenario_name: str, fixture_file: str, transcript: str, resu
     """Overwrite a scenario's recorded fixture with the fresh live transcript + grade.
 
     The stored ``model`` is the CANONICAL Carter id (``claude-sonnet-4-6``, hyphen), which
-    the offline replay asserts — independent of the transport-specific id used to make the
-    call (Copilot's chat endpoint wants ``claude-sonnet-4.6`` with a dot; pass that via
-    ``EVAL_MODEL`` when recording).
+    the offline replay asserts — independent of any provider-specific id passed via
+    ``EVAL_MODEL`` when recording.
     """
     from evals.metrics import DEFAULT_MODEL
 

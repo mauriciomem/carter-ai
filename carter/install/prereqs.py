@@ -1,14 +1,14 @@
 """Environment detection and prerequisite/credential checks.
 
-``check_prerequisites`` itself lives in ``carter.installer`` (it resolves ``_which``
-through that module's namespace so tests can monkeypatch it); the leaf probes and the
-non-coupled checks live here.
+OpenCode is the only supported harness (ADR-0014): ``require_opencode`` fails the
+install hard when ``opencode`` is missing or older than ``MIN_OPENCODE`` (D6).
 """
 
 from __future__ import annotations
 
 import os
 import platform
+import re
 import shutil
 import subprocess
 
@@ -20,6 +20,64 @@ REQUIRED_ENV_VARS = (
     "GITHUB_TOKEN",
     "TFE_TOKEN",
 )
+
+
+# Minimum supported OpenCode release (ADR-0014 D6).
+MIN_OPENCODE = (2, 1)
+
+_VERSION_RE = re.compile(r"\bv?(\d+)\.(\d+)(?:\.(\d+))?")
+
+
+class PrerequisiteError(RuntimeError):
+    """A hard install prerequisite is missing; nothing has been written."""
+
+
+def parse_opencode_version(output: str) -> tuple[int, int, int] | None:
+    """Parse ``opencode --version`` output (e.g. ``opencode v2.1.4``).
+
+    Tolerates a leading ``v`` and a pre-release/build suffix (``2.1.0-beta.1``).
+    Returns ``None`` when no ``MAJOR.MINOR`` version is present.
+    """
+    match = _VERSION_RE.search(output)
+    if not match:
+        return None
+    major, minor, patch = match.groups()
+    return int(major), int(minor), int(patch or 0)
+
+
+def require_opencode() -> tuple[int, int, int]:
+    """Fail hard unless ``opencode`` is on PATH and at least ``MIN_OPENCODE``.
+
+    Raises:
+        PrerequisiteError: ``opencode`` is missing, its version is unreadable, or
+            it is older than ``MIN_OPENCODE``.
+    """
+    minimum = ".".join(map(str, MIN_OPENCODE))
+    hint = f"Install or upgrade OpenCode (>= {minimum}): https://opencode.ai/v2/docs/"
+    if not _which("opencode"):
+        raise PrerequisiteError(f"opencode not found on PATH. {hint}")
+    output = _cmd_version("opencode", "--version")
+    version = parse_opencode_version(output or "")
+    if version is None:
+        raise PrerequisiteError(
+            f"Could not read the OpenCode version from `opencode --version` "
+            f"(got {output!r}). {hint}"
+        )
+    if version[:2] < MIN_OPENCODE:
+        shown = ".".join(map(str, version))
+        raise PrerequisiteError(f"OpenCode {shown} is too old. {hint}")
+    log_ok("opencode", ".".join(map(str, version)))
+    return version
+
+
+def check_optional_tools() -> dict[str, bool]:
+    """Report optional tools (``gh`` for carter-ops). Never fails the install."""
+    found = bool(_which("gh"))
+    if found:
+        log_ok("gh CLI", (_cmd_version("gh") or "")[:30])
+    else:
+        log_warn("gh CLI not found (optional)")
+    return {"gh": found}
 
 
 def _which(cmd: str) -> str | None:

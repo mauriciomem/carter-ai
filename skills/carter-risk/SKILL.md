@@ -74,7 +74,7 @@ Perform structured risk identification and assessment. Produce a risk register w
 </output-format>
 
 <guidelines>
-- Check `~/.copilot/knowledge/mistakes.md` for risks based on past failures.
+- Check `~/.carter/knowledge/mistakes.md` for risks based on past failures.
 - Be specific — "something might go wrong" is not a risk. "Terraform state corruption during concurrent applies" is.
 - Every critical risk must have a mitigation plan AND a contingency plan.
 - Review risks periodically — suggest adding risk reviews to sprint ceremonies.

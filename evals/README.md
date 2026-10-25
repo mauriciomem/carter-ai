@@ -19,7 +19,7 @@ uv sync --extra dev   # once: pytest, pyyaml, httpx
 # Run offline evals (fast, no auth needed)
 uv run pytest evals -m "not live" -v
 
-# Run live evals only (uses your existing Copilot auth automatically)
+# Run live evals only (needs ANTHROPIC_API_KEY or OPENAI_API_KEY; skip otherwise)
 uv run pytest evals -m live -v
 
 # Run only routing / skill correctness evals
@@ -35,13 +35,12 @@ repo-root config only collects `tests/`.
 
 ## Authentication
 
-Live evals need an LLM. Authentication is resolved automatically in this order:
+Live evals need an LLM provider API key from the environment, checked in this order:
 
-1. **GitHub Copilot** (preferred) — uses your existing `opencode` or `gh` CLI auth. No extra setup needed.
-2. **ANTHROPIC_API_KEY** — env var with an Anthropic key
-3. **OPENAI_API_KEY** — env var with an OpenAI key
+1. **ANTHROPIC_API_KEY** — env var with an Anthropic key
+2. **OPENAI_API_KEY** — env var with an OpenAI key
 
-If you're already using Copilot CLI or OpenCode, live evals work out of the box.
+With neither set, the live tests skip cleanly. Live evals are opt-in (`-m live`).
 
 ## Architecture
 
@@ -155,10 +154,10 @@ Scenarios are YAML files in `evals/scenarios/`. Each scenario has:
 | `EVAL_MAX_TOKENS` | Per-call completion cap | `4096` |
 | `EVAL_METRICS_OUT` | Write the run's metrics summary JSON here | unset |
 | `EVAL_RECORD` | Re-record adherence fixtures from a live run | unset |
-| `ANTHROPIC_API_KEY` | API key for Anthropic (fallback if no Copilot auth) | — |
-| `OPENAI_API_KEY` | API key for OpenAI (last resort fallback) | — |
+| `ANTHROPIC_API_KEY` | API key for Anthropic (preferred) | — |
+| `OPENAI_API_KEY` | API key for OpenAI (fallback) | — |
 
-Note: If you're logged into `gh` or `opencode`, no env vars are needed at all.
+Note: no stored OpenCode/`gh` credentials are read — set a key explicitly.
 
 ## CI Integration
 

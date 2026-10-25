@@ -1,14 +1,13 @@
-"""Component installers: agents, skills, instructions, knowledge, memories, ops.
+"""Component installers: agents, skills, OpenCode rules, knowledge, memories, ops.
 
-Plus the install manifest read/write. These are pure orchestration over the file
-primitives and path resolvers — none are monkeypatched by tests, so they live here
-rather than in ``carter.installer``.
+Plus the install manifest read/write. OpenCode is the only install target
+(ADR-0014); the knowledge base, manifest and backups live under ``~/.carter``
+(D3, see ``carter.install.paths``).
 """
 
 from __future__ import annotations
 
 import json
-import shutil
 import subprocess
 from pathlib import Path
 
@@ -18,45 +17,29 @@ from carter.install.files import (
     _install_file,
     _install_rendered_file,
     _install_templated_file,
-    _sha256,
 )
 from carter.install.paths import (
     REPO_ROOT,
     _carter_base,
-    _copilot_base,
     _home,
     _opencode_base,
+    knowledge_dir,
+    manifest_path,
 )
 
 
 def install_agents(
-    targets: list[str],
     base_dir: Path | None,
     manifest: dict,
     backup_root: Path,
 ) -> dict[str, int]:
+    """Install the OpenCode agents rendered from the shipped guarded defaults."""
     log_step("Installing agents...")
-    src_dir = REPO_ROOT / "agents"
     stats: dict[str, int] = {"created": 0, "updated": 0, "unchanged": 0}
-
-    # The static `agents/*.md` are copilot-shaped (a `tools:` allowlist array).
-    # OpenCode rejects that array — it wants a `permission` block and `provider/model`
-    # ids — so for the opencode target we render the OpenCode-shaped frontmatter from
-    # the guarded defaults rather than copying the copilot file verbatim.
-    opencode_rendered = _render_opencode_agents() if "opencode" in targets else {}
-
-    for agent_file in sorted(src_dir.glob("carter-*.md")):
-        if "copilot" in targets:
-            dst = _copilot_base(base_dir) / "agents" / agent_file.name
-            status = _install_file(agent_file, dst, manifest, backup_root)
-            stats[status] += 1
-
-        if "opencode" in targets:
-            dst = _opencode_base(base_dir) / "agents" / agent_file.name
-            content = opencode_rendered[agent_file.name]
-            status = _install_rendered_file(content, dst, manifest, backup_root)
-            stats[status] += 1
-
+    for name, content in sorted(_render_opencode_agents().items()):
+        dst = _opencode_base(base_dir) / "agents" / name
+        status = _install_rendered_file(content, dst, manifest, backup_root)
+        stats[status] += 1
     return stats
 
 
@@ -71,7 +54,6 @@ def _render_opencode_agents() -> dict[str, str]:
     from carter.scaffold import create_env, render_agents
 
     cfg = generate_default_config(workspace_name="carter", mode="single")
-    cfg["target"] = "opencode"
     cfg["agent_suffix"] = ""
     # Global agents serve every workspace: defer to each workspace's docs_language.
     cfg["docs_language"] = None
@@ -79,7 +61,6 @@ def _render_opencode_agents() -> dict[str, str]:
 
 
 def install_skills(
-    targets: list[str],
     base_dir: Path | None,
     manifest: dict,
     backup_root: Path,
@@ -108,88 +89,16 @@ def install_skills(
             # Template substitution for carter-ops SKILL.md
             needs_template = skill_dir.name == "carter-ops" and src_file.name == "SKILL.md"
 
-            if "copilot" in targets:
-                dst = _copilot_base(base_dir) / "skills" / skill_dir.name / rel
-                if needs_template:
-                    status = _install_templated_file(
-                        src_file, dst, manifest, backup_root, template_vars
-                    )
-                else:
-                    status = _install_file(src_file, dst, manifest, backup_root)
-                stats[status] += 1
-
-            if "opencode" in targets:
-                dst = _opencode_base(base_dir) / "skills" / skill_dir.name / rel
-                if needs_template:
-                    status = _install_templated_file(
-                        src_file, dst, manifest, backup_root, template_vars
-                    )
-                else:
-                    status = _install_file(src_file, dst, manifest, backup_root)
-                stats[status] += 1
+            dst = _opencode_base(base_dir) / "skills" / skill_dir.name / rel
+            if needs_template:
+                status = _install_templated_file(
+                    src_file, dst, manifest, backup_root, template_vars
+                )
+            else:
+                status = _install_file(src_file, dst, manifest, backup_root)
+            stats[status] += 1
 
     return stats
-
-
-def install_instructions(
-    targets: list[str],
-    base_dir: Path | None,
-    manifest: dict,
-    backup_root: Path,
-) -> None:
-    log_step("Installing instructions...")
-    src = REPO_ROOT / "instructions" / "copilot-instructions.md"
-
-    if "copilot" in targets:
-        dst = _copilot_base(base_dir) / "instructions" / "copilot-instructions.md"
-        _install_file(src, dst, manifest, backup_root)
-
-    # OpenCode never loads instructions/copilot-instructions.md (it reads AGENTS.md,
-    # installed by install_opencode_rules), so it is no longer copied there. Clean up
-    # the copy earlier Carter versions wrote, so upgrades don't leave it behind.
-    if "opencode" in targets:
-        remove_legacy_opencode_instructions(base_dir, backup_root)
-
-
-def remove_legacy_opencode_instructions(base_dir: Path | None, backup_root: Path | None) -> None:
-    """Remove the OpenCode copy of copilot-instructions.md older Carter versions wrote.
-
-    Deleted only when it is provably Carter-owned: its hash equals the shipped file,
-    or the existing install manifest recorded it with the same hash. Otherwise it is
-    treated as user-modified: moved to ``backup_root`` when given, else left in place
-    with a warning. A symlink is never followed or removed.
-    """
-    stale = _opencode_base(base_dir) / "instructions" / "copilot-instructions.md"
-    shown = str(stale).replace(str(_home()), "~")
-    if stale.is_symlink():
-        log_warn(f"{shown} is a symlink — left untouched (no longer used by OpenCode)")
-        return
-    if not stale.is_file():
-        return
-
-    current = _sha256(stale)
-    shipped = REPO_ROOT / "instructions" / "copilot-instructions.md"
-    recorded = ((read_manifest(base_dir) or {}).get("file_hashes") or {}).get(str(stale))
-    carter_owned = current == _sha256(shipped) or current == recorded
-
-    if carter_owned:
-        stale.unlink()
-        log_ok(f"Removed stale {shown}")
-    elif backup_root is not None:
-        dest = backup_root / "opencode-instructions" / stale.name
-        dest.parent.mkdir(parents=True, exist_ok=True)
-        shutil.move(str(stale), dest)
-        log_warn(
-            f"{shown} was modified — moved to {str(dest).replace(str(_home()), '~')} "
-            "(OpenCode does not load it)"
-        )
-    else:
-        log_warn(f"{shown} was modified — left in place (OpenCode does not load it)")
-        return
-
-    parent = stale.parent
-    if parent.is_dir() and not any(parent.iterdir()):
-        parent.rmdir()
 
 
 _OPENCODE_AGENTS_MD_LEGACY = """\
@@ -203,14 +112,13 @@ its instructions exactly.
   `/memories/` (platform, if available).
 - Use `~/.carter/memories/user/` for cross-project notes, `repo/<name>/` for
   project-specific notes, and `session/` for conversation-scoped working notes.
-- Consult `~/.carter/memories/` and `~/.copilot/knowledge/` before proposing
+- Consult `~/.carter/memories/` and `~/.carter/knowledge/` before proposing
   solutions to check for past decisions and lessons.
 """
 
-# Ported verbatim from instructions/copilot-instructions.md §Communication (D2: only
-# this section — AGENTS.md loads every session, so token cost is disciplined). Written
-# as implicit concatenation purely to satisfy the line-length lint; the emitted bytes
-# match the instructions file exactly.
+# Global rules §Communication (D2: only this section — AGENTS.md loads every session,
+# so token cost is disciplined). Written as implicit concatenation purely to satisfy
+# the line-length lint.
 _OPENCODE_COMMUNICATION = (
     "\n## Communication\n"
     "- Be concise and clear. Explain so a junior developer or solution architect"
@@ -226,7 +134,7 @@ _OPENCODE_COMMUNICATION = (
 # unmodified older install upgrades cleanly; user-modified files are never touched.
 _OPENCODE_AGENTS_MD_V2 = _OPENCODE_AGENTS_MD_LEGACY + _OPENCODE_COMMUNICATION
 
-# Mirrors the "Git & Language" section of instructions/copilot-instructions.md.
+# The "Git & Language" global rules (also rendered into the workspace AGENTS.md).
 _OPENCODE_GIT_LANGUAGE = (
     "\n## Git & Language\n"
     "- You (the user) are always the commit author and sign with your own key. Never"
@@ -250,14 +158,11 @@ _OPENCODE_AGENTS_MD_KNOWN = (_OPENCODE_AGENTS_MD_LEGACY, _OPENCODE_AGENTS_MD_V2)
 
 
 def install_opencode_rules(
-    targets: list[str],
     base_dir: Path | None,
     manifest: dict,
     backup_root: Path,
 ) -> None:
     """Generate ~/.config/opencode/AGENTS.md for OpenCode global rules."""
-    if "opencode" not in targets:
-        return
     log_step("Installing OpenCode global rules...")
     dst = _opencode_base(base_dir) / "AGENTS.md"
     dst.parent.mkdir(parents=True, exist_ok=True)
@@ -312,7 +217,7 @@ def install_knowledge(
 ) -> int:
     log_step("Initializing knowledge base...")
     src_dir = REPO_ROOT / "knowledge"
-    dst_dir = _copilot_base(base_dir) / "knowledge"
+    dst_dir = knowledge_dir(base_dir)
     count = 0
 
     for src_file in sorted(src_dir.glob("*.md")):
@@ -391,14 +296,37 @@ def install_ops(
 
 
 def write_manifest(manifest: dict, base_dir: Path | None) -> Path:
-    manifest_path = _copilot_base(base_dir) / ".carter-manifest.json"
-    manifest_path.parent.mkdir(parents=True, exist_ok=True)
-    manifest_path.write_text(json.dumps(manifest, indent=2) + "\n")
-    return manifest_path
+    path = manifest_path(base_dir)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(manifest, indent=2) + "\n")
+    return path
+
+
+def normalize_manifest(data: dict) -> dict:
+    """Accept both manifest shapes.
+
+    Pre-ADR-0014 manifests kept ``mcp_servers`` as ``{target: [names]}``; the
+    current shape is a flat list. Old dicts are flattened (de-duplicated, order
+    kept) so callers only ever see the list form.
+    """
+    servers = data.get("mcp_servers")
+    if isinstance(servers, dict):
+        flat: list[str] = []
+        for names in servers.values():
+            for name in names or []:
+                if name not in flat:
+                    flat.append(name)
+        data["mcp_servers"] = flat
+    elif servers is None:
+        data["mcp_servers"] = []
+    data.setdefault("files", [])
+    data.setdefault("file_hashes", {})
+    return data
 
 
 def read_manifest(base_dir: Path | None) -> dict | None:
-    manifest_path = _copilot_base(base_dir) / ".carter-manifest.json"
-    if manifest_path.exists():
-        return json.loads(manifest_path.read_text())
+    """Read ``~/.carter/manifest.json`` (either shape), or ``None`` if absent."""
+    path = manifest_path(base_dir)
+    if path.exists():
+        return normalize_manifest(json.loads(path.read_text()))
     return None

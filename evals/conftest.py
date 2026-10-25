@@ -17,9 +17,19 @@ def repo_root() -> Path:
 
 
 @pytest.fixture
-def agents_dir(repo_root: Path) -> Path:
-    """Path to agent definitions."""
-    return repo_root / "agents"
+def agents_dir(tmp_path: Path) -> Path:
+    """Agents rendered from ``templates/`` exactly as ``carter install`` writes them
+    (no suffix). The static ``agents/`` tree is gone (ADR-0014 phase 5)."""
+    from carter.config import generate_default_config
+    from carter.scaffold import create_env, render_agents
+
+    cfg = generate_default_config()
+    cfg["agent_suffix"] = ""
+    out = tmp_path / "agents"
+    out.mkdir()
+    for name, content in render_agents(cfg, create_env()).items():
+        (out / name).write_text(content)
+    return out
 
 
 @pytest.fixture

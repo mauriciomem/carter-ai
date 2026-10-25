@@ -21,7 +21,7 @@ This file covers core Packer conventions. For specialized topics, use `read_file
 | `windows.md` | Windows images, WinRM communicator, PowerShell provisioners, Windows Updates, Chocolatey, IIS |
 | `hcp.md` | HCP Packer registry, hcp_packer_registry block, bucket_name, build metadata, image lifecycle, Terraform data source |
 
-**How to load:** derive the directory path from this SKILL.md's location and read the sibling file. For example, if this file is at `~/.copilot/skills/carter-packer/SKILL.md`, read `~/.copilot/skills/carter-packer/aws.md`.
+**How to load:** derive the directory path from this SKILL.md's location and read the sibling file. For example, if this file is at `~/.config/opencode/skills/carter-packer/SKILL.md`, read `~/.config/opencode/skills/carter-packer/aws.md`.
 
 If the request does not match any specialized topic, use the core guidelines below without loading additional files.
 

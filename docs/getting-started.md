@@ -6,7 +6,7 @@ This guide walks you through setting up Carter and using it in real scenarios. I
 
 - Python 3.11+ installed
 - [uv](https://docs.astral.sh/uv/) (Python package manager)
-- VS Code with GitHub Copilot, or Copilot CLI
+- [OpenCode](https://opencode.ai/v2/docs/) 2.1 or newer (`opencode --version`)
 - Git installed and configured
 
 ## Concepts
@@ -23,10 +23,10 @@ Before diving in, here's the mental model:
 
 **carter-ops** is the protocol for write operations (git commits, pushes, Jira comments). It ensures you always see a plan before anything is executed.
 
-**Strictness policy** is Carter's enforced safety posture. Each agent has a
-deny-by-default tool allowlist, and actions are gated by risk category. One
-`policy.level` setting (`guarded` / `strict`) decides how hard the in-scope gates
-bite — see [strictness-policy.md](strictness-policy.md).
+**Strictness policy** is Carter's safety posture, emitted as each agent's OpenCode
+`permissions:` list. Anything not explicitly allowed asks first, and actions are
+grouped by risk category. One `policy.level` setting (`guarded` / `strict`) decides
+how hard the in-scope gates bite — see [strictness-policy.md](strictness-policy.md).
 
 ---
 
@@ -56,11 +56,18 @@ From there you have two paths depending on how you want to use Carter:
 
 ### Path A: Global Install (system-level)
 
-This copies agent files to `~/.copilot/` so they're available in every VS Code workspace.
+This writes the agents, skills and global rules to `~/.config/opencode/` so they're
+available in every OpenCode project, and Carter's own state (knowledge, memories,
+install manifest, backups) to `~/.carter/`. It stops with an error, writing nothing,
+if `opencode` is missing or older than 2.1.
 
 ```bash
 carter install
+carter install --mcp --mcp-servers github   # optionally wire MCP servers too
 ```
+
+> **Coming from a Copilot-era Carter?** `carter install` migrates `~/.copilot` state
+> to `~/.carter` automatically; see [Upgrading](../README.md#upgrading-from-a-copilot-era-install).
 
 ### Path B: Workspace Scaffold (per-project)
 
@@ -71,21 +78,21 @@ This generates customized agents from templates into a specific workspace direct
 mkdir -p ~/my-workspace
 carter init ~/my-workspace --name "my-project"
 
-# ...or choose where agents are written, and the agent-name suffix
-carter init ~/my-workspace --target all --agent-suffix local
-#   --target copilot|opencode|all   (default copilot)
+# ...or choose the agent-name suffix and a cost profile
+carter init ~/my-workspace --agent-suffix local --profile budget
 #   --agent-suffix <suffix>         (default local; "" for none)
+#   --profile quality|budget        (default: shipped per-agent tiers)
 #   --docs-language <tag>           (default en; internal docs only)
 ```
 
 > The narrator's redaction rules are always rendered; `redaction.categories` in
 > `carter.yaml` selects which categories it redacts.
 
-**What `carter init` creates** (agent/instruction locations depend on `target` in
-`carter.yaml`; the tree below shows the default `target: copilot`):
+**What `carter init` creates:**
 
 ```
 my-workspace/
+├── AGENTS.md                 ← Workspace instructions (written only if absent)
 ├── .carter/
 │   ├── carter.yaml           ← Your configuration (drives everything)
 │   ├── knowledge/            ← Learnings captured during work
@@ -98,17 +105,16 @@ my-workspace/
 │       ├── plans/active/         ← One dir per plan: <NNN-slug>/README.md (+ step-NN.md)
 │       ├── plans/completed/
 │       └── sessions/            ← checkpoint.md (session recovery cursor)
-└── .github/                  ← Copilot/VS Code discovery paths
-    ├── agents/               ← Generated from templates
-    │   ├── carter-maestro-local.md
-    │   ├── carter-architect-local.md
-    │   ├── carter-engineer-local.md
-    │   ├── carter-devops-local.md
-    │   ├── carter-pm-local.md
-    │   ├── carter-learner-local.md
-    │   ├── carter-narrator-local.md   ← External-facing content + redaction agent
-    │   └── carter-security-local.md   ← Threat modeling, secure review, vuln triage
-    └── copilot-instructions.md   ← Generated global instructions (skipped if it exists)
+└── .opencode/
+    └── agents/               ← Generated from templates (OpenCode discovery path)
+        ├── carter-maestro-local.md
+        ├── carter-architect-local.md
+        ├── carter-engineer-local.md
+        ├── carter-devops-local.md
+        ├── carter-pm-local.md
+        ├── carter-learner-local.md
+        ├── carter-narrator-local.md   ← External-facing content + redaction agent
+        └── carter-security-local.md   ← Threat modeling, secure review, vuln triage
 ```
 
 > **Why the `-local` suffix?** Workspace agents carry a suffix (default `local`)
@@ -118,12 +124,9 @@ my-workspace/
 > same names as global. The suffix is applied to filenames, Maestro's routing,
 > and cross-references — so invocation stays consistent.
 
-> **Discovery paths by target.** Agents and instructions are written where each
-> tool loads them. With `target: opencode`, `carter init` instead writes
-> `.opencode/agents/*.md` and `AGENTS.md` (project root). With `target: all`, it
-> writes both sets. Carter-owned `carter-*` agents are refreshed by
-> `carter update`; instruction files are only created when absent, so your edits
-> are preserved.
+> **What `carter update` touches.** Carter-owned `carter-*` agent files are
+> rewritten on every `carter update`; `AGENTS.md` is only created when absent, so
+> your edits are preserved.
 
 ### Understanding carter.yaml
 
@@ -150,28 +153,25 @@ agents:
 # (carter-engineer-local). Use "" for no suffix (same names as global).
 agent_suffix: local
 
-# Where to write agents/instructions: copilot | opencode | all
-target: copilot
-
 # Language for Carter's internal docs: ADRs, RFCs, .carter/ plans + knowledge, memories.
 # Commits, code comments, repo docs, PRs/issues, Jira and Slack are always English;
 # Carter still talks to you in your own language. Set at scaffold time with
 # `carter init --docs-language es`.
 docs_language: en
 
-# Risk-based strictness policy (ADR-0005 / ADR-0010). One knob; deny-by-default per agent.
+# Risk-based strictness policy (ADR-0014). One knob; ask-by-default per agent.
 policy:
   level: guarded        # guarded | strict
   overrides: {}         # category -> gate, e.g. {remote-write: deny} to tighten remote-write
 
-# Per-agent model (ADR-0010 D2). Thinkers run on Opus, implementers on a cheaper
-# Sonnet; resolved overrides > profile > tier > default. One model: string per agent (never an
-# array). Haiku is opt-in via overrides only.
+# Per-agent model. Each value is ONE OpenCode model string: provider/model[#variant].
+# Thinkers run on Opus, implementers on a cheaper Sonnet; resolved
+# overrides > profile > tier > default. Haiku is opt-in via overrides only.
 models:
-  default:      { copilot: "Claude Opus 5.5",   opencode: "anthropic/claude-opus-5-5" }
-  thinkers:     { copilot: "Claude Opus 5.5",   opencode: "anthropic/claude-opus-5-5" }
-  implementers: { copilot: "Claude Sonnet 5.5", opencode: "anthropic/claude-sonnet-5-5" }
-  overrides: {}         # per-agent, e.g. {engineer: {copilot: "Claude Haiku 5.5", opencode: "anthropic/claude-haiku-5-5"}}
+  default:      anthropic/claude-opus-5-5
+  thinkers:     anthropic/claude-opus-5-5
+  implementers: anthropic/claude-sonnet-5-5
+  overrides: {}         # per-agent, e.g. {engineer: anthropic/claude-haiku-5-5}
 
 # Should Carter review your code before you push?
 quality_gate:
@@ -190,12 +190,22 @@ When you change `carter.yaml`, regenerate with:
 carter update .
 ```
 
-> **Reasoning effort is global, not per-agent.** No target exposes a per-agent effort
-> field, so Carter emits none — effort is the harness's global knob
-> (`copilot --effort high`, a VS Code/OpenCode setting). Default to **`high`** (the safe
-> all-rounder), and raise it per-session to `xhigh` for thinker-heavy work (RFC/ADR/plan
-> authoring). `carter check` prints which model each agent pins, with the caveat that
-> Carter can't verify your subscription includes it.
+> **Reasoning effort is not set per agent.** Carter emits no effort field. To pick a
+> model's reasoning level, use a variant in the model string
+> (`provider/model#variant`) or OpenCode's own settings. `carter check` prints which
+> model each agent pins, with the caveat that Carter can't verify your provider
+> offers it.
+
+Then validate the workspace:
+
+```bash
+carter check .              # files, plans, policy lint, and `opencode debug agents`
+carter check . --no-harness # skip the OpenCode step (e.g. on a machine without it)
+```
+
+`carter check` compares each agent's emitted `permissions:` and `model` with what
+`carter.yaml` generates, then asks OpenCode which agents it actually loaded. If
+`opencode` isn't on `PATH`, that last step is skipped with a warning.
 
 ---
 
@@ -407,7 +417,7 @@ publishes a GitHub Release with generated notes.
 | Commit type | Example | Version effect (pre-1.0) |
 |-------------|---------|--------------------------|
 | `fix:` | `fix: handle missing settings.json` | PATCH — `0.1.0 → 0.1.1` |
-| `feat:` | `feat: add opencode MCP target` | MINOR — `0.1.1 → 0.2.0` |
+| `feat:` | `feat: add a terraform MCP server option` | MINOR — `0.1.1 → 0.2.0` |
 | `feat!:` / `BREAKING CHANGE:` | `feat!: drop python 3.10` | breaking — stays in `0.y` until 1.0 is declared |
 | `docs:` `chore:` `refactor:` `test:` `ci:` `build:` `style:` | `docs: fix typo` | **no release** |
 
