@@ -1,17 +1,17 @@
 """Component installers: agents, skills, OpenCode rules, knowledge, memories, ops.
 
-Plus the install manifest read/write. OpenCode is the only install target
-(ADR-0014); the knowledge base, manifest and backups live under ``~/.carter``
-(D3, see ``carter.install.paths``).
+Plus the install manifest read/write. OpenCode is the only install target;
+the knowledge base, manifest and backups live under ``~/.carter`` (see
+``carter.install.paths``).
 """
 
 from __future__ import annotations
 
 import json
 import shutil
-import subprocess
 from pathlib import Path
 
+from carter.home import tilde
 from carter.install.console import log_ok, log_skip, log_step, log_warn
 from carter.install.files import (
     _get_template_vars,
@@ -24,12 +24,12 @@ from carter.install.ownership import _hash_matches
 from carter.install.paths import (
     REPO_ROOT,
     _carter_base,
-    _home,
     _opencode_base,
     knowledge_dir,
     manifest_path,
 )
 from carter.install.rules_history import SHIPPED_GLOBAL_RULES
+from carter.ops.config import git_signing_key
 
 
 def install_agents(
@@ -51,8 +51,8 @@ def _render_opencode_agents() -> dict[str, str]:
     """Render the OpenCode-shaped agent files from the shipped guarded defaults.
 
     Returns ``{filename: content}`` keyed by ``carter-<role>.md`` (no agent suffix —
-    global installs use canonical names). Imported lazily so the install path does
-    not pull in the scaffold/Jinja stack unless an opencode target is requested.
+    global installs use canonical names). The scaffold/Jinja stack is imported
+    lazily so importing the installer stays cheap.
     """
     from carter.config import generate_default_config
     from carter.scaffold import create_env, render_agents
@@ -126,7 +126,7 @@ def remove_retired_skills(
     for skill in sorted(skills_root.iterdir()):
         if not skill.name.startswith("carter-") or skill.name in shipped:
             continue
-        shown = str(skill).replace(str(_home()), "~")
+        shown = tilde(skill)
         if skill.is_symlink() or not skill.is_dir():
             owned = False
         else:
@@ -162,8 +162,8 @@ its instructions exactly.
   solutions to check for past decisions and lessons.
 """
 
-# Global rules §Communication (D2: only this section — AGENTS.md loads every session,
-# so token cost is disciplined). Written as implicit concatenation purely to satisfy
+# Global rules §Communication (only this section: AGENTS.md loads every session,
+# so its token cost must stay small). Written as implicit concatenation purely to satisfy
 # the line-length lint.
 _OPENCODE_COMMUNICATION = (
     "\n## Communication\n"
@@ -200,16 +200,12 @@ _OPENCODE_AGENTS_MD = _OPENCODE_AGENTS_MD_BASE + _OPENCODE_COMMUNICATION + _OPEN
 _OPENCODE_AGENTS_MD_KNOWN = SHIPPED_GLOBAL_RULES
 
 
-def install_opencode_rules(
-    base_dir: Path | None,
-    manifest: dict,
-    backup_root: Path,
-) -> None:
+def install_opencode_rules(base_dir: Path | None, manifest: dict) -> None:
     """Generate ~/.config/opencode/AGENTS.md for OpenCode global rules."""
     log_step("Installing OpenCode global rules...")
     dst = _opencode_base(base_dir) / "AGENTS.md"
     dst.parent.mkdir(parents=True, exist_ok=True)
-    shown = str(dst).replace(str(_home()), "~")
+    shown = tilde(dst)
     owned = True
     if not dst.exists():
         dst.write_text(_OPENCODE_AGENTS_MD)
@@ -248,10 +244,10 @@ def install_memories(
     for scope in ("user", "session", "repo"):
         scope_dir = memories_dir / scope
         if scope_dir.exists():
-            log_skip(f"{str(scope_dir).replace(str(_home()), '~')} (exists)")
+            log_skip(f"{tilde(scope_dir)} (exists)")
         else:
             scope_dir.mkdir(parents=True, exist_ok=True)
-            log_ok(str(scope_dir).replace(str(_home()), "~"))
+            log_ok(tilde(scope_dir))
             count += 1
         manifest["files"].append(str(scope_dir))
 
@@ -271,7 +267,7 @@ def install_knowledge(
     for src_file in sorted(src_dir.glob("*.md")):
         dst = dst_dir / src_file.name
         if dst.exists():
-            log_skip(f"{str(dst).replace(str(_home()), '~')} (exists, not overwriting)")
+            log_skip(f"{tilde(dst)} (exists, not overwriting)")
             # Knowledge is user data: an existing file is Carter-owned only if it
             # is byte-identical to the seed. Anything else (user-written, edited,
             # migrated from ~/.copilot) is never recorded, so uninstall keeps it.
@@ -286,13 +282,8 @@ def install_knowledge(
     return count
 
 
-def install_ops(
-    base_dir: Path | None,
-    manifest: dict,
-    backup_root: Path,
-    bot_name: str = "carter-bot",
-) -> dict[str, int]:
-    """Generate carter-ops configuration.
+def install_ops(base_dir: Path | None, manifest: dict, bot_name: str = "carter-bot") -> bool:
+    """Generate carter-ops configuration. Returns True if the config was created.
 
     The ``carter ops`` subcommand ships with the installed ``carter`` CLI, so
     no source files or wrapper scripts need to be copied. This only generates
@@ -301,47 +292,30 @@ def install_ops(
     """
     log_step("Configuring carter-ops...")
     carter_home = _carter_base(base_dir)
-    stats: dict[str, int] = {"created": 0, "updated": 0, "unchanged": 0}
-
     config_path = carter_home / "config.toml"
-    if not config_path.exists():
-        config_path.parent.mkdir(parents=True, exist_ok=True)
+    if config_path.exists():
+        log_skip(f"{tilde(config_path)} (exists, not overwriting)")
+        return False
 
-        # Auto-detect signing key
-        signing_key = ""
-        try:
-            result = subprocess.run(
-                ["git", "config", "user.signingkey"],
-                capture_output=True,
-                text=True,
-                timeout=5,
-            )
-            if result.returncode == 0 and result.stdout.strip():
-                signing_key = result.stdout.strip()
-        except (subprocess.SubprocessError, FileNotFoundError):
-            pass
+    config_path.parent.mkdir(parents=True, exist_ok=True)
 
-        bot_email = f"{bot_name}@users.noreply.github.com"
-        config_content = (
-            "[attribution]\n"
-            "# Co-author identity: credited via a `Co-authored-by:` trailer on commits\n"
-            "# (you stay the author) and in GitHub/Jira footers.\n"
-            f'name = "{bot_name}"\n'
-            f'email = "{bot_email}"\n'
-            f'footer = "This comment was generated by {bot_name}."\n'
-            "\n"
-            "[git]\n"
-            f'signing_key = "{signing_key}"\n'
-        )
-        config_path.write_text(config_content)
-        log_ok(f"{str(config_path).replace(str(_home()), '~')}")
-        manifest["files"].append(str(config_path))
-        stats["created"] += 1
-    else:
-        log_skip(f"{str(config_path).replace(str(_home()), '~')} (exists, not overwriting)")
-        stats["unchanged"] += 1
-
-    return stats
+    signing_key = git_signing_key()
+    bot_email = f"{bot_name}@users.noreply.github.com"
+    config_content = (
+        "[attribution]\n"
+        "# Co-author identity: credited via a `Co-authored-by:` trailer on commits\n"
+        "# (you stay the author) and in GitHub/Jira footers.\n"
+        f'name = "{bot_name}"\n'
+        f'email = "{bot_email}"\n'
+        f'footer = "This comment was generated by {bot_name}."\n'
+        "\n"
+        "[git]\n"
+        f'signing_key = "{signing_key}"\n'
+    )
+    config_path.write_text(config_content)
+    log_ok(tilde(config_path))
+    manifest["files"].append(str(config_path))
+    return True
 
 
 def write_manifest(manifest: dict, base_dir: Path | None) -> Path:
@@ -354,7 +328,7 @@ def write_manifest(manifest: dict, base_dir: Path | None) -> Path:
 def normalize_manifest(data: dict) -> dict:
     """Accept both manifest shapes.
 
-    Pre-ADR-0014 manifests kept ``mcp_servers`` as ``{target: [names]}``; the
+    Manifests from multi-target versions kept ``mcp_servers`` as ``{target: [names]}``; the
     current shape is a flat list. Old dicts are flattened (de-duplicated, order
     kept) so callers only ever see the list form.
     """

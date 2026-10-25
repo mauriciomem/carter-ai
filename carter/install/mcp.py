@@ -1,4 +1,4 @@
-"""MCP server wiring for OpenCode V2 (ADR-0014 phase 3).
+"""MCP server wiring for OpenCode V2.
 
 Carter servers are written under ``mcp.servers.<name>`` in the global
 ``opencode.json`` (https://opencode.ai/v2/docs/mcp-servers/). V1 fields are
@@ -16,7 +16,7 @@ from typing import Any
 
 from carter.install.console import log_err, log_ok, log_step, log_warn
 from carter.install.files import _backup_file
-from carter.install.jsonc import _load_jsonc, _write_json_preserving
+from carter.install.jsonc import _load_jsonc, _write_json
 from carter.install.paths import REPO_ROOT, _opencode_base
 
 # The MCP servers Carter ships. Single source of truth so the install and
@@ -82,7 +82,7 @@ def merge_mcp_servers(
                 f'You may want to remove "{base_name}" to avoid duplicate tools.',
             )
         servers[name] = to_v2_server(entry)
-    _write_json_preserving(file_path, data)
+    _write_json(file_path, data)
     return True
 
 
@@ -105,7 +105,7 @@ def remove_carter_servers(file_path: Path) -> list[str]:
             del servers[k]
             removed.append(k)
     if removed:
-        _write_json_preserving(file_path, data)
+        _write_json(file_path, data)
     return removed
 
 

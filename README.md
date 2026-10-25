@@ -36,7 +36,7 @@ Then choose how to use Carter:
 ```bash
 carter install                  # agents, skills, rules, knowledge seeds
 carter install --mcp            # also configure MCP servers (needs tokens)
-carter uninstall                # remove (same as: carter install --uninstall)
+carter uninstall                # remove what Carter installed
 
 mkdir -p ~/my-project                          # the directory must exist
 carter init ~/my-project --name "my-project"   # scaffold a workspace
@@ -49,7 +49,7 @@ the Atlassian server authenticates via OAuth in your client. See [.env.example](
 
 ### Uninstalling
 
-`carter uninstall` (equivalent to `carter install --uninstall`) removes only what
+`carter uninstall` removes only what
 Carter installed and you have not changed:
 
 - **Removed:** `carter-*` agents and skills, the global `~/.config/opencode/AGENTS.md`

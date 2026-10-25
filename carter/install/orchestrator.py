@@ -1,7 +1,7 @@
-"""``carter install`` orchestration (OpenCode-only, ADR-0014).
+"""``carter install`` orchestration (OpenCode-only).
 
 Order matters: ``require_opencode`` runs before anything is written, so an
-unsupported or missing OpenCode fails the install hard with nothing on disk (D6).
+unsupported or missing OpenCode fails the install hard with nothing on disk.
 """
 
 from __future__ import annotations
@@ -10,6 +10,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from carter import __version__
+from carter.home import tilde
 from carter.install.components import (
     install_agents,
     install_knowledge,
@@ -25,31 +26,29 @@ from carter.install.console import _log, bold, green, log_debug, log_step, set_v
 from carter.install.legacy import remove_legacy_opencode_instructions, warn_legacy_copilot
 from carter.install.mcp import configure_mcp_servers
 from carter.install.migrate import migrate_copilot_state
-from carter.install.paths import _home, backups_dir
+from carter.install.paths import backups_dir
 from carter.install.prereqs import (
     check_credentials,
     check_optional_tools,
     detect_environment,
     require_opencode,
 )
-from carter.install.uninstall import uninstall
 
 
 def run(
     mcp: bool = False,
     bot_name: str = "carter-bot",
-    uninstall_flag: bool = False,
     base_dir: Path | None = None,
     verbosity: int = 1,
     mcp_servers: list[str] | None = None,
 ) -> None:
-    """Run the Carter system-level install (or uninstall) for OpenCode.
+    """Run the Carter system-level install for OpenCode.
 
     Parameters mirror the ``carter install`` options. ``mcp_servers`` is the
     opt-in subset; ``None`` installs the full shipped set.
 
     Raises:
-        PrerequisiteError: OpenCode is missing or older than 2.1 (install only).
+        PrerequisiteError: OpenCode is missing or older than 2.1.
     """
     set_verbosity(verbosity)
 
@@ -59,10 +58,6 @@ def run(
     if mcp:
         _mcp_label = "yes" + (f" ({', '.join(mcp_servers)})" if mcp_servers else " (all)")
     _log(f" MCP servers: {_mcp_label}")
-
-    if uninstall_flag:
-        uninstall(base_dir)
-        return
 
     detect_environment()
     log_step("Checking prerequisites...")
@@ -76,7 +71,7 @@ def run(
         log_step("Skipping MCP credentials (no --mcp flag)")
 
     # Before anything reads or seeds ~/.carter: knowledge seeds must not shadow
-    # the user's migrated knowledge (D3).
+    # the user's migrated knowledge.
     migrate_copilot_state(base_dir)
 
     now = datetime.now(UTC)
@@ -86,7 +81,6 @@ def run(
         "version": __version__,
         "installed_at": now.isoformat(),
         "updated_at": now.isoformat(),
-        "targets": ["opencode"],
         "files": [],
         "mcp_servers": [],
         "file_hashes": {},
@@ -102,10 +96,10 @@ def run(
     remove_retired_skills(base_dir, existing, backup_root)
     # OpenCode reads AGENTS.md; drop the instructions copy older versions wrote.
     remove_legacy_opencode_instructions(base_dir, backup_root)
-    install_opencode_rules(base_dir, manifest, backup_root)
+    install_opencode_rules(base_dir, manifest)
     knowledge_count = install_knowledge(base_dir, manifest, backup_root)
     memory_count = install_memories(base_dir, manifest)
-    ops_stats = install_ops(base_dir, manifest, backup_root, bot_name=bot_name)
+    ops_created = install_ops(base_dir, manifest, bot_name=bot_name)
 
     if mcp:
         mcp_count = configure_mcp_servers(base_dir, manifest, backup_root, servers=mcp_servers)
@@ -117,16 +111,15 @@ def run(
 
     total_agents = agent_stats["created"] + agent_stats["updated"] + agent_stats["unchanged"]
     total_skills = skill_stats["created"] + skill_stats["updated"] + skill_stats["unchanged"]
-    total_ops = ops_stats["created"] + ops_stats["updated"] + ops_stats["unchanged"]
 
     _log(f"\n{green('✓')} {bold('Installation complete')}")
     _log(f"  Agents: {total_agents}")
     _log(f"  Skills: {total_skills}")
-    _log(f"  Ops config: {total_ops}")
+    _log(f"  Ops config: {'created' if ops_created else 'kept'}")
     _log(f"  MCP servers: {mcp_count}")
     _log(f"  Knowledge files: {knowledge_count} new")
     _log(f"  Memory dirs: {memory_count} new")
-    _log(f"  Manifest: {str(manifest_path).replace(str(_home()), '~')}")
+    _log(f"  Manifest: {tilde(manifest_path)}")
 
     updated = agent_stats["updated"] + skill_stats["updated"]
     unchanged = agent_stats["unchanged"] + skill_stats["unchanged"]

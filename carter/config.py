@@ -82,7 +82,7 @@ DEFAULT_CONFIG: dict[str, Any] = {
         "level": "guarded",  # guarded | strict
         "overrides": {},  # category -> gate, explicit per-category override
     },
-    # Per-agent model (ADR-0014 D4). Each tier is ONE OpenCode V2 model string,
+    # Per-agent model. Each tier is ONE OpenCode V2 model string,
     # `provider/model[#variant]`. Resolved `overrides > profile > tier > default`
     # (see `resolve_model`). Thinkers = Opus 5.5; implementers = Sonnet 5.5; Haiku 5.5
     # is opt-in via `overrides`. No per-agent effort; `temperature` is never emitted.
@@ -142,7 +142,7 @@ _MODEL_RE = re.compile(r"^[^\s/#]+/[^\s#]+(#[^\s#]+)?$")
 
 
 def _validate_no_target(user_config: dict[str, Any], config_path: Path) -> None:
-    """Reject a leftover ``target:`` key (ADR-0014 D4: removed, no shim)."""
+    """Reject a leftover ``target:`` key (OpenCode is the only target; no shim)."""
     if "target" in user_config:
         raise ConfigError(
             f"Unknown key 'target' in {config_path}. Delete the `target:` key: "
@@ -270,7 +270,7 @@ POLICY_LEVELS: tuple[str, ...] = ("guarded", "strict")
 # remote/infra path so it folds into `remote-write`; infra-mutation and destructive
 # actions fold into `dangerous`; and the old external-publish overlay is dropped —
 # redaction is a narrator -> devops handoff (prompt-level routing guidance, not
-# harness-enforced; ADR-0014 D2), not a taxonomy category. Carter's `gate` tier is
+# harness-enforced), not a taxonomy category. Carter's `gate` tier is
 # emitted to OpenCode as `ask`.
 RISK_TAXONOMY: dict[str, dict[str, str]] = {
     "read": {"guarded": "allow", "strict": "allow"},
@@ -285,7 +285,7 @@ RISK_TAXONOMY: dict[str, dict[str, str]] = {
 # sole holder of `remote-write` and `dangerous`. The narrator is first-class —
 # {read, local-write} like pm/engineer — and reaches `remote-write` only by handing
 # off to devops, never by holding the category. (The redaction pass before that
-# handoff is prompt-level guidance, not harness-enforced — ADR-0014 D2.)
+# handoff is prompt-level guidance, not harness-enforced.)
 AGENT_ALLOWLIST: dict[str, dict[str, bool]] = {
     "maestro": {"read": True},
     "architect": {"read": True},
@@ -384,7 +384,7 @@ def effective_allowlist(config: dict[str, Any]) -> dict[str, dict[str, bool]]:
 
 
 # ──────────────────────────────────────────────────────────────────────────────
-# Agent frontmatter emission (OpenCode V2 `permissions:`, ADR-0014 D1)
+# Agent frontmatter emission (OpenCode V2 `permissions:`)
 # ──────────────────────────────────────────────────────────────────────────────
 # Carter is a scaffolder, not a runtime: it emits each agent's allowlist x gates as
 # an ordered V2 `permissions:` rule list (last match wins). That list is the single
@@ -395,7 +395,7 @@ def effective_allowlist(config: dict[str, Any]) -> dict[str, dict[str, bool]]:
 # never emits them and the lint rejects them.
 V1_AGENT_KEYS: tuple[str, ...] = ("permission", "tools", "bash", "task", "name", "temperature")
 
-# V2 effects are allow/deny/ask only, so Carter `gate` is emitted as `ask` (D2).
+# V2 effects are allow/deny/ask only, so Carter `gate` is emitted as `ask`.
 _OPENCODE_GATE: dict[str, str] = {
     "allow": "allow",
     "ask": "ask",
@@ -435,7 +435,7 @@ _BASH_COMMANDS: dict[str, tuple[str, ...]] = {
     ),
 }
 
-# Actions every agent may use without prompting (D1 step 2).
+# Actions every agent may use without prompting (step 2 of `permission_rules`).
 _DISCOVERY_ACTIONS: tuple[str, ...] = ("read", "glob", "grep", "skill", "question")
 
 # The primary orchestrator — the only agent allowed to launch subagents (flat chain).
@@ -459,7 +459,7 @@ def _gates_for(
 
 
 def permission_rules(config: dict[str, Any], role: str) -> list[Rule]:
-    """The ordered V2 ``permissions:`` rules for ``role`` (ADR-0014 D1; last match wins).
+    """The ordered V2 ``permissions:`` rules for ``role`` (last match wins).
 
     1. ``* *`` ask baseline (overrides V2's ``*:*:allow`` base).
     2. Discovery actions allowed.

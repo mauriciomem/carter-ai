@@ -218,7 +218,7 @@ Creates:
 - Records the files Carter wrote, with content hashes, in `~/.carter/manifest.json`
   for clean uninstall; backups of replaced files go to `~/.carter/backups/<timestamp>/`
 
-`carter uninstall` (same as `carter install --uninstall`) treats knowledge as user
+`carter uninstall` treats knowledge as user
 data: a knowledge file is removed only if it still matches the seed Carter shipped.
 Edited files, files you wrote, and files migrated from `~/.copilot/knowledge/` are
 kept with a `⚠ Kept …` warning. Memories, `config.toml` and `audit.log` are never

@@ -179,19 +179,14 @@ def _validate_step_file(step_file: Path, plan_name: str, thresholds: dict[str, A
     return errors
 
 
-def validate_plan_dir(plan_dir: Path, thresholds: dict[str, Any] | None = None) -> list[str]:
-    """Validate one plan directory against the plan frontmatter contract.
-
-    Returns a list of human-readable error strings (empty = valid).
-    """
-    return _validate_plan_dir(plan_dir, thresholds)[0]
-
-
 def _validate_plan_dir(
     plan_dir: Path, thresholds: dict[str, Any] | None = None
 ) -> tuple[list[str], dict[str, Any] | None]:
-    """Internal: returns ``(errors, parsed_frontmatter_or_None)`` so callers that
-    also need the frontmatter (e.g. the bucket-status check) don't re-read it."""
+    """Validate one plan directory against the plan frontmatter contract.
+
+    Returns ``(errors, parsed_frontmatter_or_None)`` so callers that also need the
+    frontmatter (e.g. the bucket-status check) don't re-read it.
+    """
     th = {**DEFAULT_THRESHOLDS, **(thresholds or {})}
     name = plan_dir.name
 
@@ -327,7 +322,7 @@ def _check_bucket_status(name: str, status: Any, bucket: str) -> list[str]:
     bucket. Takes the already-parsed status (no I/O); conditions already reported
     by ``_validate_plan_dir`` (missing/invalid status) are skipped here."""
     if status not in VALID_PLAN_STATUS:
-        return []  # missing/invalid status already reported by validate_plan_dir
+        return []  # missing/invalid status already reported by _validate_plan_dir
     if bucket == "active" and status in TERMINAL_STATUS:
         return [
             f"{name}/README.md: status {status!r} is terminal but the plan is in "

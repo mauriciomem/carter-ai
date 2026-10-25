@@ -1,4 +1,4 @@
-"""Carter installer package (OpenCode-only, ADR-0014).
+"""Carter installer package (OpenCode-only).
 
 ``carter.install.orchestrator.run`` backs the ``carter install`` command; the
 other modules are its leaves (paths, prereqs, components, MCP wiring, legacy

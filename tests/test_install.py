@@ -9,10 +9,15 @@ from types import SimpleNamespace
 import pytest
 
 from carter.config import generate_default_config
-from carter.install import components, legacy, mcp, paths
+from carter.install import components, files, legacy, mcp, paths
 from carter.install import uninstall as uninstall_mod
 from carter.install.components import _OPENCODE_AGENTS_MD
-from carter.install.files import _sha256
+from carter.install.files import (
+    _get_template_vars,
+    _install_file,
+    _install_rendered_file,
+    _sha256,
+)
 from carter.install.jsonc import _load_jsonc, _strip_jsonc
 from carter.install.rules_history import SHIPPED_GLOBAL_RULES
 from carter.scaffold import create_env, render_agents
@@ -522,6 +527,67 @@ class TestUninstall:
         # Non-Carter file preserved
         assert other.exists()
 
+    def test_uninstall_leaves_unmanaged_ops_paths(self, base_dir: Path) -> None:
+        """Nothing is installed under ~/.carter/ops or ~/.local/bin; uninstall must not
+        delete user files there just because of their name."""
+        install.write_manifest({"files": [], "file_hashes": {}, "mcp_servers": []}, base_dir)
+        ops_file = base_dir / "carter" / "ops" / "mine.txt"
+        wrapper = base_dir / "local" / "bin" / "carter-ops"
+        for f in (ops_file, wrapper):
+            f.parent.mkdir(parents=True, exist_ok=True)
+            f.write_text("user\n")
+
+        install.uninstall(base_dir)
+
+        assert ops_file.exists()
+        assert wrapper.exists()
+
+
+class TestInstallPrimitives:
+    def test_install_file_updates_with_backup(self, tmp_path: Path) -> None:
+        src, dst, backup = tmp_path / "src.md", tmp_path / "out" / "dst.md", tmp_path / "bk"
+        src.write_text("new\n")
+        dst.parent.mkdir()
+        dst.write_text("old\n")
+        manifest: dict = {"files": [], "file_hashes": {}}
+
+        assert _install_file(src, dst, manifest, backup) == "updated"
+        assert dst.read_text() == "new\n"
+        assert (backup / "dst.md").read_text() == "old\n"
+        assert manifest["file_hashes"][str(dst)] == _sha256(src)
+        assert _install_file(src, dst, manifest, backup) == "unchanged"
+        assert manifest["files"] == [str(dst), str(dst)]
+
+    def test_rendered_file_created_then_unchanged(self, tmp_path: Path) -> None:
+        dst, manifest = tmp_path / "a" / "x.md", {"files": [], "file_hashes": {}}
+        assert _install_rendered_file("hi\n", dst, manifest, tmp_path / "bk") == "created"
+        assert manifest["file_hashes"][str(dst)] == _sha256(dst)
+        assert _install_rendered_file("hi\n", dst, manifest, tmp_path / "bk") == "unchanged"
+        assert not (tmp_path / "bk").exists()
+
+    def test_template_vars_from_config(self, tmp_path: Path) -> None:
+        config = tmp_path / "config.toml"
+        config.write_text(
+            '[attribution]\nname = "acme-bot"\nemail = "bot@acme.test"\n'
+            '[git]\nsigning_key = "~/.ssh/k.pub"\n'
+        )
+        assert _get_template_vars(config, "carter-bot") == {
+            "{{BOT_NAME}}": "acme-bot",
+            "{{BOT_EMAIL}}": "bot@acme.test",
+            "{{SIGNING_KEY}}": "~/.ssh/k.pub",
+        }
+
+    def test_template_vars_defaults_use_given_bot_name(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(files, "git_signing_key", lambda: "GITKEY")
+        result = _get_template_vars(tmp_path / "missing.toml", "acme-bot")
+        assert result == {
+            "{{BOT_NAME}}": "acme-bot",
+            "{{BOT_EMAIL}}": "acme-bot@users.noreply.github.com",
+            "{{SIGNING_KEY}}": "GITKEY",
+        }
+
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Hashing
@@ -553,8 +619,7 @@ class TestHashing:
 class TestInstallOps:
     def test_generates_config_toml(self, base_dir: Path) -> None:
         manifest = {"files": [], "file_hashes": {}}
-        backup = base_dir / "backup"
-        install.install_ops(base_dir, manifest, backup)
+        install.install_ops(base_dir, manifest)
 
         config = base_dir / "carter" / "config.toml"
         assert config.exists()
@@ -570,29 +635,25 @@ class TestInstallOps:
         config.write_text('[attribution]\nname = "my-custom-bot"\n')
 
         manifest = {"files": [], "file_hashes": {}}
-        backup = base_dir / "backup"
-        install.install_ops(base_dir, manifest, backup)
+        install.install_ops(base_dir, manifest)
 
         assert "my-custom-bot" in config.read_text()
 
     def test_manifest_tracks_config(self, base_dir: Path) -> None:
         manifest = {"files": [], "file_hashes": {}}
-        backup = base_dir / "backup"
-        install.install_ops(base_dir, manifest, backup)
+        install.install_ops(base_dir, manifest)
 
         config = base_dir / "carter" / "config.toml"
         assert str(config) in manifest["files"]
 
     def test_idempotent(self, base_dir: Path) -> None:
         manifest = {"files": [], "file_hashes": {}}
-        backup = base_dir / "backup"
-        install.install_ops(base_dir, manifest, backup)
+        install.install_ops(base_dir, manifest)
 
         manifest2 = {"files": [], "file_hashes": {}}
-        stats2 = install.install_ops(base_dir, manifest2, backup)
+        created_again = install.install_ops(base_dir, manifest2)
 
-        assert stats2["unchanged"] > 0
-        assert stats2["created"] == 0
+        assert created_again is False
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -603,8 +664,7 @@ class TestInstallOps:
 class TestBotName:
     def test_default_bot_name(self, base_dir: Path) -> None:
         manifest = {"files": [], "file_hashes": {}}
-        backup = base_dir / "backup"
-        install.install_ops(base_dir, manifest, backup)
+        install.install_ops(base_dir, manifest)
 
         config = base_dir / "carter" / "config.toml"
         content = config.read_text()
@@ -613,8 +673,7 @@ class TestBotName:
 
     def test_custom_bot_name(self, base_dir: Path) -> None:
         manifest = {"files": [], "file_hashes": {}}
-        backup = base_dir / "backup"
-        install.install_ops(base_dir, manifest, backup, bot_name="acme-bot")
+        install.install_ops(base_dir, manifest, bot_name="acme-bot")
 
         config = base_dir / "carter" / "config.toml"
         content = config.read_text()
@@ -623,8 +682,7 @@ class TestBotName:
 
     def test_custom_bot_name_footer(self, base_dir: Path) -> None:
         manifest = {"files": [], "file_hashes": {}}
-        backup = base_dir / "backup"
-        install.install_ops(base_dir, manifest, backup, bot_name="acme-bot")
+        install.install_ops(base_dir, manifest, bot_name="acme-bot")
 
         config = base_dir / "carter" / "config.toml"
         content = config.read_text()
@@ -692,8 +750,7 @@ class TestOpenCodeRules:
     def test_creates_agents_md(self, base_dir: Path) -> None:
         """OpenCode global rules file should be created."""
         manifest = {"files": [], "file_hashes": {}}
-        backup = base_dir / "backup"
-        install.install_opencode_rules(base_dir, manifest, backup)
+        install.install_opencode_rules(base_dir, manifest)
 
         agents_md = base_dir / "opencode" / "AGENTS.md"
         assert agents_md.exists()
@@ -706,12 +763,11 @@ class TestOpenCodeRules:
     def test_does_not_overwrite(self, base_dir: Path) -> None:
         """Existing AGENTS.md should not be overwritten."""
         manifest = {"files": [], "file_hashes": {}}
-        backup = base_dir / "backup"
         agents_md = base_dir / "opencode" / "AGENTS.md"
         agents_md.parent.mkdir(parents=True, exist_ok=True)
         agents_md.write_text("# Custom rules\n")
 
-        install.install_opencode_rules(base_dir, manifest, backup)
+        install.install_opencode_rules(base_dir, manifest)
         assert agents_md.read_text() == "# Custom rules\n"
 
 
@@ -725,7 +781,7 @@ class TestOpenCodeRulesUpgrade:
 
     def test_fresh_install_has_communication_section(self, base_dir: Path) -> None:
         manifest = {"files": [], "file_hashes": {}}
-        install.install_opencode_rules(base_dir, manifest, base_dir / "backup")
+        install.install_opencode_rules(base_dir, manifest)
 
         content = (base_dir / "opencode" / "AGENTS.md").read_text()
         assert "## Communication" in content
@@ -762,7 +818,7 @@ class TestOpenCodeRulesUpgrade:
         agents_md.write_text(old)
 
         manifest = {"files": [], "file_hashes": {}}
-        install.install_opencode_rules(base_dir, manifest, base_dir / "backup")
+        install.install_opencode_rules(base_dir, manifest)
 
         content = agents_md.read_text()
         assert content == _OPENCODE_AGENTS_MD
@@ -791,7 +847,7 @@ class TestOpenCodeRulesUpgrade:
         agents_md.write_text(custom)
 
         manifest = {"files": [], "file_hashes": {}}
-        install.install_opencode_rules(base_dir, manifest, base_dir / "backup")
+        install.install_opencode_rules(base_dir, manifest)
 
         assert agents_md.read_text() == custom, "user-modified AGENTS.md was clobbered"
         out = capsys.readouterr().out
@@ -1014,8 +1070,7 @@ class TestVisibleMemoryReferences:
     def test_opencode_rules_reference_visible_memory(self, base_dir: Path) -> None:
         """OpenCode AGENTS.md should reference ~/.carter/memories/."""
         manifest = {"files": [], "file_hashes": {}}
-        backup = base_dir / "backup"
-        install.install_opencode_rules(base_dir, manifest, backup)
+        install.install_opencode_rules(base_dir, manifest)
 
         agents_md = (base_dir / "opencode" / "AGENTS.md").read_text()
         assert "~/.carter/memories/" in agents_md

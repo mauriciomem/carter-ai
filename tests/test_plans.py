@@ -15,13 +15,18 @@ import pytest
 
 from carter.plans import (
     _count_step_rows,
+    _validate_plan_dir,
     parse_frontmatter,
     validate_checkpoint,
-    validate_plan_dir,
     validate_plans_dir,
 )
 
 # ─── Helpers ─────────────────────────────────────────────────────────────────
+
+
+def validate_plan_dir(plan_dir: Path, thresholds: dict | None = None) -> list[str]:
+    """Errors for one plan directory, via the path ``validate_plans_dir`` uses."""
+    return _validate_plan_dir(plan_dir, thresholds)[0]
 
 
 VALID_README = textwrap.dedent(
