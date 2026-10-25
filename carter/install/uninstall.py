@@ -9,7 +9,7 @@ from carter.home import tilde
 from carter.install.components import read_manifest
 from carter.install.console import _log, bold, green, log_ok, log_step, log_warn
 from carter.install.legacy import remove_legacy_opencode_instructions
-from carter.install.mcp import remove_carter_servers
+from carter.install.mcp import global_config_files, remove_carter_servers
 from carter.install.ownership import _hash_matches, _within
 from carter.install.paths import (
     _opencode_base,
@@ -86,8 +86,9 @@ def uninstall(base_dir: Path | None) -> None:
                         log_ok(f"Removed {tilde(f)}/")
 
     log_step("Removing MCP servers (OpenCode)...")
-    for name in remove_carter_servers(opencode_base / "opencode.json"):
-        log_ok(f"Removed {name} from opencode.json")
+    for cfg in global_config_files(base_dir):
+        for name in remove_carter_servers(cfg):
+            log_ok(f"Removed {name} from {cfg.name}")
 
     # Remove manifest
     path = manifest_path(base_dir)
