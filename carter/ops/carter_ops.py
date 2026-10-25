@@ -35,6 +35,8 @@ AUDIT_LOG = carter_home() / "audit.log"
 
 USAGE = "Usage: carter ops {audit|policy-override|config --emit} [--key value ...]"
 
+HELP_FLAGS = frozenset({"--help", "-h", "help"})
+
 
 def emit(data: dict[str, Any]) -> None:
     """Write JSON to stdout."""
@@ -213,6 +215,11 @@ def main(argv: list[str] | None = None) -> int:
         argv = sys.argv[1:]
 
     command, rest = (argv[0], argv[1:]) if argv else ("", [])
+
+    # Help is plain text on stdout; real subcommands keep the JSON contract.
+    if command in HELP_FLAGS or HELP_FLAGS.intersection(rest):
+        print(f"{USAGE}\n\n{(__doc__ or '').strip()}")
+        return 0
 
     if command == "audit":
         return _handle_audit(_parse_flags(rest))

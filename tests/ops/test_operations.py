@@ -395,3 +395,25 @@ class TestConfigSubcommand:
 
         rc = carter_ops.main(["config"])
         assert rc == 1
+
+
+class TestHelp:
+    @pytest.mark.parametrize(
+        "argv", [["--help"], ["-h"], ["help"], ["audit", "--help"], ["config", "-h"]]
+    )
+    def test_help_exits_zero(self, argv: list[str], capsys: pytest.CaptureFixture) -> None:
+        from carter.ops import carter_ops
+
+        assert carter_ops.main(argv) == 0
+        out = capsys.readouterr()
+        assert "Usage: carter ops" in out.out
+        assert out.err == ""
+
+    def test_cli_ops_help(self) -> None:
+        from click.testing import CliRunner
+
+        from carter.cli import main
+
+        result = CliRunner().invoke(main, ["ops", "--help"])
+        assert result.exit_code == 0
+        assert "Usage: carter ops" in result.output
