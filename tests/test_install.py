@@ -565,7 +565,7 @@ class TestInstallOps:
         assert "[attribution]" in content
         assert "carter-bot" in content
         assert "[git]" in content
-        assert "[jira]" in content
+        assert "[jira]" not in content
 
     def test_does_not_overwrite_existing_config(self, base_dir: Path) -> None:
         config = base_dir / "carter" / "config.toml"

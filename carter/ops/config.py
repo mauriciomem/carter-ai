@@ -49,11 +49,6 @@ class Config:
     # Git
     signing_key: str = ""
 
-    # Jira
-    jira_url: str = ""
-    jira_email: str = ""
-    jira_token: str = ""
-
     # GitHub
     github_token: str = ""
 
@@ -79,17 +74,7 @@ class Config:
             if signing_key:
                 cfg.signing_key = str(Path(signing_key).expanduser())
 
-            jira = data.get("jira", {})
-            cfg.jira_url = jira.get("url", "")
-            cfg.jira_email = jira.get("email", "")
-
-        # Env vars override file values (secrets always from env)
-        cfg.jira_token = os.environ.get("JIRA_TOKEN", "") or os.environ.get(
-            "ATLASSIAN_API_TOKEN", ""
-        )
-        cfg.jira_url = os.environ.get("ATLASSIAN_URL", "") or cfg.jira_url
-        cfg.jira_email = os.environ.get("ATLASSIAN_EMAIL", "") or cfg.jira_email
-
+        # Secrets always come from env
         # GitHub
         cfg.github_token = os.environ.get("GITHUB_TOKEN", "")
 

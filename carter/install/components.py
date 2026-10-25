@@ -290,11 +290,6 @@ def install_ops(
             "\n"
             "[git]\n"
             f'signing_key = "{signing_key}"\n'
-            "\n"
-            "[jira]\n"
-            'url = ""\n'
-            'email = ""\n'
-            "# token comes from JIRA_TOKEN or ATLASSIAN_API_TOKEN env var — never in config file\n"
         )
         config_path.write_text(config_content)
         log_ok(f"{str(config_path).replace(str(_home()), '~')}")

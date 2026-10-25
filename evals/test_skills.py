@@ -89,9 +89,10 @@ class TestCarterOpsSkillContent:
         assert has_template or has_literal
 
     def test_has_jira_operations(self, ops_skill: str) -> None:
-        """Must cover Jira REST API commands."""
-        assert "curl" in ops_skill or "jira" in ops_skill.lower()
-        assert "rest/api/2" in ops_skill
+        """Jira goes through the carter-atlassian MCP server, never curl/REST."""
+        assert "jira" in ops_skill.lower()
+        assert "carter-atlassian" in ops_skill
+        assert "rest/api/" not in ops_skill
 
     def test_no_legacy_cli_invocations(self, ops_skill: str) -> None:
         """Skill should not teach the legacy CLI as primary execution method."""
