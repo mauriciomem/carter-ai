@@ -2,6 +2,27 @@
 
 <!-- version list -->
 
+## v0.11.0 (2026-10-25)
+
+### Chores
+
+- **docs**: Keep ADRs local-only and drop links to them
+  ([#21](https://github.com/mauriciomem/carter-ai/pull/21),
+  [`08bf3f7`](https://github.com/mauriciomem/carter-ai/commit/08bf3f74f128016144f9971f4d00d359a52f26f1))
+
+### Features
+
+- OpenCode is the only supported harness (min OpenCode 2.1)
+  ([#28](https://github.com/mauriciomem/carter-ai/pull/28),
+  [`bfadf83`](https://github.com/mauriciomem/carter-ai/commit/bfadf8396b8921473c6b0a5cde009cf6cfb22ebb))
+
+### Breaking Changes
+
+- GitHub Copilot and VS Code support are removed. Carter requires OpenCode >= 2.1; the `target`
+  config key and `--target` flag are gone; Carter state moves from ~/.copilot to ~/.carter (migrated
+  automatically on install).
+
+
 ## v0.10.0 (2026-10-24)
 
 ### Documentation
