@@ -2,6 +2,19 @@
 
 <!-- version list -->
 
+## v0.12.0 (2026-10-25)
+
+### Bug Fixes
+
+- **policy**: Deny remote gh/vault commands to non-devops agents
+  ([#30](https://github.com/mauriciomem/carter-ai/pull/30),
+  [`da2d77e`](https://github.com/mauriciomem/carter-ai/commit/da2d77e66e7bb05fb1fa3666c2894f8c6528e427))
+
+- **policy**: Deny remote gh/vault commands to non-devops agents and route ops: remote steps via
+  devops ([#30](https://github.com/mauriciomem/carter-ai/pull/30),
+  [`da2d77e`](https://github.com/mauriciomem/carter-ai/commit/da2d77e66e7bb05fb1fa3666c2894f8c6528e427))
+
+
 ## v0.11.1 (2026-10-25)
 
 ### Bug Fixes
