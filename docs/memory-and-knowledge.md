@@ -220,23 +220,9 @@ Creates:
 
 `carter uninstall` treats knowledge as user
 data: a knowledge file is removed only if it still matches the seed Carter shipped.
-Edited files, files you wrote, and files migrated from `~/.copilot/knowledge/` are
+Edited files and files you wrote are
 kept with a `⚠ Kept …` warning. Memories, `config.toml` and `audit.log` are never
 removed. With a manifest from an older version (no hashes), all knowledge files are kept.
-
-### Upgrading from a Copilot-era install
-
-Earlier versions kept knowledge, the manifest and backups under `~/.copilot/`. The
-first `carter install` copies them to `~/.carter/knowledge/`, `~/.carter/manifest.json`
-and `~/.carter/backups/`. Nothing in `~/.copilot` is deleted, and a destination file
-that already exists with different content is kept (a warning names it). The
-migration runs once; `~/.carter/.migrated-from-copilot` marks it done (delete that
-file to run it again).
-
-Copilot/VS Code files from the old install stay in place. `carter uninstall --legacy`
-removes the Carter ones listed in the old `~/.copilot/.carter-manifest.json` (agents,
-skills, instructions, `carter-*` MCP entries), skipping files you edited. Without
-that manifest it only lists what to remove by hand.
 
 ### What the installer does NOT do
 

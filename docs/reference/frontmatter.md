@@ -313,11 +313,6 @@ caveat.
 **Effort and temperature are not emitted.** Use a `#variant` in the model string or
 OpenCode's settings for reasoning level; `temperature` is never written.
 
-## Removed keys
-
-`target:` is gone (OpenCode is the only harness). A leftover `target:` in
-`carter.yaml` fails with an error telling you to delete it.
-
 ## See also
 
 - [plans-and-state.md](../plans-and-state.md) — the plan/ADR/checkpoint workflow

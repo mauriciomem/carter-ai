@@ -66,9 +66,6 @@ carter install
 carter install --mcp --mcp-servers github   # optionally wire MCP servers too
 ```
 
-> **Coming from a Copilot-era Carter?** `carter install` migrates `~/.copilot` state
-> to `~/.carter` automatically; see [Upgrading](../README.md#upgrading-from-a-copilot-era-install).
-
 ### Path B: Workspace Scaffold (per-project)
 
 This generates customized agents from templates into a specific workspace directory.

@@ -9,10 +9,9 @@ The test suite validates these systems:
 | System | Test File | What It Covers |
 |--------|-----------|----------------|
 | **Installer** | `tests/test_install.py`, `tests/test_install_opencode.py` | File copying, OpenCode >= 2.1 gate, V2 `mcp.servers` merging, manifest tracking, idempotency |
-| **Migration** | `tests/test_migration.py` | `~/.copilot` → `~/.carter` state copy, `carter uninstall --legacy` |
 | **Harness check** | `tests/test_harness.py` | `carter check` running `opencode debug agents` (faked) |
 | **Scaffold (CLI + Templates)** | `tests/test_scaffold.py` | Config loading, template rendering, quality gates, **policy emission**, workspace init |
-| **Policy model** | `tests/test_config.py` | The `policy` block, risk taxonomy, per-agent allowlist, overrides, `permissions:` rule order, `target:` rejection |
+| **Policy model** | `tests/test_config.py` | The `policy` block, risk taxonomy, per-agent allowlist, overrides, `permissions:` rule order |
 | **Policy lint** | `tests/test_policy_lint.py` | `carter check` drift detection on emitted `permissions:`/`model`, V1-key rejection |
 | **Models** | `tests/test_models.py` | Per-agent model resolution and emission |
 | **Dispatch** | `tests/test_dispatch.py` | Native subagent dispatch emission |
@@ -21,7 +20,7 @@ The test suite validates these systems:
 | **Carter-Ops** | `tests/ops/test_operations.py` | `carter ops` audit, policy-override ledger, config emit |
 | **Uninstall** | `tests/test_uninstall.py` | `carter uninstall` never deletes user-edited or user-owned files |
 | **`ops:` routing** | `tests/test_ops_routing.py` | Local `ops:` steps run anywhere; remote steps only via carter-devops |
-| **Skill hygiene** | `tests/test_skill_hygiene.py` | Skill sources carry no Copilot-era leftovers |
+| **Skill hygiene** | `tests/test_skill_hygiene.py` | Skill sources carry only what OpenCode V2 reads |
 | **Docs links** | `tests/test_docs_links.py` | Relative links and anchors in `README.md` and `docs/**` resolve |
 | **Version** | `tests/test_version.py` | `carter.__version__` derives from package metadata |
 
@@ -105,7 +104,7 @@ real `uv tool` and runs it against a real OpenCode:
 Each cell checks that `carter --version` is a valid PEP 440 version, runs
 `carter init` + `carter check` on a fresh workspace, and runs `carter install` into a
 throwaway home, asserting that at least 8 agent files land in the OpenCode agents
-directory and that nothing is written to the old Copilot location.
+directory.
 
 #### Bumping the OpenCode floor
 
@@ -163,7 +162,6 @@ tests/
 ├── conftest.py             # Shared fixtures (repo_root, base_dir, fake_opencode, _no_real_opencode)
 ├── test_install.py         # Installer
 ├── test_install_opencode.py # OpenCode >= 2.1 gate, V2 MCP shape
-├── test_migration.py       # ~/.copilot -> ~/.carter, uninstall --legacy
 ├── test_harness.py         # opencode debug agents validation
 ├── test_scaffold.py        # Scaffold + policy emission
 ├── test_config.py          # Policy model: taxonomy, allowlist, overrides
@@ -175,7 +173,7 @@ tests/
 ├── test_state.py           # .carter/ git state
 ├── test_uninstall.py       # uninstall keeps user-edited files
 ├── test_ops_routing.py     # ops: local vs remote (devops-only) steps
-├── test_skill_hygiene.py   # no Copilot-era leftovers in skills
+├── test_skill_hygiene.py   # skill frontmatter hygiene
 ├── test_docs_links.py      # README/docs relative links resolve
 ├── test_version.py         # Version metadata
 └── ops/
