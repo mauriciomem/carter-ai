@@ -2,6 +2,21 @@
 
 <!-- version list -->
 
+## v0.16.0 (2026-10-25)
+
+### Refactoring
+
+- Remove legacy harness support and migration code
+  ([#40](https://github.com/mauriciomem/carter-ai/pull/40),
+  [`4008f43`](https://github.com/mauriciomem/carter-ai/commit/4008f434d6b1d46057ba80a1a715a7ec567497a3))
+
+### Breaking Changes
+
+- Carter uninstall --legacy and the automatic migration from the old state directory are removed,
+  and an older global AGENTS.md is no longer upgraded in place (anything other than the current
+  rules text is kept as user-modified).
+
+
 ## v0.15.2 (2026-10-25)
 
 ### Bug Fixes
