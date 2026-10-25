@@ -43,7 +43,8 @@ carter init ~/my-project --name "my-project"   # scaffold a workspace
 ```
 
 For MCP servers, set the relevant tokens first (`GITHUB_TOKEN`, `TFE_TOKEN`);
-the Atlassian server authenticates via OAuth in your client. See [.env.example](.env.example).
+`carter install --mcp` warns about any that are unset but does not stop. The
+Atlassian server authenticates via OAuth in your client. See [.env.example](.env.example).
 
 → Full walkthrough: **[docs/getting-started.md](docs/getting-started.md)**
 
@@ -127,7 +128,7 @@ first-class citizen, each the authority in its domain.
 | **DevOps** | CI/CD, IaC, containers, git | Pipelines, Terraform, Packer, deployment — the **only** agent that pushes/mutates infra |
 | **Learner** | Explanation, research, memory | Documentation, mistake capture, topic research |
 | **PM** | Planning, risk, agile | WBS, roadmaps, sprint planning, risk assessment |
-| **Narrator** | External-facing content | The external-content specialist (the way Architect is the design specialist) — drafts + **redacts** outward content (PRs, Jira, docs, announcements); substantive outward content should go through the narrator's redaction pass before DevOps transmits it (prompt-level guidance, ADR-0001) |
+| **Narrator** | External-facing content | The external-content specialist (the way Architect is the design specialist) — drafts + **redacts** outward content (PRs, Jira, docs, announcements); substantive outward content should go through the narrator's redaction pass before DevOps transmits it (prompt-level guidance, not enforced by OpenCode) |
 | **Security** | Defensive review, threat modeling, authorized methodology | any agent can flag a risk; carter-security specializes in defensive review and *authorized* security methodology. Advisory only (it threat-models, reviews, and triages — it does not run attacks); offensive methodology is authorized-context-gated; it never pushes — remediation is a handoff to devops. |
 
 > Maestro is emitted with `mode: primary` and the specialists with `mode: subagent`
@@ -155,7 +156,9 @@ executes the commands directly, and records the result with `carter ops audit`.
 ## Configuration & templates
 
 Workspace agents are generated from Jinja2 templates (base + per-agent
-inheritance) driven by `.carter/carter.yaml`. Edit config, then `carter update .`
+inheritance) driven by `.carter/carter.yaml`. These keys apply only to workspace
+agents scaffolded by `carter init`; the global agents written by `carter install`
+always use the shipped defaults (`guarded`, default models, no suffix). Edit config, then `carter update .`
 to regenerate (knowledge files are never touched); `carter check .` validates the
 workspace and runs `opencode debug agents` to confirm OpenCode loads every Carter
 agent with its emitted permissions (skipped with a warning if `opencode` is not on
@@ -180,8 +183,7 @@ PATH; `--no-harness` skips it explicitly).
 
 Each agent gets an ordered OpenCode
 [`permissions:`](https://opencode.ai/v2/docs/permissions/) list (last match wins)
-generated from a **risk-based strictness policy** (ADR-0014; categories from
-ADR-0010). Everything starts at `ask`; reading and searching are allowed; four risk
+generated from a **risk-based strictness policy**. Everything starts at `ask`; reading and searching are allowed; four risk
 categories — **read → local-write → remote-write → dangerous** — are granted per
 agent. One `policy.level` knob sets how strict:
 
@@ -267,11 +269,11 @@ uv run pytest -q                     # unit tests (offline)
 uv run pytest evals -m "not live" -q # offline evals
 ```
 
-The suite (installer, scaffold, parity, carter-ops) runs on every push and PR via
+The suite (installer, scaffold, parity, carter-ops, docs links) runs on every push and PR via
 [GitHub Actions](.github/workflows/ci.yml). → **[docs/testing.md](docs/testing.md)**
 
 ```
-carter/        CLI package (cli, installer, install/, scaffold, config, plans, state, ops/)
+carter/        CLI package (cli, install/, scaffold, config, harness, home, plans, state, resources, ops/)
 templates/     Jinja2 agent + AGENTS.md templates (install, init, update)
 skills/        Skill definitions (hand-maintained)
 knowledge/     Knowledge-base seed templates
@@ -296,7 +298,7 @@ evals/         Prompt/skill evals (offline + live)
 | `Unknown key 'target'` | Delete `target:` from `.carter/carter.yaml` (see [Upgrading](#upgrading-from-a-copilot-era-install)) |
 | `carter uninstall` left files behind | By design: files you edited (or that existed before install) are kept and listed as `⚠ Kept …`. Delete them by hand if you don't need them (see [Uninstalling](#uninstalling)) |
 | MCP server conflicts | Carter installs alongside existing servers as `carter-*`; remove the original to avoid duplicate tools |
-| Missing tokens for `--mcp` | Run `carter install --mcp -v` to see which env vars are unset |
+| Missing tokens for `--mcp` | `carter install --mcp` prints a `⚠` warning for each unset `GITHUB_TOKEN` / `TFE_TOKEN` (hidden by `-q`) and continues — the install never fails on a missing token. Without `--mcp`, tokens are not checked |
 
 ## License
 

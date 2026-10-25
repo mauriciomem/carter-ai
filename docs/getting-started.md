@@ -83,6 +83,9 @@ carter init ~/my-workspace --agent-suffix local --profile budget
 #   --agent-suffix <suffix>         (default local; "" for none)
 #   --profile quality|budget        (default: shipped per-agent tiers)
 #   --docs-language <tag>           (default en; internal docs only)
+#   --single                        single-repo mode (default: umbrella); also adds
+#                                   `.carter/` to the workspace .gitignore
+#   --no-git-state                  don't create the private .carter/.git repo
 ```
 
 > The narrator's redaction rules are always rendered; `redaction.categories` in
@@ -93,7 +96,9 @@ carter init ~/my-workspace --agent-suffix local --profile budget
 ```
 my-workspace/
 ├── AGENTS.md                 ← Workspace instructions (written only if absent)
+├── .gitignore                ← `--single` only: adds `.carter/` so state stays out of the repo
 ├── .carter/
+│   ├── .git/                 ← Private git repo for state (skipped with `--no-git-state`)
 │   ├── carter.yaml           ← Your configuration (drives everything)
 │   ├── knowledge/            ← Learnings captured during work
 │   │   ├── lessons-learned.md
@@ -130,7 +135,9 @@ my-workspace/
 
 ### Understanding carter.yaml
 
-This is the file that drives all template rendering. Key sections:
+This is the file that drives all template rendering for **this workspace**. The
+global agents from `carter install` don't read it — they always use the shipped
+defaults. Key sections:
 
 ```yaml
 # What personality should Carter have?
@@ -159,7 +166,7 @@ agent_suffix: local
 # `carter init --docs-language es`.
 docs_language: en
 
-# Risk-based strictness policy (ADR-0014). One knob; ask-by-default per agent.
+# Risk-based strictness policy. One knob; ask-by-default per agent.
 policy:
   level: guarded        # guarded | strict
   overrides: {}         # category -> gate, e.g. {remote-write: deny} to tighten remote-write
@@ -205,7 +212,9 @@ carter check . --no-harness # skip the OpenCode step (e.g. on a machine without 
 
 `carter check` compares each agent's emitted `permissions:` and `model` with what
 `carter.yaml` generates, then asks OpenCode which agents it actually loaded. If
-`opencode` isn't on `PATH`, that last step is skipped with a warning.
+`opencode` isn't on `PATH`, that last step is skipped with a warning. See
+[how the harness check behaves](reference/frontmatter.md#harness-check-opencode-debug-agents)
+(it may start OpenCode's background service and can take a few seconds).
 
 ---
 
@@ -344,11 +353,14 @@ Each agent has strict rules about what it will and won't do. This prevents confu
 
 | Agent | Does | Does NOT |
 |-------|------|----------|
+| Maestro | Route requests, run the quality gate, offer knowledge capture | Do the specialist work itself |
 | Architect | Design systems, ADRs, API contracts | Write code, configure CI |
 | Engineer | Write code, tests, reviews | Design architecture, write pipelines |
-| DevOps | Pipelines, Terraform, Docker | Write application code |
+| DevOps | Pipelines, Terraform, Docker; the only agent that pushes or publishes | Write application code |
 | PM | Plans, roadmaps, risk assessment | Write code, design systems |
-| Learner | Research, explain, document | Write production code |
+| Learner | Research, explain topics, capture mistakes | Write production code |
+| Narrator | Draft and redact external-facing content and repo docs | Publish it (DevOps transmits), write code |
+| Security | Threat models, secure review, vulnerability triage (advisory) | Run attacks, push fixes (hands off to DevOps) |
 
 **Why this matters:** If you ask the engineer to "design the system architecture", it will recognize that's not its job and tell you to ask the architect instead. This keeps each agent focused and prevents hallucinated expertise.
 
@@ -402,7 +414,7 @@ Running `carter update` re-renders agent files but **never touches knowledge fil
 ## Releasing
 
 Carter uses **automated SemVer releases** driven entirely by your commit messages —
-there is no version number to bump by hand (ADR-0009). The git tag is the single
+there is no version number to bump by hand. The git tag is the single
 source of truth: `carter --version` and the built wheel both derive from the latest
 `vX.Y.Z` tag via `hatch-vcs`. An untagged checkout reports a dev version like
 `0.1.1.dev3+g<sha>`.
@@ -418,7 +430,7 @@ publishes a GitHub Release with generated notes.
 |-------------|---------|--------------------------|
 | `fix:` | `fix: handle missing settings.json` | PATCH — `0.1.0 → 0.1.1` |
 | `feat:` | `feat: add a terraform MCP server option` | MINOR — `0.1.1 → 0.2.0` |
-| `feat!:` / `BREAKING CHANGE:` | `feat!: drop python 3.10` | breaking — stays in `0.y` until 1.0 is declared |
+| `feat!:` / `BREAKING CHANGE:` | `feat!: drop python 3.10` | MINOR while pre-1.0 — `0.10.0 → 0.11.0` |
 | `docs:` `chore:` `refactor:` `test:` `ci:` `build:` `style:` | `docs: fix typo` | **no release** |
 
 > The project is intentionally **pre-1.0** (`0.y.z`): the API is still unstable. The
@@ -430,11 +442,11 @@ publishes a GitHub Release with generated notes.
 Install a specific tagged version (reproducible, won't drift):
 
 ```bash
-uv tool install git+https://github.com/mauriciomem/carter-ai.git@v0.1.0
-carter --version   # carter, version 0.1.0
+uv tool install git+https://github.com/mauriciomem/carter-ai.git@vX.Y.Z
+carter --version   # carter, version X.Y.Z
 ```
 
-Omit `@vX.Y.Z` to track the default branch's latest (a dev version).
+Replace `vX.Y.Z` with a tag from the [releases page](https://github.com/mauriciomem/carter-ai/releases). Omit `@vX.Y.Z` to track the default branch's latest (a dev version).
 
 ## Next Steps
 

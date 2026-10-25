@@ -7,7 +7,7 @@ description: Create project plans, work breakdown structures, and task dictionar
 Produce a structured plan **written to disk** under
 `.carter/state/plans/active/<NNN-slug>/`, with machine-readable frontmatter and
 verifiable `must_haves`. A plan is a directory, not a chat message — this is what
-makes session recovery and the quality gate work (ADR-0003).
+makes session recovery and the quality gate work.
 
 **Language:** write in the workspace `docs_language` (`.carter/carter.yaml`); if it is absent, English unless the user chose another language.
 </objective>
@@ -39,7 +39,7 @@ exactly; `carter check` validates every plan against it and **rejects an
 a `README.md`. Pick the next free `NNN` (001, 002, …); the `<NNN-slug>` directory
 name MUST equal the `id` in the frontmatter.
 
-**Tiered structure (per ADR-0003 D2 — thresholds come from `carter.yaml`
+**Tiered structure (thresholds come from `carter.yaml`
 `plans:`, defaults shown):**
 
 - **1–3 steps:** keep them inline in the README's Steps table. No step files.

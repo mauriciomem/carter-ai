@@ -1,8 +1,7 @@
 # Running Carter without breaking the bank
 
 *A plain-language guide to what Carter costs you, why, and how to run it on cheaper
-models without losing quality. The design record is
-ADR-0008; this doc is for people who **use** Carter.*
+models without losing quality. This doc is for people who **use** Carter.*
 
 Last reviewed: 2026-10-24.
 
@@ -11,9 +10,14 @@ Last reviewed: 2026-10-24.
 ## The one thing to understand first
 
 **Carter is a scaffolder, not a program that runs your AI.** When you run `carter
-install` or `carter init`, Carter writes a pile of static files — agent definitions,
-skills, and MCP server configs — into OpenCode's config directories, and then it
-*exits*. From that point on, your **harness** (OpenCode, the program that runs the
+install` or `carter init`, Carter writes a pile of static files and then it *exits*:
+
+- `carter install` writes agents, skills, global rules and (with `--mcp`) MCP server
+  configs to `~/.config/opencode/`, and Carter's own state to `~/.carter/`.
+- `carter init <dir>` writes workspace agents to `<dir>/.opencode/agents/`, an
+  `AGENTS.md`, and config/knowledge/state to `<dir>/.carter/`.
+
+ From that point on, your **harness** (OpenCode, the program that runs the
 agents) is what actually talks to the model.
 
 Why this matters for your bill: Carter can only influence two things about cost —
@@ -91,14 +95,17 @@ carter install --mcp                                 # all three (default)
 
 The GitHub server is the official `github/github-mcp-server` run **read-only** via Docker
 (a security hardening that costs ~68% more GitHub tokens than the old server, accepted
-deliberately — see ADR-0008). "Read-only" removes the MCP *write* surface only; shell
+deliberately: removing write tools from the model's MCP surface is worth the extra
+tokens, and you can skip the server entirely if you don't need it). "Read-only" removes the MCP *write* surface only; shell
 `gh`/`git` writes still work, governed by the strictness policy.
 
 ## Choosing a cost profile
 
 The cheaper default above is already applied out of the box. If you want to push cost
 down further — or trade it back for maximum quality — set a **`profile:`** in your
-workspace `carter.yaml`:
+workspace `carter.yaml`. Profiles and `models` overrides apply to workspace agents
+(`carter init`); the global agents from `carter install` always use the shipped
+tiers:
 
 | `profile:` | What it does | When |
 |------------|--------------|------|
@@ -198,4 +205,4 @@ pieces.** You spend frontier-model money once, on the hard thinking, not on ever
 | Check quality held up | `uv run pytest evals -m "not live"` |
 | Avoid MCP token cost | Only `--mcp` the servers you use; only set their tokens |
 | Reduce hops | `@`-mention specialists directly; be specific up front |
-| Understand the trade-offs | Read ADR-0008 |
+| Understand the trade-offs | Re-read [The deeper idea](#the-deeper-idea-structure-replaces-raw-model-power) above |

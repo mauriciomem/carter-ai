@@ -19,9 +19,19 @@ The test suite validates these systems:
 | **Agent parity** | `tests/test_parity.py` | Rendered-template invariants, emitted frontmatter, no false claims |
 | **Plans & state** | `tests/test_plans.py`, `tests/test_state.py` | Plan frontmatter contract, checkpoint recovery, `.carter/` git state |
 | **Carter-Ops** | `tests/ops/test_operations.py` | `carter ops` audit, policy-override ledger, config emit |
+| **Uninstall** | `tests/test_uninstall.py` | `carter uninstall` never deletes user-edited or user-owned files |
+| **`ops:` routing** | `tests/test_ops_routing.py` | Local `ops:` steps run anywhere; remote steps only via carter-devops |
+| **Skill hygiene** | `tests/test_skill_hygiene.py` | Skill sources carry no Copilot-era leftovers |
+| **Docs links** | `tests/test_docs_links.py` | Relative links and anchors in `README.md` and `docs/**` resolve |
 | **Version** | `tests/test_version.py` | `carter.__version__` derives from package metadata |
 
-The tests run in full isolation using temporary directories — they never touch your real `~/.carter/`, `~/.config/opencode/`, or any workspace paths. No test needs a real `opencode` binary.
+The tests run in full isolation using temporary directories — they never touch your real `~/.carter/`, `~/.config/opencode/`, or any workspace paths. No test needs a real `opencode` binary: an autouse fixture
+(`_no_real_opencode`) hides it, and tests that exercise the harness step use the
+`fake_opencode` fixture instead.
+
+At the time of writing the suite has **686 unit tests** and **59 offline evals**
+(`uv run pytest --co -q` prints the current count). The evals have their own guide:
+[evals/README.md](../evals/README.md).
 
 ## Prerequisites
 
@@ -64,7 +74,7 @@ uv run pytest tests/ops/ -v
 
 ## Continuous Integration
 
-CI runs as **two tiers** (ADR-0009 D5): a free, deterministic, key-free gate on
+CI runs as **two tiers**: a free, deterministic, key-free gate on
 every PR, and a budgeted live-accuracy canary on a weekly cron.
 
 | Tier | Workflow | Trigger | Key? | What it proves |
@@ -81,10 +91,36 @@ uv run pytest tests/ -q                                             # unit tests
 uv run pytest evals/ -m "not live" -q                               # offline evals
 ```
 
+### install-smoke matrix
+
+The `install-smoke` job in [ci.yml](../.github/workflows/ci.yml) installs Carter as a
+real `uv tool` and runs it against a real OpenCode:
+
+| Axis | Values |
+|------|--------|
+| OS | Linux (`ubuntu-latest`) and macOS (`macos-latest`) |
+| OpenCode `floor` | `2.1.0`, the minimum supported version — **required** to pass |
+| OpenCode `latest` | newest published 2.x — **informational** (allowed to fail, so upstream changes don't block PRs) |
+
+Each cell checks that `carter --version` is a valid PEP 440 version, runs
+`carter init` + `carter check` on a fresh workspace, and runs `carter install` into a
+throwaway home, asserting that at least 8 agent files land in the OpenCode agents
+directory and that nothing is written to the old Copilot location.
+
+#### Bumping the OpenCode floor
+
+1. Change `MIN_OPENCODE` in [`carter/install/prereqs.py`](../carter/install/prereqs.py).
+2. Change the `floor` entry's `opencode:` version in
+   [`.github/workflows/ci.yml`](../.github/workflows/ci.yml) in the **same** commit.
+3. Update user-facing "2.1" wording (`README.md`, `docs/`, the `carter install` help
+   text and the "OpenCode >= 2.1" test names/messages) — `grep -rn "2\.1" README.md docs carter tests`.
+
 ### Why the live evals need an API key (and the PR gate does not)
 
-The live evals (`evals/test_live.py`, marked `live`) send the agent/skill prompt
-markdown to a **raw model** and assert on the response. They read a standard
+The live evals are every test marked `live`: the prompt-quality canary
+(`evals/test_live.py`, which sends agent/skill prompt markdown to a **raw model** and
+asserts on the response) and the live adherence run (`evals/test_adherence_live.py`).
+Run them with `uv run pytest evals/ -m live -v`. They read a standard
 provider key from your environment — `ANTHROPIC_API_KEY`, else `OPENAI_API_KEY` — and
 skip cleanly when neither is set. They never read stored OpenCode or `gh` credentials,
 so running live evals in CI *requires* a dedicated LLM key.
@@ -124,7 +160,7 @@ No external mocking libraries are used. Both the installer and the scaffold acce
 
 ```
 tests/
-├── conftest.py             # Shared fixtures (repo_root, base_dir)
+├── conftest.py             # Shared fixtures (repo_root, base_dir, fake_opencode, _no_real_opencode)
 ├── test_install.py         # Installer
 ├── test_install_opencode.py # OpenCode >= 2.1 gate, V2 MCP shape
 ├── test_migration.py       # ~/.copilot -> ~/.carter, uninstall --legacy
@@ -137,6 +173,10 @@ tests/
 ├── test_parity.py          # Rendered agent invariants
 ├── test_plans.py           # Plan frontmatter contract + recovery
 ├── test_state.py           # .carter/ git state
+├── test_uninstall.py       # uninstall keeps user-edited files
+├── test_ops_routing.py     # ops: local vs remote (devops-only) steps
+├── test_skill_hygiene.py   # no Copilot-era leftovers in skills
+├── test_docs_links.py      # README/docs relative links resolve
 ├── test_version.py         # Version metadata
 └── ops/
     └── test_operations.py  # carter ops: audit, policy-override, config
@@ -150,6 +190,8 @@ Shared fixtures live in `tests/conftest.py`; suites define local fixtures where 
 |---------|------|-------------|
 | `repo_root` | `Path` | Absolute path to the Carter repository root. Used when tests need to reference source files. |
 | `base_dir` | `Path` | A fresh `tmp_path` directory. Every installer function accepts this as a parameter, so all file writes go here instead of real user directories. |
+| `fake_opencode` | factory | Puts a fake `opencode` on an isolated `PATH`. Call it with the `--version` output (or `None` for "not installed") and optionally the `debug agents` output and exit code. |
+| `_no_real_opencode` | autouse | Stops `carter check` from running a developer's real `opencode`; skipped for tests that request `fake_opencode`. |
 
 ### How `base_dir` Isolation Works
 

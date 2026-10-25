@@ -1,14 +1,15 @@
 # Frontmatter reference
 
-> Canonical schema source for Carter's durable artifacts (ADR-0003 §D6).
+> Canonical schema source for Carter's durable artifacts, and for the strictness
+> policy tables (risk taxonomy, per-agent allowlist, emitted rule order).
 > This is the **authoritative** definition. The `carter-adr` and `carter-plan`
 > skills carry a minimal emittable template for the agent to write from, but this
 > page governs — on any discrepancy, this wins, and the Python validator
 > (`carter check`) enforces the load-bearing keys/enums against it.
 
 All durable, lifecycle-bearing artifacts carry a YAML frontmatter block. Machines
-read the frontmatter; humans read the body. Where a Python validator exists
-(ADR-0003 §O3, Phase 2), it enforces these schemas before a plan is `active`.
+read the frontmatter; humans read the body. The Python validator (`carter check`)
+enforces these schemas before a plan is `active`.
 
 ---
 
@@ -25,7 +26,7 @@ rfc: null                     # RFC-NNNN this plan traces back to (optional)
 push_policy: manual           # manual | auto  (manual = never push without approval)
 tags: []
 repos: []                     # repos this plan touches (multi-repo work)
-must_haves:                   # MANDATORY: >= 1 entry total (ADR-0003 O6)
+must_haves:                   # MANDATORY: >= 1 entry total
   truths: []                  #   observable behaviors/states that must be true
   artifacts: []               #   files/resources that must exist
   key_links: []               #   canonical references (PRs, dashboards)
@@ -68,7 +69,7 @@ landing on a long ADR), every ADR carries:
 
 ```yaml
 ---
-id: ADR-0003
+id: ADR-NNNN                  # four-digit, zero-padded
 status: accepted              # proposed | accepted | rejected | superseded | deprecated
 created: 2026-06-07
 decided: 2026-06-09           # null until accepted
@@ -85,7 +86,7 @@ decision change, and is permitted.
 
 ## RFC frontmatter
 
-An RFC (design proposal, ADR-0004) is a **directory**
+An RFC (design proposal, reviewed before anything is built) is a **directory**
 under `docs/rfcs/NNNN-name/`; its `README.md` carries frontmatter + a human header
 block. Status lives in frontmatter; the directory never moves.
 
@@ -173,8 +174,7 @@ repo, outside any `.carter/`, so `carter.yaml` cannot govern them. It is a
 
 ## Risk-based strictness policy (`policy` block)
 
-The risk-based strictness policy (ADR-0014; categories from ADR-0005 / ADR-0010)
-is a `policy` block in `carter.yaml`. `guarded` is the floor and the default for
+The risk-based strictness policy is a `policy` block in `carter.yaml`. `guarded` is the floor and the default for
 everything: a new install, an existing config that omits the block, and an
 unrecognized level all resolve to `guarded`.
 
@@ -250,12 +250,28 @@ comment in the agent body; the emitted `permissions:` is the single source of tr
 
 **`carter check` lint.** For each agent it fails if `permissions` or `model` is
 missing or differs from what `carter.yaml` generates (exact, ordered match), or if a
-V1 key is present. It then runs `opencode debug agents` and fails if OpenCode didn't
-load an agent or loaded different rules (skipped with a warning when `opencode`
-isn't on `PATH`; `--no-harness` skips it).
+V1 key is present. It then runs the harness check below.
+
+### Harness check (`opencode debug agents`)
+
+After the lint, `carter check` runs `opencode debug agents` in the workspace and
+fails if OpenCode didn't load a Carter agent or loaded it with different rules.
+
+- **Skipped** with a warning when `opencode` isn't on `PATH`; `--no-harness` skips it
+  explicitly.
+- **Starts OpenCode's background service** if it isn't running. That is your shared
+  per-user service; `carter check` leaves it running and never stops it.
+- **Retries with backoff.** The first call can return an empty list while the service
+  starts, so an empty or incomplete result is retried (waits of 0.5 + 1 + 2 + 4 s,
+  about 7.5 s worst case, plus call time).
+- **30-second timeout** per call; a timeout fails the check.
+- **A broken `opencode`** (it is on `PATH` but errors or prints invalid output)
+  fails the check rather than being skipped.
 
 **Global agents.** `carter install` renders the same templates with the shipped
-`guarded` defaults and no suffix into `~/.config/opencode/agents/`.
+`guarded` defaults, default models and no suffix into `~/.config/opencode/agents/`.
+It does not read any `carter.yaml`, so the keys on this page affect only workspace
+agents scaffolded by `carter init`.
 
 ## Per-agent model (`models` block)
 
@@ -293,5 +309,5 @@ OpenCode's settings for reasoning level; `temperature` is never written.
 
 ## See also
 
-- ADR-0003 — the decision of record (artifact schemas)
-- ADR-0014 — OpenCode-only emission (`permissions`, `models`)
+- [plans-and-state.md](../plans-and-state.md) — the plan/ADR/checkpoint workflow
+- [strictness-policy.md](../strictness-policy.md) — tutorial for the `policy` block
