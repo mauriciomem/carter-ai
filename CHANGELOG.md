@@ -2,6 +2,21 @@
 
 <!-- version list -->
 
+## v0.13.0 (2026-10-25)
+
+### Bug Fixes
+
+- **install**: Recognize every shipped global rules version so old installs upgrade
+  ([#31](https://github.com/mauriciomem/carter-ai/pull/31),
+  [`12575f3`](https://github.com/mauriciomem/carter-ai/commit/12575f34bb92e124b6d322d3a1aad0d02d1e21f0))
+
+### Features
+
+- **skills**: Retire carter-triage, upgrade old global rules and drop Copilot-era leftovers
+  ([#31](https://github.com/mauriciomem/carter-ai/pull/31),
+  [`12575f3`](https://github.com/mauriciomem/carter-ai/commit/12575f34bb92e124b6d322d3a1aad0d02d1e21f0))
+
+
 ## v0.12.0 (2026-10-25)
 
 ### Bug Fixes
