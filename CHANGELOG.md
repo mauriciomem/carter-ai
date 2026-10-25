@@ -2,6 +2,32 @@
 
 <!-- version list -->
 
+## v0.15.0 (2026-10-25)
+
+### Chores
+
+- Build, CI and .gitignore hygiene ([#35](https://github.com/mauriciomem/carter-ai/pull/35),
+  [`0d108ae`](https://github.com/mauriciomem/carter-ai/commit/0d108aefa5f999d6df92e5338fec507ab88eb7c3))
+
+### Continuous Integration
+
+- Fix workflow comments, drop always-true guard, use find for agent count
+  ([#35](https://github.com/mauriciomem/carter-ai/pull/35),
+  [`0d108ae`](https://github.com/mauriciomem/carter-ai/commit/0d108aefa5f999d6df92e5338fec507ab88eb7c3))
+
+### Documentation
+
+- Accuracy pass after the OpenCode-only cleanup
+  ([#34](https://github.com/mauriciomem/carter-ai/pull/34),
+  [`adbb954`](https://github.com/mauriciomem/carter-ai/commit/adbb954f9aabf94bcba6a11f76baddbe31bfd9f9))
+
+### Features
+
+- **evals**: Price Claude 5.5 models from Anthropic's published rates
+  ([#36](https://github.com/mauriciomem/carter-ai/pull/36),
+  [`18fff08`](https://github.com/mauriciomem/carter-ai/commit/18fff08cfff4caf0671d0eb2c59f3e94dbf4321f))
+
+
 ## v0.14.1 (2026-10-25)
 
 ### Bug Fixes
