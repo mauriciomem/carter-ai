@@ -302,4 +302,4 @@ evals/         Prompt/skill evals (offline + live)
 
 ## License
 
-GPL-3.0
+`GPL-3.0-only` — see [LICENSE](LICENSE).
