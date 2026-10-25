@@ -1,6 +1,6 @@
 name: evals-live
 
-# Weekly live-eval canary (ADR-0009 D5).
+# Weekly live-eval canary.
 #
 # The PR gate (ci.yml) runs only the key-free, deterministic OFFLINE evals. This
 # workflow is the budgeted ACCURACY canary: it sends the real agent/skill prompts to
@@ -10,8 +10,8 @@ name: evals-live
 # the real OpenCode tool-calling loop. Read the metrics with that caveat.
 #
 # Auth: the harness reads only a standard provider key from the environment
-# (ANTHROPIC_API_KEY, else OPENAI_API_KEY), so we provide a dedicated ANTHROPIC_API_KEY
-# repo secret. If the secret is unset the live tests skip cleanly (no failure).
+# (ANTHROPIC_API_KEY, else OPENAI_API_KEY), so we pass a dedicated ANTHROPIC_API_KEY
+# repo secret, plus OPENAI_API_KEY as the fallback when no Anthropic key is set. If the secret is unset the live tests skip cleanly (no failure).
 
 on:
   schedule:
@@ -50,7 +50,7 @@ jobs:
 
       - name: Run live evals (budgeted, low-cost model)
         # All `live`-marked evals: the prompt-quality canary (test_live.py) AND the
-        # adherence run (test_adherence_live.py, ADR-0010 D9 — EVAL_MODEL vs a thinker
+        # adherence run (test_adherence_live.py — EVAL_MODEL vs a thinker
         # plan, graded against the >=90% / 0-critical bar). Both hit the
         # billed API and are NEVER on the per-PR gate (ci.yml runs -m "not live").
         run: uv run pytest evals/ -m live -v -p no:cacheprovider

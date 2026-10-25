@@ -11,7 +11,7 @@ build/
 # maps the top-level agents/skills/templates/... into carter/_data/ AT BUILD TIME, and a
 # dev editable-install populates it locally. It must NOT be tracked — a committed
 # carter/_data/ shadows the force-include (wheel-build path collision) AND makes
-# resources.py resolve to a half-populated dir on a clean checkout (ADR-0006 / the
+# resources.py resolve to a half-populated dir on a clean checkout (the
 # editable-install gotcha).
 /carter/_data/
 
@@ -19,8 +19,15 @@ build/
 .venv/
 venv/
 
-# pytest
+# Tool caches / test + coverage output
 .pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Live-eval metrics output (EVAL_METRICS_OUT in evals-live.yml)
+eval-metrics.json
 
 # IDE
 .vscode/
@@ -35,24 +42,6 @@ Thumbs.db
 
 # Environment variables (never commit real credentials)
 .env
-
-# Installer backups and manifests are user-local, not repo content
-
-# yui-soul workspace overlay (scaffolded into this repo root, not part of carter-ai).
-# Root-anchored so carter's own knowledge/, docs/, and .github/workflows/ are unaffected.
-/.yui.json
-/AGENTS.md
-/PORTABILITY.md
-/.github/agents/
-/.github/instructions/
-/.knowledge/
-/.plans/
-/.rfcs/
-/.ideas/
-/.backlog/
-
-# External reference repos (vendored for inspection, not carter-ai source)
-/external/
 
 # Project scratch / pre-build notes (kept on disk, out of git)
 /notes/
