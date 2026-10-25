@@ -43,8 +43,8 @@ Agents are split into two tiers:
 | Implementers | `anthropic/claude-sonnet-5-5` | Engineer, DevOps, PM, Narrator | Well-defined, structured work |
 
 PM and Narrator follow fixed formats (plan schema, redaction rules), so a cheaper
-model does the job. Both passed an adherence test on the cheaper model before the
-default changed.
+model does the job. The decision rests on recorded adherence runs made
+on Sonnet 4.6, not on the current default model.
 
 `carter check` prints the model of every agent. Carter can't check that your
 provider offers those models; if it doesn't, change them as described below.

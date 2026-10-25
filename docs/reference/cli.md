@@ -29,7 +29,7 @@ Install Carter for OpenCode 2.1 or newer. Writes to `~/.config/opencode/` and
 |--------|-------------|
 | `--mcp` | Also configure the MCP servers |
 | `--mcp-servers TEXT` | Comma-separated subset: `github`, `terraform`, `atlassian`. Default: all. Only with `--mcp` |
-| `--bot-name TEXT` | Co-author name for commits made through `ops:` (default `carter-bot`) |
+| `--bot-name TEXT` | Co-author name for commits made through `ops:` (default `carter-bot`). Used only when `~/.carter/config.toml` doesn't exist yet; afterwards edit that file |
 | `--base-dir DIRECTORY` | Install into another base directory (for testing) |
 | `-q`, `--quiet` | Errors only |
 | `-v`, `--verbose` | Detailed output |
@@ -89,8 +89,10 @@ Validate a workspace. Exits with status 1 and lists the problems if any check fa
 - OpenCode loads every agent with the same description, model and rules.
 
 The last step runs `opencode debug agents`, which starts OpenCode's background
-service if it isn't running and leaves it running. It retries for a few seconds if
-OpenCode still serves old files, and times out after 30 seconds per call. It is
+service if it isn't running and leaves it running. It first waits until the newest
+agent file is 1.5 s old. A stale or failed result is retried, up to 5 attempts with
+0.5, 1, 2 and 4 s pauses. A single call that takes longer than 30 s fails the check
+at once, without retrying. It is
 skipped with a warning when `opencode` isn't on `PATH`; `--no-harness` skips it on
 purpose.
 

@@ -45,8 +45,8 @@ this:
 Rule of thumb: if it is true only for this project, it goes in the workspace. If it
 would help in any project, it goes global.
 
-Carter never overwrites knowledge files. `carter install`, `carter init` and
-`carter update` create them only when they are missing.
+Carter never overwrites knowledge files. `carter init` (workspace) and
+`carter install` (global) create them only when they are missing.
 
 ### How knowledge gets written
 

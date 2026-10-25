@@ -83,8 +83,9 @@ cheaper executor doesn't lower the bar for the plan.
 - `test_adherence_live.py` runs a real session on the weekly schedule only.
 - `EVAL_RECORD=1` with the live test overwrites the fixture with a fresh recording.
 
-The Engineer, Narrator and PM run on the cheaper model by default because they pass
-this eval.
+The Engineer, Narrator and PM run on the cheaper tier by default because their
+recorded runs, made on Sonnet 4.6, pass this eval. The fixtures were not re-recorded
+on the current default model.
 
 ## Scenarios
 
@@ -116,5 +117,6 @@ To add one:
 - [`ci.yml`](../.github/workflows/ci.yml) runs `pytest evals/ -m "not live"` on every
   PR.
 - [`evals-live.yml`](../.github/workflows/evals-live.yml) runs the live evals every
-  Monday with a repository secret and a capped budget, and uploads the metrics as an
+  Monday with one model-provider secret (Anthropic, or OpenAI as a fallback) and a
+  capped budget, and uploads the metrics as an
   artifact.

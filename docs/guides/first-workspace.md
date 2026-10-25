@@ -115,7 +115,8 @@ Workspace OK
 - each agent's permissions and model still match `carter.yaml`,
 - plans and the session checkpoint follow their [schemas](../reference/frontmatter.md),
 - OpenCode itself loads every agent with those settings (it runs
-  `opencode debug agents`, which starts OpenCode's background service if needed).
+  `opencode debug agents`, which starts OpenCode's background service if needed;
+  see the [CLI reference](../reference/cli.md#carter-check) for retries and timeouts).
 
 Nothing runs this automatically. Run it after you change settings or edit a plan.
 Use `--no-harness` to skip the OpenCode step.

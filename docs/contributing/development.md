@@ -22,20 +22,7 @@ uv run pytest evals -m "not live" -q
 
 See [Testing](testing.md) for details.
 
-> [!NOTE]
-> **`ModuleNotFoundError: No module named 'carter.cli'` in a dev checkout.** The
-> wheel bundles data under `carter/_data/` (`force-include` in `pyproject.toml`). In
-> an editable install that directory can appear in `site-packages` and hide your
-> source package. Remove the `site-packages/carter` directory, then link your source
-> in its place:
->
-> ```bash
-> SP=.venv/lib/python3.X/site-packages   # your Python version
-> ln -sfn "$PWD/carter" "$SP/carter"
-> uv run carter --version
-> ```
->
-> A normal `uv tool install` is not affected.
+If imports look stale after switching branches, run `uv sync --reinstall`.
 
 ## Repository layout
 

@@ -49,4 +49,4 @@ Find your symptom, then apply the fix. If nothing here helps, open an
 
 | Symptom | Fix |
 |---------|-----|
-| `carter uninstall` left files behind | By design. Files you edited are kept and listed as `⚠ Kept …`, and memories, `config.toml` and `audit.log` are never removed. Delete them by hand if you don't need them |
+| `carter uninstall` left files behind | By design. Files you edited are kept (those edited since the last install are listed as `⚠ Kept …`), and memories, `config.toml` and `audit.log` are never removed. Delete them by hand if you don't need them |

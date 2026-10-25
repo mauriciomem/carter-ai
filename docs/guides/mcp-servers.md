@@ -8,7 +8,7 @@ three of them for you. They are optional.
 |--------|--------------|-------|
 | `carter-github` | Read-only access to repositories, files, commits, issues and PRs | Docker, `GITHUB_TOKEN` |
 | `carter-terraform` | Terraform Registry, HCP Terraform and Terraform Enterprise workspaces | Docker, `TFE_TOKEN` |
-| `carter-atlassian` | Jira issues and Confluence pages | An Atlassian account (OAuth sign-in, no token) |
+| `carter-atlassian` | Jira issues and Confluence pages | An Atlassian account and a one-time sign-in (no token) |
 
 ## Install
 
@@ -22,7 +22,9 @@ carter install --mcp --mcp-servers github,terraform   # just these
 carter install --mcp                                  # all three
 ```
 
-Put the `export` lines in your shell profile so OpenCode sees them later. For
+Put the `export` lines in your shell profile so OpenCode sees them later. Note that
+`gh` also picks up an exported `GITHUB_TOKEN`; see the
+[warning in Write operations](write-operations.md#setup). For
 Terraform Enterprise, also set `TFE_ADDRESS`; leave it unset for HCP Terraform.
 [`.env.example`](../../.env.example) lists every variable.
 
@@ -34,8 +36,15 @@ A missing token is only a warning; the install continues:
     export GITHUB_TOKEN="your-value"
 ```
 
-The Atlassian server needs no token. It signs you in through OAuth in OpenCode the
-first time it is used.
+The Atlassian server needs no token, but you sign in once
+([OpenCode MCP servers](https://opencode.ai/v2/docs/mcp-servers/)): run `/mcps` in
+OpenCode and select `carter-atlassian`, or run:
+
+```bash
+opencode mcp auth carter-atlassian
+```
+
+Until then, `opencode mcp list` shows it as needing authentication.
 
 > [!TIP]
 > **Install only what you use.** Every configured server's tool list is sent to the

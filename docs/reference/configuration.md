@@ -139,7 +139,9 @@ See [Safety and permissions](../guides/safety-and-permissions.md).
 | `overrides` | `{}` | Per-category effect, e.g. `{remote-write: deny}`. Categories: `read`, `local-write`, `remote-write`, `dangerous`. Effects: `allow`, `ask`, `gate`, `deny` |
 | `allowlist` | not set | Grant or remove categories per agent, e.g. `{engineer: {remote-write: true}}` |
 
-An invalid category or effect in `overrides` is an error.
+An invalid category or effect in `overrides` is an error. In `allowlist`, every
+agent must be listed in `agents:`, every category must be one of the four, and every
+value must be `true` or `false`; anything else is an error.
 
 ### models
 

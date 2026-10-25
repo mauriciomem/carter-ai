@@ -44,7 +44,7 @@ Tests are grouped into classes named after the behavior they cover, for example
 
 | Workflow | When | Needs a key | Checks |
 |----------|------|-------------|--------|
-| [`ci.yml`](../../.github/workflows/ci.yml) | Every push to `main` and every PR | No | ruff, mypy, unit tests and offline evals on Python 3.11, 3.14 and 3.15, and an install smoke test |
+| [`ci.yml`](../../.github/workflows/ci.yml) | Every push to `main` and every PR | No | ruff and mypy (Python 3.14); unit tests and offline evals on Python 3.11, 3.14 and 3.15; an install smoke test |
 | [`evals-live.yml`](../../.github/workflows/evals-live.yml) | Mondays 06:00 UTC, or manually | Yes (repo secret) | Live evals against a low-cost model, with token and cost metrics |
 | [`release.yml`](../../.github/workflows/release.yml) | Every push to `main` | No | Tags and publishes a release ([details](development.md#releases)) |
 
@@ -67,7 +67,8 @@ expecting at least 8 agent files.
 
 A model call on every PR would cost money, give flaky results and expose a secret to
 pull requests from forks. So the PR gate checks prompt **structure** only. The weekly
-live run uses a single repository secret, a capped token budget and a cheap model.
+live run uses one model-provider secret (Anthropic, or OpenAI as a fallback), a
+capped token budget and a cheap model.
 It sends prompts to the raw model, not through OpenCode's full tool loop, so treat
 it as a trend, not a merge gate.
 

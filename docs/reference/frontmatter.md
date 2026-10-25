@@ -119,14 +119,3 @@ tags: []
 Reviews live next to it in `review-<agent>.md`, newest round first. A review is
 current when its latest round reviewed the RFC's current `revision`. Accepted,
 rejected and withdrawn RFCs are frozen; replace them with a new RFC.
-
-## Knowledge entries (optional)
-
-The [knowledge files](../guides/memory-and-plans.md#two-sets-of-knowledge) are plain
-Markdown. An entry may carry two optional fields when it helps to filter or promote
-it later:
-
-```yaml
-scope: workspace              # universal | workspace
-tags: [security, terraform]
-```

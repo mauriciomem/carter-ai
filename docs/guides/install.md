@@ -58,7 +58,7 @@ Useful options:
 |--------|--------|
 | `--mcp` | Also configure the MCP servers. See [MCP servers](mcp-servers.md) |
 | `--mcp-servers github,terraform` | Only these MCP servers (with `--mcp`) |
-| `--bot-name NAME` | Name credited as co-author on commits (default `carter-bot`) |
+| `--bot-name NAME` | Name credited as co-author on commits (default `carter-bot`). First install only; see [Write operations](write-operations.md#setup) |
 | `-q` / `-v` / `--debug` | Less or more output |
 
 The full list is in the [CLI reference](../reference/cli.md#carter-install).
@@ -112,13 +112,14 @@ uv tool uninstall carter-ai   # removes the carter command itself
   untouched knowledge files, the `carter-*` MCP servers in `opencode.json` and
   `opencode.jsonc`, and `~/.carter/manifest.json`.
 - **Kept:** `~/.carter/memories/`, `config.toml`, `audit.log`, backups, and any file
-  you edited. Each kept file is reported:
+  you edited. Files edited since the last install are reported:
 
 ```text
   ⚠ Kept ~/.carter/knowledge/mistakes.md: edited since install
 ```
 
-Delete those by hand if you don't need them. Workspaces created with `carter init`
+Knowledge files you had already edited before a re-install are kept without a
+message. Delete any of these by hand if you don't need them. Workspaces created with `carter init`
 are never touched; remove their `.carter/`, `.opencode/agents/carter-*` and
 `AGENTS.md` yourself.
 

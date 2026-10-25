@@ -15,8 +15,9 @@ Three ideas decide the effect for any action:
 
 1. **Everything asks by default.** Only what is explicitly allowed runs silently.
 2. **Actions fall into four risk categories.**
-3. **Each agent is granted only the categories its job needs.** An action in a
-   category the agent doesn't hold is denied.
+3. **Each agent is granted only the categories its job needs.** Risky commands in a
+   category the agent doesn't hold are denied. Agents without local-write still
+   can edit files, run shell commands and fetch web pages, but OpenCode asks first.
 
 ## The four risk categories
 
@@ -112,7 +113,12 @@ policy:
 ```
 
 Run `carter update` after each change and `carter check` to confirm OpenCode loaded
-it. A typo in a category or effect name fails with a clear error.
+it. A typo in `overrides` or `allowlist` fails with a clear error, and so does an
+`allowlist` entry for an agent that isn't in `agents:`:
+
+```text
+Error: Invalid policy.allowlist.engineer category 'remote-wirte'. Must be one of: read, local-write, remote-write, dangerous.
+```
 
 ## Record an exception
 
