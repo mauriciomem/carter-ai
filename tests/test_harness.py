@@ -57,11 +57,11 @@ class _Runner:
 EXPECTED = {"carter-pm-local": RULES, "carter-engineer-local": RULES}
 
 
-def _validate(runner, sleeps: list | None = None, **kw):
+def _validate(runner, sleeps: list | None = None, expected=None, **kw):
     sleeps = [] if sleeps is None else sleeps
     return harness.validate_agents(
         Path("/ws"),
-        EXPECTED,
+        EXPECTED if expected is None else expected,
         runner=runner,
         which=lambda _: "/bin/opencode",
         sleep=sleeps.append,
@@ -137,7 +137,7 @@ class TestValidateAgents:
             return _proc(_all_present())
 
         _validate(runner, timeout=7)
-        assert seen["cmd"] == ["/bin/opencode", "debug", "agents"]
+        assert seen["cmd"] == ["/bin/opencode", "debug", "agents"]  # no --standalone flag
         assert seen["timeout"] == 7 and seen["cwd"] == Path("/ws")
 
     def test_missing_opencode_skips(self):
@@ -160,6 +160,85 @@ class TestValidateAgents:
         out = json.dumps([_agent("carter-pm-local", reordered), _agent("carter-engineer-local")])
         assert _validate(_Runner(_proc(out))).status == "fail"
 
+    def test_stale_description_then_fresh_retries(self):
+        exp = {n: harness.Expected(RULES, description="New") for n in EXPECTED}
+        stale = json.dumps([dict(_agent(n), description="Old") for n in EXPECTED])
+        fresh = json.dumps([dict(_agent(n), description="New") for n in EXPECTED])
+        runner = _Runner(_proc(stale), _proc(fresh))
+        sleeps: list = []
+        result = _validate(runner, sleeps, expected=exp)
+        assert result.status == "ok", result.errors
+        assert runner.calls == 2 and len(sleeps) == 1
+
+    def test_persistent_stale_fails_with_hint(self):
+        exp = {n: harness.Expected(RULES, description="New") for n in EXPECTED}
+        stale = json.dumps([dict(_agent(n), description="Old") for n in EXPECTED])
+        runner = _Runner(_proc(stale))
+        result = _validate(runner, expected=exp)
+        assert result.status == "fail"
+        assert runner.calls == harness.DEFAULT_ATTEMPTS
+        assert any("carter-pm-local" in e and "description" in e for e in result.errors)
+        assert any("stale" in e and "re-run" in e for e in result.errors)
+
+    def test_missing_only_has_no_stale_hint(self):
+        out = json.dumps([_agent("carter-pm-local")])
+        result = _validate(_Runner(_proc(out)))
+        assert result.status == "fail"
+        assert any("carter-engineer-local" in e and "not loaded" in e for e in result.errors)
+        assert not any("stale" in e for e in result.errors)
+
+    def test_mismatch_only_has_stale_hint(self):
+        exp = {n: harness.Expected(RULES, description="New") for n in EXPECTED}
+        out = json.dumps([dict(_agent(n), description="Old") for n in EXPECTED])
+        result = _validate(_Runner(_proc(out)), expected=exp)
+        assert result.errors[-1].startswith(harness.STALE_HINT.split(";")[0])
+        assert not any("not loaded" in e for e in result.errors)
+
+    def test_mixed_reports_both_groups(self):
+        exp = {n: harness.Expected(RULES, description="New") for n in EXPECTED}
+        out = json.dumps([dict(_agent("carter-pm-local"), description="Old")])
+        errors = _validate(_Runner(_proc(out)), expected=exp).errors
+        assert len(errors) == 3
+        assert "carter-engineer-local" in errors[0] and "not loaded" in errors[0]
+        assert "carter-pm-local" in errors[1] and "description" in errors[1]
+        assert "stale" in errors[2] and "carter-pm-local" in errors[2]
+        assert "carter-engineer-local" not in errors[2]
+
+    def test_stale_model_then_fresh_retries(self):
+        exp = {n: harness.Expected(None, model="anthropic/claude-opus-5-5#high") for n in EXPECTED}
+        old = {"id": "claude-sonnet-5-5", "providerID": "anthropic"}
+        new = {"id": "claude-opus-5-5", "providerID": "anthropic", "variant": "high"}
+        runner = _Runner(
+            _proc(json.dumps([{"id": n, "model": old} for n in EXPECTED])),
+            _proc(json.dumps([{"id": n, "model": new} for n in EXPECTED])),
+        )
+        assert _validate(runner, expected=exp).status == "ok"
+        assert runner.calls == 2
+
+    def test_model_mismatch_names_agent(self):
+        exp = {n: harness.Expected(None, model="anthropic/claude-opus-5-5") for n in EXPECTED}
+        out = json.dumps([{"id": n, "model": {"id": "x", "providerID": "y"}} for n in EXPECTED])
+        result = _validate(_Runner(_proc(out)), expected=exp)
+        assert result.status == "fail"
+        assert any("carter-pm-local" in e and "model" in e for e in result.errors)
+
+    def test_permission_drift_then_fresh_retries(self):
+        widened = BASE + [{"action": "*", "resource": "*", "effect": "allow"}]
+        stale = json.dumps([_agent(n, widened) for n in EXPECTED])
+        runner = _Runner(_proc(stale), _proc(_all_present()))
+        assert _validate(runner).status == "ok" and runner.calls == 2
+
+    def test_waits_for_recent_edits_to_settle(self):
+        sleeps: list = []
+        runner = _Runner(_proc(_all_present()))
+        _validate(runner, sleeps, newest_change=99.5, clock=lambda: 100.0, settle=2.0)
+        assert sleeps == [1.5]
+
+    def test_no_settle_wait_for_old_files(self):
+        sleeps: list = []
+        _validate(_Runner(_proc(_all_present())), sleeps, newest_change=10.0, clock=lambda: 100.0)
+        assert sleeps == []
+
     def test_no_permissions_field_only_checks_presence(self):
         out = json.dumps([{"id": n} for n in EXPECTED])
         assert _validate(_Runner(_proc(out))).status == "ok"
@@ -176,7 +255,7 @@ def _init(tmp_path: Path) -> Path:
     return ws
 
 
-def _loaded(ws: Path, drop: str | None = None) -> str:
+def _loaded(ws: Path, drop: str | None = None, stale_description: bool = False) -> str:
     import os
 
     import yaml
@@ -187,9 +266,21 @@ def _loaded(ws: Path, drop: str | None = None) -> str:
     for f in files:
         if f.stem == drop:
             continue
-        rules = yaml.safe_load(f.read_text().split("---", 2)[1])["permissions"]
-        rules = [dict(r, resource=os.path.expanduser(r["resource"])) for r in rules]
-        agents.append({"id": f.stem, "permissions": BASE + rules})
+        meta = yaml.safe_load(f.read_text().split("---", 2)[1])
+        rules = [dict(r, resource=os.path.expanduser(r["resource"])) for r in meta["permissions"]]
+        provider, _, rest = str(meta["model"]).partition("/")
+        model_id, _, variant = rest.partition("#")
+        model = {"id": model_id, "providerID": provider} | ({"variant": variant} if variant else {})
+        if stale_description:
+            meta["description"] = "stale " + str(meta.get("description"))
+        agents.append(
+            {
+                "id": f.stem,
+                "description": meta.get("description"),
+                "model": model,
+                "permissions": BASE + rules,
+            }
+        )
     return json.dumps(agents)
 
 
@@ -213,6 +304,20 @@ class TestCheckCli:
         assert result.exit_code == 1
         assert "carter-pm-local" in result.output
         assert "Traceback" not in result.output
+
+    def test_stale_then_fresh_passes(self, tmp_path, fake_opencode, no_sleep):
+        ws = _init(tmp_path)
+        fake_opencode(agents_sequence=[_loaded(ws, stale_description=True), _loaded(ws)])
+        result = CliRunner().invoke(main, ["check", str(ws)])
+        assert result.exit_code == 0, result.output
+        assert (tmp_path / "fakebin" / "agents.calls").read_text().strip() == "2"
+
+    def test_persistently_stale_description_fails(self, tmp_path, fake_opencode, no_sleep):
+        ws = _init(tmp_path)
+        fake_opencode(agents_output=_loaded(ws, stale_description=True))
+        result = CliRunner().invoke(main, ["check", str(ws)])
+        assert result.exit_code == 1
+        assert "description" in result.output and "stale" in result.output
 
     def test_garbage_and_nonzero_fail_cleanly(self, tmp_path, fake_opencode, no_sleep):
         ws = _init(tmp_path)

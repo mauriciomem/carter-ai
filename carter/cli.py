@@ -16,7 +16,7 @@ from carter.config import (
     generate_default_config,
     load_config,
 )
-from carter.harness import validate_agents
+from carter.harness import Expected, validate_agents
 from carter.plans import parse_frontmatter, validate_checkpoint, validate_plans_dir
 from carter.scaffold import (
     agent_filename,
@@ -311,15 +311,23 @@ def check(target_dir: str, no_harness: bool) -> None:
 
     # Harness validation: OpenCode must actually load every agent.
     if not no_harness:
-        expected: dict[str, list | None] = {}
+        expected: dict[str, Expected] = {}
+        mtimes: list[float] = []
         for role in config["agents"]:
-            if not (agents_dir / agent_filename(role, config)).exists():
+            agent_file = agents_dir / agent_filename(role, config)
+            if not agent_file.exists():
                 continue  # already reported as a missing file
-            perms = installed.get(role, {}).get("permissions")
-            expected[Path(agent_filename(role, config)).stem] = (
-                perms if isinstance(perms, list) else None
+            mtimes.append(agent_file.stat().st_mtime)
+            meta = installed.get(role, {})
+            perms, desc, model = meta.get("permissions"), meta.get("description"), meta.get("model")
+            expected[agent_file.stem] = Expected(
+                rules=perms if isinstance(perms, list) else None,
+                description=desc if isinstance(desc, str) else None,
+                model=model if isinstance(model, str) else None,
             )
-        harness_result = validate_agents(target, expected)
+        harness_result = validate_agents(
+            target, expected, newest_change=max(mtimes) if mtimes else None
+        )
         if harness_result.warning:
             click.echo(f"⚠  {harness_result.warning}", err=True)
         errors.extend(harness_result.errors)

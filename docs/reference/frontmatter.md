@@ -255,15 +255,26 @@ V1 key is present. It then runs the harness check below.
 ### Harness check (`opencode debug agents`)
 
 After the lint, `carter check` runs `opencode debug agents` in the workspace and
-fails if OpenCode didn't load a Carter agent or loaded it with different rules.
+fails if OpenCode didn't load a Carter agent, or loaded it with a different
+description, model or rules.
 
 - **Skipped** with a warning when `opencode` isn't on `PATH`; `--no-harness` skips it
   explicitly.
 - **Starts OpenCode's background service** if it isn't running. That is your shared
-  per-user service; `carter check` leaves it running and never stops it.
-- **Retries with backoff.** The first call can return an empty list while the service
-  starts, so an empty or incomplete result is retried (waits of 0.5 + 1 + 2 + 4 s,
-  about 7.5 s worst case, plus call time).
+  per-user service; `carter check` leaves it running and never stops it. (OpenCode's
+  `--standalone` private-server flag is not accepted by `debug agents`, so there is
+  no service-free way to run this check.)
+- **Guards against stale answers.** The service reloads agent files asynchronously,
+  so right after an edit it can still report the previous agents. `carter check`
+  first waits until the newest agent file is at least 1.5 s old, then treats a
+  result as stale unless every agent's description, model and permission block
+  match the file.
+- **Retries with backoff.** An empty, incomplete or mismatching result is retried
+  (waits of 0.5 + 1 + 2 + 4 s, about 7.5 s worst case, plus call time). If it still
+  doesn't match, the check fails and names the agents. An agent OpenCode didn't list
+  is reported as not loaded (likely a malformed file). For agents that are listed
+  but whose description, model or rules differ, it adds a note that OpenCode may be
+  serving stale config — re-run `carter check` to confirm.
 - **30-second timeout** per call; a timeout fails the check.
 - **A broken `opencode`** (it is on `PATH` but errors or prints invalid output)
   fails the check rather than being skipped.
