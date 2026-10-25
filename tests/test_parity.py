@@ -437,28 +437,28 @@ class TestRenderedBodyParity:
 
     def test_rendered_maestro_carries_policy_gate_table(self, rendered_agents_dir: Path) -> None:
         """The global rendered maestro body must carry the always-on policy gate table
-        (ADR-0005 D6) and the enforced `gate`-tier redaction handoff (ADR-0010 D5) —
-        frontmatter parity can't catch a body relapse."""
+        (ADR-0005 D6) and the narrator -> devops redaction handoff (ADR-0010 D5;
+        prompt-level per ADR-0014 D2) — frontmatter parity can't catch a body relapse."""
         body = (rendered_agents_dir / "carter-maestro.md").read_text()
         assert "Strictness Policy" in body
         assert "remote-write" in body  # a 4-category taxonomy row is present
         assert "dangerous" in body
-        # Enforced redaction handoff (no R6 overlay): substantive outward content
-        # routes narrator -> devops as a gate-tier step.
-        assert "gate`-tier redaction handoff" in body
+        # Redaction handoff (no R6 overlay): substantive outward content routes
+        # narrator -> devops. Prompt-level guidance, not harness-enforced (ADR-0014 D2).
+        assert "redaction handoff" in body
+        assert "gate`-tier" not in body
         assert "carter-narrator" in body and "carter-devops" in body
 
-    def test_rendered_narrator_carries_enforced_redaction_handoff(
-        self, rendered_agents_dir: Path
-    ) -> None:
-        """The global rendered narrator body must wire the enforced author/transmit
-        handoff (ADR-0010 D5) — narrator authors + redacts (gate-tier), devops
+    def test_rendered_narrator_carries_redaction_handoff(self, rendered_agents_dir: Path) -> None:
+        """The global rendered narrator body must wire the author/transmit
+        handoff (ADR-0010 D5) — narrator authors + redacts, devops
         transmits as the sole remote-write holder."""
         body = (rendered_agents_dir / "carter-narrator.md").read_text().lower()
         assert "transmit" in body
         assert "devops" in body
         assert "remote-write" in body  # narrator does NOT hold it; devops does
-        assert "gate`-tier" in body
+        assert "redaction handoff" in body
+        assert "gate`-tier" not in body  # not harness-enforced (ADR-0014 D2)
 
 
 class TestTemplateRenderedBlockParity:

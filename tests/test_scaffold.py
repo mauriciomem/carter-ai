@@ -897,9 +897,9 @@ class TestPolicyNotice:
 
 
 class TestNarratorRedactionHandoff:
-    """The narrator template wires the enforced `gate`-tier redaction handoff
-    (ADR-0010 D5): narrator drafts + redacts locally, devops (sole remote-write
-    holder) transmits. No R6 overlay; narrator is first-class."""
+    """The narrator template wires the redaction handoff (ADR-0010 D5; prompt-level
+    guidance, not harness-enforced per ADR-0014 D2): narrator drafts + redacts locally,
+    devops (sole remote-write holder) transmits. No R6 overlay; narrator is first-class."""
 
     def test_narrator_describes_devops_transmit_handoff(self):
         cfg = generate_default_config()
@@ -907,16 +907,18 @@ class TestNarratorRedactionHandoff:
         body = render_agents(cfg, create_env())["carter-narrator.md"].lower()
         assert "devops" in body
         assert "transmit" in body
-        assert "gate`-tier" in body  # the enforced handoff, not a convention
+        assert "redaction handoff" in body
+        assert "gate`-tier" not in body  # not harness-enforced (ADR-0014 D2)
         assert "remote-write" in body  # narrator does not hold it
 
-    def test_maestro_encodes_gate_tier_redaction_handoff(self):
-        # ADR-0010 D5: substantive outward content is a `gate`-tier narrator handoff
+    def test_maestro_encodes_redaction_handoff(self):
+        # ADR-0010 D5: substantive outward content is a narrator redaction handoff
         # routed to devops to transmit; one-liners = ask + inline check. No R6 overlay.
         cfg = generate_default_config()
         cfg["agent_suffix"] = ""
         body = render_agents(cfg, create_env())["carter-maestro.md"]
-        assert "gate`-tier redaction handoff" in body
+        assert "redaction handoff" in body
+        assert "gate`-tier" not in body
         assert "carter-narrator" in body and "carter-devops" in body
         assert "inline redaction check" in body  # the one-liner lane
         assert "R6 overlay" not in body and "external-publish" not in body

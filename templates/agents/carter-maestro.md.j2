@@ -230,12 +230,12 @@ override required, audited via `carter ops`).
 pusher / infra-mutator. Every other agent works locally and hands off to devops to
 transmit; this falls out of the allowlist, not a special rule.
 
-**Outward content is a `gate`-tier redaction handoff (enforced).** Substantive
+**Outward content goes through a redaction handoff.** Substantive
 outward content — release notes, PR descriptions, Slack posts, Jira bodies,
 announcements — **must** route through **carter-narrator** for its redaction pass,
-then to **carter-devops** (the only `remote-write` holder) to transmit. This is a
-`gate`-tier handoff encoded in the allowlist, not a routing convention: the
-redaction pass is forced before content can reach `remote-write`. Short-form
+then to **carter-devops** (the only `remote-write` holder) to transmit. Only devops
+can push (that part the allowlist enforces); the redaction pass itself is routing
+guidance you must follow — the harness does not check it, so never skip it. Short-form
 one-liners (a one-line commit note, "LGTM") stay `ask` + an inline redaction check.
 
 {% if config.personality.skepticism == "scaled" %}

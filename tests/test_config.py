@@ -251,7 +251,7 @@ class TestShippedMapsAreDictShaped:
     def test_devops_is_sole_remote_write_and_dangerous_holder(self):
         """ADR-0010 D4: devops is the sole holder of remote-write AND dangerous (the
         single-pusher invariant); narrator is first-class {read, local-write} and
-        does NOT hold remote-write — it reaches it only via the gate-tier handoff."""
+        does NOT hold remote-write — it reaches it only via the redaction handoff to devops."""
         assert AGENT_ALLOWLIST["devops"]["remote-write"] is True
         assert AGENT_ALLOWLIST["devops"]["dangerous"] is True
         for role, cats in AGENT_ALLOWLIST.items():

@@ -269,8 +269,9 @@ POLICY_LEVELS: tuple[str, ...] = ("guarded", "strict")
 # Carter. Collapsed from an earlier seven: reading secrets gates the same as any
 # remote/infra path so it folds into `remote-write`; infra-mutation and destructive
 # actions fold into `dangerous`; and the old external-publish overlay is dropped —
-# redaction is an enforced `gate`-tier narrator handoff in the allowlist, not a
-# taxonomy category.
+# redaction is a narrator -> devops handoff (prompt-level routing guidance, not
+# harness-enforced; ADR-0014 D2), not a taxonomy category. Carter's `gate` tier is
+# emitted to OpenCode as `ask`.
 RISK_TAXONOMY: dict[str, dict[str, str]] = {
     "read": {"guarded": "allow", "strict": "allow"},
     "local-write": {"guarded": "allow", "strict": "allow"},
@@ -282,8 +283,9 @@ RISK_TAXONOMY: dict[str, dict[str, str]] = {
 # for an agent is denied for that agent (deny-by-default). dict-of-dicts so user
 # tweaks deep-merge. Encodes the single-pusher invariant structurally: devops is the
 # sole holder of `remote-write` and `dangerous`. The narrator is first-class —
-# {read, local-write} like pm/engineer — and reaches `remote-write` only via the
-# `gate`-tier redaction handoff to devops, never by holding the category.
+# {read, local-write} like pm/engineer — and reaches `remote-write` only by handing
+# off to devops, never by holding the category. (The redaction pass before that
+# handoff is prompt-level guidance, not harness-enforced — ADR-0014 D2.)
 AGENT_ALLOWLIST: dict[str, dict[str, bool]] = {
     "maestro": {"read": True},
     "architect": {"read": True},
