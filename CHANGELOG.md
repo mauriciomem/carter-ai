@@ -2,6 +2,19 @@
 
 <!-- version list -->
 
+## v0.14.1 (2026-10-25)
+
+### Bug Fixes
+
+- **install**: Count skill directories in the install summary
+  ([#33](https://github.com/mauriciomem/carter-ai/pull/33),
+  [`85ad82e`](https://github.com/mauriciomem/carter-ai/commit/85ad82e71a73294d6b40ebabedc303edb06d5a04))
+
+- **install**: Count skills in the install summary; clean up tests and evals
+  ([#33](https://github.com/mauriciomem/carter-ai/pull/33),
+  [`85ad82e`](https://github.com/mauriciomem/carter-ai/commit/85ad82e71a73294d6b40ebabedc303edb06d5a04))
+
+
 ## v0.14.0 (2026-10-25)
 
 ### Refactoring
