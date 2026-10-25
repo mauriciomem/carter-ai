@@ -72,7 +72,8 @@ def install_skills(
 ) -> dict[str, int]:
     log_step("Installing skills...")
     src_dir = REPO_ROOT / "skills"
-    stats: dict[str, int] = {"created": 0, "updated": 0, "unchanged": 0}
+    # Per-file statuses, plus "skills": the number of skill directories installed.
+    stats: dict[str, int] = {"created": 0, "updated": 0, "unchanged": 0, "skills": 0}
 
     # Load config for template substitution (carter-ops SKILL.md)
     carter_home = _carter_base(base_dir)
@@ -85,6 +86,7 @@ def install_skills(
         skill_file = skill_dir / "SKILL.md"
         if not skill_file.exists():
             continue
+        stats["skills"] += 1
 
         skill_files = [f for f in sorted(skill_dir.iterdir()) if f.is_file()]
         for src_file in skill_files:
