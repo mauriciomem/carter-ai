@@ -14,6 +14,17 @@ def _strip_jsonc(text: str) -> str:
 
     Handles comments inside strings correctly (leaves them alone).
     """
+    # Remove trailing commas before } or ]
+    return re.sub(r",\s*([}\]])", r"\1", _strip_comments(text))
+
+
+def has_comments(text: str) -> bool:
+    """True when ``text`` contains a // or /* */ comment outside strings."""
+    return _strip_comments(text) != text
+
+
+def _strip_comments(text: str) -> str:
+    """Strip // and /* */ comments outside string literals."""
     result: list[str] = []
     i = 0
     n = len(text)
@@ -56,8 +67,7 @@ def _strip_jsonc(text: str) -> str:
         result.append(c)
         i += 1
 
-    # Remove trailing commas before } or ]
-    return re.sub(r",\s*([}\]])", r"\1", "".join(result))
+    return "".join(result)
 
 
 def _load_jsonc(path: Path) -> dict | None:

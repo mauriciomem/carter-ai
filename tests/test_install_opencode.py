@@ -287,3 +287,85 @@ class TestUninstallV2:
         mcp = json.loads(cfg.read_text())["mcp"]
         assert mcp == {"servers": {"mine": {"type": "remote", "url": "https://a"}}}
         assert not list((base / "opencode" / "agents").glob("carter-*.md"))
+
+
+class TestJsoncTarget:
+    """OpenCode 2.1 loads both global files: opencode.json, then opencode.jsonc."""
+
+    COMMENTED = '{\n  // my theme\n  "theme": "x",\n}\n'
+
+    def _wire(self, base: Path) -> None:
+        configure_mcp_servers(base, {}, base / "backup", servers=["github"])
+
+    def _servers(self, path: Path) -> set[str]:
+        from carter.install.jsonc import _load_jsonc
+
+        data = _load_jsonc(path) or {}
+        return set(data.get("mcp", {}).get("servers", {}))
+
+    def test_json_only(self, tmp_path: Path) -> None:
+        oc = tmp_path / "opencode"
+        oc.mkdir()
+        (oc / "opencode.json").write_text("{}")
+        self._wire(tmp_path)
+        assert self._servers(oc / "opencode.json") == {"carter-github"}
+        assert not (oc / "opencode.jsonc").exists()
+
+    def test_neither_creates_only_opencode_json(self, tmp_path: Path) -> None:
+        self._wire(tmp_path)
+        oc = tmp_path / "opencode"
+        assert sorted(p.name for p in oc.iterdir()) == ["opencode.json"]
+
+    def test_jsonc_only(self, tmp_path: Path) -> None:
+        oc = tmp_path / "opencode"
+        oc.mkdir()
+        (oc / "opencode.jsonc").write_text('{"theme": "x"}')
+        self._wire(tmp_path)
+        assert self._servers(oc / "opencode.jsonc") == {"carter-github"}
+        assert not (oc / "opencode.json").exists()
+        assert not (oc / "opencode.jsonc.carter-backup").exists()
+
+    def test_jsonc_with_comments_backed_up_and_warned(self, tmp_path: Path, capsys) -> None:
+        oc = tmp_path / "opencode"
+        oc.mkdir()
+        (oc / "opencode.jsonc").write_text(self.COMMENTED)
+        self._wire(tmp_path)
+        assert self._servers(oc / "opencode.jsonc") == {"carter-github"}
+        assert (oc / "opencode.jsonc.carter-backup").read_text() == self.COMMENTED
+        out = capsys.readouterr()
+        assert "comments" in (out.out + out.err)
+
+    def test_both_targets_jsonc_and_dedupes_json(self, tmp_path: Path, capsys) -> None:
+        oc = tmp_path / "opencode"
+        oc.mkdir()
+        (oc / "opencode.json").write_text(
+            json.dumps({"mcp": {"servers": {"carter-github": {}, "mine": {}}}})
+        )
+        (oc / "opencode.jsonc").write_text("{}")
+        self._wire(tmp_path)
+        assert self._servers(oc / "opencode.jsonc") == {"carter-github"}
+        assert self._servers(oc / "opencode.json") == {"mine"}
+        out = capsys.readouterr()
+        assert "Both" in (out.out + out.err)
+
+    def test_uninstall_from_jsonc(self, fake_opencode, tmp_path: Path) -> None:
+        fake_opencode()
+        base = tmp_path / "home"
+        oc = base / "opencode"
+        oc.mkdir(parents=True)
+        (oc / "opencode.jsonc").write_text(self.COMMENTED)
+        assert _install(base, "--mcp").exit_code == 0
+        cfg = oc / "opencode.jsonc"
+        text = cfg.read_text().replace(
+            '"servers": {', '"carter-old": {"type": "local"}, "servers": {'
+        )
+        cfg.write_text("// keep\n" + text)
+        assert not (oc / "opencode.json").exists()
+
+        result = CliRunner().invoke(main, ["uninstall", "--base-dir", str(base)])
+        assert result.exit_code == 0, result.output
+        from carter.install.jsonc import _load_jsonc
+
+        assert _load_jsonc(cfg) == {"theme": "x", "mcp": {"servers": {}}}
+        assert (oc / "opencode.jsonc.carter-backup").read_text().startswith("// keep")
+        assert "comments" in result.output
