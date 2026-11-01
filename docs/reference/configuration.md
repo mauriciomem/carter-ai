@@ -17,9 +17,7 @@ version: '2'
 workspace:
   name: my-project
   mode: umbrella
-identity:
-  git_account: ''
-  bot_name: carter-bot
+identity: {}
 personality:
   skepticism: scaled
   style: reviewer
@@ -79,10 +77,19 @@ defaults, so you only write what you change; lists (`agents`,
 
 ### identity
 
+Policy only. Nothing here changes attribution while agents run: `carter update` shows
+these two values, asks, and pins them in `~/.carter/config.toml` (see
+[User config](#user-config-carterconfigtoml)).
+
 | Key | Default | Description |
 |-----|---------|-------------|
-| `git_account` | `''` | Your Git hosting account, shown to the agents in `AGENTS.md` |
-| `bot_name` | `carter-bot` | Bot name shown in `AGENTS.md`. The co-author used in commits comes from `~/.carter/config.toml` (see [Write operations](../guides/write-operations.md#setup)) |
+| `role` | not set | `co-author` (the default role) or `author`. `author` needs a signing key; below that tier commits are refused, never downgraded |
+| `require_tier` | not set | The lowest tier this workspace accepts: `t0`, `t1` or `t2` |
+| `git_account` | not set | Deprecated and ignored. `carter check` and `carter update` warn if it is present |
+| `bot_name` | not set | Deprecated and ignored, with the same warning. The co-author comes from `~/.carter/config.toml` |
+
+`allow_project_opencode_edit` and other settings that loosen a control are not accepted
+here. Edit-denied settings live only in `~/.carter/config.toml`.
 
 ### personality
 
@@ -169,3 +176,44 @@ Default `en`. The language for Carter's own documents: ADRs, RFCs, plans,
 checkpoints, knowledge and memories. A language tag such as `es` or `pt-BR`.
 Commits, code comments, repository docs, PRs, issues, Jira and Slack text are always
 English.
+
+## User config: `~/.carter/config.toml`
+
+`carter install` creates it (schema 2) and migrates an older file once, saving the
+original as `config.toml.schema1.bak` (never overwritten). The migration drops the old
+`[git] signing_key` (Carter never uses your key) and an email that is not
+`<id>+<login>@users.noreply.github.com`; it keeps your footer exactly as written. Loading
+the file never writes to it.
+
+```toml
+schema = 2
+
+[identity]
+role = "co-author"        # co-author | author
+login = ""                # the LLM's GitHub account; empty means no identity (T0)
+id = 0
+name = ""
+email = ""                # <id>+<login>@users.noreply.github.com
+
+[attribution]
+footer = "_This comment was generated with Carter._"
+
+[workspaces."/abs/path"]
+max_tier = "t1"           # optional cap: t0 | t1, set by hand
+role = "co-author"        # pinned by `carter update`
+require_tier = "t2"       # pinned by `carter update`
+```
+
+| Table | Keys |
+|-------|------|
+| `[identity]` | `role`, `login`, `id`, `name`, `email`, `mode` |
+| `[identity.signing]`, `[identity.disclosure]`, `[github]` | Reserved for later releases; read and kept, not used yet |
+| `[attribution]` | `footer`: appended to GitHub and Jira bodies |
+| `[workspaces."<path>"]` | `max_tier`, `role`, `require_tier`, `allow_project_opencode_edit`. The path is the resolved absolute path of the workspace |
+
+Tiers: T0 is nothing configured (commits carry `Assisted-by: Carter`), T1 is an LLM
+account without a key (`Co-authored-by: <login> <address>`), T2 adds a signing key. A
+workspace `max_tier` lowers the tier for that workspace, never raises it. Unset optional
+keys are left out of the file. A file Carter cannot read or that is incomplete
+(for example, signing keys without an account) is `E-CONFIG`: agent commits are refused
+instead of falling back to defaults.

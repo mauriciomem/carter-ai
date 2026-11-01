@@ -24,10 +24,9 @@ DEFAULT_CONFIG: dict[str, Any] = {
         "name": "my-workspace",
         "mode": "umbrella",
     },
-    "identity": {
-        "git_account": "",
-        "bot_name": "carter-bot",
-    },
+    # Policy only (plan 002, D62): `role` and `require_tier`, pinned by `carter update`.
+    # `git_account` and `bot_name` are deprecated: still accepted, ignored.
+    "identity": {},
     "personality": {
         "skepticism": "scaled",
         "style": "reviewer",
@@ -101,6 +100,48 @@ DEFAULT_CONFIG: dict[str, Any] = {
 
 class ConfigError(Exception):
     """Raised when carter.yaml is invalid or missing required fields."""
+
+
+IDENTITY_ROLES = ("co-author", "author")
+IDENTITY_TIERS = ("t0", "t1", "t2")
+_DEPRECATED_IDENTITY_KEYS = ("git_account", "bot_name")
+
+
+def _validate_identity(identity: Any) -> None:
+    """Validate the ``identity`` policy block at the config boundary.
+
+    ``role`` and ``require_tier`` are optional (``null`` means unset). Nothing in this
+    file may loosen a control: ``allow_project_opencode_edit`` belongs to the edit-denied
+    ``~/.carter/config.toml`` (D52). Other keys keep today's behaviour (carried through).
+    """
+    if identity is None:
+        return
+    if not isinstance(identity, dict):
+        raise ConfigError(f"Invalid identity block: {identity!r} (must be a mapping)")
+    if "allow_project_opencode_edit" in identity:
+        raise ConfigError(
+            "identity.allow_project_opencode_edit is not accepted in carter.yaml: "
+            "loosening a control is set only in ~/.carter/config.toml (D52)."
+        )
+    for key, allowed in (("role", IDENTITY_ROLES), ("require_tier", IDENTITY_TIERS)):
+        value = identity.get(key)
+        if value is not None and not (isinstance(value, str) and value in allowed):
+            raise ConfigError(
+                f"Invalid identity.{key}: {value!r}. Must be one of: {', '.join(allowed)}."
+            )
+
+
+def identity_warnings(config: dict[str, Any]) -> list[str]:
+    """Deprecation warnings for the ``identity`` block (key names only, never values)."""
+    identity = config.get("identity")
+    if not isinstance(identity, dict):
+        return []
+    return [
+        f"identity.{key} is deprecated and ignored: attribution comes from the LLM identity "
+        "in ~/.carter/config.toml"
+        for key in _DEPRECATED_IDENTITY_KEYS
+        if key in identity
+    ]
 
 
 def _validate_agent_suffix(suffix: Any) -> None:
@@ -234,6 +275,7 @@ def load_config(config_path: Path) -> dict[str, Any]:
 
     merged = _merge_with_defaults(config)
     _validate_models(merged.get("models"))
+    _validate_identity(merged.get("identity"))
     _validate_agent_suffix(merged.get("agent_suffix", ""))
     _validate_policy(merged.get("policy", {}), merged.get("agents"))
     _validate_profile(merged.get("profile"))

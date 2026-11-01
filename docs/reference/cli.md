@@ -29,14 +29,17 @@ Install Carter for OpenCode 2.1 or newer. Writes to `~/.config/opencode/` and
 |--------|-------------|
 | `--mcp` | Also configure the MCP servers |
 | `--mcp-servers TEXT` | Comma-separated subset: `github`, `terraform`, `atlassian`. Default: all. Only with `--mcp` |
-| `--bot-name TEXT` | Co-author name for commits made through `ops:` (default `carter-bot`). Used only when `~/.carter/config.toml` doesn't exist yet; afterwards edit that file |
+| `--bot-name TEXT` | Deprecated and ignored: prints a warning. The co-author now comes from the LLM identity in `~/.carter/config.toml` (see [Attribution](../guides/write-operations.md#attribution)) |
 | `--base-dir DIRECTORY` | Install into another base directory (for testing) |
 | `-q`, `--quiet` | Errors only |
 | `-v`, `--verbose` | Detailed output |
 | `--debug` | Debug output |
 
-Safe to re-run. See [Install](../guides/install.md#upgrade) and
-[MCP servers](../guides/mcp-servers.md).
+Safe to re-run. It also creates `~/.carter/config.toml` (schema 2) on a first install
+and migrates an older one once, after saving `config.toml.schema1.bak`. If your global
+`AGENTS.md` has your own edits, it is left alone and the new commit rule is printed and
+saved to `~/.carter/upgrade-notes/<version>.md`. See [Install](../guides/install.md#upgrade)
+and [MCP servers](../guides/mcp-servers.md).
 
 ## carter uninstall
 
@@ -69,11 +72,30 @@ files (`carter.yaml`, knowledge files, `AGENTS.md`) are not overwritten.
 ## carter update
 
 ```text
-carter update [--dry-run] [TARGET_DIR]
+carter update [--dry-run] [--yes] [TARGET_DIR]
 ```
 
 Regenerate the `carter-*` agent files from `.carter/carter.yaml`. `AGENTS.md` is
-created only if missing. `--dry-run` lists the files without writing them.
+created only if missing; if yours still has the old commit rule, `update` says so and
+prints the current rule without rewriting the file. `--dry-run` lists the files without
+writing them.
+
+`update` is also the only place that applies the `identity` policy of `carter.yaml`
+(`role` and `require_tier`, see [Configuration](configuration.md#identity)). It shows
+each change and its source, then pins the values in `~/.carter/config.toml` under
+`[workspaces."<path>"]` after you confirm. `--yes` skips the question; without a
+terminal and without `--yes` the policy is not pinned and `update` says so. Editing
+`carter.yaml` alone changes nothing until the next `update`.
+
+| Option | Description |
+|--------|-------------|
+| `--dry-run` | List what would be rendered and pinned; write nothing |
+| `--yes`, `-y` | Pin the identity policy without asking |
+
+`update` stops without pinning when `max_tier` in `config.toml` (set by hand) is below
+`require_tier`, when `config.toml` holds keys Carter doesn't manage (it prints the
+difference and never overwrites the file), or when `config.toml` is invalid or still
+schema 1 (run `carter install` first).
 
 ## carter check
 
@@ -126,8 +148,21 @@ the usage.
 
 ### carter ops config --emit
 
-Print the attribution settings the agents use: bot name and email, signing key,
-footer, and whether `GITHUB_TOKEN` is set.
+Print, as JSON, the attribution the agents must use right now. The values are resolved
+when you run it, from `~/.carter/config.toml` and the environment:
+
+| Key | Meaning |
+|-----|---------|
+| `tier` | `t0` (nothing configured), `t1` (LLM account, no key) or `t2` (account and key) |
+| `role`, `role_source` | `co-author` or `author`, and where it came from (`workspace`, `env`, `config`, `default`) |
+| `coauthor_trailer` | The trailer line for commit messages: `Assisted-by: Carter` at T0, `Co-authored-by: <login> <noreply address>` above |
+| `commits` | `allowed` or `refused` |
+| `refusal_reason` | The error code when `commits` is `refused` (for example `E-CONFIG` or `E-ROLE-B-TIER`) |
+| `footer` | Text appended to GitHub and Jira bodies |
+| `has_github_token` | Whether `GITHUB_TOKEN` is set |
+
+An invalid `config.toml` gives `commits: refused` with `E-CONFIG`: agent commits stay off
+until it is fixed. Carter never reads your signing key.
 
 ### carter ops audit
 

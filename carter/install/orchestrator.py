@@ -35,7 +35,6 @@ from carter.install.prereqs import (
 
 def run(
     mcp: bool = False,
-    bot_name: str = "carter-bot",
     base_dir: Path | None = None,
     verbosity: int = 1,
     mcp_servers: list[str] | None = None,
@@ -51,7 +50,6 @@ def run(
     set_verbosity(verbosity)
 
     _log(f"\n {bold('Carter Installer')}")
-    _log(f" Bot name: {bot_name}")
     _mcp_label = "no (use --mcp to install)"
     if mcp:
         _mcp_label = "yes" + (f" ({', '.join(mcp_servers)})" if mcp_servers else " (all)")
@@ -85,12 +83,12 @@ def run(
         log_debug("Existing installation found — updating")
 
     agent_stats = install_agents(base_dir, manifest, backup_root)
-    skill_stats = install_skills(base_dir, manifest, backup_root, bot_name=bot_name)
+    skill_stats = install_skills(base_dir, manifest, backup_root)
     remove_retired_skills(base_dir, existing, backup_root)
-    install_opencode_rules(base_dir, manifest)
+    install_opencode_rules(base_dir, manifest, existing)
     knowledge_count = install_knowledge(base_dir, manifest, backup_root)
     memory_count = install_memories(base_dir, manifest)
-    ops_created = install_ops(base_dir, manifest, bot_name=bot_name)
+    ops_created = install_ops(base_dir, manifest)
 
     if mcp:
         mcp_count = configure_mcp_servers(base_dir, manifest, backup_root, servers=mcp_servers)
@@ -105,7 +103,7 @@ def run(
     _log(f"\n{green('✓')} {bold('Installation complete')}")
     _log(f"  Agents: {total_agents}")
     _log(f"  Skills: {skill_stats['skills']}")
-    _log(f"  Ops config: {'created' if ops_created else 'kept'}")
+    _log(f"  Ops config: {'created or migrated' if ops_created else 'kept'}")
     _log(f"  MCP servers: {mcp_count}")
     _log(f"  Knowledge files: {knowledge_count} new")
     _log(f"  Memory dirs: {memory_count} new")

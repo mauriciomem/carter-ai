@@ -463,3 +463,85 @@ class TestDocsLanguage:
         assert result.exit_code != 0
         assert "docs_language" in result.output
         assert not (tmp_path / ".carter").exists()
+
+
+class TestIdentityPolicyBlock:
+    """``identity`` in carter.yaml is policy only: ``role`` and ``require_tier``
+    (plan 002 step 12). ``git_account``/``bot_name`` are deprecated and ignored."""
+
+    @staticmethod
+    def _load(tmp_path, identity):
+        cfg = _minimal_existing_config()
+        cfg["identity"] = identity
+        path = tmp_path / "carter.yaml"
+        path.write_text(yaml.dump(cfg))
+        return load_config(path)
+
+    def test_default_config_carries_no_identity_policy_or_legacy_keys(self):
+        assert generate_default_config()["identity"] == {}
+
+    @pytest.mark.parametrize("role", ["co-author", "author", None])
+    @pytest.mark.parametrize("tier", ["t0", "t1", "t2", None])
+    def test_valid_values_load(self, tmp_path, role, tier):
+        loaded = self._load(tmp_path, {"role": role, "require_tier": tier})
+        assert loaded["identity"] == {"role": role, "require_tier": tier}
+
+    def test_absent_policy_is_fine(self, tmp_path):
+        assert self._load(tmp_path, {})["identity"] == {}
+
+    @pytest.mark.parametrize("role", ["root", "Author", "b", "", 5, True, ["author"]])
+    def test_invalid_role_raises(self, tmp_path, role):
+        with pytest.raises(ConfigError, match="identity.role"):
+            self._load(tmp_path, {"role": role})
+
+    @pytest.mark.parametrize("tier", ["t3", "T1", "2", "", 2, False, ["t1"]])
+    def test_invalid_require_tier_raises(self, tmp_path, tier):
+        with pytest.raises(ConfigError, match="identity.require_tier"):
+            self._load(tmp_path, {"require_tier": tier})
+
+    def test_identity_must_be_a_mapping(self, tmp_path):
+        with pytest.raises(ConfigError, match="identity"):
+            self._load(tmp_path, ["role"])
+
+    def test_error_names_the_valid_values(self, tmp_path):
+        with pytest.raises(ConfigError, match="co-author.*author"):
+            self._load(tmp_path, {"role": "root"})
+
+    def test_legacy_keys_are_accepted_and_carried_through(self, tmp_path):
+        loaded = self._load(tmp_path, {"git_account": "me", "bot_name": "acme-bot"})
+        assert loaded["identity"] == {"git_account": "me", "bot_name": "acme-bot"}
+
+    def test_unknown_keys_keep_todays_behaviour(self, tmp_path):
+        loaded = self._load(tmp_path, {"git_org": "acme", "bot_email": "bot@x", "role": "author"})
+        assert loaded["identity"]["git_org"] == "acme"
+
+    @pytest.mark.parametrize("value", [True, False])
+    def test_nothing_in_carter_yaml_may_loosen_a_control(self, tmp_path, value):
+        # D52: the opt-out lives only in the edit-denied ~/.carter/config.toml.
+        with pytest.raises(ConfigError, match="allow_project_opencode_edit"):
+            self._load(tmp_path, {"allow_project_opencode_edit": value})
+
+
+class TestIdentityDeprecations:
+    def test_legacy_keys_warn_once_each_without_values(self):
+        from carter.config import identity_warnings
+
+        warnings = identity_warnings({"identity": {"git_account": "me-secret", "bot_name": "b"}})
+        assert len(warnings) == 2
+        assert any("identity.git_account" in w and "deprecated" in w for w in warnings)
+        assert any("identity.bot_name" in w for w in warnings)
+        assert "me-secret" not in " ".join(warnings)
+
+    def test_policy_keys_and_other_keys_do_not_warn(self):
+        from carter.config import identity_warnings
+
+        assert identity_warnings({"identity": {"role": "author", "require_tier": "t1"}}) == []
+        assert identity_warnings({"identity": {"git_org": "acme"}}) == []
+        assert identity_warnings({"identity": {}}) == []
+        assert identity_warnings({}) == []
+
+    def test_warning_says_where_the_identity_comes_from_now(self):
+        from carter.config import identity_warnings
+
+        (w,) = identity_warnings({"identity": {"bot_name": "x"}})
+        assert "~/.carter/config.toml" in w

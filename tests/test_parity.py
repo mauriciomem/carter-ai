@@ -474,3 +474,43 @@ class TestTemplateRenderedBlockParity:
                 assert has_block, f"{name}: maestro rendered without the block"
             else:
                 assert not has_block, f"{name}: block leaked into a subagent"
+
+
+class TestCarterOpsSkillGeneratedBlocks:
+    """The forbidden list and error table inside the carter-ops skill are rendered from
+    ``g2_rules.json`` and ``errors.json``; hand edits (drift) fail here with the expected
+    block. Refresh with ``python -m carter.identity.blocks skills/carter-ops/SKILL.md``."""
+
+    SKILL = Path(__file__).resolve().parent.parent / "skills" / "carter-ops" / "SKILL.md"
+
+    def test_skill_blocks_equal_their_data_files(self) -> None:
+        from carter.identity.blocks import check_text
+
+        problems = check_text(self.SKILL.read_text(encoding="utf-8"))
+        assert not problems, "\n\n".join(problems)
+
+    def test_a_hand_edited_block_is_reported_with_the_expected_rendering(self) -> None:
+        from carter.identity.blocks import check_text
+        from carter.identity.rules import render_forbidden_block
+
+        text = self.SKILL.read_text(encoding="utf-8").replace("`--no-verify`", "`--nope`")
+        problems = check_text(text)
+        assert any(p.startswith("forbidden: block differs") for p in problems)
+        assert render_forbidden_block() in "\n".join(problems)
+
+    def test_missing_markers_are_reported(self) -> None:
+        from carter.identity.blocks import check_text
+
+        assert len(check_text("no markers here")) == 2
+
+    def test_sync_repairs_a_drifted_file(self) -> None:
+        from carter.identity.blocks import check_text, sync_text
+
+        text = self.SKILL.read_text(encoding="utf-8").replace("`--no-verify`", "`--nope`")
+        assert check_text(sync_text(text)) == []
+
+    def test_sync_is_idempotent(self) -> None:
+        from carter.identity.blocks import sync_text
+
+        text = self.SKILL.read_text(encoding="utf-8")
+        assert sync_text(sync_text(text)) == sync_text(text)

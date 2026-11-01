@@ -6,7 +6,7 @@ description: Git commands, GitHub CLI, branching strategies, and GitHub Actions 
 <objective>
 Execute git and GitHub operations following best practices. Design branching strategies and CI/CD pipelines with GitHub Actions.
 
-**Language & attribution:** commit messages, branch names, tags and PR text are always English. The user is the commit author (signed `-S`); credit Carter with a `Co-authored-by:` trailer, never `--author`.
+**Language & attribution:** commit messages, branch names, tags and PR text are always English. The user is the commit author and committer; never pass `--author`, `-S`, `-s` or `--no-verify`. Credit comes from the `coauthor_trailer` that `carter ops config --emit` prints (see `carter-ops`).
 </objective>
 
 <routing>

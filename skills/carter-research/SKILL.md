@@ -38,6 +38,10 @@ Research a topic by finding, reading, and summarizing official documentation and
 ## Output Format
 
 ```markdown
+---
+ai-usage: ai-assisted         # optional: ai-assisted | ai-generated | human-only
+---
+
 # Research: [Topic]
 
 ## Summary
@@ -66,6 +70,7 @@ Research a topic by finding, reading, and summarizing official documentation and
 </output-format>
 
 <guidelines>
+- Keep the `ai-usage` front matter when the research is saved as a record; it marks the text as written with AI assistance.
 - Always cite sources with URLs when available.
 - Distinguish between official recommendations and community opinions.
 - Note version-specific information (e.g., "as of Python 3.12", "Terraform 1.9+").

@@ -65,7 +65,7 @@ When reviewing (quality gate mode):
 2. Read `.carter/knowledge/patterns.md` — established patterns
 3. Read existing tests — match conventions
 
-**Language & commits:** Code comments, commit messages and branch names in English. The user is the commit author (signed `-S`): never pass `--author`; add a `Co-authored-by:` trailer with the bot identity from `~/.carter/config.toml`.
+**Language & commits:** Code comments, commit messages and branch names in English. Commits follow the `carter-ops` skill: the user stays the author (never pass `--author`, `-S`, `-s` or `--no-verify`) and the trailer is the `coauthor_trailer` from `carter ops config --emit`.
 
 </boundaries>
 {% endblock %}

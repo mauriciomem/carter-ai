@@ -44,6 +44,7 @@ evals/
 ├── metrics.py             token, latency and cost summary
 ├── test_routing.py        offline: routing table
 ├── test_skills.py         offline: skill content
+├── test_ops_scenarios.py  offline: ops scenarios (generated lists, emit parity)
 ├── test_metrics.py        offline: metrics
 ├── test_adherence.py      offline: replays recorded sessions
 ├── test_live.py           live: model behavior
@@ -59,8 +60,9 @@ no keyword routes to two agents, every scenario matches the table, and every age
 carries the `ops:` trigger line.
 
 **Skills** (`test_skills.py`): the `ops:` flow lists its six phases in order
-(assess, plan, approve, execute, audit, report); commits are signed, authored by the
-user and credited with a `Co-authored-by:` trailer, never `--author`; skills have
+(assess, plan, approve, execute, audit, report); the recipe reads the trailer from
+`carter ops config --emit`, never signs, stages named files, verifies the commit and
+stops when `commits` is `refused`; skills have
 frontmatter and cover their core topics; no skill teaches a retired approach.
 
 **Live** (`test_live.py`): does the model show a plan and wait for approval, refuse
@@ -94,13 +96,14 @@ Scenarios live in `evals/scenarios/*.yaml`:
 ```yaml
 - name: unique_identifier
   input: "The user message to send"
-  config:                    # optional template values for the ops skill
-    bot_name: test-bot
-    bot_email: test-bot@users.noreply.github.com
+  emit:                      # optional: a simulated `carter ops config --emit` result
+    tier: t1
+    coauthor_trailer: "Co-authored-by: test-bot <1+test-bot@users.noreply.github.com>"
   expect:
     workflow_phases: [ASSESS, PLAN, APPROVE, EXECUTE, AUDIT, REPORT]
-    commands_contain: ["git commit -S", "Co-authored-by: ..."]
-    commands_not_contain: ["--dry-run", "--execute"]
+    commands_contain: ["git commit", "--trailer"]
+    commands_not_contain_g2: true   # fills the forbidden-command list from g2_rules.json
+    commands_not_contain: ["--dry-run", "--execute"]   # scenario-specific extras
     response_contains: ["keyword1", "keyword2"]
     response_not_contains: ["anti-pattern"]
 ```

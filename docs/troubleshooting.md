@@ -45,6 +45,16 @@ Find your symptom, then apply the fix. If nothing here helps, open an
 | My `opencode.jsonc` comments disappeared | Carter rewrites the file as JSON. The original is in `opencode.jsonc.carter-backup` next to it |
 | Warning that both `opencode.json` and `opencode.jsonc` exist | OpenCode loads both. Carter uses the `.jsonc`; consider merging them into one file |
 
+## Commit attribution
+
+| Symptom | Fix |
+|---------|-----|
+| The agent stops and reports `E-CONFIG` | `~/.carter/config.toml` is invalid, or a signing section is incomplete. Agent commits stay off until it is fixed. `carter ops config --emit` shows `commits: refused`. If it is still a schema-1 file, run `carter install` to migrate it |
+| The agent reports `E-ROLE-B-TIER` | The role is `author`, which needs a signing key. Set `role: co-author` in `carter.yaml` and run `carter update`, or add the key (not available yet) |
+| `carter update` says "Not pinned" | The `identity` policy is only applied after you confirm. Run it in a terminal, or pass `--yes` |
+| `carter install` printed a "commit rule" note | Your global `AGENTS.md` has your edits, so Carter left it alone. Merge the rule from `~/.carter/upgrade-notes/<version>.md` |
+| A warning about `identity.git_account` or `identity.bot_name` | Both are deprecated and ignored. Delete them from `.carter/carter.yaml` |
+
 ## Uninstalling
 
 | Symptom | Fix |

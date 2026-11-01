@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import copy
 import json
 import os
 from pathlib import Path
@@ -48,9 +49,28 @@ def scenarios_dir() -> Path:
 
 
 @pytest.fixture
-def ops_scenarios(scenarios_dir: Path) -> list[dict]:
-    """carter-ops skill scenarios."""
+def ops_scenarios_raw(scenarios_dir: Path) -> list[dict]:
+    """carter-ops skill scenarios exactly as written in the YAML."""
     return yaml.safe_load((scenarios_dir / "carter_ops.yaml").read_text())
+
+
+@pytest.fixture
+def ops_scenarios(ops_scenarios_raw: list[dict]) -> list[dict]:
+    """carter-ops scenarios with the generated forbidden-command lists filled in.
+
+    A scenario with ``expect.commands_not_contain_g2: true`` gets the list rendered from
+    ``g2_rules.json`` followed by its own extra ``commands_not_contain`` entries."""
+    from carter.identity.rules import render_forbidden_commands
+
+    resolved = copy.deepcopy(ops_scenarios_raw)
+    for scenario in resolved:
+        expect = scenario["expect"]
+        if expect.pop("commands_not_contain_g2", False):
+            expect["commands_not_contain"] = [
+                *render_forbidden_commands(),
+                *expect.get("commands_not_contain", []),
+            ]
+    return resolved
 
 
 @pytest.fixture

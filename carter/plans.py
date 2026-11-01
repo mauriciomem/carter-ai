@@ -6,15 +6,17 @@ canonical schema lives in ``docs/reference/frontmatter.md``; this module is
 its executable form. ``carter check`` runs ``validate_plans_dir`` over a
 workspace's ``.carter/state/plans/``.
 
-Design: pure functions returning lists of human-readable error strings (empty =
-valid), mirroring the existing ``carter check`` error-collection style. No I/O
-beyond reading the plan files passed in.
+Design: pure functions returning human-readable strings, mirroring the existing
+``carter check`` error-collection style. Plan validation returns a ``PlanValidation``
+with two channels: ``errors`` (fail ``carter check``) and ``warnings`` (printed, never
+fail it). No I/O beyond reading the plan files passed in.
 """
 
 from __future__ import annotations
 
 import datetime
 import re
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
@@ -32,15 +34,21 @@ _DATE_STR_RE = re.compile(r"^\d{4}-\d{2}-\d{2}([T ].*)?$")
 
 VALID_PLAN_STATUS = {"proposed", "active", "blocked", "completed", "abandoned"}
 VALID_STEP_STATUS = {"pending", "in-progress", "done", "blocked"}
-VALID_PUSH_POLICY = {"manual", "auto"}
+# Optional provenance marker on plans, the checkpoint and records (RFC-0007 §4.2).
+AI_USAGE_KEY = "ai-usage"
+VALID_AI_USAGE = ("ai-assisted", "ai-generated", "human-only")
+
+# Deprecated (RFC-0007 §4.8): accepted and ignored for one minor version, with a warning.
+# Never required and its value is not checked.
+DEPRECATED_PUSH_POLICY_KEY = "push_policy"
 
 # Terminal statuses belong in completed/; non-terminal (in-progress) statuses
 # belong in active/. The maestro reads active/ for "plans in progress", so a
 # terminal plan left in active/ would resurface as live work.
 TERMINAL_STATUS = {"completed", "abandoned"}
 
-# Keys a plan README frontmatter MUST carry. adr/tags/repos are optional.
-REQUIRED_PLAN_KEYS = ("id", "status", "created", "updated", "push_policy", "must_haves")
+# Keys a plan README frontmatter MUST carry. adr/tags/repos/ai-usage are optional.
+REQUIRED_PLAN_KEYS = ("id", "status", "created", "updated", "must_haves")
 MUST_HAVES_KEYS = ("truths", "artifacts", "key_links")
 
 # Defaults mirror carter.config DEFAULT_CONFIG["plans"]; a workspace may override.
@@ -49,6 +57,33 @@ DEFAULT_THRESHOLDS: dict[str, Any] = {
     "readme_max_lines": 150,
     "step_max_lines": 80,
 }
+
+
+@dataclass
+class PlanValidation:
+    """Outcome of validating plans: ``errors`` fail the check, ``warnings`` never do."""
+
+    errors: list[str] = field(default_factory=list)
+    warnings: list[str] = field(default_factory=list)
+
+    def extend(self, other: PlanValidation) -> None:
+        """Append another result's errors and warnings."""
+        self.errors.extend(other.errors)
+        self.warnings.extend(other.warnings)
+
+
+def _ai_usage_error(fm: dict[str, Any], label: str) -> str | None:
+    """Error for an invalid ``ai-usage`` value; ``None`` when absent or valid.
+
+    A key present with no value (``ai-usage:`` / ``null``) is invalid: the key is
+    optional, an empty marker is not.
+    """
+    if AI_USAGE_KEY not in fm:
+        return None
+    value = fm[AI_USAGE_KEY]
+    if isinstance(value, str) and value in VALID_AI_USAGE:
+        return None
+    return f"{label}: {AI_USAGE_KEY} {value!r} not in {list(VALID_AI_USAGE)}"
 
 
 def _safe_read(path: Path, label: str) -> tuple[str | None, str | None]:
@@ -181,10 +216,10 @@ def _validate_step_file(step_file: Path, plan_name: str, thresholds: dict[str, A
 
 def _validate_plan_dir(
     plan_dir: Path, thresholds: dict[str, Any] | None = None
-) -> tuple[list[str], dict[str, Any] | None]:
+) -> tuple[PlanValidation, dict[str, Any] | None]:
     """Validate one plan directory against the plan frontmatter contract.
 
-    Returns ``(errors, parsed_frontmatter_or_None)`` so callers that also need the
+    Returns ``(result, parsed_frontmatter_or_None)`` so callers that also need the
     frontmatter (e.g. the bucket-status check) don't re-read it.
     """
     th = {**DEFAULT_THRESHOLDS, **(thresholds or {})}
@@ -192,17 +227,18 @@ def _validate_plan_dir(
 
     readme = plan_dir / "README.md"
     if not readme.exists():
-        return [f"{name}: missing README.md"], None
+        return PlanValidation([f"{name}: missing README.md"]), None
 
     text, read_err = _safe_read(readme, f"{name}/README.md")
     if read_err:
-        return [read_err], None
+        return PlanValidation([read_err]), None
     assert text is not None  # read_err is None ⇒ text is set
     fm = parse_frontmatter(text)
     if fm is None:
-        return [f"{name}/README.md: missing or malformed YAML frontmatter"], None
+        return PlanValidation([f"{name}/README.md: missing or malformed YAML frontmatter"]), None
 
     errors: list[str] = []
+    warnings: list[str] = []
 
     for key in REQUIRED_PLAN_KEYS:
         if key not in fm:
@@ -224,11 +260,15 @@ def _validate_plan_dir(
     if "status" in fm and status not in VALID_PLAN_STATUS:
         errors.append(f"{name}/README.md: status {status!r} not in {sorted(VALID_PLAN_STATUS)}")
 
-    push_policy = fm.get("push_policy")
-    if "push_policy" in fm and push_policy not in VALID_PUSH_POLICY:
-        errors.append(
-            f"{name}/README.md: push_policy {push_policy!r} not in {sorted(VALID_PUSH_POLICY)}"
+    if DEPRECATED_PUSH_POLICY_KEY in fm:
+        warnings.append(
+            f"{name}/README.md: {DEPRECATED_PUSH_POLICY_KEY} is deprecated and ignored; "
+            f"remove it (push approval is not a plan setting any more)"
         )
+
+    ai_usage_error = _ai_usage_error(fm, f"{name}/README.md")
+    if ai_usage_error:
+        errors.append(ai_usage_error)
 
     # created / updated must be dates
     for date_key in ("created", "updated"):
@@ -286,35 +326,40 @@ def _validate_plan_dir(
     for step_file in step_files:
         errors.extend(_validate_step_file(step_file, name, th))
 
-    return errors, fm
+    return PlanValidation(errors, warnings), fm
 
 
-def validate_plans_dir(plans_root: Path, thresholds: dict[str, Any] | None = None) -> list[str]:
+def validate_plans_dir(
+    plans_root: Path, thresholds: dict[str, Any] | None = None
+) -> PlanValidation:
     """Validate every plan under ``plans_root/{active,completed}/``.
 
     Missing directories are treated as clean (a fresh workspace has no plans).
     In addition to each plan's intrinsic validity: the frontmatter status must be
     coherent with its bucket (``completed/`` holds only terminal statuses), and a
     plan number (NNN) must be unique **globally**, not just within one bucket.
+
+    Returns both channels: ``.errors`` fail ``carter check``, ``.warnings`` (e.g. the
+    deprecated ``push_policy`` key) are reported but never change its exit code.
     """
-    errors: list[str] = []
+    result = PlanValidation()
     seen: dict[str, list[str]] = {}  # NNN -> ["<bucket>/<name>", ...], global
     for state in ("active", "completed"):
         state_dir = plans_root / state
         if not state_dir.is_dir():
             continue
         for plan_dir in sorted(p for p in state_dir.iterdir() if p.is_dir()):
-            errs, fm = _validate_plan_dir(plan_dir, thresholds)
-            errors.extend(errs)
+            plan_result, fm = _validate_plan_dir(plan_dir, thresholds)
+            result.extend(plan_result)
             status = fm.get("status") if fm else None
-            errors.extend(_check_bucket_status(plan_dir.name, status, state))
+            result.errors.extend(_check_bucket_status(plan_dir.name, status, state))
             m = re.match(r"^(\d{3})-", plan_dir.name)
             if m:
                 seen.setdefault(m.group(1), []).append(f"{state}/{plan_dir.name}")
     for nnn, names in sorted(seen.items()):
         if len(names) > 1:
-            errors.append(f"duplicate plan number {nnn} ({', '.join(sorted(names))})")
-    return errors
+            result.errors.append(f"duplicate plan number {nnn} ({', '.join(sorted(names))})")
+    return result
 
 
 def _check_bucket_status(name: str, status: Any, bucket: str) -> list[str]:
@@ -341,7 +386,8 @@ def validate_checkpoint(checkpoint_file: Path, plans_root: Path | None = None) -
 
     The checkpoint is optional: its absence is clean. If present, it must carry
     valid frontmatter with ``updated`` and, when set, an ``active_plan`` string
-    and an integer ``next_step`` (both may be null). It is a thin cursor that
+    and an integer ``next_step`` (both may be null), plus the optional ``ai-usage``
+    enum. It is a thin cursor that
     points into a plan's frontmatter — not a place to duplicate plan content.
 
     When ``plans_root`` is given, ``active_plan`` must resolve to a real plan
@@ -382,5 +428,9 @@ def validate_checkpoint(checkpoint_file: Path, plans_root: Path | None = None) -
     # bool is a subclass of int, but `next_step: true` is not a step index.
     if next_step is not None and (not isinstance(next_step, int) or isinstance(next_step, bool)):
         errors.append(f"{rel}: next_step must be an integer or null")
+
+    ai_usage_error = _ai_usage_error(fm, rel)
+    if ai_usage_error:
+        errors.append(ai_usage_error)
 
     return errors

@@ -9,12 +9,14 @@ uninstall.
 |------|----------|------------|-----------|
 | `~/.config/opencode/agents/carter-*.md` | The 8 agents | Updated (old copy backed up) | Removed unless edited |
 | `~/.config/opencode/skills/carter-*/` | The 27 skills | Updated (old copy backed up) | Removed unless edited |
-| `~/.config/opencode/AGENTS.md` | Global rules loaded in every session | Left alone if you changed it | Removed unless edited |
+| `~/.config/opencode/AGENTS.md` | Global rules loaded in every session | Updated if it is an unedited earlier Carter version; left alone (with an upgrade note) if you changed it | Removed unless edited |
 | `~/.config/opencode/opencode.json` or `.jsonc` | `carter-*` MCP servers (with `--mcp`) | Servers replaced | `carter-*` servers removed |
 | `~/.config/opencode/opencode.jsonc.carter-backup` | Copy of a config file that had comments | Overwritten | Kept |
 | `~/.carter/knowledge/` | 6 global knowledge files | Never overwritten | Removed only if unchanged |
 | `~/.carter/memories/{user,repo,session}/` | Raw notes | Kept | Kept |
-| `~/.carter/config.toml` | Co-author name, email, footer, signing key | Never overwritten | Kept |
+| `~/.carter/config.toml` | Schema-2 settings: LLM identity, footer, per-workspace policy | Created if missing; a schema-1 file is migrated once (original kept as `config.toml.schema1.bak`); otherwise left alone | Kept |
+| `~/.carter/config.toml.schema1.bak` | Copy of the file before its migration | Never overwritten | Kept |
+| `~/.carter/upgrade-notes/<version>.md` | The new commit rule, when your global `AGENTS.md` has your edits and could not be updated | Written once per version | Kept |
 | `~/.carter/audit.log` | Log of `ops:` operations and policy exceptions | Kept | Kept |
 | `~/.carter/backups/<timestamp>/` | Files replaced by an install | Added to | Kept |
 | `~/.carter/manifest.json` | What Carter installed, with checksums | Rewritten | Removed |

@@ -1089,13 +1089,16 @@ class TestLanguageAndCoAuthorRules:
         agents, _ = self._render(docs_language=None)
         assert "the workspace `docs_language`" in agents["carter-pm.md"]
 
-    def test_committers_use_trailer_never_author(self):
+    def test_committers_use_the_runtime_trailer_never_author(self):
         agents, instructions = self._render()
         for role in ("engineer", "devops", "maestro"):
-            text = agents[f"carter-{role}.md"]
-            assert "Co-authored-by:" in text, role
-            assert "never pass `--author`" in text.lower() or "never `--author`" in text, role
-        assert "Co-authored-by:" in instructions["AGENTS.md"]
+            text = " ".join(agents[f"carter-{role}.md"].split())
+            assert "coauthor_trailer" in text, role
+            assert "carter ops config --emit" in text, role
+            assert "never `--author`" in text.lower() or "`--author`" in text, role
+            assert "signed `-S`" not in text, role
+        assert "coauthor_trailer" in instructions["AGENTS.md"]
+        assert "signed `-S`" not in instructions["AGENTS.md"]
 
     def test_narrator_outward_content_is_english(self):
         agents, _ = self._render(docs_language="es")
@@ -1107,3 +1110,55 @@ class TestLanguageAndCoAuthorRules:
         pm = _render_opencode_agents()["carter-pm.md"]
         assert "the workspace `docs_language`" in pm
         assert "`en` (`docs_language`)" not in pm
+
+
+# ─── Scaffolded plan/checkpoint files validate cleanly (plan 002, step 5) ────
+
+
+class TestScaffoldedStateValidates:
+    """Whatever Carter scaffolds for plans and checkpoints passes ``carter check``
+    with zero errors and zero warnings (no deprecated ``push_policy`` leaking out)."""
+
+    @staticmethod
+    def _first_fence(text: str, lang: str, after: str = "") -> str:
+        start = text.index(after) if after else 0
+        open_at = text.index(f"```{lang}", start) + len(f"```{lang}")
+        return text[open_at : text.index("```", open_at)].lstrip("\n")
+
+    def test_fresh_workspace_state_is_clean(self, tmp_path, default_config):
+        from carter.plans import validate_checkpoint, validate_plans_dir
+
+        carter_dir = init_workspace(tmp_path, default_config, git_state=False)
+        plans_root = carter_dir / "state" / "plans"
+
+        result = validate_plans_dir(plans_root)
+
+        assert (result.errors, result.warnings) == ([], [])
+        checkpoint = carter_dir / "state" / "sessions" / "checkpoint.md"
+        assert validate_checkpoint(checkpoint, plans_root) == []
+
+    def test_plan_skill_example_validates_without_errors_or_warnings(self, tmp_path):
+        from carter.plans import validate_plans_dir
+
+        skill = Path(__file__).resolve().parent.parent / "skills" / "carter-plan" / "SKILL.md"
+        example = self._first_fence(skill.read_text(encoding="utf-8"), "markdown")
+        plan_dir = tmp_path / "active" / "001-feature-name"
+        plan_dir.mkdir(parents=True)
+        (plan_dir / "README.md").write_text(example, encoding="utf-8")
+
+        result = validate_plans_dir(tmp_path)
+
+        assert (result.errors, result.warnings) == ([], [])
+
+    def test_maestro_checkpoint_example_validates_and_carries_ai_usage(
+        self, tmp_path, default_config, env
+    ):
+        from carter.plans import validate_checkpoint
+
+        maestro = render_agents(default_config, env)["carter-maestro.md"]
+        example = self._first_fence(maestro, "markdown", after="Saving a Checkpoint")
+        assert "ai-usage: ai-assisted" in example
+        checkpoint = tmp_path / "checkpoint.md"
+        checkpoint.write_text(example, encoding="utf-8")
+
+        assert validate_checkpoint(checkpoint) == []

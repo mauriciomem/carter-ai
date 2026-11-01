@@ -1,0 +1,29 @@
+{
+  "version": 1,
+  "source": "RFC-0007 Appendix C.1 and C.4.1; slice 1 ships the signal tables and the forbidden list, the other C.1 keys are reserved (empty) until their slice",
+  "reserved": ["isolation_vars", "gh_read_allowlist", "policy_set"],
+  "agent_signals": ["CARTER_AGENT_SHELL", "AGENT", "AI_AGENT", "OPENCODE", "OPENCODE_SESSION_ID"],
+  "human_signals": ["CARTER_HUMAN_SHELL"],
+  "isolation_markers": [{"name": "GIT_SSH_COMMAND", "match": "contains", "value": "IdentityAgent=none"}, {"name": "DBUS_SESSION_BUS_ADDRESS", "match": "equals", "value": "unix:path=/nonexistent"}, {"name": "GH_CONFIG_DIR", "match": "equals", "value": "<home>/.carter/run/gh-empty"}, {"name": "GIT_CONFIG_KEY_n/GIT_CONFIG_VALUE_n", "match": "pair-equals-isolation-entry", "value": "an entry Carter's isolation block sets, e.g. the value no_push or a gpg.*program set to the resolved false"}],
+  "pollution_set": {"by_name": ["CARTER_AGENT_SHELL", "AGENT", "AI_AGENT", "OPENCODE", "OPENCODE_SESSION_ID", "CARTER_HUMAN_SHELL"], "by_value": ["GIT_SSH_COMMAND", "DBUS_SESSION_BUS_ADDRESS", "GH_CONFIG_DIR", "GIT_CONFIG_KEY_n/GIT_CONFIG_VALUE_n"]},
+  "not_pollution": ["SSH_AUTH_SOCK", "DBUS_SESSION_BUS_ADDRESS", "GH_CONFIG_DIR"],
+  "warn_only": ["GH_TOKEN", "GITHUB_TOKEN"],
+  "isolation_vars": [],
+  "forbidden": [
+    {"id": "commit-flags", "class": "Commit-creating verbs", "applies_from": "1", "verbs": ["commit", "merge", "rebase", "cherry-pick", "revert", "am", "pull"], "items": ["--no-verify", "-n", "--no-gpg-sign", "-S", "--gpg-sign", "-S<arg>", "--gpg-sign=<arg>", "-s", "--signoff", "--reset-author", "--author"], "note": "`-n` is forbidden for `commit` only (it means `--no-verify` there; `merge -n` is `--no-stat`). Bare `-S` is not used before signing arrives (slice 2b).", "scoped_flags": [{"flag": "-n", "verbs": ["commit"], "means": "--no-verify"}], "literals": ["--no-verify", "git commit -n", "--no-gpg-sign", "git commit -S", "--gpg-sign", "--signoff", "--reset-author", "--author"], "rfc": "C.4.1 row 1"},
+    {"id": "staging", "class": "Staging", "applies_from": "1", "items": ["git add -A", "git add .", "git commit -a"], "literals": ["git add -A", "git add .", "git commit -a"], "rfc": "C.4.1 row 2"},
+    {"id": "push-verbs", "class": "Push verbs", "applies_from": "1G", "items": ["git push", "git send-pack"], "literals": ["git push", "git send-pack"], "rfc": "C.4.1 row 3"},
+    {"id": "env-overrides", "class": "Env prefixes, assignments and unsets", "applies_from": "1", "via": ["VAR=", "env", "env -u", "unset", "export"], "items": ["GIT_AUTHOR_*", "GIT_COMMITTER_*", "GIT_CONFIG*", "GIT_SSH*", "GIT_ASKPASS", "GIT_EXEC_PATH", "GIT_DIR", "HOME", "XDG_CONFIG_HOME", "CARTER_*", "AGENT", "OPENCODE*"], "note": "Forbidden as a `VAR=` prefix, with `env`/`env -u`, `unset` and `export`.", "literals": ["GIT_AUTHOR_", "GIT_COMMITTER_", "GIT_CONFIG", "GIT_SSH", "GIT_ASKPASS", "GIT_EXEC_PATH", "GIT_DIR"], "rfc": "C.4.1 row 4"},
+    {"id": "git-config-writes", "class": "git config", "applies_from": "1", "items": ["git config --global", "git config --system", "git config --file", "git config --worktree", "git config <key> <value>"], "note": "Any write at any scope is forbidden; only `--get*`, `--list` and `--show-*` pass.", "literals": ["git config --global", "git config --system", "git config --file", "git config --worktree", "git config user."], "rfc": "C.4.1 row 5"},
+    {"id": "config-flags", "class": "-c and --config-env=", "applies_from": "1", "items": ["hook.*", "core.hooksPath", "core.sshCommand", "core.askPass", "core.fsmonitor", "commit.gpgsign", "user.*", "gpg.*", "alias.*", "include*", "credential.*", "url.*", "remote.*", "http.*", "protocol.*", "carter.*"], "literals": ["-c user.", "-c gpg.", "-c commit.gpgsign", "-c core.hooksPath", "-c core.sshCommand", "-c carter.", "--config-env"], "rfc": "C.4.1 row 6"},
+    {"id": "plumbing", "class": "Plumbing", "applies_from": "1", "items": ["commit-tree", "fast-import", "filter-branch", "filter-repo", "replace", "update-ref"], "note": "`update-ref` is forbidden with a raw SHA.", "literals": ["git commit-tree", "git fast-import", "git filter-branch", "git filter-repo"], "rfc": "C.4.1 row 7"},
+    {"id": "other-verbs", "class": "Other verbs", "applies_from": "2a", "items": ["sudo", "docker", "podman", "systemd-run", "crontab", "at", "opencode run", "opencode serve", "gh api"], "note": "`docker` and `podman` belong to consent group `sudo-docker`; `gh` is limited to the read allowlist and a leading `gh -R` is refused.", "literals": [], "rfc": "C.4.1 row 8"},
+    {"id": "human-only-carter", "class": "Human-only Carter verbs", "applies_from": "1G", "items": ["carter push", "carter pr", "carter identity add/remove/unlock/lock", "carter guard *", "carter github-token set", "carter broker *"], "literals": [], "rfc": "C.4.1 row 9"},
+    {"id": "credential-paths", "class": "Credential paths", "applies_from": "2a", "ref": "credential_paths", "items": ["security find-generic-password", "security find-internet-password"], "note": "Any token that references `credential_paths` after normalization.", "literals": [], "rfc": "C.4.1 row 10"},
+    {"id": "control-files", "class": "Control files", "applies_from": "2a", "ref": "control_paths", "items": ["tee", "sed -i", "cp", "mv", "rm", "ln", "chmod", "truncate"], "note": "Write-capable references to `control_paths`: redirections (`>`, `>>`) and these commands, or interpreter args naming them.", "literals": [], "rfc": "C.4.1 row 11"}
+  ],
+  "gh_read_allowlist": [],
+  "policy_set": [],
+  "credential_paths": ["/.ssh/", "/.config/gh/", "opencode/service.json", "/.git-credentials", "/proc/*/environ", "/Library/Keychains/", "/.carter/secrets/"],
+  "control_paths": ["~/.carter/bin/", "~/.carter/hooks/", "~/.carter/run/", "~/.carter/isolation.json", "~/.carter/gitconfig", "~/.carter/config.toml", "~/.carter/guard-state.json", "<plugin dir>"]
+}

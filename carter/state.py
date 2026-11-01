@@ -3,11 +3,14 @@
 from __future__ import annotations
 
 import contextlib
+import os
 import subprocess
 from pathlib import Path
 from typing import Any
 
 from carter.config import write_config
+from carter.identity.scrub import scrub_git_env
+from carter.identity.trailer import ASSISTED_BY_CARTER
 from carter.ops.config import Config
 
 KNOWLEDGE_FILES: dict[str, str] = {
@@ -104,21 +107,22 @@ def _git_init(directory: Path) -> None:
         commit_state(directory, "chore: init carter state", allow_empty=True)
 
 
-# Fallback author for state commits, used only when no git identity is configured
-# (e.g. a bare CI runner) so a recovery snapshot never fails for lack of one. When
-# the user has a git identity, they are the author (Carter is only the co-author).
-_STATE_COMMIT_NAME = "carter"
-_STATE_COMMIT_EMAIL = "carter-bot@users.noreply.github.com"
+# Fallback author for state commits, used only when git has no identity (e.g. a bare CI
+# runner) so a recovery snapshot never fails for lack of one. The address is on the
+# reserved ``.invalid`` TLD: it is deliberately not a real mailbox or a GitHub account.
+_STATE_COMMIT_NAME = "Carter"
+_STATE_COMMIT_EMAIL = "state@carter.invalid"
 
 
 def co_author_trailer() -> str:
-    """The ``Co-authored-by:`` trailer crediting Carter on commits it makes.
+    """The attribution trailer for commits Carter makes in the state repo.
 
-    Uses the ``[attribution]`` name/email from ``~/.carter/config.toml`` (written by
-    ``carter install``), defaulting to ``carter-bot``.
+    ``Assisted-by: Carter`` at T0, ``Co-authored-by: <login> <noreply>`` at T1/T2 (from
+    the resolver). A broken config or a refused resolution still yields
+    ``Assisted-by: Carter``: a state save is not an agent commit, so it never fails or
+    blocks, and it never names an identity it could not resolve.
     """
-    cfg = Config.load()
-    return f"Co-authored-by: {cfg.bot_name} <{cfg.bot_email}>"
+    return Config.load().coauthor_trailer or ASSISTED_BY_CARTER
 
 
 class StateError(Exception):
@@ -130,8 +134,20 @@ class StateError(Exception):
 
 
 def _run_git(args: list[str], cwd: Path) -> subprocess.CompletedProcess[str]:
-    """Run a git command in ``cwd``, capturing output and never raising."""
-    return subprocess.run(["git", *args], cwd=cwd, capture_output=True, text=True, check=False)
+    """Run a git command in ``cwd``, capturing output and never raising.
+
+    The only subprocess entry in this module. The environment is scrubbed (a polluted
+    shell cannot pick the author, committer, injected config or repository) and signing
+    is switched off: state commits are the human's, unsigned, whatever the environment.
+    """
+    return subprocess.run(
+        ["git", "-c", "commit.gpgsign=false", *args],
+        cwd=cwd,
+        env=scrub_git_env(os.environ),
+        capture_output=True,
+        text=True,
+        check=False,
+    )
 
 
 def _has_git_identity(cwd: Path) -> bool:
