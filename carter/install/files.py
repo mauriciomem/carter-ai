@@ -7,9 +7,10 @@ from collections.abc import Callable
 from pathlib import Path
 
 from carter.home import tilde
+from carter.identity import ConfigError, load_identity, resolve
+from carter.identity.trailer import noreply_email
 from carter.install.console import log_debug, log_ok, log_skip
 from carter.install.ownership import sha256_bytes
-from carter.ops.config import git_signing_key, read_config_toml
 
 
 def _sha256(path: Path) -> str:
@@ -26,19 +27,20 @@ def _backup_file(path: Path, backup_root: Path) -> None:
     log_debug(f"Backed up {path} → {dest}")
 
 
-def _get_template_vars(config_path: Path, bot_name: str) -> dict[str, str]:
-    """Get template variables from config.toml or defaults."""
-    data = read_config_toml(config_path)
-    attribution = data.get("attribution", {})
-    bot_email = attribution.get("email") or f"{bot_name}@users.noreply.github.com"
-    bot_name = attribution.get("name") or bot_name
-    signing_key = data.get("git", {}).get("signing_key") or git_signing_key()
+def _get_template_vars(config_path: Path) -> dict[str, str]:
+    """Skill placeholders from the schema-2 identity (removed in step 15).
 
-    return {
-        "{{BOT_NAME}}": bot_name,
-        "{{BOT_EMAIL}}": bot_email,
-        "{{SIGNING_KEY}}": signing_key,
-    }
+    No signing key is ever substituted, and no email is invented: at T0 (or with a
+    legacy or broken config) the name is ``Carter`` and the email empty.
+    """
+    name, email = "Carter", ""
+    try:
+        cfg = load_identity(config_path)
+        if resolve(cfg, workspace=None, env={}).tier != "t0":
+            name, email = cfg.identity.login, noreply_email(cfg)
+    except ConfigError:
+        pass
+    return {"{{BOT_NAME}}": name, "{{BOT_EMAIL}}": email, "{{SIGNING_KEY}}": ""}
 
 
 def _install_content(

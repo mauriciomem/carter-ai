@@ -35,7 +35,7 @@ RoleSource = Literal["workspace", "env", "config", "default"]
 def is_noreply_email(email: str, *, login: str | None = None, uid: int | None = None) -> bool:
     """True for ``<id>+<login>@users.noreply.github.com``.
 
-    The old ``carter-bot@users.noreply.github.com`` default has no id and is rejected.
+    The old ``carter-bot@`` default has no id and is rejected.
     With ``login``/``uid`` the address must also match them (logins compare
     case-insensitively, as GitHub treats them).
     """

@@ -6,7 +6,7 @@ provides the deterministic side-channel around that:
 
   - audit:           post-hoc audit logging after model-driven execution
   - policy-override: record a single-action strictness-policy override
-  - config --emit:   print attribution/config values for model consumption
+  - config --emit:   print the resolved attribution (tier, role, trailer) and footer
 
 All output is JSON to stdout. Human-readable errors go to stderr.
 
@@ -198,11 +198,17 @@ def _handle_policy_override(params: dict[str, Any]) -> int:
 def _handle_config_emit() -> int:
     """Print config values for model consumption."""
     cfg = Config.load()
+    for warning in (cfg.footer_warning, *cfg.warnings):
+        if warning:
+            emit_error(warning)
     emit(
         {
-            "bot_name": cfg.bot_name,
-            "bot_email": cfg.bot_email,
-            "signing_key": cfg.signing_key,
+            "tier": cfg.tier,
+            "role": cfg.role,
+            "role_source": cfg.role_source,
+            "coauthor_trailer": cfg.coauthor_trailer,
+            "commits": cfg.commits,
+            "refusal_reason": cfg.refusal_reason,
             "footer": cfg.footer,
             "has_github_token": bool(cfg.github_token),
         }

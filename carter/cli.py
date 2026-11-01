@@ -14,6 +14,7 @@ from carter.config import (
     _validate_agent_suffix,
     _validate_docs_language,
     generate_default_config,
+    identity_warnings,
     load_config,
 )
 from carter.harness import Expected, validate_agents
@@ -213,11 +214,85 @@ def init(
     click.echo(f"Workspace '{workspace_name}' initialized ({mode} mode)")
 
 
+def _stdin_is_tty() -> bool:
+    import sys
+
+    return sys.stdin.isatty()
+
+
+def _pin_identity_policy(target: Path, config: dict, *, dry_run: bool, assume_yes: bool) -> None:
+    """Copy ``identity.role``/``require_tier`` from carter.yaml into config.toml (D62).
+
+    Shows the change and its source first, and writes only after a human confirms
+    (``--yes`` or a TTY prompt). Raises ``click.ClickException`` when pinning is wanted
+    but refused (cap below ``require_tier``, unmodelled keys, a broken or schema-1 file).
+    """
+    from carter.identity import ConfigError, load_identity
+    from carter.identity.pin import apply_pin, plan_pin
+    from carter.identity.workspace import workspace_key
+    from carter.identity.writer import WriterError
+
+    identity = config.get("identity") or {}
+    role, tier = identity.get("role") or "", identity.get("require_tier") or ""
+    try:
+        cfg = load_identity()
+    except ConfigError as exc:
+        if role or tier:
+            raise click.ClickException(
+                f"config.toml is invalid (E-CONFIG: {exc.detail}); identity policy not pinned."
+            ) from exc
+        return
+    if cfg.needs_migration:
+        if role or tier:
+            raise click.ClickException(
+                "~/.carter/config.toml is schema 1; run `carter install` to migrate it "
+                "before pinning identity policy."
+            )
+        return
+
+    key = workspace_key(target)
+    plan = plan_pin(cfg, key, role=role, require_tier=tier)
+    if plan.refusal:
+        raise click.ClickException(f"Identity policy not pinned: {plan.refusal}.")
+    if not plan.changes:
+        if role or tier:
+            click.echo("Identity policy already pinned (no change).")
+        return
+
+    click.echo(f"Identity policy for {key} (source: .carter/carter.yaml)")
+    for change in plan.changes:
+        click.echo(f"  {change.field:<13} {change.old} -> {change.new}")
+    if plan.max_tier:
+        click.echo(
+            f"  max_tier      {plan.max_tier} (hand-edited in config.toml; not changed here)"
+        )
+    if dry_run:
+        click.echo("Would pin into ~/.carter/config.toml [workspaces] (dry run: nothing written).")
+        return
+    if not assume_yes:
+        if not _stdin_is_tty():
+            click.echo("Not pinned: run `carter update` in a terminal, or pass --yes.")
+            return
+        if not click.confirm("Pin this policy into ~/.carter/config.toml?"):
+            click.echo("Not pinned.")
+            return
+    try:
+        apply_pin(cfg, plan)
+    except (WriterError, ConfigError) as exc:
+        raise click.ClickException(str(exc)) from exc
+    click.echo("Pinned into ~/.carter/config.toml.")
+
+
 @main.command()
 @click.argument("target_dir", default=".", type=click.Path(exists=True, file_okay=False))
 @click.option("--dry-run", is_flag=True, help="Preview changes without writing")
-def update(target_dir: str, dry_run: bool) -> None:
-    """Re-render templated files from carter.yaml."""
+@click.option("--yes", "-y", "assume_yes", is_flag=True, help="Pin identity policy without asking.")
+def update(target_dir: str, dry_run: bool, assume_yes: bool) -> None:
+    """Re-render templated files from carter.yaml and pin its identity policy.
+
+    `identity.role` and `identity.require_tier` in carter.yaml take effect only here:
+    update shows them, asks, and pins them in ~/.carter/config.toml.
+    """
     target = Path(target_dir).resolve()
     config_path = target / ".carter" / "carter.yaml"
 
@@ -225,6 +300,10 @@ def update(target_dir: str, dry_run: bool) -> None:
         config = load_config(config_path)
     except ConfigError as e:
         raise click.ClickException(str(e)) from e
+
+    for warning in identity_warnings(config):
+        click.echo(f"⚠  {warning}")
+    _pin_identity_policy(target, config, dry_run=dry_run, assume_yes=assume_yes)
 
     env = create_env()
 
@@ -268,6 +347,8 @@ def check(target_dir: str, no_harness: bool) -> None:
         config = load_config(config_path)
     except ConfigError as e:
         raise click.ClickException(str(e)) from e
+
+    warnings.extend(identity_warnings(config))
 
     # Check agent and instruction files exist in OpenCode's discovery paths,
     # collecting each role's parsed frontmatter for the policy lint as we go.

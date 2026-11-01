@@ -68,7 +68,6 @@ def install_skills(
     base_dir: Path | None,
     manifest: dict,
     backup_root: Path,
-    bot_name: str = "carter-bot",
 ) -> dict[str, int]:
     log_step("Installing skills...")
     src_dir = REPO_ROOT / "skills"
@@ -78,7 +77,7 @@ def install_skills(
     # Load config for template substitution (carter-ops SKILL.md)
     carter_home = _carter_base(base_dir)
     config_path = carter_home / "config.toml"
-    template_vars = _get_template_vars(config_path, bot_name)
+    template_vars = _get_template_vars(config_path)
 
     for skill_dir in sorted(src_dir.iterdir()):
         if not skill_dir.is_dir():

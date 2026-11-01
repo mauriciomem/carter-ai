@@ -422,6 +422,8 @@ class TestReadsNeverWrite:
         allowed = {
             "carter/identity/writer.py",
             "carter/identity/migrate.py",
+            "carter/identity/pin.py",  # only `carter update` calls it
+            "carter/cli.py",  # `carter update` (lazy import, WriterError)
         }
         importers = set()
         for src in (REPO / "carter").rglob("*.py"):

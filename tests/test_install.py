@@ -473,28 +473,45 @@ class TestInstallPrimitives:
         assert _install_rendered_file("hi\n", dst, manifest, tmp_path / "bk") == "unchanged"
         assert not (tmp_path / "bk").exists()
 
-    def test_template_vars_from_config(self, tmp_path: Path) -> None:
+    def test_template_vars_for_a_t1_identity(self, tmp_path: Path) -> None:
         config = tmp_path / "config.toml"
         config.write_text(
-            '[attribution]\nname = "acme-bot"\nemail = "bot@acme.test"\n'
-            '[git]\nsigning_key = "~/.ssh/k.pub"\n'
+            'schema = 2\n[identity]\nlogin = "llm-bot"\nid = 12345\n'
+            'email = "12345+llm-bot@users.noreply.github.com"\n'
         )
-        assert _get_template_vars(config, "carter-bot") == {
-            "{{BOT_NAME}}": "acme-bot",
-            "{{BOT_EMAIL}}": "bot@acme.test",
-            "{{SIGNING_KEY}}": "~/.ssh/k.pub",
+        assert _get_template_vars(config) == {
+            "{{BOT_NAME}}": "llm-bot",
+            "{{BOT_EMAIL}}": "12345+llm-bot@users.noreply.github.com",
+            "{{SIGNING_KEY}}": "",
         }
 
-    def test_template_vars_defaults_use_given_bot_name(
+    def test_template_vars_at_t0_invent_no_email_and_no_key(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        monkeypatch.setattr(files, "git_signing_key", lambda: "GITKEY")
-        result = _get_template_vars(tmp_path / "missing.toml", "acme-bot")
-        assert result == {
-            "{{BOT_NAME}}": "acme-bot",
-            "{{BOT_EMAIL}}": "acme-bot@users.noreply.github.com",
-            "{{SIGNING_KEY}}": "GITKEY",
-        }
+        result = _get_template_vars(tmp_path / "missing.toml")
+        assert result == {"{{BOT_NAME}}": "Carter", "{{BOT_EMAIL}}": "", "{{SIGNING_KEY}}": ""}
+
+    @pytest.mark.parametrize(
+        "text",
+        [
+            '[attribution]\nname = "acme-bot"\nemail = "bot@acme.test"\n'
+            '[git]\nsigning_key = "~/.ssh/k.pub"\n',  # schema 1
+            "schema = 2\n[identity\n",  # broken
+        ],
+        ids=["schema1", "broken"],
+    )
+    def test_legacy_or_broken_config_never_feeds_the_template(
+        self, tmp_path: Path, text: str
+    ) -> None:
+        config = tmp_path / "config.toml"
+        config.write_text(text)
+        result = _get_template_vars(config)
+        assert "k.pub" not in str(result) and "bot@acme.test" not in str(result)
+        assert result["{{SIGNING_KEY}}"] == ""
+
+    def test_files_module_has_no_way_to_read_the_humans_key(self) -> None:
+        assert not hasattr(files, "git_signing_key")
+        assert "signingkey" not in Path(files.__file__).read_text(encoding="utf-8").lower()
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -723,6 +740,22 @@ class TestCarterOpsSkill:
         assert "{{BOT_NAME}}" not in content
         assert "{{BOT_EMAIL}}" not in content
         assert "{{SIGNING_KEY}}" not in content
+
+    def test_humans_signing_key_is_not_substituted_into_the_skill(self, base_dir: Path) -> None:
+        import os
+        import subprocess
+
+        subprocess.run(
+            ["git", "config", "--global", "user.signingkey", "SECRET-HUMAN-KEY-ID"], check=True
+        )
+        ssh = Path(os.environ["HOME"]) / ".ssh"
+        ssh.mkdir()
+        (ssh / "id_ed25519").write_text("x")
+        install.install_skills(base_dir, {"files": [], "file_hashes": {}}, base_dir / "backup")
+
+        skill = (base_dir / "opencode" / "skills" / "carter-ops" / "SKILL.md").read_text()
+        assert "SECRET-HUMAN-KEY-ID" not in skill
+        assert "id_ed25519" not in skill
 
     def test_templated_skill_unchanged_on_reinstall(self, base_dir: Path) -> None:
         """A re-install must not rewrite (and back up) the unchanged templated skill."""
