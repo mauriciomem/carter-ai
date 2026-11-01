@@ -48,5 +48,6 @@ Thumbs.db
 # Private Carter workspace state (versioned in its own nested .carter/.git)
 /.carter/
 
-# Architecture decision records are maintainer-local in this repo (not versioned)
+# Architecture decision records and RFCs are maintainer-local in this repo (not versioned)
 /docs/adr/
+/docs/rfcs/
