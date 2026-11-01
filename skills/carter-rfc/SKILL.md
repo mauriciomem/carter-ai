@@ -53,6 +53,7 @@ author: <who>
 adr: null                     # ADR-NNNN produced by this RFC, when accepted
 plan: null                    # NNN-slug plan that executes it, when created
 supersedes: []                # RFC ids this replaces
+ai-usage: ai-assisted         # optional: ai-assisted | ai-generated | human-only
 tags: []
 ---
 

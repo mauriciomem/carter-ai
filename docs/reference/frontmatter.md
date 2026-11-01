@@ -20,7 +20,7 @@ created: 2026-06-09           # date (YYYY-MM-DD)
 updated: 2026-06-09           # date (YYYY-MM-DD)
 adr: null                     # decision record this plan carries out (optional)
 rfc: null                     # RFC this plan comes from (optional)
-push_policy: manual           # manual | auto  (manual: never push without approval)
+ai-usage: ai-assisted         # optional: ai-assisted | ai-generated | human-only
 tags: []
 repos: []                     # repositories this plan touches
 must_haves:                   # at least one entry in total
@@ -32,7 +32,8 @@ must_haves:                   # at least one entry in total
 
 `carter check` enforces:
 
-- `id`, `status`, `created`, `updated`, `push_policy` and `must_haves` are present.
+- `id`, `status`, `created`, `updated` and `must_haves` are present.
+- `ai-usage`, when present, is one of `ai-assisted`, `ai-generated` or `human-only`.
 - `id` matches the directory name.
 - `created` and `updated` are dates (a time may follow).
 - `must_haves` has only `truths`, `artifacts` and `key_links`, each a list. A typo
@@ -41,6 +42,26 @@ must_haves:                   # at least one entry in total
 - The status matches the folder: `completed` and `abandoned` plans live in
   `completed/`; `proposed`, `active` and `blocked` plans live in `active/`.
 - The README stays within `plans.readme_max_lines` (default 150).
+
+`push_policy` is **deprecated**. Older plans may still carry it (`manual` or `auto`);
+`carter check` accepts any value, ignores it, and prints a warning. Warnings never
+change the exit code of `carter check`; only errors do. Remove the key when you next
+edit the plan. New plans do not write it.
+
+### The `ai-usage` field
+
+`ai-usage` marks how a record was produced. It is optional and one of:
+
+| Value | Meaning |
+|-------|---------|
+| `ai-assisted` | A human wrote or directed it with AI help (the default Carter writes) |
+| `ai-generated` | An AI produced it with little or no human editing |
+| `human-only` | Written without AI |
+
+The value follows the context of the work, not the agent's role. Carter's record
+templates (plan, checkpoint, decision record, RFC, research) write
+`ai-usage: ai-assisted`. Ordinary repository docs, such as this page, carry no
+frontmatter. A value outside the list is an error in a plan or checkpoint.
 
 ## Plan `step-NN.md`
 
@@ -68,11 +89,13 @@ plan. It never copies plan content.
 updated: 2026-06-09T18:00:00Z
 active_plan: 001-feature-name # plan id, or null
 next_step: 4                  # step number, or null
+ai-usage: ai-assisted         # optional, same values as for plans
 ---
 ```
 
-A one-line summary of where you left off follows. `carter check` requires `updated`
-and reports an `active_plan` that doesn't exist under `plans/active/`.
+A one-line summary of where you left off follows. `carter check` requires `updated`,
+reports an `active_plan` that doesn't exist under `plans/active/`, and rejects an
+`ai-usage` value outside the list above.
 
 ## Decision record (ADR)
 
@@ -88,6 +111,7 @@ decided: 2026-06-09           # null until accepted
 supersedes: []                # earlier record ids, optionally with a section (§D3)
 superseded_by: null
 rfc: null                     # the RFC this decision came from (optional)
+ai-usage: ai-assisted         # optional, same values as for plans
 tags: [storage, plans]
 ---
 ```
@@ -112,6 +136,7 @@ author: your-github-user
 adr: null                     # the decision record it produced, once accepted
 plan: null                    # the plan that carries it out, once created
 supersedes: []
+ai-usage: ai-assisted         # optional, same values as for plans
 tags: []
 ---
 ```

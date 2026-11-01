@@ -319,3 +319,35 @@ class TestJsoncTarget:
         assert _load_jsonc(cfg) == {"theme": "x", "mcp": {"servers": {}}}
         assert (oc / "opencode.jsonc.carter-backup").read_text().startswith("// keep")
         assert "comments" in result.output
+
+
+class TestBotNameFlagIsDeprecated:
+    """``--bot-name`` still parses, warns, and has no effect (plan 002 step 9)."""
+
+    def test_flag_warns_and_is_ignored(self, fake_opencode, base_dir: Path) -> None:
+        fake_opencode("opencode v2.1.4")
+        result = _install(base_dir, "--bot-name", "acme-bot")
+
+        assert result.exit_code == 0, result.output
+        assert "--bot-name is deprecated" in result.output
+        config = (base_dir / "carter" / "config.toml").read_text()
+        assert "acme-bot" not in config
+        assert "schema = 2" in config
+
+    def test_value_does_not_reach_any_installed_file(self, fake_opencode, base_dir: Path) -> None:
+        fake_opencode("opencode v2.1.4")
+        _install(base_dir, "--bot-name", "acme-bot-ZZZ")
+        leaked = [
+            str(p) for p in base_dir.rglob("*") if p.is_file() and "acme-bot-ZZZ" in p.read_text()
+        ]
+        assert leaked == []
+
+    def test_no_warning_without_the_flag(self, fake_opencode, base_dir: Path) -> None:
+        fake_opencode("opencode v2.1.4")
+        result = _install(base_dir)
+        assert result.exit_code == 0, result.output
+        assert "deprecated" not in result.output
+
+    def test_help_marks_the_flag_deprecated(self) -> None:
+        result = CliRunner().invoke(main, ["install", "--help"])
+        assert "deprecated" in result.output.lower()

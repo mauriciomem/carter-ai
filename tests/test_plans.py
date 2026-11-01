@@ -1,9 +1,9 @@
 """Tests for carter.plans — the plan frontmatter validator.
 
 The validator enforces the contract in docs/reference/frontmatter.md:
-required keys, status/push_policy enums, id↔directory match, must_haves shape,
-the active-plan rule (an ``active`` plan must declare >= 1 must_haves entry), and the
-configurable size/step thresholds.
+required keys, status/ai-usage enums, the push_policy deprecation warning, id↔directory
+match, must_haves shape, the active-plan rule (an ``active`` plan must declare >= 1
+must_haves entry), and the configurable size/step thresholds.
 """
 
 from __future__ import annotations
@@ -14,6 +14,7 @@ from pathlib import Path
 import pytest
 
 from carter.plans import (
+    PlanValidation,
     _count_step_rows,
     _validate_plan_dir,
     parse_frontmatter,
@@ -26,7 +27,17 @@ from carter.plans import (
 
 def validate_plan_dir(plan_dir: Path, thresholds: dict | None = None) -> list[str]:
     """Errors for one plan directory, via the path ``validate_plans_dir`` uses."""
-    return _validate_plan_dir(plan_dir, thresholds)[0]
+    return _validate_plan_dir(plan_dir, thresholds)[0].errors
+
+
+def plan_warnings(plan_dir: Path, thresholds: dict | None = None) -> list[str]:
+    """Warnings for one plan directory."""
+    return _validate_plan_dir(plan_dir, thresholds)[0].warnings
+
+
+def plans_errors(plans_root: Path, thresholds: dict | None = None) -> list[str]:
+    """Errors from scanning a plans root (most tests only care about errors)."""
+    return validate_plans_dir(plans_root, thresholds).errors
 
 
 VALID_README = textwrap.dedent(
@@ -37,7 +48,7 @@ VALID_README = textwrap.dedent(
     created: 2026-06-09
     updated: 2026-06-09
     adr: null
-    push_policy: manual
+    ai-usage: ai-assisted
     tags: []
     repos: []
     must_haves:
@@ -126,9 +137,7 @@ class TestStructuralErrors:
         errors = validate_plan_dir(plan)
         assert any("frontmatter" in e for e in errors)
 
-    @pytest.mark.parametrize(
-        "key", ["id", "status", "created", "updated", "push_policy", "must_haves"]
-    )
+    @pytest.mark.parametrize("key", ["id", "status", "created", "updated", "must_haves"])
     def test_missing_required_key(self, tmp_path, key):
         readme = VALID_README.replace(f"{key}:", f"x_{key}:", 1)
         plan = make_plan(tmp_path, readme=readme)
@@ -186,11 +195,104 @@ class TestEnums:
         errors = validate_plan_dir(plan)
         assert any("status" in e for e in errors)
 
-    def test_bad_push_policy(self, tmp_path):
-        readme = VALID_README.replace("push_policy: manual", "push_policy: yolo")
+
+class TestPushPolicyDeprecation:
+    """RFC-0007 §4.8: push_policy is optional, ignored, and warned about (one minor)."""
+
+    def test_plan_without_push_policy_has_no_error_and_no_warning(self, tmp_path):
+        plan = make_plan(tmp_path)
+        assert validate_plan_dir(plan) == []
+        assert plan_warnings(plan) == []
+
+    @pytest.mark.parametrize("value", ["manual", "auto", "bogus", "null", "42"])
+    def test_any_value_is_accepted_with_exactly_one_warning(self, tmp_path, value):
+        readme = VALID_README.replace("ai-usage:", f"push_policy: {value}\nai-usage:")
         plan = make_plan(tmp_path, readme=readme)
+
+        assert validate_plan_dir(plan) == []  # enum is not checked any more
+        warnings = plan_warnings(plan)
+        assert len(warnings) == 1
+        assert "push_policy" in warnings[0]
+        assert "deprecated" in warnings[0]
+        assert "001-sample-plan/README.md" in warnings[0]
+
+    def test_warning_does_not_hide_real_errors(self, tmp_path):
+        readme = VALID_README.replace("ai-usage:", "push_policy: manual\nai-usage:")
+        readme = readme.replace("status: active", "status: wip")
+        plan = make_plan(tmp_path, readme=readme)
+        assert any("status" in e for e in validate_plan_dir(plan))
+        assert len(plan_warnings(plan)) == 1
+
+    def test_scan_reports_warnings_on_their_own_channel(self, tmp_path):
+        readme = VALID_README.replace("ai-usage:", "push_policy: manual\nai-usage:")
+        make_plan(tmp_path, readme=readme)
+        result = validate_plans_dir(tmp_path)
+        assert isinstance(result, PlanValidation)
+        assert result.errors == []
+        assert len(result.warnings) == 1
+
+
+REPO_PLANS = Path(__file__).resolve().parent.parent / ".carter" / "state" / "plans"
+
+
+@pytest.mark.skipif(not REPO_PLANS.is_dir(), reason="private .carter/ workspace state is absent")
+class TestRealWorkspacePlans:
+    """Regression: plans 001 and 002 keep ``push_policy: manual`` and must still pass."""
+
+    @pytest.mark.parametrize("name", ["001-llm-attribution-signing", "002-slice-1-hazards"])
+    def test_real_plan_validates_with_warnings_only(self, name):
+        plan_dir = REPO_PLANS / "active" / name
+        if not plan_dir.is_dir():
+            pytest.skip(f"{name} is not in active/ any more")
+        result = _validate_plan_dir(plan_dir)[0]
+        assert result.errors == []
+        assert all("push_policy" in w and "deprecated" in w for w in result.warnings)
+
+    def test_whole_workspace_scan_has_no_errors(self):
+        assert validate_plans_dir(REPO_PLANS).errors == []
+
+
+class TestAiUsage:
+    """``ai-usage`` is an optional enum on plans and the checkpoint (RFC-0007 §4.2)."""
+
+    @pytest.mark.parametrize("value", ["ai-assisted", "ai-generated", "human-only"])
+    def test_valid_values_accepted(self, tmp_path, value):
+        plan = make_plan(tmp_path, readme=VALID_README.replace("ai-assisted", value))
+        assert validate_plan_dir(plan) == []
+        assert plan_warnings(plan) == []
+
+    def test_key_is_optional(self, tmp_path):
+        plan = make_plan(tmp_path, readme=VALID_README.replace("ai-usage: ai-assisted\n", ""))
+        assert "ai-usage" not in (plan / "README.md").read_text()
+        assert validate_plan_dir(plan) == []
+        assert plan_warnings(plan) == []
+
+    @pytest.mark.parametrize("value", ["robot", "AI-ASSISTED", "null", "true", "[]"])
+    def test_invalid_value_is_an_error(self, tmp_path, value):
+        plan = make_plan(tmp_path, readme=VALID_README.replace("ai-assisted", value))
         errors = validate_plan_dir(plan)
-        assert any("push_policy" in e for e in errors)
+        assert len(errors) == 1
+        assert "ai-usage" in errors[0]
+        assert "ai-generated" in errors[0]  # names the valid values
+
+    def test_checkpoint_accepts_valid_value(self, tmp_path):
+        f = tmp_path / "checkpoint.md"
+        f.write_text("---\nupdated: 2026-06-09\nai-usage: ai-generated\n---\n")
+        assert validate_checkpoint(f) == []
+
+    def test_checkpoint_without_key_is_clean(self, tmp_path):
+        f = tmp_path / "checkpoint.md"
+        f.write_text("---\nupdated: 2026-06-09\n---\n")
+        assert validate_checkpoint(f) == []
+
+    @pytest.mark.parametrize("value", ["robot", "null", "7"])
+    def test_checkpoint_invalid_value_is_an_error(self, tmp_path, value):
+        f = tmp_path / "checkpoint.md"
+        f.write_text(f"---\nupdated: 2026-06-09\nai-usage: {value}\n---\n")
+        errors = validate_checkpoint(f)
+        assert len(errors) == 1
+        assert "ai-usage" in errors[0]
+        assert "checkpoint" in errors[0]
 
 
 # ─── validate_plan_dir — must_haves + O6 ─────────────────────────────────────
@@ -273,17 +375,17 @@ class TestValidatePlansDir:
                 "status: active", "status: nonsense"
             ),
         )
-        errors = validate_plans_dir(tmp_path)
+        errors = plans_errors(tmp_path)
         assert any("002-bad" in e for e in errors)
         assert not any("001-sample-plan" in e for e in errors)
 
     def test_empty_plans_dir_is_clean(self, tmp_path):
         (tmp_path / "active").mkdir()
         (tmp_path / "completed").mkdir()
-        assert validate_plans_dir(tmp_path) == []
+        assert plans_errors(tmp_path) == []
 
     def test_missing_plans_dir_is_clean(self, tmp_path):
-        assert validate_plans_dir(tmp_path / "does-not-exist") == []
+        assert plans_errors(tmp_path / "does-not-exist") == []
 
     def test_duplicate_numeric_id_flagged(self, tmp_path):
         """001-foo and 001-bar share the NNN prefix within one bucket."""
@@ -299,7 +401,7 @@ class TestValidatePlansDir:
             state="active",
             readme=VALID_README.replace("id: 001-sample-plan", "id: 001-bar"),
         )
-        errors = validate_plans_dir(tmp_path)
+        errors = plans_errors(tmp_path)
         assert any("001" in e and "duplicate" in e.lower() for e in errors)
 
     def test_distinct_numeric_ids_clean(self, tmp_path):
@@ -315,7 +417,7 @@ class TestValidatePlansDir:
             state="active",
             readme=VALID_README.replace("id: 001-sample-plan", "id: 002-bar"),
         )
-        assert not any("duplicate" in e.lower() for e in validate_plans_dir(tmp_path))
+        assert not any("duplicate" in e.lower() for e in plans_errors(tmp_path))
 
     def test_duplicate_numeric_id_across_buckets_flagged(self, tmp_path):
         """NNN must be unique globally, not just within a bucket (001 in active/ + completed/)."""
@@ -330,7 +432,7 @@ class TestValidatePlansDir:
             "status: active", "status: completed"
         )
         make_plan(tmp_path, name="001-done", state="completed", readme=done)
-        errors = validate_plans_dir(tmp_path)
+        errors = plans_errors(tmp_path)
         assert any("001" in e and "duplicate" in e.lower() for e in errors)
 
 
@@ -366,6 +468,43 @@ class TestCheckIntegration:
         assert result.exit_code == 1
         assert "must_haves" in result.output
 
+    def test_check_prints_warnings_and_still_exits_zero(self, tmp_path):
+        runner, main = self._init(tmp_path)
+        legacy = VALID_README.replace("ai-usage:", "push_policy: manual\nai-usage:")
+        make_plan(tmp_path / ".carter" / "state" / "plans", readme=legacy)
+        result = runner.invoke(main, ["check", str(tmp_path)])
+        assert result.exit_code == 0, result.output
+        assert "push_policy" in result.output
+        assert "deprecated" in result.output
+        assert "Workspace OK" in result.output
+        assert "Workspace issues found" not in result.output
+
+    def test_check_with_warning_and_error_exits_nonzero_and_prints_both(self, tmp_path):
+        runner, main = self._init(tmp_path)
+        bad = VALID_README.replace("ai-usage:", "push_policy: manual\nai-usage:")
+        bad = bad.replace('    - "The sample behaviour works"\n', "")
+        make_plan(tmp_path / ".carter" / "state" / "plans", readme=bad)
+        result = runner.invoke(main, ["check", str(tmp_path)])
+        assert result.exit_code == 1
+        assert "must_haves" in result.output
+        assert "push_policy" in result.output
+
+    def test_check_fails_on_bad_ai_usage(self, tmp_path):
+        runner, main = self._init(tmp_path)
+        make_plan(
+            tmp_path / ".carter" / "state" / "plans",
+            readme=VALID_README.replace("ai-assisted", "robot"),
+        )
+        result = runner.invoke(main, ["check", str(tmp_path)])
+        assert result.exit_code == 1
+        assert "ai-usage" in result.output
+
+    def test_clean_plan_prints_no_warning(self, tmp_path):
+        runner, main = self._init(tmp_path)
+        make_plan(tmp_path / ".carter" / "state" / "plans")
+        result = runner.invoke(main, ["check", str(tmp_path)])
+        assert "deprecated" not in result.output
+
     def test_check_fails_on_bad_checkpoint(self, tmp_path):
         runner, main = self._init(tmp_path)
         cp = tmp_path / ".carter" / "state" / "sessions" / "checkpoint.md"
@@ -373,6 +512,39 @@ class TestCheckIntegration:
         result = runner.invoke(main, ["check", str(tmp_path)])
         assert result.exit_code == 1
         assert "checkpoint" in result.output
+
+
+class TestFrontmatterReferenceMatchesValidator:
+    """docs/reference/frontmatter.md is the contract the validator enforces."""
+
+    @staticmethod
+    def _doc() -> str:
+        doc = Path(__file__).resolve().parent.parent / "docs" / "reference" / "frontmatter.md"
+        return doc.read_text(encoding="utf-8")
+
+    def test_plan_block_drops_push_policy_and_documents_ai_usage(self) -> None:
+        plan_block = self._doc().split("```yaml", 2)[1]
+        assert "push_policy:" not in plan_block
+        assert "ai-usage:" in plan_block
+
+    def test_enforced_list_no_longer_requires_push_policy(self) -> None:
+        doc = self._doc()
+        enforces = doc[doc.index("`carter check` enforces:") :].split("\n\n", 3)[1]
+        assert "push_policy" not in enforces
+
+    def test_deprecation_and_every_enum_value_are_documented(self) -> None:
+        from carter.plans import VALID_AI_USAGE
+
+        doc = self._doc()
+        assert "push_policy" in doc and "deprecated" in doc
+        for value in VALID_AI_USAGE:
+            assert value in doc
+
+    def test_checkpoint_and_record_blocks_document_ai_usage(self) -> None:
+        blocks = self._doc().split("```yaml")[1:]
+        with_ai_usage = [b for b in blocks if "ai-usage:" in b.split("```")[0]]
+        # plan README, checkpoint, ADR, RFC
+        assert len(with_ai_usage) == 4
 
 
 # ─── skill <-> validator anti-drift contract ─────────────────────────────────
@@ -529,32 +701,32 @@ class TestFolderStatusCoherence:
 
     def test_completed_status_in_active_flagged(self, tmp_path):
         self._plan_with_status(tmp_path, "001-done", "active", "completed")
-        errors = validate_plans_dir(tmp_path)
+        errors = plans_errors(tmp_path)
         assert any("001-done" in e and "active" in e.lower() for e in errors)
 
     def test_abandoned_status_in_active_flagged(self, tmp_path):
         self._plan_with_status(tmp_path, "001-gone", "active", "abandoned")
-        errors = validate_plans_dir(tmp_path)
+        errors = plans_errors(tmp_path)
         assert any("001-gone" in e for e in errors)
 
     def test_active_status_in_completed_flagged(self, tmp_path):
         self._plan_with_status(tmp_path, "001-wip", "completed", "active")
-        errors = validate_plans_dir(tmp_path)
+        errors = plans_errors(tmp_path)
         assert any("001-wip" in e and "completed" in e.lower() for e in errors)
 
     def test_proposed_in_active_is_clean(self, tmp_path):
         self._plan_with_status(tmp_path, "001-draft", "active", "proposed")
-        errors = validate_plans_dir(tmp_path)
+        errors = plans_errors(tmp_path)
         assert not any("001-draft" in e for e in errors)
 
     def test_blocked_in_active_is_clean(self, tmp_path):
         self._plan_with_status(tmp_path, "001-stuck", "active", "blocked")
-        errors = validate_plans_dir(tmp_path)
+        errors = plans_errors(tmp_path)
         assert not any("001-stuck" in e for e in errors)
 
     def test_completed_in_completed_is_clean(self, tmp_path):
         self._plan_with_status(tmp_path, "001-fin", "completed", "completed")
-        errors = validate_plans_dir(tmp_path)
+        errors = plans_errors(tmp_path)
         assert not any("001-fin" in e for e in errors)
 
 

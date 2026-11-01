@@ -134,8 +134,19 @@ session), **offer** to save a checkpoint — never write it unprompted:
 1. Ask: *"Save a checkpoint so we can resume here?"* If declined, do nothing.
 2. If confirmed, write/update `.carter/state/sessions/checkpoint.md` as a **thin
    cursor only** — frontmatter (`updated` = now, `active_plan` = the plan id or
-   null, `next_step` = the step number or null) plus a one-line summary. **Never
-   duplicate plan content** into it; it points at the plan, it does not copy it.
+   null, `next_step` = the step number or null, `ai-usage: ai-assisted`) plus a
+   one-line summary. **Never duplicate plan content** into it; it points at the
+   plan, it does not copy it:
+
+   ```markdown
+   ---
+   updated: 2026-06-09T18:00:00Z
+   active_plan: 001-feature-name
+   next_step: 4
+   ai-usage: ai-assisted
+   ---
+   Step 3 done; step 4 (tests for the parser) is next.
+   ```
 3. Run `carter save` to commit `.carter/` state so the checkpoint (and any plan
    edits) are recoverable.
 

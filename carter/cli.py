@@ -54,8 +54,8 @@ def main() -> None:
 )
 @click.option(
     "--bot-name",
-    default="carter-bot",
-    help="Git commit author name for carter-ops attribution.",
+    default=None,
+    help="Deprecated and ignored. Attribution is configured with the LLM identity.",
 )
 @click.option(
     "--base-dir",
@@ -69,7 +69,7 @@ def main() -> None:
 def install(
     mcp: bool,
     mcp_servers: str | None,
-    bot_name: str,
+    bot_name: str | None,
     base_dir: Path | None,
     quiet: bool,
     verbose: bool,
@@ -79,6 +79,13 @@ def install(
     from carter.install.mcp import MCP_SERVERS
     from carter.install.orchestrator import run as run_install
     from carter.install.prereqs import PrerequisiteError
+
+    if bot_name is not None:
+        click.echo(
+            "⚠  --bot-name is deprecated and ignored: attribution now comes from the LLM "
+            "identity in ~/.carter/config.toml.",
+            err=True,
+        )
 
     if quiet:
         verbosity = 0
@@ -104,7 +111,6 @@ def install(
     try:
         run_install(
             mcp=mcp,
-            bot_name=bot_name,
             base_dir=base_dir,
             verbosity=verbosity,
             mcp_servers=servers,
@@ -250,6 +256,7 @@ def check(target_dir: str, no_harness: bool) -> None:
     target = Path(target_dir).resolve()
     config_path = target / ".carter" / "carter.yaml"
     errors: list[str] = []
+    warnings: list[str] = []  # reported, never change the exit code
 
     # Check config exists
     if not config_path.exists():
@@ -289,7 +296,9 @@ def check(target_dir: str, no_harness: bool) -> None:
 
     # Validate plan frontmatter contract; thresholds from config
     plans_root = target / ".carter" / "state" / "plans"
-    errors.extend(validate_plans_dir(plans_root, config.get("plans")))
+    plans_result = validate_plans_dir(plans_root, config.get("plans"))
+    errors.extend(plans_result.errors)
+    warnings.extend(plans_result.warnings)
 
     # Validate the session checkpoint cursor (absent is fine); cross-check that
     # its active_plan resolves to a real plan under active/.
@@ -323,6 +332,11 @@ def check(target_dir: str, no_harness: bool) -> None:
         errors.extend(harness_result.errors)
         if harness_result.status == "ok":
             click.echo(f"OpenCode loaded all {len(expected)} Carter agents")
+
+    if warnings:
+        click.echo("Workspace warnings:", err=True)
+        for warning in warnings:
+            click.echo(f"  ⚠ {warning}", err=True)
 
     if errors:
         click.echo("Workspace issues found:", err=True)

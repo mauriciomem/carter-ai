@@ -62,7 +62,7 @@ status: active            # proposed | active | blocked | completed | abandoned
 created: 2026-06-09
 updated: 2026-06-09
 adr: null                 # ADR-NNNN if this plan executes an accepted ADR
-push_policy: manual       # manual | auto
+ai-usage: ai-assisted     # optional: ai-assisted | ai-generated | human-only
 tags: []
 repos: []
 must_haves:               # MANDATORY: >= 1 entry total
