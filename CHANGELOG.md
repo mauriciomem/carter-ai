@@ -2,6 +2,25 @@
 
 <!-- version list -->
 
+## v0.17.0 (2026-11-01)
+
+### Features
+
+- **identity**: Data-driven agent rules, tier-based skill and docs
+  ([`d32601d`](https://github.com/mauriciomem/carter-ai/commit/d32601d1a57ddd0c9d661bb8b4a68b145e82b7ad))
+
+- **identity**: Runtime identity, scrubbed state commits and pinned policy
+  ([`d32601d`](https://github.com/mauriciomem/carter-ai/commit/d32601d1a57ddd0c9d661bb8b4a68b145e82b7ad))
+
+- **identity**: Schema-2 config, tier resolver, safe migration; deprecate push_policy
+  ([`d32601d`](https://github.com/mauriciomem/carter-ai/commit/d32601d1a57ddd0c9d661bb8b4a68b145e82b7ad))
+
+### Breaking Changes
+
+- **identity**: Config.toml moves to schema 2; install no longer writes [git] signing_key or a
+  carter-bot@ email, and --bot-name has no effect.
+
+
 ## v0.16.1 (2026-10-25)
 
 ### Bug Fixes
