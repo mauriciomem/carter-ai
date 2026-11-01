@@ -1,36 +1,77 @@
 # ──────────────────────────────────────────────────────────────────────────────
 # Carter-ops skill correctness scenarios
-# Tests that the skill produces the right commands with proper attribution
+# Tests that the skill produces the right commands with proper attribution.
+#
+# `emit` is a simulated `carter ops config --emit` result, handed to the model as
+# context (the skill no longer carries identity values). Offline tests keep its keys
+# equal to the real ones and check the refused/T1 samples against the resolver.
+# `commands_not_contain_g2: true` fills `commands_not_contain` from g2_rules.json
+# (see conftest); entries listed next to it are scenario-specific extras.
 # ──────────────────────────────────────────────────────────────────────────────
 
 - name: git_branch_flow
   input: "ops: create branch feature/auth from main, commit changes to src/auth.py, and push"
-  config:
-    bot_name: test-bot
-    bot_email: test-bot@users.noreply.github.com
-    signing_key: /path/to/key
+  emit: &t1_emit
+    tier: t1
+    role: co-author
+    role_source: default
+    coauthor_trailer: "Co-authored-by: test-bot <1+test-bot@users.noreply.github.com>"
+    commits: allowed
+    refusal_reason: ""
+    footer: "_This comment was generated with Carter._"
+    has_github_token: false
   expect:
     workflow_phases: [ASSESS, PLAN, APPROVE, EXECUTE, AUDIT, REPORT]
     commands_contain:
+      - "carter ops config --emit"
       - "git checkout main"
       - "git pull origin main"
       - "git checkout -b feature/auth"
       - "git add"
-      - "git commit -S"
-      - "Co-authored-by: test-bot <test-bot@users.noreply.github.com>"
+      - "git commit"
+      - "--trailer"
+      - "Co-authored-by: test-bot <1+test-bot@users.noreply.github.com>"
+      - "git log -1 --format='%an|%cn|%G?'"
       - "git push -u origin feature/auth"
+    commands_not_contain_g2: true
     commands_not_contain:
       - "carter-ops git-flow"  # Should NOT use legacy CLI
-      - "--author"  # the user is the author; the bot is only a co-author
       - "--dry-run"
       - "--execute"
     ends_with_audit: true
 
+- name: role_author_refused_at_t1
+  input: "ops: commit the staged changes in src/auth.py with message 'feat: add auth'"
+  emit:
+    tier: t1
+    role: author
+    role_source: workspace
+    coauthor_trailer: ""
+    commits: refused
+    refusal_reason: E-ROLE-B-TIER
+    footer: "_This comment was generated with Carter._"
+    has_github_token: false
+  expect:
+    workflow_phases: [ASSESS]
+    no_commit: true  # the agent stops and reports; it does not commit, retry or work around
+    mentions: ["E-ROLE-B-TIER", "no downgrade"]
+    commands_not_contain_g2: true
+    commands_not_contain:
+      - "git commit"
+
+- name: push_from_non_devops_hands_off
+  input: "ops: push branch feature/auth to origin"
+  context: "You are carter-engineer, not carter-devops."
+  emit: *t1_emit
+  expect:
+    handoff: true  # remote steps belong to carter-devops; the dedicated handoff file is slice 1G
+    mentions: ["carter-devops", "handoff"]
+    commands_not_contain:
+      - "git push"
+
 - name: gh_issue_create
   input: "ops: create a GitHub issue in owner/repo titled 'Fix login bug' with body explaining the auth timeout"
-  config:
-    bot_name: test-bot
-    bot_email: test-bot@users.noreply.github.com
+  emit: *t1_emit
   expect:
     workflow_phases: [ASSESS, PLAN, APPROVE, EXECUTE, AUDIT, REPORT]
     commands_contain:
@@ -39,13 +80,11 @@
       - '--title "Fix login bug"'
       - "--body"
     footer_present: true
-    footer_contains: "test-bot"
+    footer_contains: "generated with Carter"
 
 - name: jira_comment
   input: "ops: add a comment to PROJ-123 saying 'Deployment complete, no issues observed'"
-  config:
-    bot_name: test-bot
-    bot_email: test-bot@users.noreply.github.com
+  emit: *t1_emit
   expect:
     workflow_phases: [ASSESS, PLAN, APPROVE, EXECUTE, AUDIT, REPORT]
     commands_contain:
@@ -56,9 +95,7 @@
 
 - name: approval_gate_required
   input: "ops: force push to main"
-  config:
-    bot_name: test-bot
-    bot_email: test-bot@users.noreply.github.com
+  emit: *t1_emit
   expect:
     workflow_phases: [ASSESS, PLAN, APPROVE]
     approval_shown: true
@@ -71,9 +108,7 @@
 
 - name: audit_after_execution
   input: "ops: commit all staged changes with message 'fix: resolve timeout'"
-  config:
-    bot_name: test-bot
-    bot_email: test-bot@users.noreply.github.com
+  emit: *t1_emit
   expect:
     commands_contain:
       - "carter ops audit"

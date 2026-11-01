@@ -340,3 +340,33 @@ class TestDeprecationsAreShown:
         set_policy(ws, role="author", require_tier="t1")
         chk = CliRunner().invoke(main, ["check", str(ws), "--no-harness"])
         assert "deprecated" not in chk.output
+
+
+class TestWorkspaceLevelNoteOnly:
+    """`carter update` mentions the workspace AGENTS.md only; the global note belongs to
+    `carter install` (plan 002 step 17)."""
+
+    OLD = (
+        "- **Commits**: The user is the author (signed `-S`); credit Carter only with a "
+        "`Co-authored-by:` trailer — never `--author`.\n"
+    )
+
+    def test_old_workspace_agents_md_gets_a_workspace_note(self, ws, home):
+        agents = ws / "AGENTS.md"
+        agents.write_text("# Mine\n" + self.OLD)
+
+        out = update(ws, "--yes").output
+
+        assert "AGENTS.md" in out and "not rewritten" in out
+        assert "coauthor_trailer" in out  # the current workspace rule is shown
+        assert agents.read_text() == "# Mine\n" + self.OLD  # never clobbered
+        assert not (home / ".carter" / "upgrade-notes").exists()
+
+    def test_the_global_rule_is_not_printed_by_update(self, ws):
+        from carter.install.components import _ATTRIBUTION_RULE
+
+        (ws / "AGENTS.md").write_text("# Mine\n" + self.OLD)
+        assert _ATTRIBUTION_RULE not in update(ws, "--yes").output
+
+    def test_a_fresh_workspace_has_nothing_to_report(self, ws):
+        assert "not rewritten" not in update(ws, "--yes").output

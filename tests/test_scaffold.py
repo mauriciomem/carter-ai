@@ -1089,13 +1089,16 @@ class TestLanguageAndCoAuthorRules:
         agents, _ = self._render(docs_language=None)
         assert "the workspace `docs_language`" in agents["carter-pm.md"]
 
-    def test_committers_use_trailer_never_author(self):
+    def test_committers_use_the_runtime_trailer_never_author(self):
         agents, instructions = self._render()
         for role in ("engineer", "devops", "maestro"):
-            text = agents[f"carter-{role}.md"]
-            assert "Co-authored-by:" in text, role
-            assert "never pass `--author`" in text.lower() or "never `--author`" in text, role
-        assert "Co-authored-by:" in instructions["AGENTS.md"]
+            text = " ".join(agents[f"carter-{role}.md"].split())
+            assert "coauthor_trailer" in text, role
+            assert "carter ops config --emit" in text, role
+            assert "never `--author`" in text.lower() or "`--author`" in text, role
+            assert "signed `-S`" not in text, role
+        assert "coauthor_trailer" in instructions["AGENTS.md"]
+        assert "signed `-S`" not in instructions["AGENTS.md"]
 
     def test_narrator_outward_content_is_english(self):
         agents, _ = self._render(docs_language="es")

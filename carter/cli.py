@@ -239,7 +239,7 @@ def _pin_identity_policy(target: Path, config: dict, *, dry_run: bool, assume_ye
     except ConfigError as exc:
         if role or tier:
             raise click.ClickException(
-                f"config.toml is invalid (E-CONFIG: {exc.detail}); identity policy not pinned."
+                f"config.toml is invalid ({exc.code}: {exc.detail}); identity policy not pinned."
             ) from exc
         return
     if cfg.needs_migration:
@@ -283,6 +283,26 @@ def _pin_identity_policy(target: Path, config: dict, *, dry_run: bool, assume_ye
     click.echo("Pinned into ~/.carter/config.toml.")
 
 
+def _note_stale_workspace_rules(target: Path, config: dict, env: Environment) -> None:
+    """Workspace-level upgrade note: ``AGENTS.md`` is never rewritten, so say so when its
+    commit rule predates the tier-based one. (The global note belongs to ``carter install``.)"""
+    instructions = _instructions_path(target)
+    if not instructions.exists() or "coauthor_trailer" in instructions.read_text():
+        return
+    rule = next(
+        (
+            line
+            for line in render_instructions(config, env)["AGENTS.md"].splitlines()
+            if line.startswith("- **Commits**")
+        ),
+        "",
+    )
+    click.echo(
+        f"ℹ  {instructions.relative_to(target)} was not rewritten (it may hold your edits) and "
+        f"its commit rule is out of date. Current rule:\n   {rule}"
+    )
+
+
 @main.command()
 @click.argument("target_dir", default=".", type=click.Path(exists=True, file_okay=False))
 @click.option("--dry-run", is_flag=True, help="Preview changes without writing")
@@ -321,6 +341,7 @@ def update(target_dir: str, dry_run: bool, assume_yes: bool) -> None:
     _render_and_write(target, config, env)
     click.echo(f"ℹ  {policy_notice(config)}")
     click.echo("Templates re-rendered from carter.yaml")
+    _note_stale_workspace_rules(target, config, env)
 
 
 @main.command()

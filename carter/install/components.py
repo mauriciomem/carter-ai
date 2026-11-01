@@ -8,18 +8,19 @@ the knowledge base, manifest and backups live under ``~/.carter`` (see
 from __future__ import annotations
 
 import json
+import os
 import shutil
+import tempfile
 from pathlib import Path
 
+from carter import __version__
 from carter.home import tilde
 from carter.identity import ConfigError
 from carter.identity.migrate import MigrationError, ensure_config
 from carter.install.console import log_err, log_ok, log_skip, log_step, log_warn
 from carter.install.files import (
-    _get_template_vars,
     _install_file,
     _install_rendered_file,
-    _install_templated_file,
     _sha256,
 )
 from carter.install.ownership import _hash_matches
@@ -74,11 +75,6 @@ def install_skills(
     # Per-file statuses, plus "skills": the number of skill directories installed.
     stats: dict[str, int] = {"created": 0, "updated": 0, "unchanged": 0, "skills": 0}
 
-    # Load config for template substitution (carter-ops SKILL.md)
-    carter_home = _carter_base(base_dir)
-    config_path = carter_home / "config.toml"
-    template_vars = _get_template_vars(config_path)
-
     for skill_dir in sorted(src_dir.iterdir()):
         if not skill_dir.is_dir():
             continue
@@ -91,17 +87,8 @@ def install_skills(
         for src_file in skill_files:
             rel = src_file.relative_to(skill_dir)
 
-            # Template substitution for carter-ops SKILL.md
-            needs_template = skill_dir.name == "carter-ops" and src_file.name == "SKILL.md"
-
             dst = _opencode_base(base_dir) / "skills" / skill_dir.name / rel
-            if needs_template:
-                status = _install_templated_file(
-                    src_file, dst, manifest, backup_root, template_vars
-                )
-            else:
-                status = _install_file(src_file, dst, manifest, backup_root)
-            stats[status] += 1
+            stats[_install_file(src_file, dst, manifest, backup_root)] += 1
 
     return stats
 
@@ -177,14 +164,20 @@ _OPENCODE_COMMUNICATION = (
     "- At any doubt, ask for clarification before proceeding.\n"
 )
 
+# The commit-attribution rule. One constant: it is installed into the global AGENTS.md and
+# is also the text of the upgrade note for users whose AGENTS.md we must not rewrite.
+_ATTRIBUTION_RULE = (
+    "- Commits: the user is the author and committer (their own git config). Never pass"
+    " `--author`, `--no-verify`, `-s` or `-S`, and never add `Signed-off-by` unless the"
+    " user asks for it on that commit. Credit comes only from the `coauthor_trailer` that"
+    " `carter ops config --emit` prints; if `commits` is `refused`, stop and report.\n"
+)
+
 # The "Git & Language" global rules (also rendered into the workspace AGENTS.md).
 _OPENCODE_GIT_LANGUAGE = (
     "\n## Git & Language\n"
-    "- You (the user) are always the commit author and sign with your own key. Never"
-    " pass `--author`; credit Carter only with a trailer:"
-    " `Co-authored-by: <name> <email>` from `[attribution]` in"
-    " `~/.carter/config.toml` (default `carter-bot <carter-bot@users.noreply.github.com>`).\n"
-    "- Everything that lands in a repository or leaves the workspace is written in"
+    + _ATTRIBUTION_RULE
+    + "- Everything that lands in a repository or leaves the workspace is written in"
     " English, whatever language the conversation uses: commit messages, branch names,"
     " code comments, repo docs, PR/issue titles and bodies, review comments, release"
     " notes, Jira and Slack text.\n"
@@ -196,19 +189,76 @@ _OPENCODE_GIT_LANGUAGE = (
 
 _OPENCODE_AGENTS_MD = _OPENCODE_AGENTS_MD_BASE + _OPENCODE_COMMUNICATION + _OPENCODE_GIT_LANGUAGE
 
+# sha256 of the global AGENTS.md text shipped up to v0.16.x. A file with exactly this
+# content was never edited by the user, so it is upgraded in place.
+_KNOWN_PREVIOUS_AGENTS_MD_SHA256 = frozenset(
+    {"f96032e740c9fc9660d0798c36ed38b53aa12d7323b21bddf338834ca37d5401"}
+)
 
-def install_opencode_rules(base_dir: Path | None, manifest: dict) -> None:
-    """Generate ~/.config/opencode/AGENTS.md for OpenCode global rules."""
+
+def _upgrade_note_text() -> str:
+    return (
+        f"# Carter {__version__}: commit attribution rule\n\n"
+        "Your global rules file (`~/.config/opencode/AGENTS.md`) has your own edits, so Carter\n"
+        "left it alone. Replace the commit/author/signing line in its Git & Language section\n"
+        "with this rule:\n\n" + _ATTRIBUTION_RULE
+    )
+
+
+def _write_upgrade_note(base_dir: Path | None, shown_agents_md: str) -> None:
+    """Print the new rule and save it to ``~/.carter/upgrade-notes/<version>.md`` once.
+
+    The file is written atomically (tmp + replace, mode 0644) and a failure never blocks
+    the install. It is not in the manifest: it is the user's reminder, not Carter's state."""
+    note = _carter_base(base_dir) / "upgrade-notes" / f"{__version__}.md"
+    if note.exists():
+        log_warn(f"{shown_agents_md}: attribution rule still to merge, see {tilde(note)}")
+        return
+    text = _upgrade_note_text()
+    log_warn(f"{shown_agents_md}: not updated. Merge this rule by hand:")
+    print(text)
+    try:
+        note.parent.mkdir(parents=True, exist_ok=True)
+        fd, tmp = tempfile.mkstemp(dir=note.parent, prefix=".note.", suffix=".tmp")
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8") as fh:
+                fh.write(text)
+            os.chmod(tmp, 0o644)
+            os.replace(tmp, note)
+        except BaseException:
+            Path(tmp).unlink(missing_ok=True)
+            raise
+        log_ok(tilde(note), "saved")
+    except OSError as exc:
+        log_warn(f"could not save the upgrade note ({type(exc).__name__})")
+
+
+def install_opencode_rules(
+    base_dir: Path | None, manifest: dict, previous: dict | None = None
+) -> None:
+    """Generate ~/.config/opencode/AGENTS.md for OpenCode global rules.
+
+    A missing file is written; the current text is kept. A file that is exactly a text
+    Carter shipped before (known hash, or the hash the previous install recorded) is
+    upgraded in place. Anything else is the user's: it is never touched, and the new
+    attribution rule is printed and saved as an upgrade note instead.
+    """
     log_step("Installing OpenCode global rules...")
     dst = _opencode_base(base_dir) / "AGENTS.md"
     dst.parent.mkdir(parents=True, exist_ok=True)
     shown = tilde(dst)
     owned = True
+    recorded = ((previous or {}).get("file_hashes") or {}).get(str(dst))
     if not dst.exists():
         dst.write_text(_OPENCODE_AGENTS_MD)
         log_ok(shown)
     elif dst.read_text() == _OPENCODE_AGENTS_MD:
         log_skip(f"{shown} (already current)")
+    elif _sha256(dst).removeprefix("sha256:") in _KNOWN_PREVIOUS_AGENTS_MD_SHA256 or (
+        recorded and _hash_matches(dst, str(recorded))
+    ):
+        dst.write_text(_OPENCODE_AGENTS_MD)
+        log_ok(shown, "updated (was an unmodified earlier Carter version)")
     else:
         # User-modified — NEVER clobber.
         log_warn(
@@ -218,6 +268,7 @@ def install_opencode_rules(base_dir: Path | None, manifest: dict) -> None:
         manifest.setdefault("notes", []).append(
             f"{shown}: user-modified, current Carter rules not installed"
         )
+        _write_upgrade_note(base_dir, shown)
         owned = False
     if owned:
         # Recorded with its hash so uninstall can tell if the user edits it later.

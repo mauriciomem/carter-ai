@@ -58,7 +58,7 @@ Useful options:
 |--------|--------|
 | `--mcp` | Also configure the MCP servers. See [MCP servers](mcp-servers.md) |
 | `--mcp-servers github,terraform` | Only these MCP servers (with `--mcp`) |
-| `--bot-name NAME` | Name credited as co-author on commits (default `carter-bot`). First install only; see [Write operations](write-operations.md#setup) |
+| `--bot-name NAME` | Deprecated and ignored (prints a warning). See [Attribution](write-operations.md#attribution) |
 | `-q` / `-v` / `--debug` | Less or more output |
 
 The full list is in the [CLI reference](../reference/cli.md#carter-install).
@@ -83,8 +83,20 @@ uv tool install --force git+https://github.com/mauriciomem/carter-ai.git
 
 Re-running `carter install` is safe. It updates the agents and skills, copies any
 file it replaces to `~/.carter/backups/<timestamp>/`, and never overwrites your
-knowledge files, `~/.carter/config.toml`, or an `AGENTS.md` you edited. Skills that
-Carter no longer ships are removed unless you changed them.
+knowledge files or an `AGENTS.md` you edited. Skills that Carter no longer ships are
+removed unless you changed them.
+
+`~/.carter/config.toml` is created on a first install. An older (schema 1) file is
+migrated once to schema 2, explicitly and only by `carter install`: the original is copied
+to `~/.carter/config.toml.schema1.bak` first and never overwritten, your footer is kept,
+and the old `[git] signing_key` and a `carter-bot@` email are dropped. If the file can't
+be migrated (for example, invalid TOML), install says so and leaves it untouched.
+
+Carter never uses your signing key: it doesn't read `user.signingkey` or your SSH keys.
+
+If your global `~/.config/opencode/AGENTS.md` has your own edits, `carter install` can't
+update its commit rule. It prints the new rule and saves it to
+`~/.carter/upgrade-notes/<version>.md`; merge it by hand.
 
 If you use workspaces, run `carter update` in each one afterwards to pick up the new
 templates.

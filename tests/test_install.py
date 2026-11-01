@@ -11,9 +11,8 @@ import pytest
 from carter.config import generate_default_config
 from carter.install import components, files, mcp, paths
 from carter.install import uninstall as uninstall_mod
-from carter.install.components import _OPENCODE_AGENTS_MD
+from carter.install.components import _ATTRIBUTION_RULE, _OPENCODE_AGENTS_MD
 from carter.install.files import (
-    _get_template_vars,
     _install_file,
     _install_rendered_file,
     _sha256,
@@ -473,46 +472,6 @@ class TestInstallPrimitives:
         assert _install_rendered_file("hi\n", dst, manifest, tmp_path / "bk") == "unchanged"
         assert not (tmp_path / "bk").exists()
 
-    def test_template_vars_for_a_t1_identity(self, tmp_path: Path) -> None:
-        config = tmp_path / "config.toml"
-        config.write_text(
-            'schema = 2\n[identity]\nlogin = "llm-bot"\nid = 12345\n'
-            'email = "12345+llm-bot@users.noreply.github.com"\n'
-        )
-        assert _get_template_vars(config) == {
-            "{{BOT_NAME}}": "llm-bot",
-            "{{BOT_EMAIL}}": "12345+llm-bot@users.noreply.github.com",
-            "{{SIGNING_KEY}}": "",
-        }
-
-    def test_template_vars_at_t0_invent_no_email_and_no_key(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        result = _get_template_vars(tmp_path / "missing.toml")
-        assert result == {"{{BOT_NAME}}": "Carter", "{{BOT_EMAIL}}": "", "{{SIGNING_KEY}}": ""}
-
-    @pytest.mark.parametrize(
-        "text",
-        [
-            '[attribution]\nname = "acme-bot"\nemail = "bot@acme.test"\n'
-            '[git]\nsigning_key = "~/.ssh/k.pub"\n',  # schema 1
-            "schema = 2\n[identity\n",  # broken
-        ],
-        ids=["schema1", "broken"],
-    )
-    def test_legacy_or_broken_config_never_feeds_the_template(
-        self, tmp_path: Path, text: str
-    ) -> None:
-        config = tmp_path / "config.toml"
-        config.write_text(text)
-        result = _get_template_vars(config)
-        assert "k.pub" not in str(result) and "bot@acme.test" not in str(result)
-        assert result["{{SIGNING_KEY}}"] == ""
-
-    def test_files_module_has_no_way_to_read_the_humans_key(self) -> None:
-        assert not hasattr(files, "git_signing_key")
-        assert "signingkey" not in Path(files.__file__).read_text(encoding="utf-8").lower()
-
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Hashing
@@ -728,18 +687,32 @@ class TestCarterOpsSkill:
         assert "APPROVE" in content
         assert "git commit" in content
 
-    def test_carter_ops_skill_template_substitution(self, base_dir: Path) -> None:
-        """carter-ops skill should have template vars substituted at install time."""
-        manifest = {"files": [], "file_hashes": {}}
-        backup = base_dir / "backup"
-        install.install_skills(base_dir, manifest, backup)
+    def test_carter_ops_skill_is_installed_verbatim(self, base_dir: Path) -> None:
+        """No install-time substitution: runtime values come from `carter ops config --emit`."""
+        install.install_skills(base_dir, {"files": [], "file_hashes": {}}, base_dir / "backup")
 
-        skill_md = base_dir / "opencode" / "skills" / "carter-ops" / "SKILL.md"
-        content = skill_md.read_text()
-        # Template placeholders should be replaced with actual values
-        assert "{{BOT_NAME}}" not in content
-        assert "{{BOT_EMAIL}}" not in content
-        assert "{{SIGNING_KEY}}" not in content
+        installed = base_dir / "opencode" / "skills" / "carter-ops" / "SKILL.md"
+        source = install.REPO_ROOT / "skills" / "carter-ops" / "SKILL.md"
+        assert installed.read_bytes() == source.read_bytes()
+        assert "{{" not in installed.read_text()
+
+    def test_a_configured_identity_is_not_baked_into_the_skill(self, base_dir: Path) -> None:
+        config = base_dir / "carter" / "config.toml"
+        config.parent.mkdir(parents=True)
+        config.write_text(
+            'schema = 2\n[identity]\nlogin = "llm-bot"\nid = 12345\n'
+            'email = "12345+llm-bot@users.noreply.github.com"\n'
+            '[attribution]\nfooter = "BAKED-FOOTER-MARK"\n'
+        )
+        install.install_skills(base_dir, {"files": [], "file_hashes": {}}, base_dir / "backup")
+
+        skill = (base_dir / "opencode" / "skills" / "carter-ops" / "SKILL.md").read_text()
+        for value in ("llm-bot", "12345", "BAKED-FOOTER-MARK", "users.noreply.github.com"):
+            assert value not in skill
+
+    def test_files_module_has_no_templating(self) -> None:
+        assert not hasattr(files, "_get_template_vars")
+        assert not hasattr(files, "_install_templated_file")
 
     def test_humans_signing_key_is_not_substituted_into_the_skill(self, base_dir: Path) -> None:
         import os
@@ -834,8 +807,7 @@ class TestOpenCodeRulesUpgrade:
     def test_git_language_section_has_core_rules(self) -> None:
         """The global AGENTS.md Git & Language section keeps its core rules."""
         section = _OPENCODE_AGENTS_MD.split("## Git & Language\n", 1)[1].split("\n## ", 1)[0]
-        assert "Never pass `--author`" in section
-        assert "Co-authored-by:" in section
+        assert "`--author`" in section and "coauthor_trailer" in section
         assert "English" in section
         assert "docs_language" in section
 
@@ -854,6 +826,149 @@ class TestOpenCodeRulesUpgrade:
         out = capsys.readouterr().out
         assert "user-modified" in out
         assert any("user-modified" in note for note in manifest.get("notes", []))
+
+
+# The global Git & Language rule as shipped up to v0.16.x (the "known previous version").
+_V016_GIT_LANGUAGE = (
+    "\n## Git & Language\n"
+    "- You (the user) are always the commit author and sign with your own key. Never"
+    " pass `--author`; credit Carter only with a trailer:"
+    " `Co-authored-by: <name> <email>` from `[attribution]` in"
+    " `~/.carter/config.toml` (default `carter-bot <carter-bot@users.noreply.github.com>`).\n"
+    "- Everything that lands in a repository or leaves the workspace is written in"
+    " English, whatever language the conversation uses: commit messages, branch names,"
+    " code comments, repo docs, PR/issue titles and bodies, review comments, release"
+    " notes, Jira and Slack text.\n"
+    "- Carter's internal docs (ADRs, RFCs, `.carter/` plans/knowledge/checkpoints,"
+    " memories) use the workspace `docs_language` from `.carter/carter.yaml`; without"
+    " one, English unless the user asks for another language.\n"
+    "- Talk to the user in their own language.\n"
+)
+
+
+def _v016_text() -> str:
+    head = _OPENCODE_AGENTS_MD.split("\n## Git & Language", 1)[0]
+    return head + _V016_GIT_LANGUAGE
+
+
+class TestGlobalAttributionRule:
+    """The global AGENTS.md carries the tier-based rule (plan 002 step 17)."""
+
+    def _install(self, base_dir: Path, manifest: dict | None = None, previous=None):
+        manifest = manifest if manifest is not None else {"files": [], "file_hashes": {}}
+        install.install_opencode_rules(base_dir, manifest, previous)
+        return manifest
+
+    def test_fresh_install_has_the_new_rule_and_not_the_old_one(self, base_dir: Path) -> None:
+        self._install(base_dir)
+        text = (base_dir / "opencode" / "AGENTS.md").read_text()
+        assert _ATTRIBUTION_RULE in text
+        for needed in ("coauthor_trailer", "carter ops config --emit", "Signed-off-by"):
+            assert needed in text
+        for stale in ("sign with your own key", "carter-bot", "[attribution]"):
+            assert stale not in text
+
+    def test_rule_names_every_forbidden_flag_and_the_refusal(self) -> None:
+        for flag in ("--author", "--no-verify", "`-s`", "`-S`"):
+            assert flag in _ATTRIBUTION_RULE, flag
+        assert "`refused`" in _ATTRIBUTION_RULE and "stop" in _ATTRIBUTION_RULE
+
+    def test_rule_is_short(self) -> None:
+        assert len(_ATTRIBUTION_RULE) <= 600
+
+    def test_unmodified_v016_file_is_upgraded_in_place(self, base_dir: Path) -> None:
+        agents_md = base_dir / "opencode" / "AGENTS.md"
+        agents_md.parent.mkdir(parents=True)
+        agents_md.write_text(_v016_text())
+
+        manifest = self._install(base_dir)
+
+        assert agents_md.read_text() == _OPENCODE_AGENTS_MD
+        assert str(agents_md) in manifest["files"]
+        assert not (base_dir / "carter" / "upgrade-notes").exists()
+
+    def test_file_matching_the_recorded_manifest_hash_is_upgraded(self, base_dir: Path) -> None:
+        from carter.install.ownership import sha256_bytes
+
+        agents_md = base_dir / "opencode" / "AGENTS.md"
+        agents_md.parent.mkdir(parents=True)
+        older = _OPENCODE_AGENTS_MD.replace("Be concise and clear", "Be brief and clear")
+        agents_md.write_text(older)
+        previous = {"file_hashes": {str(agents_md): sha256_bytes(older.encode())}}
+
+        self._install(base_dir, previous=previous)
+
+        assert agents_md.read_text() == _OPENCODE_AGENTS_MD
+
+    def test_user_modified_file_is_kept_and_the_note_is_printed_and_written(
+        self, base_dir: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        from carter import __version__
+
+        agents_md = base_dir / "opencode" / "AGENTS.md"
+        agents_md.parent.mkdir(parents=True)
+        custom = _v016_text() + "\n## My own rules\n"
+        agents_md.write_text(custom)
+
+        self._install(base_dir)
+
+        assert agents_md.read_text() == custom
+        out = capsys.readouterr().out
+        assert _ATTRIBUTION_RULE in out  # printed
+        note = base_dir / "carter" / "upgrade-notes" / f"{__version__}.md"
+        assert note.is_file()
+        assert _ATTRIBUTION_RULE in note.read_text()  # the same single constant
+        assert (note.stat().st_mode & 0o777) == 0o644
+
+    def test_second_install_does_not_duplicate_the_note(
+        self, base_dir: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        agents_md = base_dir / "opencode" / "AGENTS.md"
+        agents_md.parent.mkdir(parents=True)
+        agents_md.write_text(_v016_text() + "\n## Mine\n")
+        self._install(base_dir)
+        notes = base_dir / "carter" / "upgrade-notes"
+        (first,) = list(notes.iterdir())
+        before = (first.read_bytes(), first.stat().st_mtime_ns)
+        capsys.readouterr()
+
+        self._install(base_dir)
+
+        assert [p.name for p in notes.iterdir()] == [first.name]
+        assert (first.read_bytes(), first.stat().st_mtime_ns) == before
+        second_out = capsys.readouterr().out
+        assert _ATTRIBUTION_RULE not in second_out  # not repeated, only pointed to
+        assert first.name in second_out
+
+    def test_an_unmodified_current_file_needs_no_note(self, base_dir: Path) -> None:
+        agents_md = base_dir / "opencode" / "AGENTS.md"
+        agents_md.parent.mkdir(parents=True)
+        agents_md.write_text(_OPENCODE_AGENTS_MD)
+        self._install(base_dir)
+        assert not (base_dir / "carter" / "upgrade-notes").exists()
+
+    def test_note_write_is_atomic_and_never_blocks_the_install(
+        self, base_dir: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        import os
+
+        agents_md = base_dir / "opencode" / "AGENTS.md"
+        agents_md.parent.mkdir(parents=True)
+        agents_md.write_text(_v016_text() + "\n## Mine\n")
+        monkeypatch.setattr(os, "replace", lambda *a, **k: (_ for _ in ()).throw(OSError("x")))
+
+        self._install(base_dir)  # must not raise
+
+        notes = base_dir / "carter" / "upgrade-notes"
+        assert not notes.exists() or list(notes.iterdir()) == []  # no half-written file
+        assert _ATTRIBUTION_RULE in capsys.readouterr().out  # still printed
+
+    def test_the_note_is_not_listed_in_the_manifest(self, base_dir: Path) -> None:
+        agents_md = base_dir / "opencode" / "AGENTS.md"
+        agents_md.parent.mkdir(parents=True)
+        agents_md.write_text("# mine\n")
+        manifest = self._install(base_dir)
+        assert not any("upgrade-notes" in f for f in manifest["files"])
 
 
 class TestOpsOneLiner:

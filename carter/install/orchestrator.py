@@ -85,7 +85,7 @@ def run(
     agent_stats = install_agents(base_dir, manifest, backup_root)
     skill_stats = install_skills(base_dir, manifest, backup_root)
     remove_retired_skills(base_dir, existing, backup_root)
-    install_opencode_rules(base_dir, manifest)
+    install_opencode_rules(base_dir, manifest, existing)
     knowledge_count = install_knowledge(base_dir, manifest, backup_root)
     memory_count = install_memories(base_dir, manifest)
     ops_created = install_ops(base_dir, manifest)

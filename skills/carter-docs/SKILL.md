@@ -8,7 +8,7 @@ Author and maintain repository documentation that developers actually use, and
 detect documentation that has gone stale or is missing. Structure content by the
 reader's need, not by the shape of the code.
 
-**Language:** repository documentation (READMEs, changelogs, API docs, guides) is always English. Commits keep the user as author with a `Co-authored-by:` trailer.
+**Language:** repository documentation (READMEs, changelogs, API docs, guides) is always English. Commits keep the user as author (never `--author`); the trailer is the `coauthor_trailer` from `carter ops config --emit` (see `carter-ops`).
 </objective>
 
 <delegation>

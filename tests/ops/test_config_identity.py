@@ -80,9 +80,7 @@ class TestNoHumanKey:
         assert offenders == {}
 
     def test_the_carter_bot_default_email_no_longer_exists(self):
-        # components.py still quotes it in the global AGENTS.md text; step 17 rewrites that
-        # text and must then drop this allowance.
-        allowed = {"carter/install/components.py"}
+        allowed: set[str] = set()  # the global AGENTS.md text no longer quotes it (step 17)
         offenders = [
             str(p.relative_to(REPO))
             for p in (REPO / "carter").rglob("*")

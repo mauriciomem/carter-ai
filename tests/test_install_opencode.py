@@ -351,3 +351,28 @@ class TestBotNameFlagIsDeprecated:
     def test_help_marks_the_flag_deprecated(self) -> None:
         result = CliRunner().invoke(main, ["install", "--help"])
         assert "deprecated" in result.output.lower()
+
+
+class TestUpgradeNoteThroughTheCli:
+    def test_install_with_a_modified_global_file_prints_and_writes_the_note(
+        self, fake_opencode, base_dir: Path
+    ) -> None:
+        from carter import __version__
+        from carter.install.components import _ATTRIBUTION_RULE
+
+        fake_opencode("opencode v2.1.4")
+        agents_md = base_dir / "opencode" / "AGENTS.md"
+        agents_md.parent.mkdir(parents=True)
+        agents_md.write_text("# my own global rules\n")
+
+        result = _install(base_dir)
+
+        assert result.exit_code == 0, result.output
+        assert _ATTRIBUTION_RULE in result.output
+        assert agents_md.read_text() == "# my own global rules\n"
+        assert (base_dir / "carter" / "upgrade-notes" / f"{__version__}.md").is_file()
+
+    def test_a_fresh_install_writes_no_note(self, fake_opencode, base_dir: Path) -> None:
+        fake_opencode("opencode v2.1.4")
+        assert _install(base_dir).exit_code == 0
+        assert not (base_dir / "carter" / "upgrade-notes").exists()
