@@ -64,6 +64,14 @@ def main() -> None:
     default=None,
     help="Override install base directory (for testing).",
 )
+@click.option(
+    "--yes",
+    "-y",
+    "assume_yes",
+    is_flag=True,
+    help="Also install the policy guards without asking. Without a terminal and without "
+    "--yes they are skipped with a notice.",
+)
 @click.option("-q", "--quiet", is_flag=True, help="Errors only.")
 @click.option("-v", "--verbose", is_flag=True, help="Detailed output.")
 @click.option("--debug", is_flag=True, help="Debug output.")
@@ -72,11 +80,15 @@ def install(
     mcp_servers: str | None,
     bot_name: str | None,
     base_dir: Path | None,
+    assume_yes: bool,
     quiet: bool,
     verbose: bool,
     debug: bool,
 ) -> None:
-    """Install Carter agents, skills, and MCP servers for OpenCode (>= 2.1)."""
+    """Install Carter agents, skills, and MCP servers for OpenCode (>= 2.1).
+
+    Then offers the policy guards (`carter guard install`). A guard problem exits 1 but
+    never undoes the rest."""
     from carter.install.mcp import MCP_SERVERS
     from carter.install.orchestrator import run as run_install
     from carter.install.prereqs import PrerequisiteError
@@ -110,14 +122,18 @@ def install(
             )
 
     try:
-        run_install(
+        guard_code = run_install(
             mcp=mcp,
             base_dir=base_dir,
             verbosity=verbosity,
             mcp_servers=servers,
+            guards=True,
+            assume_yes=assume_yes,
         )
     except PrerequisiteError as exc:
         raise click.ClickException(f"{exc} Nothing was installed.") from exc
+    if guard_code:
+        raise SystemExit(guard_code)
 
 
 @main.command()
@@ -127,11 +143,16 @@ def install(
     default=None,
     help="Override install base directory (for testing).",
 )
-def uninstall(base_dir: Path | None) -> None:
-    """Remove the Carter OpenCode install."""
+@click.option("--keep-guards", is_flag=True, help="Leave policies, include line and guard state.")
+@click.option("--yes", "-y", "assume_yes", is_flag=True, help="Remove the guards without asking.")
+def uninstall(base_dir: Path | None, keep_guards: bool, assume_yes: bool) -> None:
+    """Remove the Carter OpenCode install and, unless --keep-guards, the policy guards
+    (only where unchanged since Carter wrote them; kept without a terminal or --yes)."""
     from carter.install.uninstall import uninstall as run_uninstall
 
-    run_uninstall(base_dir)
+    code = run_uninstall(base_dir, keep_guards=keep_guards, assume_yes=assume_yes)
+    if code:
+        raise SystemExit(code)
 
 
 @main.command()
@@ -283,6 +304,39 @@ def _pin_identity_policy(target: Path, config: dict, *, dry_run: bool, assume_ye
     click.echo("Pinned into ~/.carter/config.toml.")
 
 
+def _refresh_policies(*, dry_run: bool, assume_yes: bool) -> None:
+    """D52 (RFC-0007 C.6.2): turn ``allow_project_opencode_edit`` into policy statements.
+
+    Only where policies were installed with consent; only from a human's shell. Everything
+    is skipped, with a note, if ``config.toml`` cannot be read: ``update`` never fails here."""
+    from datetime import datetime
+
+    from carter.guard.optout import refresh_from_update
+    from carter.identity import ConfigError, load_identity
+    from carter.install.paths import backups_dir, guard_state_path
+    from carter.terminal import is_agent_shell
+
+    try:
+        cfg = load_identity()
+    except ConfigError:
+        click.echo("ℹ  config.toml is invalid; D52 opt-outs not refreshed.")
+        return
+    stamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%S")
+    refresh_from_update(
+        None,
+        guard_state_path(None),
+        cfg,
+        home=str(Path.home()),
+        backup_root=backups_dir(None) / stamp,
+        assume_yes=assume_yes,
+        dry_run=dry_run,
+        interactive=_stdin_is_tty(),
+        agent=is_agent_shell(),
+        confirm=click.confirm,
+        echo=click.echo,
+    )
+
+
 def _note_stale_workspace_rules(target: Path, config: dict, env: Environment) -> None:
     """Workspace-level upgrade note: ``AGENTS.md`` is never rewritten, so say so when its
     commit rule predates the tier-based one. (The global note belongs to ``carter install``.)"""
@@ -324,6 +378,7 @@ def update(target_dir: str, dry_run: bool, assume_yes: bool) -> None:
     for warning in identity_warnings(config):
         click.echo(f"⚠  {warning}")
     _pin_identity_policy(target, config, dry_run=dry_run, assume_yes=assume_yes)
+    _refresh_policies(dry_run=dry_run, assume_yes=assume_yes)
 
     env = create_env()
 
@@ -545,6 +600,15 @@ def ops(args: tuple[str, ...]) -> None:
     from carter.ops.carter_ops import main as ops_main
 
     raise SystemExit(ops_main(list(args)))
+
+
+def _register_guard() -> None:
+    from carter.guard.cli import guard
+
+    main.add_command(guard)
+
+
+_register_guard()
 
 
 if __name__ == "__main__":

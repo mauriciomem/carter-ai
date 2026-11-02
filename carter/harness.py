@@ -227,3 +227,103 @@ def validate_agents(
         names = ", ".join(mismatched)
         errors.append(f"{STALE_HINT} (affects {names}; {tries} attempts made)")
     return HarnessResult("fail", errors)
+
+
+class DebugConfigError(Exception):
+    """``opencode debug config`` could not be read or parsed.
+
+    The message never carries OpenCode's output: the resolved config holds provider
+    settings (RFC-0007 App C.6.3), so only exit codes and parser positions are reported."""
+
+
+def read_debug_config(
+    *,
+    runner: Callable[..., Any] = subprocess.run,
+    which: Callable[[str], str | None] | None = None,
+    home: Path | None = None,
+    timeout: float = DEFAULT_TIMEOUT,
+) -> dict[str, Any]:
+    """Run ``opencode debug config`` (cwd ``$HOME``) and return the parsed JSON.
+
+    The result is for in-memory comparison only: the caller must not log it or write it
+    anywhere (it contains provider settings). Raises ``DebugConfigError``."""
+    opencode = (which or _which)("opencode")
+    if not opencode:
+        raise DebugConfigError("opencode not found on PATH")
+    try:
+        proc = runner(
+            [opencode, "debug", "config"],
+            cwd=home if home is not None else Path.home(),
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+            stdin=subprocess.DEVNULL,
+        )
+    except subprocess.TimeoutExpired as exc:
+        raise DebugConfigError(f"`opencode debug config` timed out after {timeout:g}s") from exc
+    except OSError as exc:
+        raise DebugConfigError(
+            f"could not run `opencode debug config` ({type(exc).__name__})"
+        ) from exc
+    if proc.returncode != 0:
+        raise DebugConfigError(f"`opencode debug config` exited {proc.returncode}")
+    try:
+        data = json.loads(proc.stdout or "")
+    except json.JSONDecodeError as exc:
+        raise DebugConfigError(
+            f"`opencode debug config` printed unparsable output ({exc.msg} at {exc.pos})"
+        ) from None
+    if not isinstance(data, dict):
+        raise DebugConfigError(
+            "`opencode debug config` printed unparsable output (expected an object)"
+        )
+    return data
+
+
+def provider_ids(debug_config: Mapping[str, Any]) -> set[str]:
+    """Provider ids in a resolved config (V2 ``providers``; V1's ``provider`` is accepted)."""
+    ids: set[str] = set()
+    for key in ("providers", "provider"):
+        block = debug_config.get(key)
+        if isinstance(block, dict):
+            ids |= {str(k) for k in block}
+    return ids
+
+
+def policy_statements(debug_config: Mapping[str, Any]) -> list[dict[str, Any]]:
+    """The ``{action, resource, effect}`` statements OpenCode resolved, in order.
+
+    Reads ``policies`` and the older ``experimental.policies`` spelling."""
+    found: list[dict[str, Any]] = []
+    experimental = debug_config.get("experimental")
+    sources = [
+        debug_config.get("policies"),
+        experimental.get("policies") if isinstance(experimental, dict) else None,
+    ]
+    for block in sources:
+        if isinstance(block, list):
+            found += [s for s in block if isinstance(s, dict)]
+    return found
+
+
+def read_agent_ids(
+    *,
+    runner: Callable[..., Any] = subprocess.run,
+    which: Callable[[str], str | None] | None = None,
+    home: Path | None = None,
+    timeout: float = DEFAULT_TIMEOUT,
+) -> list[str]:
+    """Ids of every agent OpenCode knows (`opencode debug agents`, cwd ``$HOME``), in order.
+
+    Used to find the built-in agents (`build`, `plan`, ...) that need Carter's per-agent
+    denies. Raises ``DebugConfigError`` (same typed failure as the config reader)."""
+    opencode = (which or _which)("opencode")
+    if not opencode:
+        raise DebugConfigError("opencode not found on PATH")
+    try:
+        agents = _call(opencode, home if home is not None else Path.home(), runner, timeout)
+    except subprocess.TimeoutExpired as exc:
+        raise DebugConfigError(f"`opencode debug agents` timed out after {timeout:g}s") from exc
+    except _CallError as exc:
+        raise DebugConfigError(str(exc)) from exc
+    return [str(a["id"]) for a in agents if isinstance(a.get("id"), str)]

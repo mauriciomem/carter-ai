@@ -12,8 +12,10 @@ from carter.install.mcp import global_config_files, remove_carter_servers
 from carter.install.ownership import _hash_matches, _within
 from carter.install.paths import (
     _opencode_base,
-    knowledge_dir,
     manifest_path,
+)
+from carter.install.paths import (
+    managed_roots as _managed_roots,
 )
 
 
@@ -54,12 +56,21 @@ def _remove_if_owned(
         parent = parent.parent
 
 
-def uninstall(base_dir: Path | None) -> None:
-    """Remove the OpenCode install."""
+def uninstall(base_dir: Path | None, *, keep_guards: bool = False, assume_yes: bool = False) -> int:
+    """Remove the OpenCode install and, unless ``keep_guards``, the guards (policies,
+    per-agent denies, git config, guard state) that ``carter guard install`` wrote.
+
+    The guards go first (policies before files). Returns 1 if removing the guards failed;
+    everything else is still removed, as ``carter install`` never aborts on its guard step."""
     log_step("Uninstalling Carter...")
+    guard_code = 0
+    if not keep_guards:
+        from carter.guard.wiring import uninstall_guards
+
+        guard_code = uninstall_guards(base_dir, assume_yes=assume_yes)
     manifest = read_manifest(base_dir)
     opencode_base = _opencode_base(base_dir)
-    managed_roots = (opencode_base.resolve(), knowledge_dir(base_dir).resolve())
+    managed_roots = _managed_roots(base_dir)
 
     if manifest:
         hashes: dict[str, str] = manifest.get("file_hashes") or {}
@@ -90,3 +101,4 @@ def uninstall(base_dir: Path | None) -> None:
         log_ok("Removed manifest")
 
     _log(f"\n{green('✓')} {bold('Uninstall complete')}")
+    return guard_code

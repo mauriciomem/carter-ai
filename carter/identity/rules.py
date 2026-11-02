@@ -150,6 +150,23 @@ def pollution_hits(env: Mapping[str, str], *, home: str) -> list[str]:
     return hits
 
 
+STRONG_AGENT_SIGNAL = "CARTER_AGENT_SHELL"
+
+
+def is_agent(env: Mapping[str, str]) -> bool:
+    """AD1 (App C.1): is ``env`` an agent shell? The Python mirror of ``carter-guard``'s check.
+
+    Agent iff ``CARTER_AGENT_SHELL=1``, or any other ``agent_signals`` name is present
+    and no ``human_signals`` name is. Names come from the data file, so adding one there
+    changes this too. No positive "broker" marker is honoured (any agent shell could forge
+    it). Presence is what counts, never the value, except for the strong marker."""
+    r = load_rules()
+    if env.get(STRONG_AGENT_SIGNAL) == "1":
+        return True
+    weak = (name for name in r.agent_signals if name != STRONG_AGENT_SIGNAL)
+    return any(name in env for name in weak) and not any(n in env for n in r.human_signals)
+
+
 def warn_hits(env: Mapping[str, str]) -> list[str]:
     """Variables that only warrant a ``check --host`` WARN (``GH_TOKEN``/``GITHUB_TOKEN``)."""
     return [name for name in load_rules().warn_only if name in env]

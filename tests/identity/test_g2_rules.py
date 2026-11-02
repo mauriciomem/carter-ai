@@ -63,9 +63,9 @@ class TestSchema:
         for marker in raw()["isolation_markers"]:
             assert set(marker) == {"name", "match", "value"}
 
-    def test_reserved_keys_are_empty_and_named(self):
+    def test_reserved_keys_are_empty_and_named(self):  # 1G filled gh_read_allowlist and policy_set
         data = raw()
-        assert data["reserved"] == ["isolation_vars", "gh_read_allowlist", "policy_set"]
+        assert data["reserved"] == ["isolation_vars"]
         for key in data["reserved"]:
             assert data[key] == [], f"{key} is reserved for a later slice"
 

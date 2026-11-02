@@ -1,0 +1,16 @@
+// Synthetic. Only the SHAPE of a real V2 global OpenCode config (plugins, providers, a
+// per-agent model override, comments): no real names, hosts or keys.
+{
+  "$schema": "https://opencode.ai/config.json",
+  "plugins": ["example-plugin"],
+  "providers": {
+    // an internal gateway, key read from the environment
+    "example-gateway": {
+      "package": "aisdk:@ai-sdk/openai-compatible",
+      "settings": { "baseURL": "https://gateway.example.invalid/v1", "apiKey": "{env:EXAMPLE_KEY}" }
+    }
+  },
+  "agents": {
+    "title": { "model": "example-gateway/small-model" }
+  }
+}

@@ -5,8 +5,9 @@ This pins what the plan-003 step-2 spike found on git 2.56, so step 13 (Carter's
 ``~/.carter/gitconfig`` behind one include line) can rely on it. Everything runs in the
 hermetic fixture home: ``GIT_CONFIG_GLOBAL`` points at a scratch file, never the real one.
 
-``hook_scopes`` is the behavioural detection step 13 reuses: do not parse versions, ask
-git where it read the hook from.
+``hook_scopes`` is the behavioural detection; since plan 003 step 13 it lives in
+``carter.guard.gitconfig`` (the production probe) and this file imports it: do not parse
+versions, ask git where it read the hook from.
 """
 
 from __future__ import annotations
@@ -17,6 +18,8 @@ import subprocess
 from pathlib import Path
 
 import pytest
+
+from carter.guard.gitconfig import hook_scopes
 
 HOOK = "carter-guard-commit-msg"
 
@@ -35,19 +38,6 @@ pytestmark = pytest.mark.skipif(
 
 def git(*args: str, cwd: Path | None = None) -> subprocess.CompletedProcess[str]:
     return subprocess.run(["git", *args], cwd=cwd, capture_output=True, text=True)
-
-
-def hook_scopes(cwd: Path, event: str = "commit-msg") -> dict[str, str]:
-    """Map hook name -> scope as git reports it (``global``, ``local``, ``command``...).
-
-    Disabled hooks are listed too (git prints ``<scope>\\tdisabled\\t<name>``).
-    """
-    proc = git("hook", "list", "--show-scope", event, cwd=cwd)
-    scopes: dict[str, str] = {}
-    for line in proc.stdout.splitlines():
-        parts = line.split("\t")
-        scopes[parts[-1]] = parts[0]
-    return scopes
 
 
 def fragment(marker: Path, *, enabled: bool = True, tier: str = "from-include") -> str:

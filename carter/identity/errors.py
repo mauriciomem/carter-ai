@@ -27,6 +27,10 @@ E_CONFIG = "E-CONFIG"
 E_ROLE_B_TIER = "E-ROLE-B-TIER"
 E_TIER_REQUIRED = "E-TIER-REQUIRED"
 E_COMMIT_T1 = "E-COMMIT-T1"
+# Slice 1G (plan 003). The last two are not in Appendix B; the architect added them (F10).
+E_POLICIES_MISSING = "E-POLICIES-MISSING"
+E_HUMAN_TERMINAL = "E-HUMAN-TERMINAL"
+E_STATE_INVALID = "E-STATE-INVALID"
 
 
 @dataclass(frozen=True)

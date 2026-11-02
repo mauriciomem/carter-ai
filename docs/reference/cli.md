@@ -31,6 +31,7 @@ Install Carter for OpenCode 2.1 or newer. Writes to `~/.config/opencode/` and
 | `--mcp-servers TEXT` | Comma-separated subset: `github`, `terraform`, `atlassian`. Default: all. Only with `--mcp` |
 | `--bot-name TEXT` | Deprecated and ignored: prints a warning. The co-author now comes from the LLM identity in `~/.carter/config.toml` (see [Attribution](../guides/write-operations.md#attribution)) |
 | `--base-dir DIRECTORY` | Install into another base directory (for testing) |
+| `-y`, `--yes` | Also install the policy guards without asking. Without a terminal and without `--yes` the guards are skipped with a notice |
 | `-q`, `--quiet` | Errors only |
 | `-v`, `--verbose` | Detailed output |
 | `--debug` | Debug output |
@@ -50,6 +51,12 @@ files, `carter-*` MCP servers and the install manifest. Edited files, memories,
 | Option | Description |
 |--------|-------------|
 | `--base-dir DIRECTORY` | Uninstall from another base directory (for testing) |
+| `--keep-guards` | Leave the policies, per-agent denies, include line and guard state in place |
+| `-y`, `--yes` | Remove the guards without asking. Without a terminal and without `--yes` they are kept |
+
+Unless `--keep-guards` is given, uninstall first removes the policy guards it installed,
+only where it is unchanged since (anything you edited is kept and reported). A guard
+problem is printed and makes the exit code 1 but never stops the rest of the removal.
 
 ## carter init
 

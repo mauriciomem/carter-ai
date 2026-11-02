@@ -9,6 +9,12 @@ from typing import Any
 
 import yaml
 
+from carter.identity.policyset import (
+    agent_mcp_denies,
+    agent_permission_denies,
+    agent_permission_exempt,
+)
+
 # `identity` is optional policy (role, require_tier), not a required key: a workspace
 # with no policy, or one that dropped the deprecated keys, has no block at all.
 REQUIRED_KEYS = {"version", "workspace", "agents"}
@@ -341,11 +347,14 @@ RISK_TAXONOMY: dict[str, dict[str, str]] = {
 
 # Per-agent allowlist: agent -> {category: True}. A category absent
 # for an agent is denied for that agent (deny-by-default). dict-of-dicts so user
-# tweaks deep-merge. Encodes the single-pusher invariant structurally: devops is the
-# sole holder of `remote-write` and `dangerous`. The narrator is first-class —
-# {read, local-write} like pm/engineer — and reaches `remote-write` only by handing
-# off to devops, never by holding the category. (The redaction pass before that
-# handoff is prompt-level guidance, not harness-enforced.)
+# tweaks deep-merge. Encodes the sole-holder invariant structurally: devops is the
+# sole holder of `remote-write` (Jira/Slack/vault, `ask`) and `dangerous`. No agent pushes
+# or writes to GitHub from its shell (RFC-0007 D31/C1): those verbs are denied for
+# everyone, including devops, and devops is the sole caller of the broker tools
+# `carter_push`/`carter_pr` (slice B); see `_BASH_COMMANDS["github-write"]`.
+# The narrator is first-class — {read, local-write} like pm/engineer — and reaches
+# `remote-write` only by handing off to devops, never by holding the category. (The
+# redaction pass before that handoff is prompt-level guidance, not harness-enforced.)
 AGENT_ALLOWLIST: dict[str, dict[str, bool]] = {
     "maestro": {"read": True},
     "architect": {"read": True},
@@ -466,21 +475,15 @@ _OPENCODE_GATE: dict[str, str] = {
 # Representative shell commands per shell-risk category. V2 glob form: a pattern
 # ending in ` *` also matches the bare command (`git push *` matches `git push`).
 # A representative list, not a sandbox: anything unlisted falls to the agent's
-# broad `shell` rule. `gh api *` is denied wholesale (incl. read-only calls) to
-# non-devops agents; `vault read *` is a secret read, hence remote-write.
+# broad `shell` rule. `vault read *` is a secret read, hence remote-write.
+#
+# `github-write` is not a risk category and has no allowlist entry: every GitHub write
+# is human-only (RFC-0007 §4.5, D31), so these are `deny` for EVERY agent, devops
+# included. It comes last so no earlier rule (e.g. `git push --force *` under
+# `dangerous`) can re-open a verb: last match wins. devops hands off (A+ handoff file)
+# or, in slice B, calls the broker tool; it never pushes from its shell.
 _BASH_COMMANDS: dict[str, tuple[str, ...]] = {
     "remote-write": (
-        "git push *",
-        "gh pr create *",
-        "gh pr merge *",
-        "gh pr comment *",
-        "gh pr review *",
-        "gh pr edit *",
-        "gh issue create *",
-        "gh issue comment *",
-        "gh issue edit *",
-        "gh release *",
-        "gh api *",
         "vault read *",
         "vault write *",
     ),
@@ -493,7 +496,23 @@ _BASH_COMMANDS: dict[str, tuple[str, ...]] = {
         "git reset --hard *",
         "git push --force *",
     ),
+    "github-write": (
+        "git push *",
+        "gh pr create *",
+        "gh pr merge *",
+        "gh pr comment *",
+        "gh pr review *",
+        "gh pr edit *",
+        "gh issue create *",
+        "gh issue comment *",
+        "gh issue edit *",
+        "gh release *",
+        "gh api *",
+    ),
 }
+
+# Categories in `_BASH_COMMANDS` that are denied outright instead of gated.
+_ALWAYS_DENY: frozenset[str] = frozenset({"github-write"})
 
 # Actions every agent may use without prompting (step 2 of `permission_rules`).
 _DISCOVERY_ACTIONS: tuple[str, ...] = ("read", "glob", "grep", "skill", "question")
@@ -518,6 +537,19 @@ def _gates_for(
     return {cat: overrides.get(cat, RISK_TAXONOMY[cat][level]) for cat in allowed}
 
 
+def _broker_denies(role: str) -> list[Rule]:
+    """Per-agent denies of the broker tools (D46) and, for roles that do not need it, of the
+    GitHub MCP tools (C14). Data comes from ``g2_rules.json``. They are agent permissions,
+    never global policies: devops must stay able to call ``carter_push``/``carter_pr``."""
+    rules: list[Rule] = []
+    if role not in agent_permission_exempt():
+        rules += [_rule(tool, "*", "deny") for tool in agent_permission_denies()]
+    mcp_action, mcp_roles = agent_mcp_denies()
+    if role in mcp_roles:
+        rules.append(_rule(mcp_action, "*", "deny"))
+    return rules
+
+
 def permission_rules(config: dict[str, Any], role: str) -> list[Rule]:
     """The ordered V2 ``permissions:`` rules for ``role`` (last match wins).
 
@@ -527,7 +559,10 @@ def permission_rules(config: dict[str, Any], role: str) -> list[Rule]:
     4. Carter state under ``~/.carter``: readable by all, memories editable by
        ``local-write`` holders.
     5. ``subagent * → deny``; the maestro alone then allows ``carter-*``.
-    6. Category rules from the allowlist x gates; ``gate`` emitted as ``ask``.
+       Then the per-agent broker denies (``carter_push``/``carter_pr``, every role but
+       devops) and the GitHub-MCP deny for roles that do not need it (see ``_broker_denies``).
+    6. Category rules from the allowlist x gates; ``gate`` emitted as ``ask``. The
+       ``github-write`` shell verbs are denied for every role, last.
     Anything else (MCP tools, websearch, execute) falls to the baseline ask.
     """
     policy = config.get("policy") or {}
@@ -552,10 +587,14 @@ def permission_rules(config: dict[str, Any], role: str) -> list[Rule]:
     rules.append(_rule("subagent", "*", "deny"))
     if role == PRIMARY_ROLE:
         rules.append(_rule("subagent", "carter-*", "allow"))
+    rules += _broker_denies(role)
     local = "allow" if writes else "ask"
     rules += [_rule(action, "*", local) for action in ("edit", "shell", "webfetch")]
     for cat, commands in _BASH_COMMANDS.items():
-        effect = _OPENCODE_GATE[gates[cat]] if cat in allowed else "deny"
+        if cat in _ALWAYS_DENY:
+            effect = "deny"
+        else:
+            effect = _OPENCODE_GATE[gates[cat]] if cat in allowed else "deny"
         rules += [_rule("shell", cmd, effect) for cmd in commands]
     return rules
 

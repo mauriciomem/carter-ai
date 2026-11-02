@@ -14,6 +14,7 @@ from pathlib import Path
 
 import pytest
 
+from carter.identity.rules import load_rules
 from host_guard import (
     NetworkBlockedError,
     changed,
@@ -113,7 +114,10 @@ def _hermetic_env(
     monkeypatch.setenv("GIT_CONFIG_NOSYSTEM", "1")
     # GIT_CONFIG_KEY_<n> / GIT_CONFIG_VALUE_<n> inject config pairs; clear every index.
     injected = [v for v in os.environ if v.startswith(("GIT_CONFIG_KEY_", "GIT_CONFIG_VALUE_"))]
-    for var in (*_IDENTITY_ENV_VARS, *_HOST_LEAK_VARS, *injected):
+    # The suite may run inside an agent shell (AGENT, OPENCODE_SESSION_ID...): AD1 would
+    # then refuse every human-terminal command under test.
+    signals = (*load_rules().agent_signals, *load_rules().human_signals)
+    for var in (*_IDENTITY_ENV_VARS, *_HOST_LEAK_VARS, *signals, *injected):
         monkeypatch.delenv(var, raising=False)
 
     # Sockets and temp files must not leak out of the sandbox either (plan 003, step 5).

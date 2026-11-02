@@ -57,7 +57,10 @@ _DANGEROUS = (
 )
 
 
-_REMOTE_WRITE = (
+_VAULT = ("vault read *", "vault write *")  # the only shell verbs left in remote-write
+# Plan 003 step 12 (T13): GitHub writes are denied for EVERY agent, devops included, and sit
+# last so no earlier rule (e.g. `git push --force *` under dangerous) can re-open one.
+_GITHUB_WRITE = (
     "git push *",
     "gh pr create *",
     "gh pr merge *",
@@ -69,15 +72,17 @@ _REMOTE_WRITE = (
     "gh issue edit *",
     "gh release *",
     "gh api *",
-    "vault read *",
-    "vault write *",
 )
+_BROKER = [_r("carter_push", "*", "deny"), _r("carter_pr", "*", "deny")]  # D46, all but devops
+_MCP_GITHUB = _r("carter_github_*", "*", "deny")  # C14, roles that do not need it
 
 
 def _shell(remote_write: str, dangerous: str) -> list[dict[str, str]]:
-    return [_r("shell", cmd, remote_write) for cmd in _REMOTE_WRITE] + [
-        _r("shell", cmd, dangerous) for cmd in _DANGEROUS
-    ]
+    return (
+        [_r("shell", cmd, remote_write) for cmd in _VAULT]
+        + [_r("shell", cmd, dangerous) for cmd in _DANGEROUS]
+        + [_r("shell", cmd, "deny") for cmd in _GITHUB_WRITE]
+    )
 
 
 def _config(level: str = "guarded") -> dict:
@@ -100,6 +105,7 @@ class TestRuleOrder:
         expected = [
             *_BASELINE,
             _r("subagent", "*", "deny"),
+            *_BROKER,
             _r("edit", "*", "ask"),
             _r("shell", "*", "ask"),
             _r("webfetch", "*", "ask"),
@@ -112,6 +118,7 @@ class TestRuleOrder:
             *_BASELINE,
             _r("subagent", "*", "deny"),
             _r("subagent", "carter-*", "allow"),
+            *_BROKER,
             _r("edit", "*", "ask"),
             _r("shell", "*", "ask"),
             _r("webfetch", "*", "ask"),
@@ -124,6 +131,7 @@ class TestRuleOrder:
             *_BASELINE,
             _MEMORIES_EDIT,
             _r("subagent", "*", "deny"),
+            *_BROKER,
             _r("edit", "*", "allow"),
             _r("shell", "*", "allow"),
             _r("webfetch", "*", "allow"),
@@ -134,26 +142,74 @@ class TestRuleOrder:
     def test_devops_guarded_gate_emitted_as_ask(self):
         # guarded: remote-write ask, dangerous gate -> ask.
         rules = permission_rules(_config("guarded"), "devops")
-        assert rules[-len(_REMOTE_WRITE) - len(_DANGEROUS) :] == _shell("ask", "ask")
+        assert rules[-len(_VAULT) - len(_DANGEROUS) - len(_GITHUB_WRITE) :] == _shell("ask", "ask")
 
     def test_devops_strict(self):
         # strict: remote-write gate -> ask, dangerous deny.
         rules = permission_rules(_config("strict"), "devops")
-        assert rules[-len(_REMOTE_WRITE) - len(_DANGEROUS) :] == _shell("ask", "deny")
+        assert rules[-len(_VAULT) - len(_DANGEROUS) - len(_GITHUB_WRITE) :] == _shell("ask", "deny")
 
     def test_overrides_are_honored(self):
         cfg = _config()
         cfg["policy"]["overrides"] = {"remote-write": "deny"}
         rules = permission_rules(cfg, "devops")
-        assert _r("shell", "git push *", "deny") in rules
-        assert _r("shell", "vault read *", "deny") in rules
+        assert _r("shell", "git push *", "deny") in rules  # denied with or without an override
+        assert (
+            _r("shell", "vault read *", "deny") in rules
+        )  # the override tightens vault ask -> deny
 
-    @pytest.mark.parametrize("cmd", ["gh pr create *", "gh api *", "vault read *"])
+    @pytest.mark.parametrize("cmd", ["gh pr create *", "gh api *", "vault read *", "git push *"])
     def test_engineer_remote_denies_follow_shell_allow(self, cmd):
         # last match wins: the deny must come after the broad shell allow.
         rules = permission_rules(_config(), "engineer")
         allow_idx = rules.index(_r("shell", "*", "allow"))
         assert rules.index(_r("shell", cmd, "deny")) > allow_idx
+
+    @pytest.mark.parametrize("role", _ALL_ROLES)
+    @pytest.mark.parametrize("level", ["guarded", "strict"])
+    def test_github_writes_are_denied_for_every_agent_and_come_last(self, role, level):
+        rules = permission_rules(_config(level), role)
+        assert rules[-len(_GITHUB_WRITE) :] == [_r("shell", c, "deny") for c in _GITHUB_WRITE]
+
+    @pytest.mark.parametrize("level", ["guarded", "strict"])
+    def test_devops_has_no_push_allow_or_ask_anywhere(self, level):
+        rules = permission_rules(_config(level), "devops")
+        for rule in rules:
+            if rule["action"] == "shell" and rule["resource"].startswith(
+                ("git push", "gh pr", "gh api")
+            ):
+                assert rule["effect"] in {"deny", "ask"}
+        pushes = [r for r in rules if r["action"] == "shell" and "git push" in r["resource"]]
+        # `git push --force *` stays a dangerous-category gate, but the later `git push *` deny wins
+        last = [r for r in pushes if r["resource"] == "git push *"][-1]
+        assert rules.index(last) > max(rules.index(r) for r in pushes if r is not last)
+        assert last["effect"] == "deny"
+
+    def test_devops_keeps_remote_write_for_vault_only(self):
+        rules = permission_rules(_config(), "devops")
+        assert _r("shell", "vault read *", "ask") in rules
+        assert _r("shell", "vault write *", "ask") in rules
+
+    @pytest.mark.parametrize("role", [r for r in _ALL_ROLES if r != "devops"])
+    def test_carter_broker_tools_are_denied_for_everyone_but_devops(self, role):
+        rules = permission_rules(_config(), role)
+        assert all(b in rules for b in _BROKER)
+
+    def test_devops_alone_lacks_the_broker_deny(self):
+        rules = permission_rules(_config(), "devops")
+        assert not [r for r in rules if r["action"] in {"carter_push", "carter_pr"}]
+
+    def test_broker_denies_follow_the_subagent_rules_and_precede_the_broad_allows(self):
+        rules = permission_rules(_config(), "engineer")
+        assert rules.index(_BROKER[0]) > rules.index(_r("subagent", "*", "deny"))
+        assert rules.index(_BROKER[1]) < rules.index(_r("shell", "*", "allow"))
+
+    @pytest.mark.parametrize("role", _ALL_ROLES)
+    def test_github_mcp_is_hidden_only_from_the_listed_roles(self, role):
+        from carter.identity.policyset import agent_mcp_denies
+
+        _, roles = agent_mcp_denies()
+        assert (_MCP_GITHUB in permission_rules(_config(), role)) is (role in roles)
 
     @pytest.mark.parametrize("role", _ALL_ROLES)
     def test_baseline_first(self, role):

@@ -84,7 +84,7 @@ class TestPolicyOverridesAreHonored:
         cfg["policy"]["level"] = "guarded"
         cfg["policy"]["overrides"] = {"remote-write": "deny"}  # tighten ask -> deny
         rules = permission_rules(cfg, "devops")
-        assert {"action": "shell", "resource": "git push *", "effect": "deny"} in rules
+        assert {"action": "shell", "resource": "vault read *", "effect": "deny"} in rules
 
     def test_override_reflected_in_gate_table(self):
         from carter.config import policy_gate_table
@@ -313,9 +313,10 @@ class TestShippedMapsAreDictShaped:
             assert all(isinstance(v, bool) for v in cats.values())
 
     def test_devops_is_sole_remote_write_and_dangerous_holder(self):
-        """Devops is the sole holder of remote-write AND dangerous (the
-        single-pusher invariant); narrator is first-class {read, local-write} and
-        does NOT hold remote-write — it reaches it only via the redaction handoff to devops."""
+        """Devops is the sole holder of remote-write (Jira/Slack/vault) AND dangerous;
+        narrator is first-class {read, local-write} and does NOT hold remote-write — it
+        reaches it only via the redaction handoff to devops. (Holding remote-write no longer
+        means pushing: see ``TestGithubWritesAreHumanOnly``.)"""
         assert AGENT_ALLOWLIST["devops"]["remote-write"] is True
         assert AGENT_ALLOWLIST["devops"]["dangerous"] is True
         for role, cats in AGENT_ALLOWLIST.items():
@@ -325,12 +326,68 @@ class TestShippedMapsAreDictShaped:
         assert AGENT_ALLOWLIST["narrator"] == {"read": True, "local-write": True}
 
 
+class TestGithubWritesAreHumanOnly:
+    """Plan 003 step 12 (T12): remote-write keeps Jira/Slack/vault ``ask`` semantics for
+    devops, but every GitHub write verb is ``deny`` for every agent (RFC-0007 D31, C1)."""
+
+    VERBS = (
+        "git push *",
+        "gh pr create *",
+        "gh pr merge *",
+        "gh pr comment *",
+        "gh pr review *",
+        "gh pr edit *",
+        "gh issue create *",
+        "gh issue comment *",
+        "gh issue edit *",
+        "gh release *",
+        "gh api *",
+    )
+
+    @pytest.mark.parametrize("role", sorted(AGENT_ALLOWLIST))
+    @pytest.mark.parametrize("level", ["guarded", "strict"])
+    def test_every_verb_is_denied_for_every_agent_including_devops(self, role, level):
+        from carter.config import permission_rules
+
+        cfg = generate_default_config()
+        cfg["policy"]["level"] = level
+        rules = permission_rules(cfg, role)
+        for verb in self.VERBS:
+            matching = [r for r in rules if r["action"] == "shell" and r["resource"] == verb]
+            assert matching and matching[-1]["effect"] == "deny", (role, verb)
+
+    def test_a_policy_override_cannot_loosen_them(self):
+        from carter.config import permission_rules
+
+        cfg = generate_default_config()
+        cfg["policy"]["overrides"] = {"remote-write": "allow", "dangerous": "allow"}
+        cfg["policy"]["allowlist"] = {"engineer": {"remote-write": True}}
+        for role in ("devops", "engineer"):
+            rules = permission_rules(cfg, role)
+            assert {"action": "shell", "resource": "git push *", "effect": "deny"} in rules
+            assert rules[-1] == {"action": "shell", "resource": "gh api *", "effect": "deny"}
+
+    def test_vault_stays_gated_for_devops(self):
+        from carter.config import permission_rules
+
+        rules = permission_rules(generate_default_config(), "devops")
+        assert {"action": "shell", "resource": "vault read *", "effect": "ask"} in rules
+        assert {"action": "shell", "resource": "vault write *", "effect": "ask"} in rules
+
+    def test_the_github_write_table_is_not_a_risk_category(self):
+        from carter.config import _BASH_COMMANDS, RISK_TAXONOMY
+
+        assert "github-write" in _BASH_COMMANDS and "github-write" not in RISK_TAXONOMY
+        assert set(_BASH_COMMANDS["github-write"]) == set(self.VERBS)
+        assert not any("github" in cats for cats in AGENT_ALLOWLIST.values())
+
+
 class TestUserOverridesDoNotWipeShippedMaps:
     def test_allowlist_override_merges_not_replaces(self):
         """A user allowlist tweak deep-merges without wiping other shipped agents."""
         config = {"policy": {"allowlist": {"engineer": {"remote-write": True}}}}
         effective = effective_allowlist(config)
-        # the shipped sole-pusher agent is untouched
+        # the shipped sole remote-write holder is untouched
         assert effective["devops"]["remote-write"] is True
         # the user's extension applied on top of engineer's shipped categories
         assert effective["engineer"]["read"] is True

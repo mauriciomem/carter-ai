@@ -24,7 +24,13 @@ HOST_FILES = (
     ".carter/config.toml",
     ".carter/manifest.json",
     ".carter/guard-state.json",
+    ".carter/gitconfig",
+    ".config/git/config",
 )
+
+# Looked at by ``stat`` only (exists, size, mtime_ns): the content is a credential and is
+# never read, not even to hash it.
+STAT_ONLY_FILES = (".carter/secrets/gh-read.token",)
 
 ABSENT = "absent"
 
@@ -39,6 +45,8 @@ class NetworkBlockedError(AssertionError):
 
 def digest_host(home: Path) -> dict[str, str]:
     """Map each guarded relative path to ``sha256`` (plus symlink target), or ``absent``.
+
+    ``STAT_ONLY_FILES`` map to ``stat:<size>:<mtime_ns>`` instead; they are never opened.
 
     A symlinked file (a dotfiles-managed ``~/.gitconfig``) is hashed through the link and its
     target is recorded too, so re-pointing the link counts as a change.
@@ -55,6 +63,15 @@ def digest_host(home: Path) -> dict[str, str]:
         if path.is_symlink():
             digest += f"->{os.readlink(path)}"
         result[rel] = digest
+    for rel in STAT_ONLY_FILES:
+        try:
+            st = (home / rel).lstat()
+        except FileNotFoundError:
+            result[rel] = ABSENT
+        except OSError as exc:
+            result[rel] = f"unreadable:{type(exc).__name__}"
+        else:
+            result[rel] = f"stat:{st.st_size}:{st.st_mtime_ns}"
     return result
 
 

@@ -29,6 +29,7 @@ RFC_APPENDIX = (
 )
 CODE_RE = re.compile(r"^E-[A-Z0-9]+(?:-[A-Z0-9]+)*$")
 SLICE_1 = {E_CONFIG, E_ROLE_B_TIER, E_TIER_REQUIRED, E_COMMIT_T1}
+ADDED_BEYOND_APPENDIX_B = {"E-HUMAN-TERMINAL", "E-STATE-INVALID", "E-APLUS-ARGS"}
 
 
 class TestRegistry:
@@ -83,7 +84,8 @@ class TestRegistry:
             if row.startswith("| E-"):
                 first = row.split("|")[1]
                 in_rfc.update(re.findall(r"E-[A-Z0-9-]+", first))
-        assert set(registry()) == in_rfc
+        # Codes the 1G architect gate added beyond Appendix B (plan 003 step 6, F10).
+        assert set(registry()) - ADDED_BEYOND_APPENDIX_B == in_rfc
 
 
 class TestUsedByCode:

@@ -22,7 +22,7 @@ import pytest
 
 from carter.home import carter_home
 from carter.install.paths import _opencode_base
-from host_guard import HOST_FILES, changed, digest_host, is_local_host
+from host_guard import HOST_FILES, STAT_ONLY_FILES, changed, digest_host, is_local_host
 
 # Variables that can redirect git's author/committer or inject config.
 POLLUTION_VARS = (
@@ -209,7 +209,7 @@ class TestOpencodeConfigIsSandboxed:
 class TestHostDigest:
     def test_lists_every_guarded_file_even_when_absent(self, tmp_path: Path) -> None:
         digest = digest_host(tmp_path)
-        assert tuple(digest) == HOST_FILES
+        assert tuple(digest) == (*HOST_FILES, *STAT_ONLY_FILES)
         assert set(digest.values()) == {"absent"}
 
     def test_the_guarded_files_cover_the_1g_surfaces(self) -> None:
@@ -220,7 +220,10 @@ class TestHostDigest:
             ".carter/config.toml",
             ".carter/manifest.json",
             ".carter/guard-state.json",
+            ".carter/gitconfig",
+            ".config/git/config",
         }
+        assert ".carter/secrets/gh-read.token" in STAT_ONLY_FILES
 
     def test_detects_modification_creation_and_deletion(self, tmp_path: Path) -> None:
         (tmp_path / ".carter").mkdir()
@@ -250,6 +253,24 @@ class TestHostDigest:
         link.unlink()
         link.symlink_to(tmp_path / "two")
         assert changed(before, digest_host(tmp_path)) == [".gitconfig"]
+
+    def test_the_token_file_is_looked_at_by_stat_and_never_opened(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        token = tmp_path / ".carter" / "secrets" / "gh-read.token"
+        token.parent.mkdir(parents=True)
+        token.write_text("github_pat_SECRET")
+        opened: list[object] = []
+        real_read_bytes = Path.read_bytes
+        monkeypatch.setattr(
+            Path, "read_bytes", lambda self: opened.append(self) or real_read_bytes(self)
+        )
+        before = digest_host(tmp_path)
+        assert token not in opened
+        assert before[".carter/secrets/gh-read.token"].startswith("stat:17:")
+        assert "SECRET" not in repr(before)
+        token.write_text("github_pat_OTHER-VALUE")
+        assert changed(before, digest_host(tmp_path)) == [".carter/secrets/gh-read.token"]
 
     def test_contents_never_appear_in_the_digest(self, tmp_path: Path) -> None:
         (tmp_path / ".gitconfig").write_text("super-secret-value")
@@ -497,6 +518,12 @@ class TestAmbientHostSurfaces:
             "GITHUB_TOKEN",
             "GH_ENTERPRISE_TOKEN",
             "GH_HOST",
+            "AGENT",
+            "AI_AGENT",
+            "OPENCODE",
+            "OPENCODE_SESSION_ID",
+            "CARTER_AGENT_SHELL",
+            "CARTER_HUMAN_SHELL",
         ],
     )
     def test_agent_sockets_and_tokens_do_not_leak_in(self, var: str) -> None:
@@ -515,6 +542,9 @@ class TestPollutedShellIsCleaned:
             "GIT_SSH_COMMAND": "ssh -i /real/key",
             "GH_TOKEN": "x",
             "GITHUB_TOKEN": "y",
+            "AGENT": "x",
+            "OPENCODE_SESSION_ID": "ses_1",
+            "CARTER_AGENT_SHELL": "1",
             "OPENCODE_CONFIG": "/real/opencode.json",
             "XDG_RUNTIME_DIR": "/run/user/1000",
             "TMPDIR": "/var/tmp",

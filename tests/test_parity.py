@@ -367,12 +367,74 @@ class TestNoFalseReadOnlyClaim:
         )
 
 
+class TestNoAgentPushes:
+    """Plan 003 step 12 (T14): no agent pushes; devops is the sole caller of B.
+
+    Structural half: the rendered frontmatter of every Carter agent. The prose half (the
+    devops template no longer claims it pushes) lands with step 23, so this step ends green.
+    """
+
+    PUSH_VERBS = ("git push", "gh pr create", "gh pr merge", "gh api", "gh release")
+
+    @staticmethod
+    def _rules(rendered_agents_dir: Path) -> dict[str, list[dict]]:
+        out: dict[str, list[dict]] = {}
+        for agent in sorted(rendered_agents_dir.glob("carter-*.md")):
+            out[agent.stem.removeprefix("carter-")] = _parse_frontmatter(agent.read_text())[
+                "permissions"
+            ]
+        assert out
+        return out
+
+    def test_no_agent_has_a_push_allow_or_ask(self, rendered_agents_dir: Path) -> None:
+        offenders = []
+        for role, rules in self._rules(rendered_agents_dir).items():
+            for rule in rules:
+                if rule["action"] != "shell" or not rule["resource"].startswith(self.PUSH_VERBS):
+                    continue
+                # `git push --force *` is a dangerous-category gate, but a later plain
+                # `git push *` deny wins (last match), so check the effective verdict.
+                verdict = [
+                    r["effect"]
+                    for r in rules
+                    if r["action"] == "shell" and r["resource"] == "git push *"
+                ][-1]
+                if rule["resource"] == "git push --force *":
+                    assert verdict == "deny", role
+                elif rule["effect"] != "deny":
+                    offenders.append((role, rule["resource"], rule["effect"]))
+        assert not offenders, f"agents can still push or write to GitHub: {offenders}"
+
+    def test_only_devops_lacks_the_carter_broker_deny(self, rendered_agents_dir: Path) -> None:
+        for role, rules in self._rules(rendered_agents_dir).items():
+            denies = {r["action"] for r in rules if r["effect"] == "deny"}
+            has_both = {"carter_push", "carter_pr"} <= denies
+            assert has_both is (role != "devops"), role
+            if role == "devops":
+                assert not {r["action"] for r in rules} & {"carter_push", "carter_pr"}
+
+    def test_the_broker_denies_come_from_the_data_file(self, rendered_agents_dir: Path) -> None:
+        from carter.identity.policyset import agent_permission_denies, agent_permission_exempt
+
+        rules = self._rules(rendered_agents_dir)
+        for role, agent_rules in rules.items():
+            expected = [] if role in agent_permission_exempt() else list(agent_permission_denies())
+            got = [r["action"] for r in agent_rules if r["action"] in agent_permission_denies()]
+            assert got == expected, role
+
+    def test_the_global_policy_set_never_names_the_broker_tools(self) -> None:
+        # D46 is per-agent: a global deny would block devops as well.
+        from carter.identity.policyset import policy_set
+
+        assert not [s for s in policy_set() if "carter_" in s.resource]
+
+
 class TestProseMatchesAllowlist:
     """The inverse of the read-only bug: an agent whose allowlist lacks
     ``remote-write`` must not claim 'Full access' in its Tool Access prose. On a
-    non-enforcing harness the advisory prose wins, so an over-claim would let a
-    non-pusher remote-write — breaking the single-pusher invariant (only devops
-    holds ``remote-write``).
+    non-enforcing harness the advisory prose wins, so an over-claim would let an
+    agent without ``remote-write`` write remotely — breaking the sole-holder invariant
+    (only devops holds ``remote-write``).
     """
 
     def test_non_pusher_agents_dont_claim_full_access(self, rendered_agents_dir: Path) -> None:
