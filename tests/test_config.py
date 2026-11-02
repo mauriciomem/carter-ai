@@ -370,7 +370,7 @@ class TestLegacyConfigKeysTolerated:
     @staticmethod
     def _inject_legacy_keys(cfg: dict) -> None:
         cfg["workspace"]["description"] = "old"
-        cfg["identity"].update({"git_org": "acme", "bot_email": "bot@x"})
+        cfg.setdefault("identity", {}).update({"git_org": "acme", "bot_email": "bot@x"})
         cfg["quality_gate"]["trigger"] = "user-initiated"
         cfg["redaction"]["enabled"] = False
         cfg["state"] = {"git_tracked": True}
@@ -478,7 +478,7 @@ class TestIdentityPolicyBlock:
         return load_config(path)
 
     def test_default_config_carries_no_identity_policy_or_legacy_keys(self):
-        assert generate_default_config()["identity"] == {}
+        assert "identity" not in generate_default_config()
 
     @pytest.mark.parametrize("role", ["co-author", "author", None])
     @pytest.mark.parametrize("tier", ["t0", "t1", "t2", None])
@@ -520,6 +520,104 @@ class TestIdentityPolicyBlock:
         # D52: the opt-out lives only in the edit-denied ~/.carter/config.toml.
         with pytest.raises(ConfigError, match="allow_project_opencode_edit"):
             self._load(tmp_path, {"allow_project_opencode_edit": value})
+
+
+class TestIdentityIsOptional:
+    """Removing the deprecated keys leaves an empty block; dropping the block must
+    not make `carter check` fail with "Missing required keys: identity"."""
+
+    @staticmethod
+    def _write(tmp_path, drop_identity=True, **identity):
+        cfg = _minimal_existing_config()
+        if drop_identity:
+            del cfg["identity"]
+        else:
+            cfg["identity"] = identity
+        path = tmp_path / "carter.yaml"
+        path.write_text(yaml.dump(cfg))
+        return path
+
+    def test_identity_is_not_a_required_key(self):
+        from carter.config import REQUIRED_KEYS
+
+        assert "identity" not in REQUIRED_KEYS
+        assert {"version", "workspace", "agents"} <= REQUIRED_KEYS
+
+    def test_config_without_identity_validates(self, tmp_path):
+        loaded = load_config(self._write(tmp_path))
+        assert loaded.get("identity") in (None, {})
+
+    def test_empty_identity_block_validates(self, tmp_path):
+        loaded = load_config(self._write(tmp_path, drop_identity=False))
+        assert loaded["identity"] == {}
+
+    def test_policy_still_validates_without_the_deprecated_keys(self, tmp_path):
+        path = self._write(tmp_path, drop_identity=False, role="author", require_tier="t1")
+        assert load_config(path)["identity"] == {"role": "author", "require_tier": "t1"}
+
+    def test_invalid_policy_is_still_rejected(self, tmp_path):
+        path = self._write(tmp_path, drop_identity=False, role="root")
+        with pytest.raises(ConfigError, match="identity.role"):
+            load_config(path)
+
+    def test_other_required_keys_are_still_required(self, tmp_path):
+        path = self._write(tmp_path)
+        cfg = yaml.safe_load(path.read_text())
+        del cfg["agents"]
+        path.write_text(yaml.dump(cfg))
+        with pytest.raises(ConfigError, match="Missing required keys: agents"):
+            load_config(path)
+
+    def test_deprecated_keys_still_warn(self, tmp_path):
+        from carter.config import identity_warnings
+
+        path = self._write(tmp_path, drop_identity=False, git_account="me", bot_name="b")
+        warnings = identity_warnings(load_config(path))
+        assert len(warnings) == 2 and all("deprecated" in w for w in warnings)
+
+    def test_no_identity_means_no_warning(self, tmp_path):
+        from carter.config import identity_warnings
+
+        assert identity_warnings(load_config(self._write(tmp_path))) == []
+
+    def test_new_workspaces_do_not_write_an_identity_block(self):
+        assert "identity" not in generate_default_config()
+
+    def test_init_writes_no_identity_block(self, tmp_path):
+        from click.testing import CliRunner
+
+        from carter.cli import main
+
+        result = CliRunner().invoke(main, ["init", str(tmp_path), "--no-git-state"])
+        assert result.exit_code == 0, result.output
+        written = yaml.safe_load((tmp_path / ".carter" / "carter.yaml").read_text())
+        assert "identity" not in written
+
+    def test_check_passes_on_a_workspace_without_identity(self, tmp_path):
+        from click.testing import CliRunner
+
+        from carter.cli import main
+
+        runner = CliRunner()
+        assert runner.invoke(main, ["init", str(tmp_path), "--no-git-state"]).exit_code == 0
+        cfg_path = tmp_path / ".carter" / "carter.yaml"
+        cfg = yaml.safe_load(cfg_path.read_text())
+        cfg.pop("identity", None)  # explicit: the file has no identity key
+        cfg_path.write_text(yaml.dump(cfg))
+
+        result = runner.invoke(main, ["check", str(tmp_path)])
+        assert result.exit_code == 0, result.output
+        assert "Missing required keys" not in result.output
+
+    def test_update_works_on_a_workspace_without_identity(self, tmp_path):
+        from click.testing import CliRunner
+
+        from carter.cli import main
+
+        runner = CliRunner()
+        assert runner.invoke(main, ["init", str(tmp_path), "--no-git-state"]).exit_code == 0
+        result = runner.invoke(main, ["update", str(tmp_path), "--yes"])
+        assert result.exit_code == 0, result.output
 
 
 class TestIdentityDeprecations:

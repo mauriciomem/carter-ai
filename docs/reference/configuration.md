@@ -17,7 +17,6 @@ version: '2'
 workspace:
   name: my-project
   mode: umbrella
-identity: {}
 personality:
   skepticism: scaled
   style: reviewer
@@ -61,7 +60,7 @@ models:
 docs_language: en
 ```
 
-`version`, `workspace`, `identity` and `agents` are required. Any other key you
+`version`, `workspace` and `agents` are required. Any other key you
 leave out takes its default. Unknown keys are ignored. Nested blocks merge with the
 defaults, so you only write what you change; lists (`agents`,
 `redaction.categories`) replace the default list entirely.
@@ -76,6 +75,8 @@ defaults, so you only write what you change; lists (`agents`,
 | `mode` | `umbrella` | `umbrella` (a directory holding several repositories) or `single` (one repository). Set by `carter init --single` |
 
 ### identity
+
+Optional: `carter init` does not write it, and a file without it is valid.
 
 Policy only. Nothing here changes attribution while agents run: `carter update` shows
 these two values, asks, and pins them in `~/.carter/config.toml` (see

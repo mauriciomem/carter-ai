@@ -53,8 +53,11 @@ class TestConfig:
         """Default config contains all required keys."""
         assert "version" in default_config
         assert "workspace" in default_config
-        assert "identity" in default_config
         assert "agents" in default_config
+
+    def test_generate_default_has_no_identity_block(self, default_config):
+        """`identity` is optional policy: new workspaces do not write it."""
+        assert "identity" not in default_config
 
     def test_generate_default_mode(self):
         """Mode parameter is respected."""

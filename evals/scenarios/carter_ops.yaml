@@ -85,13 +85,18 @@
 - name: jira_comment
   input: "ops: add a comment to PROJ-123 saying 'Deployment complete, no issues observed'"
   emit: *t1_emit
+  context: "You are carter-devops. No Jira API token is available."
   expect:
     workflow_phases: [ASSESS, PLAN, APPROVE, EXECUTE, AUDIT, REPORT]
-    commands_contain:
+    # Jira goes through the carter-atlassian MCP server (see the carter-ops and
+    # carter-atlassian skills). An MCP tool call is not a shell command, so it is
+    # checked as a mention, and curl / the REST API are forbidden.
+    mentions: ["carter-atlassian", "PROJ-123"]
+    commands_not_contain:
       - "curl"
-      - "PROJ-123"
-      - "rest/api/2"
+      - "rest/api"
     footer_present: true
+    footer_contains: "generated with Carter"
 
 - name: approval_gate_required
   input: "ops: force push to main"

@@ -9,7 +9,9 @@ from typing import Any
 
 import yaml
 
-REQUIRED_KEYS = {"version", "workspace", "identity", "agents"}
+# `identity` is optional policy (role, require_tier), not a required key: a workspace
+# with no policy, or one that dropped the deprecated keys, has no block at all.
+REQUIRED_KEYS = {"version", "workspace", "agents"}
 
 # agent_suffix becomes part of scaffolded agent filenames/names
 # (e.g. carter-engineer-local). Lowercase alphanumeric + hyphen, or empty.
@@ -24,9 +26,9 @@ DEFAULT_CONFIG: dict[str, Any] = {
         "name": "my-workspace",
         "mode": "umbrella",
     },
-    # Policy only (plan 002, D62): `role` and `require_tier`, pinned by `carter update`.
-    # `git_account` and `bot_name` are deprecated: still accepted, ignored.
-    "identity": {},
+    # No `identity` default on purpose: it is optional policy (plan 002, D62: `role`
+    # and `require_tier`, pinned by `carter update`), so new workspaces do not write
+    # it. `git_account` and `bot_name` are deprecated: still accepted, ignored.
     "personality": {
         "skepticism": "scaled",
         "style": "reviewer",
