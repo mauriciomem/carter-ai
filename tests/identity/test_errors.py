@@ -216,3 +216,39 @@ class TestRenderErrorTable:
         for row in render_error_table().splitlines():
             if row.startswith("| `E-"):
                 assert row.count("|") - row.count("\\|") == 5
+
+
+class TestObservedTexts:
+    """Spike 4 (plan 003, 2026-11-02): the strings GitHub really sent for a read-only PAT."""
+
+    def test_gh_readonly_stores_the_observed_lines_and_the_api_message(self):
+        entry = registry()["E-GH-READONLY"]
+        assert entry.observed == (
+            "remote: Permission to <o>/<r>.git denied to <login>.",
+            "fatal: unable to access 'https://github.com/<o>/<r>.git/': "
+            "The requested URL returned error: 403",
+            "gh: Resource not accessible by personal access token (HTTP 403)",
+        )
+        assert "Resource not accessible by personal access token" in entry.message
+        assert "unverified" not in entry.message
+        assert "carter push" in entry.remediation and "own terminal" in entry.remediation
+
+    def test_observed_is_data_only_and_empty_elsewhere(self):
+        assert all(e.observed == () for c, e in registry().items() if c != "E-GH-READONLY")
+        assert "observed" not in render_error_table()
+
+    def test_the_policy_remediation_says_which_gh_verbs_are_positional(self):
+        text = registry()["E-POLICY"].remediation
+        assert "-R <owner>/<repo>" in text and "after the subcommand" in text
+        assert "gh repo view <owner>/<repo>" in text and "gh search repos <query>" in text
+        assert "no `-R`" in text
+
+
+class TestPatCodes:
+    def test_pat_type_and_perm_say_what_to_do_and_never_promise_to_quote(self):
+        type_, perm = registry()["E-PAT-TYPE"], registry()["E-PAT-PERM"]
+        assert (
+            "carter github-token set" in type_.remediation and "own terminal" in type_.remediation
+        )
+        assert "this looks like" not in type_.message and "4-character prefix" in type_.message
+        assert "0700" in perm.remediation and "carter github-token set" in perm.remediation

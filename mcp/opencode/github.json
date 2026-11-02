@@ -15,7 +15,7 @@
       "get_me,get_file_contents,search_code,search_repositories,list_commits,get_commit,pull_request_read,issue_read,list_issues,list_pull_requests"
     ],
     "environment": {
-      "GITHUB_PERSONAL_ACCESS_TOKEN": "{env:GITHUB_TOKEN}"
+      "GITHUB_PERSONAL_ACCESS_TOKEN": "{file:~/.carter/secrets/gh-read.token}"
     }
   }
 }

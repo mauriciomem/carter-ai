@@ -91,8 +91,9 @@ OpenCode) after the policies change so it reloads its config.
 
 **What this is, in this release:** the policies are literal command matches, a speed bump
 and not a boundary. The plugin and the shell isolation that would make them one are not
-installed yet, agent shells still inherit your SSH agent and `gh` login, and agent commits
-still use your own git config. `carter check --host` says "plugin not installed" for as long
+installed yet, agent shells still inherit your SSH agent and `gh` login, the read-only
+GitHub token (`carter github-token set`) is stored but not injected into agent shells, and
+agent commits still use your own git config. `carter check --host` says "plugin not installed" for as long
 as that is true.
 
 Remove them with `carter guard remove` (or `carter uninstall`). Only what Carter wrote and

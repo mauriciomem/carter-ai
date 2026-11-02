@@ -1,7 +1,7 @@
 """``carter check --host`` (plan 003 step 21; RFC-0007 App B §3): the items that exist in 1G.
 
 Read-only, names only, and honest: what needs the plugin or hooks is reported as not
-installed in this slice, never as green. The token items wait for ``github-token`` (step 16).
+installed in this slice, never as green. The token items reuse ``github-token check`` (step 16).
 """
 
 from __future__ import annotations
@@ -58,7 +58,8 @@ class TestHealthyInstall:
         assert "plugin not installed (slice 2a)" in warns  # always, once g2 is consented
         assert "gate, isolation and signing guards are inactive" in warns
         assert "literal denies only" in warns
-        assert res.output.rstrip().endswith("Host OK (1 WARN).")
+        assert "not provisioned" in warns  # no token yet: a WARN, never a failure
+        assert res.output.rstrip().endswith("Host OK (2 WARN).")
 
     def test_the_git_items_say_not_applicable_in_this_slice(self, stack) -> None:
         installed(stack)
@@ -68,11 +69,11 @@ class TestHealthyInstall:
         assert "Carter installs no hooks in this slice" in out
         assert "not applicable in this slice" in out
 
-    def test_the_token_and_env_items_are_honest_about_what_is_not_checked(self, stack) -> None:
+    def test_the_env_item_is_honest_about_what_is_not_checked(self, stack) -> None:
         installed(stack)
         stack.fake(before=debug_config(stack.live))
         out = host().output
-        assert hostcheck.TOKEN_CHECK_PENDING in out
+        assert "TOKEN_CHECK_PENDING" not in out and not hasattr(hostcheck, "TOKEN_CHECK_PENDING")
         assert "pollution (agent signals, isolation markers) not checked: slice 2a" in out
 
     def test_it_is_allowed_in_an_agent_shell_because_it_is_read_only(
@@ -316,3 +317,83 @@ class TestReadOnlyAndQuiet:
         first = host().output
         stack.fake(before=debug_config(stack.live))
         assert host().output == first
+
+
+class TestToken:
+    """The token items of ``check --host`` (step 21): the same checks as ``github-token check``."""
+
+    TOKEN = "github_pat_11AAAAAAA0HOSTSENTINEL_abcdefghijklmnopqrstuvwxyz0123456789ABCDEFGH"
+
+    def provisioned(self, stack, github_api, **world) -> None:
+        from carter import ghtoken
+
+        installed(stack)
+        stack.fake(before=debug_config(stack.live))
+        ghtoken.store_token(self.TOKEN, None)  # the sandbox home
+        github_api.readonly_token_world(**world)
+
+    def test_a_read_only_token_adds_green_token_items_and_no_warn(self, stack, github_api) -> None:
+        self.provisioned(stack, github_api, expiry="2099-01-31 15:17:13 UTC")
+        res = host()
+        found = levels(res.output)
+        assert res.exit_code == 0 and "RED" not in found
+        oks = " ".join(found["OK"])
+        assert "gh-read.token" in oks and "the token is read-only" in oks
+        assert res.output.rstrip().endswith("Host OK (1 WARN).")  # only the plugin line
+        assert "HOSTSENTINEL" not in res.output
+
+    def test_a_writable_token_is_red(self, stack, github_api) -> None:
+        from gh_api import SPIKE_422, Reply
+
+        self.provisioned(stack, github_api)
+        github_api.on("POST", "/repos/o/r/git/refs", Reply(422, SPIKE_422))
+        res = host()
+        assert res.exit_code == 1 and any("WRITABLE" in t for t in levels(res.output)["RED"])
+
+    def test_an_expiry_within_14_days_warns(self, stack, github_api) -> None:
+        from datetime import UTC, datetime, timedelta
+
+        soon = (datetime.now(UTC) + timedelta(days=3)).strftime("%Y-%m-%d %H:%M:%S UTC")
+        self.provisioned(stack, github_api, expiry=soon)
+        res = host()
+        assert res.exit_code == 0 and any("expires" in t for t in levels(res.output)["WARN"])
+
+    def test_a_badly_stored_token_is_red_and_nothing_is_sent(self, stack, github_api) -> None:
+        from carter.install.paths import token_path
+
+        self.provisioned(stack, github_api)
+        token_path(None).chmod(0o644)
+        res = host()
+        assert res.exit_code == 1 and any("E-PAT-PERM" in t for t in levels(res.output)["RED"])
+        assert github_api.requests == []
+
+    def mcp(self, stack, value: object) -> Path:
+        path = config_target(None)
+        data = json.loads(path.read_text()) if path.exists() else {}
+        env = {"GITHUB_PERSONAL_ACCESS_TOKEN": value}
+        data.setdefault("mcp", {}).setdefault("servers", {})["carter-github"] = {"environment": env}
+        path.write_text(json.dumps(data))
+        return path
+
+    def test_the_mcp_entry_must_read_the_file(self, stack) -> None:
+        installed(stack)
+        stack.fake(before=debug_config(stack.live))
+        self.mcp(stack, "{file:~/.carter/secrets/gh-read.token}")
+        assert any("reads the token from" in t for t in levels(host().output)["OK"])
+
+    def test_an_env_placeholder_in_the_mcp_entry_warns(self, stack) -> None:
+        installed(stack)
+        stack.fake(before=debug_config(stack.live))
+        self.mcp(stack, "{env:GITHUB_TOKEN}")
+        res = host()
+        assert res.exit_code == 0 and any(
+            "environment variable" in t for t in levels(res.output)["WARN"]
+        )
+
+    def test_a_literal_token_in_the_mcp_entry_is_red_and_never_printed(self, stack) -> None:
+        installed(stack)
+        stack.fake(before=debug_config(stack.live))
+        self.mcp(stack, "github_pat_LITERALSENTINEL0123456789")
+        res = host()
+        assert res.exit_code == 1 and "LITERALSENTINEL" not in res.output
+        assert any("literal token" in t for t in levels(res.output)["RED"])

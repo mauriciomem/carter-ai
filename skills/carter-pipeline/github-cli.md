@@ -2,6 +2,13 @@
 
 Use `gh` for GitHub operations instead of the web UI. Prefer structured output with `--json` and `--jq` for reliable parsing.
 
+> **Agents only read.** Creating, commenting on, reviewing, merging or releasing through `gh`
+> (and `gh api`) is human-only: the commands marked *human-only* below are for the person at
+> the keyboard. An agent that finishes a branch writes the handoff file (`carter-ops` skill)
+> and tells the user to run `carter push` and then `carter pr` in their own terminal.
+> `gh repo view` and `gh search repos` take the repository or query positionally (no `-R`);
+> the other read verbs take `-R OWNER/REPO` after the subcommand.
+
 ## Prerequisites
 
 ```bash
@@ -23,11 +30,11 @@ gh pr status                   # PRs relevant to you
 gh pr checks 123               # CI status
 gh pr diff 123
 
-# Create
+# Create (human-only)
 gh pr create --fill            # from commit messages
 gh pr create --title "Fix login redirect" --body "## Summary\n- Fix redirect loop"
 
-# Actions
+# Actions (checkout is a local read; the rest is human-only)
 gh pr checkout 123             # fetch and switch to PR branch
 gh pr review 123 --approve
 gh pr review 123 --comment -b "One small question on the error handling."
@@ -61,7 +68,7 @@ gh issue list
 gh issue list --label bug
 gh issue status
 
-# Create and update
+# Create and update (human-only)
 gh issue create --title "Add retry logic" --body "Retry transient failures."
 gh issue edit 456
 gh issue comment 456 -b "I can take this."
@@ -76,8 +83,8 @@ gh repo view OWNER/REPO
 gh repo view --web
 gh repo list OWNER
 gh repo clone OWNER/REPO
-gh repo create
-gh repo fork OWNER/REPO
+gh repo create                 # human-only
+gh repo fork OWNER/REPO        # human-only
 ```
 
 ## Actions and Workflows
@@ -88,18 +95,20 @@ gh run list --workflow ci.yml
 gh run view 789
 gh run view 789 --log
 gh run watch 789               # live output
-gh run rerun 789
-gh run cancel 789
+gh run rerun 789              # human-only
+gh run cancel 789             # human-only
 gh run download 789            # download artifacts
 
 gh workflow list
 gh workflow view ci.yml
-gh workflow run ci.yml         # manual dispatch
-gh workflow enable ci.yml
-gh workflow disable ci.yml
+gh workflow run ci.yml         # manual dispatch (human-only)
+gh workflow enable ci.yml      # human-only
+gh workflow disable ci.yml     # human-only
 ```
 
 ## Releases
+
+Creating or deleting a release is human-only. Reads (`list`, `view`, `download`) are fine.
 
 ```bash
 gh release list
@@ -119,6 +128,8 @@ gh search prs QUERY
 ```
 
 ## API Access
+
+`gh api` is denied for agents (it can write); it is for the person at the keyboard.
 
 Use `gh api` when no first-class subcommand exists:
 

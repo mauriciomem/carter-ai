@@ -52,8 +52,10 @@ git config --global init.defaultBranch main
 git checkout main
 git pull
 
-# Create branch, make changes, commit, and push — use the carter-ops skill (`ops:` prefix):
-# ops: create branch feature/PROJ-123-add-auth, commit src/auth.py with "feat: ...", push
+# Create branch, make changes and commit — use the carter-ops skill (`ops:` prefix):
+# ops: create branch feature/PROJ-123-add-auth, commit src/auth.py with "feat: ..."
+# Pushing and opening the pull request are human-only: write the handoff file
+# (`carter-ops` skill) and tell the user: Run `carter push` and then `carter pr` in your own terminal, not through an agent.
 
 # Stay current with main (read operation — run directly)
 git fetch origin
@@ -182,15 +184,16 @@ git stash apply stash@{2}     # apply specific stash without removing
 ```bash
 git tag v1.0.0                         # lightweight tag
 git tag -a v1.0.0 -m "Release 1.0.0"  # annotated tag (preferred)
-git push origin v1.0.0                 # push specific tag
-git push origin --tags                 # push all tags
 ```
+
+Pushing a tag is a push: it is human-only (the user does it in their own terminal). An agent
+creates the tag locally and says so in the handoff.
 
 ## Safety Rules
 
-1. **Never force-push shared branches** — only force-push personal feature branches with `--force-with-lease`
+1. **Agents never push or force-push** — pushing is human-only; `carter push` has no force option, and a human who must force-push uses `--force-with-lease` on their own feature branch only
 2. **Always review before committing** — use `git diff` to check changes before committing via the `carter-ops` skill
-3. **Pull before push** — stay current to avoid conflicts
+3. **Pull before the human pushes** — stay current (`git fetch`, then rebase) to avoid conflicts
 4. **Don't commit secrets** — use `.gitignore` and secret managers
 5. **Don't rewrite public history** — use `git revert` for published commits
 

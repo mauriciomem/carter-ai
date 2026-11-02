@@ -8,6 +8,7 @@ from pathlib import Path
 import click
 from jinja2 import Environment
 
+from carter.aplus.handoff import OWN_TERMINAL
 from carter.config import (
     PROFILES,
     ConfigError,
@@ -337,24 +338,30 @@ def _refresh_policies(*, dry_run: bool, assume_yes: bool) -> None:
     )
 
 
+# What a workspace AGENTS.md must contain to be current: (marker text, rendered line prefix).
+_WORKSPACE_RULES = (("coauthor_trailer", "- **Commits**"), (OWN_TERMINAL, "- **Pushing**"))
+
+
 def _note_stale_workspace_rules(target: Path, config: dict, env: Environment) -> None:
-    """Workspace-level upgrade note: ``AGENTS.md`` is never rewritten, so say so when its
-    commit rule predates the tier-based one. (The global note belongs to ``carter install``.)"""
+    """Workspace-level upgrade note: ``AGENTS.md`` is never rewritten, so say so when it lacks
+    the tier-based commit rule or the human-only push rule. (The global note belongs to
+    ``carter install``.)"""
     instructions = _instructions_path(target)
-    if not instructions.exists() or "coauthor_trailer" in instructions.read_text():
+    if not instructions.exists():
         return
-    rule = next(
-        (
-            line
-            for line in render_instructions(config, env)["AGENTS.md"].splitlines()
-            if line.startswith("- **Commits**")
-        ),
-        "",
-    )
-    click.echo(
-        f"ℹ  {instructions.relative_to(target)} was not rewritten (it may hold your edits) and "
-        f"its commit rule is out of date. Current rule:\n   {rule}"
-    )
+    have = instructions.read_text()
+    lines = render_instructions(config, env)["AGENTS.md"].splitlines()
+    missing = [
+        next((line for line in lines if line.startswith(prefix)), "")
+        for marker, prefix in _WORKSPACE_RULES
+        if marker not in have
+    ]
+    if missing:
+        rules = "\n   ".join(missing)
+        click.echo(
+            f"ℹ  {instructions.relative_to(target)} was not rewritten (it may hold your edits) and "
+            f"its rules are out of date. Current rules:\n   {rules}"
+        )
 
 
 @main.command()
@@ -619,7 +626,22 @@ def _register_guard() -> None:
     main.add_command(guard)
 
 
+def _register_github_token() -> None:
+    from carter.ghtoken_cli import github_token
+
+    main.add_command(github_token)
+
+
+def _register_aplus() -> None:
+    from carter.aplus_cli import pr, push
+
+    main.add_command(push)
+    main.add_command(pr)
+
+
 _register_guard()
+_register_github_token()
+_register_aplus()
 
 
 if __name__ == "__main__":

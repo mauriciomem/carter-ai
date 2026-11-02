@@ -11,9 +11,11 @@ import tempfile
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 import pytest
 
+from carter import terminal
 from carter.identity.rules import load_rules
 from host_guard import (
     NetworkBlockedError,
@@ -362,6 +364,22 @@ with open(os.path.join(here, "gh.json")) as fh:
 argv = sys.argv[1:]
 with open(os.path.join(here, "gh.calls"), "a") as fh:
     fh.write(json.dumps(argv) + "\\n")
+with open(os.path.join(here, "gh.env"), "a") as fh:
+    names = ("GH_TOKEN", "GITHUB_TOKEN", "GH_PROMPT_DISABLED")
+    fh.write(json.dumps({{n: os.environ.get(n) for n in names}}) + "\\n")
+for i, arg in enumerate(argv):
+    path = None
+    if arg.startswith("--body-file="):
+        path = arg.split("=", 1)[1]
+    elif arg == "--body-file" and i + 1 < len(argv):
+        path = argv[i + 1]
+    if path:
+        try:
+            mode, text = oct(os.stat(path).st_mode & 0o777), open(path).read()
+        except OSError:
+            mode, text = None, None
+        with open(os.path.join(here, "gh.bodies"), "a") as fh:
+            fh.write(json.dumps({{"path": path, "mode": mode, "content": text}}) + "\\n")
 reply, matched = config["default"], -1
 for prefix, candidate in config["rules"].items():
     words = prefix.split()
@@ -385,6 +403,18 @@ class FakeGh:
         if not log.exists():
             return []
         return [json.loads(line) for line in log.read_text().splitlines()]
+
+    def _lines(self, name: str) -> list[dict[str, Any]]:
+        log = self.bindir / name
+        return [json.loads(line) for line in log.read_text().splitlines()] if log.exists() else []
+
+    def bodies(self) -> list[dict[str, Any]]:
+        """Each ``--body-file`` seen at call time: its path, mode (octal string) and content."""
+        return self._lines("gh.bodies")
+
+    def envs(self) -> list[dict[str, Any]]:
+        """For each call, the token-related variables the process was given."""
+        return self._lines("gh.env")
 
 
 @pytest.fixture
@@ -432,3 +462,25 @@ def _no_real_opencode(request: pytest.FixtureRequest, monkeypatch: pytest.Monkey
     import carter.harness
 
     monkeypatch.setattr(carter.harness, "_which", lambda _cmd: None)
+
+
+@pytest.fixture
+def github_api(monkeypatch: pytest.MonkeyPatch) -> Iterator[Any]:
+    """A loopback fake of api.github.com; ``GITHUB_API_URL`` points at it for the test."""
+    from gh_api import FakeGitHub
+
+    api = FakeGitHub().start()
+    monkeypatch.setenv("GITHUB_API_URL", api.url)
+    yield api
+    api.stop()
+
+
+@pytest.fixture
+def human_tty(monkeypatch: pytest.MonkeyPatch) -> Callable[[bool], None]:
+    """Make the process look like a human at a terminal (or not). CliRunner swaps the
+    streams for pipes, so the TTY test is faked at the one place commands ask."""
+
+    def set_tty(on: bool = True) -> None:
+        monkeypatch.setattr(terminal, "_isatty", lambda _stream: on)
+
+    return set_tty

@@ -67,7 +67,7 @@ def run(
     check_optional_tools()
 
     if mcp:
-        check_credentials()
+        check_credentials(base_dir)
     else:
         log_step("Skipping MCP credentials (no --mcp flag)")
 

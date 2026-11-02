@@ -3,27 +3,14 @@
 from __future__ import annotations
 
 import shutil
-from collections.abc import Callable
 from pathlib import Path
 
 import pytest
 
-from carter import terminal
 from guard.helpers import agents_json, all_live_statements, debug_config
 
 BUILTINS = ["build", "plan", "general", "explore"]
 REAL_GIT = shutil.which("git") or "/usr/bin/git"
-
-
-@pytest.fixture
-def human_tty(monkeypatch: pytest.MonkeyPatch) -> Callable[[bool], None]:
-    """Make the process look like a human at a terminal (or not). CliRunner swaps the
-    streams for pipes, so the TTY test is faked at the one place commands ask."""
-
-    def set_tty(on: bool = True) -> None:
-        monkeypatch.setattr(terminal, "_isatty", lambda _stream: on)
-
-    return set_tty
 
 
 @pytest.fixture

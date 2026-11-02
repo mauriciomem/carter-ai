@@ -114,7 +114,9 @@ class TestV2McpShape:
     def test_objective1_fixes_intact(self, tmp_path: Path) -> None:
         servers = self._wire(tmp_path)["mcp"]["servers"]
         gh = servers["carter-github"]
-        assert gh["environment"] == {"GITHUB_PERSONAL_ACCESS_TOKEN": "{env:GITHUB_TOKEN}"}
+        assert gh["environment"] == {
+            "GITHUB_PERSONAL_ACCESS_TOKEN": "{file:~/.carter/secrets/gh-read.token}"
+        }
         assert any("ghcr.io/github/github-mcp-server@sha256:" in c for c in gh["command"])
         tf = servers["carter-terraform"]
         assert tf["environment"] == {"TFE_TOKEN": "{env:TFE_TOKEN}"}

@@ -175,3 +175,231 @@ class TestTroubleshooting:
 
     def test_no_row_still_tells_the_user_devops_pushes(self) -> None:
         assert "Ask Maestro to hand the push to carter-devops" not in text("troubleshooting.md")
+
+
+# ── Plan 003 step 24, second half: github-token, push, pr, the A+ flow, the PAT guide ────────
+
+
+def all_user_docs() -> dict[str, str]:
+    """README and every doc a user reads (history lives in docs/rfcs and docs/adr)."""
+    found = {"README.md": (REPO / "README.md").read_text(encoding="utf-8")}
+    for path in sorted(DOCS.rglob("*.md")):
+        rel = path.relative_to(DOCS).as_posix()
+        if not rel.startswith(("rfcs/", "adr/")):
+            found[f"docs/{rel}"] = path.read_text(encoding="utf-8")
+    return found
+
+
+class TestNewCommandsInTheCliReference:
+    def test_push_options_equal_help(self) -> None:
+        block = section(text("reference/cli.md"), "carter push")
+        assert documented(block) == help_options("push") == {"--dry-run", "--set-upstream"}
+
+    @pytest.mark.parametrize(
+        "command", [["pr"], ["github-token", "set"], ["github-token", "check"]]
+    )
+    def test_commands_without_options_say_so(self, command: list[str]) -> None:
+        assert help_options(*command) == set()
+
+    def test_every_new_command_is_in_the_table_and_has_a_heading(self) -> None:
+        doc = text("reference/cli.md")
+        for name in ("github-token", "push", "pr"):
+            assert f"[`{name}`](#carter-{name})" in doc
+            assert f"\n## carter {name}\n" in doc
+        for sub in ("set", "check"):
+            assert f"### carter github-token {sub}" in doc
+        out = CliRunner().invoke(main, ["--help"]).output
+        for name in ("github-token", "push", "pr"):
+            assert name in out
+
+    def test_push_and_pr_are_documented_as_own_terminal_only_without_a_bang_shell(self) -> None:
+        doc = " ".join(text("reference/cli.md").split())
+        assert doc.count("Own terminal only") >= 2
+        assert "including OpenCode's `!` shell" in doc
+
+    def test_github_token_set_takes_the_token_from_stdin_only(self) -> None:
+        block = " ".join(
+            section(text("reference/cli.md"), "carter github-token set", "###").split()
+        )
+        assert "standard input" in block and "takes no arguments" in block
+        assert "`E-PAT-TYPE`" in block and "0600" in block and "0700" in block
+
+    def test_github_token_check_documents_the_write_probe_and_the_selection_limit(self) -> None:
+        block = " ".join(
+            section(text("reference/cli.md"), "carter github-token check", "###").split()
+        )
+        assert "all-zero commit" in block and "Resource not accessible" in block
+        assert "All repositories" in block and "14 days" in block and "E-PAT-PERM" in block
+
+    def test_check_host_lists_the_token_items(self) -> None:
+        block = " ".join(section(text("reference/cli.md"), "carter check --host", "###").split())
+        assert "read-only GitHub token" in block and "cannot write" in block
+
+
+class TestConfigurationGithubTable:
+    def test_read_token_file_example_equals_the_schema_default(self, tmp_path: Path) -> None:
+        from carter.identity import load_identity
+        from carter.identity.schema import Github
+
+        doc = section(text("reference/configuration.md"), "User config: `~/.carter/config.toml`")
+        block = next(
+            b for b in re.findall(r"```toml\n(.*?)```", doc, flags=re.S) if "[github]" in b
+        )
+        cfg_file = tmp_path / "config.toml"
+        cfg_file.write_text(block.replace("/abs/path", str(tmp_path)))
+        assert load_identity(cfg_file).github == Github()
+        assert "`read_token_file`" in doc and "never the token itself" in doc
+
+
+class TestWriteOperationsAPlusFlow:
+    def doc(self) -> str:
+        raw = re.sub(r"^> ?", "", text("guides/write-operations.md"), flags=re.M)
+        return " ".join(raw.split())
+
+    def test_the_flow_is_handoff_then_push_then_pr(self) -> None:
+        doc = self.doc()
+        i_hand = doc.index("The agent writes the handoff")
+        i_push = doc.index("You run `carter push`")
+        i_pr = doc.index("You run `carter pr`")
+        assert i_hand < i_push < i_pr
+        for needle in (
+            ".carter/state/handoff/<encoded-branch>.md",
+            "`feat/x` becomes `feat%2Fx.md`",
+            "Only these five keys are accepted",
+            "carter push --dry-run",
+            "On the default branch you type the branch name",
+            "deleted only after the pull request exists",
+            "There are no options for forcing",
+        ):
+            assert needle in doc, needle
+
+    def test_the_example_handoff_parses(self) -> None:
+        import textwrap
+
+        from carter.aplus.handoff import parse_handoff
+
+        raw = text("guides/write-operations.md")
+        block = re.search(r"\n\s*```markdown\n(.*?)\n\s*```", raw, flags=re.S)
+        assert block
+        item, _ = parse_handoff(textwrap.dedent(block.group(1)) + "\n")
+        assert item.base == "main" and item.repo == "owner/name" and item.draft is False
+        assert item.title == "feat(auth): add token refresh" and "## Summary" in item.body
+
+    def test_it_says_own_terminal_and_never_suggests_a_bang_carter(self) -> None:
+        raw = text("guides/write-operations.md")
+        assert "Run both in your own terminal" in self.doc()
+        for forbidden in ("!carter push", "!carter pr", "! carter push", "! carter pr"):
+            assert forbidden not in raw
+
+    def test_the_typed_bang_fallback_is_unvalidated_and_must_be_typed(self) -> None:
+        doc = self.doc()
+        assert "unvalidated fallback" in doc
+        assert "It must be **typed**; never paste a line that starts with `!`" in doc
+        assert "a pasted one is sent to the model" in doc
+
+    def test_issues_comments_and_releases_have_no_agent_path(self) -> None:
+        doc = self.doc()
+        assert "no agent path for issues, comments, reviews or releases" in doc
+
+    def test_the_interim_paragraph_is_here_and_in_install(self) -> None:
+        for page in ("guides/write-operations.md", "guides/install.md"):
+            doc = " ".join(text(page).split())
+            assert "speed bump" in doc, page
+            assert "plugin" in doc and "isolation" in doc, page
+            assert "stored but not injected into agent shells" in doc, page
+            assert "agent commits still use your own git config" in doc.replace(
+                "Agent commits still use your own git config",
+                "agent commits still use your own git config",
+            ), page
+
+
+class TestMcpServersGithubToken:
+    def doc(self) -> str:
+        return " ".join(text("guides/mcp-servers.md").split())
+
+    def test_the_token_guide_follows_the_contract(self) -> None:
+        doc = self.doc()
+        for needle in (
+            "fine-grained personal access token",
+            "Classic tokens (`ghp_`)",
+            'Never "All repositories"',
+            "Metadata, Contents, Pull requests, Issues, Actions, Checks and Commit statuses",
+            "90 days or less",
+            "SAML single sign-on",
+            "`carter github-token set`",
+            "`carter github-token check`",
+            "~/.carter/secrets/gh-read.token",
+            "{file:~/.carter/secrets/gh-read.token}",
+            "directory 0700, file 0600",
+            "Treat it as disclosed to your model provider",
+        ):
+            assert needle in doc, needle
+
+    def test_the_documented_entry_is_what_the_package_ships(self) -> None:
+        import json
+
+        shipped = json.loads((REPO / "mcp/opencode/github.json").read_text())
+        env = shipped["carter-github"]["environment"]["GITHUB_PERSONAL_ACCESS_TOKEN"]
+        assert env in self.doc()
+
+    def test_install_no_longer_asks_for_an_exported_github_token(self) -> None:
+        doc = self.doc()
+        assert "GitHub read-only token not found" in doc
+        assert "not** an environment variable" in doc
+
+
+class TestNoStaleAdvice:
+    def test_no_doc_recommends_exporting_github_token(self) -> None:
+        offenders = [
+            name
+            for name, body in all_user_docs().items()
+            if re.search(r"export\s+(?:GH|GITHUB)_TOKEN", body)
+        ]
+        assert offenders == []
+
+    def test_no_doc_describes_devops_pushing(self) -> None:
+        patterns = (
+            r"only (?:the )?devops (?:agent )?(?:can|may|is allowed to) (?:push|run)",
+            r"only devops can push",
+            r"the only agent that pushes",
+            r"devops only\b",
+            r"handed to devops",
+            r"hand(?:s|ed)? (?:the )?(?:push )?(?:over )?to devops",
+            r"devops (?:then )?(?:pushes|runs `?git push)",
+            r"reserved for devops",
+        )
+        hits = []
+        for name, body in all_user_docs().items():
+            flat = " ".join(body.split()).lower()
+            hits += [(name, p) for p in patterns if re.search(p, flat)]
+        # "Pushing, publishing ... reserved for DevOps" is allowed only for Jira/Slack/Vault.
+        assert [h for h in hits if h[1] != r"reserved for devops"] == []
+        for name, body in all_user_docs().items():
+            for match in re.finditer(
+                r"[^.]*reserved for devops[^.]*\.", " ".join(body.split()), re.I
+            ):
+                clause = match.group(0).lower().split(";")[-1]
+                assert "push" not in clause, (name, match.group(0))
+
+    def test_the_safety_page_says_nobody_pushes(self) -> None:
+        doc = " ".join(text("guides/safety-and-permissions.md").split())
+        assert "**Nobody pushes.**" in doc and "DevOps included" in doc
+
+    def test_the_readme_says_you_push(self) -> None:
+        readme = " ".join((REPO / "README.md").read_text(encoding="utf-8").split())
+        assert "No agent pushes: you do, with `carter push`" in readme
+
+
+class TestTroubleshootingHandoffRows:
+    @pytest.mark.parametrize(
+        "code",
+        ["E-HANDOFF", "E-SECRET-SCAN", "E-B-UNSIGNED", "E-APLUS-ARGS", "E-PAT-TYPE", "E-PAT-PERM"],
+    )
+    def test_each_code_has_a_row(self, code: str) -> None:
+        assert f"`Error: {code}`" in section(text("troubleshooting.md"), "Guards")
+
+    def test_every_documented_code_exists_in_the_registry(self) -> None:
+        from carter.identity.errors import registry
+
+        for code in set(re.findall(r"`Error: (E-[A-Z0-9-]+)", text("troubleshooting.md"))):
+            assert code in registry(), code

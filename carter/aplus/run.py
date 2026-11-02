@@ -27,6 +27,7 @@ from pathlib import Path
 from carter.identity.scrub import scrub_git_env
 
 DEFAULT_TIMEOUT = 30.0
+NETWORK_TIMEOUT = 300.0
 
 
 class RunError(Exception):
@@ -109,3 +110,88 @@ def git(
     prefix = hardening() if harden else []
     extra = [arg for pair in config for arg in ("-c", pair)]
     return run(["git", *prefix, *extra, "--no-pager", *args], cwd=cwd, env=env, timeout=timeout)
+
+
+def network_git(
+    args: Sequence[str], cwd: Path, *, timeout: float = NETWORK_TIMEOUT
+) -> subprocess.CompletedProcess[str]:
+    """``git`` for ``fetch`` and ``push`` only: the human's own credentials stay in reach.
+
+    Unlike ``git()``, the credential helpers, ``SSH_AUTH_SOCK``, system config and stdin
+    (for a passphrase or password prompt) are left alone, because the point of ``carter
+    push`` is that *you* authenticate. What could run repository-controlled code is still
+    off: hooks (``core.hooksPath`` is an empty directory), ``core.fsmonitor`` and the pager.
+    ``push.followTags`` is forced off so a configured default cannot add tags. The caller has
+    already refused repository configs that name a helper, a proxy or an SSH command.
+    Output is captured so the caller can mask URLs before printing it.
+    """
+    env = scrub_git_env(os.environ)
+    env.update(GIT_PAGER="cat", LC_ALL="C")
+    pairs = [
+        "core.fsmonitor=false",
+        f"core.hooksPath={empty_hooks_dir()}",
+        "core.pager=cat",
+        "push.followTags=false",
+    ]
+    prefix = [arg for pair in pairs for arg in ("-c", pair)]
+    try:
+        return subprocess.run(
+            ["git", *prefix, "--no-pager", *args],
+            cwd=cwd,
+            env=env,
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+            check=False,
+        )
+    except (FileNotFoundError, PermissionError) as exc:
+        raise RunError("git not found or not executable") from exc
+    except subprocess.TimeoutExpired as exc:
+        raise RunError(f"git timed out after {timeout:g}s") from exc
+
+
+GH_TIMEOUT = 60.0
+# Carter never sets these; they are named so a stale one can be reported (names only).
+GH_TOKEN_VARS = ("GH_TOKEN", "GITHUB_TOKEN", "GH_ENTERPRISE_TOKEN", "GITHUB_ENTERPRISE_TOKEN")
+
+
+def gh_path() -> str | None:
+    """Absolute path of the ``gh`` found on ``PATH`` (``None`` if there is none)."""
+    found = shutil.which("gh")
+    return os.path.abspath(found) if found else None
+
+
+def gh(
+    args: Sequence[str], cwd: Path, *, timeout: float = GH_TIMEOUT
+) -> subprocess.CompletedProcess[str]:
+    """Run ``gh`` by absolute path with your own login: no token is set or forced here.
+
+    The environment is yours minus the git author/config/repository overrides; prompts, the
+    pager, colour and the update check are off. Output is captured for the caller to mask.
+    """
+    exe = gh_path()
+    if exe is None:
+        raise RunError("gh not found: install the GitHub CLI and run `gh auth login`")
+    env = scrub_git_env(os.environ)
+    env.update(
+        GH_PROMPT_DISABLED="1",
+        GH_NO_UPDATE_NOTIFIER="1",
+        GH_PAGER="cat",
+        NO_COLOR="1",
+        LC_ALL="C",
+    )
+    try:
+        return subprocess.run(
+            [exe, *args],
+            cwd=cwd,
+            env=env,
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+            stdin=subprocess.DEVNULL,
+            check=False,
+        )
+    except (FileNotFoundError, PermissionError) as exc:
+        raise RunError("gh not found or not executable") from exc
+    except subprocess.TimeoutExpired as exc:
+        raise RunError(f"gh timed out after {timeout:g}s") from exc

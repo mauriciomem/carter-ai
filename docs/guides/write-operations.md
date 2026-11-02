@@ -1,11 +1,13 @@
 # Write operations (`ops:`)
 
 Start a request with `ops:` and Carter follows a fixed approval flow for anything
-that changes Git, GitHub or Jira: it shows you the exact commands first and runs
-them only after you agree.
+that changes Git or Jira: it shows you the exact commands first and runs them only
+after you agree. **Pushing and every other GitHub write are yours:** no agent pushes,
+opens a pull request or posts to GitHub. The agent prepares a handoff and you run
+`carter push` and `carter pr` yourself (see [Pushing and pull requests](#pushing-and-pull-requests-the-handoff)).
 
 ```text
-ops: create a feature branch, commit my changes and open a pull request
+ops: create a feature branch, commit my changes and write the pull request handoff
 ```
 
 ## The flow
@@ -17,7 +19,7 @@ flowchart LR
   C -- yes --> D[Execute]
   C -- no --> X[Stop]
   D --> E[Audit<br/>carter ops audit]
-  E --> F[Report<br/>branch, SHA, PR URL]
+  E --> F[Report<br/>branch, SHA, handoff path]
 ```
 
 1. **Assess.** The agent reads the current state (`git status`, `git diff`,
@@ -26,7 +28,8 @@ flowchart LR
 3. **Approve.** Nothing is written until you say yes.
 4. **Execute.** It runs the commands in the terminal, as you would.
 5. **Audit.** It records the result with `carter ops audit`.
-6. **Report.** It tells you what happened: branch, commit SHA, PR or issue URL.
+6. **Report.** It tells you what happened: branch, commit SHA and, for a finished
+   branch, the handoff file and the commands to run in your own terminal.
 
 Reads such as `git log` or `gh pr list` don't need `ops:`.
 
@@ -35,15 +38,79 @@ Reads such as `git log` or `gh pr list` don't need `ops:`.
 | Step | Who |
 |------|-----|
 | Local: branch, `git add`, `git commit` | The agent that received `ops:`. Maestro, Architect and Learner hold no local-write permission, so OpenCode asks you first |
-| Remote: `git push`, PRs, issues, comments, releases | **DevOps only.** Other agents stop after the local steps and hand over |
+| Push, pull requests, issues, comments, reviews, releases, merges | **You**, in your own terminal. No agent has a path to them, DevOps included |
+| The handoff file for a finished branch | DevOps (or the agent you asked), with its file tools |
 | Jira writes (through the `carter-atlassian` MCP server) | DevOps, by the skill's routing. OpenCode asks you before every MCP call, in any agent |
-| Text that leaves your machine (PR bodies, Jira comments, release notes) | Drafted by the Narrator, which removes secrets and internal details, then sent by DevOps |
+| Text that leaves your machine (PR bodies, Jira comments, release notes) | Drafted by the Narrator, which removes secrets and internal details; Jira text is then sent by DevOps, GitHub text goes in the handoff or comes to you as a draft |
 
-OpenCode enforces the DevOps restriction only for shell commands: `git push` and the
-`gh` write commands are denied to every other agent. Jira writes are MCP tool calls,
-which have no specific rule: any agent could make one, but OpenCode asks you first.
-Keeping them with DevOps, and the Narrator step, are instructions the agents follow;
-see [the limits](safety-and-permissions.md#know-the-limits).
+OpenCode enforces the restriction for shell commands: `git push` and the `gh` write
+commands are denied to every agent, and `gh api` is denied outright. Jira writes are MCP
+tool calls, which have no specific rule: any agent could make one, but OpenCode asks you
+first. Keeping them with DevOps, and the Narrator step, are instructions the agents
+follow; see [the limits](safety-and-permissions.md#know-the-limits).
+
+## Pushing and pull requests (the handoff)
+
+When a branch is ready, the agent stops at the commit and writes one file in the
+workspace, then tells you what to run:
+
+1. **The agent writes the handoff**, `.carter/state/handoff/<encoded-branch>.md`, where
+   `feat/x` becomes `feat%2Fx.md`. Front matter, then the pull request body in Markdown:
+
+   ```markdown
+   ---
+   title: "feat(auth): add token refresh"
+   base: main
+   draft: false
+   head_sha: 0123456789abcdef0123456789abcdef01234567
+   repo: owner/name
+   ---
+
+   ## Summary
+   - what changed and why
+   ```
+
+   Only these five keys are accepted. The file is untrusted input from a model and never
+   becomes a command line; it must hold no secrets. It is not part of the workspace's
+   saved history.
+2. **You run `carter push`** in your own terminal, from the repository:
+
+   ```bash
+   carter push --dry-run     # show what would be pushed and asked; push nothing
+   carter push               # show it, then ask
+   ```
+
+   It fetches the target ref, lists the commits, the files and any hook or CI paths
+   (`.husky/`, `.github/workflows/` and similar) in red, notes GitHub's branch
+   protection when your read-only token can see it, and asks `y`. On the default branch
+   you type the branch name instead. It pushes only `HEAD` to the same-named branch on
+   `origin`. Commits whose committer is the LLM must carry a valid LLM signature, or it
+   refuses. Repository or SSH settings that could run code with your credentials are shown
+   first and you decide.
+3. **You run `carter pr`** in your own terminal:
+
+   ```bash
+   carter pr
+   ```
+
+   It reads only the handoff for the current branch, scans it for secrets, finds the
+   target (the parent repository if `origin` is a fork), shows the title, base and the
+   first 40 lines of the body, asks `y/N`, then runs `gh pr create` with your own `gh`
+   login. If the branch is not on `origin` yet it offers the push first. The handoff is
+   deleted only after the pull request exists.
+
+There are no options for forcing, pushing tags, naming another remote or passing git
+flags. **Run both in your own terminal.** They refuse in an agent shell and in any shell
+without a terminal, including OpenCode's `!` shell, and say so. Errors you may meet:
+`E-HUMAN-TERMINAL`, `E-HANDOFF` (no valid file, or `head_sha` is not part of the branch),
+`E-SECRET-SCAN` (the title, branch or body looks like a credential), `E-B-UNSIGNED`.
+See [Troubleshooting](../troubleshooting.md#guards).
+
+> [!WARNING]
+> **A plain `git push` typed into OpenCode's `!` prompt is an unvalidated fallback.** It
+> runs with your credentials but none of the checks above. It must be **typed**; never
+> paste a line that starts with `!`, because a pasted one is sent to the model instead of
+> your shell.
 
 ## Attribution
 
@@ -72,8 +139,10 @@ sign with your key.
   The agent checks that last line: author and committer are you and the signature
   status is `N` (unsigned). If the emit says `commits: refused`, the agent stops and
   tells you why instead of committing.
-- **GitHub** issues, PRs and comments are posted with your `gh` login and end with the
-  `footer` from the same command (default `_This comment was generated with Carter._`).
+- **GitHub** pull requests are created by `carter pr` with your own `gh` login. There is
+  no agent path for issues, comments, reviews or releases: the agent gives you the text,
+  ending with the `footer` from the same command (default
+  `_This comment was generated with Carter._`), and you post it.
 - **Jira** comments are written through the `carter-atlassian`
   [MCP server](mcp-servers.md), with your Atlassian login, and end with the same footer.
 
@@ -89,14 +158,24 @@ LLM identity, so you are at T0 and nothing else is needed. An older file is migr
 
 - `carter install --bot-name` is deprecated and ignored.
 - The old `signing_key` setting is dropped; Carter never reads your signing key.
-- GitHub writes use `gh`, so log in with `gh auth login` first.
+- `carter pr` uses `gh` with your own login, so run `gh auth login` first.
 
 > [!WARNING]
 > `gh` uses `GH_TOKEN` or `GITHUB_TOKEN` from the environment instead of your
-> `gh auth login` credentials (`gh help environment`). If you export `GITHUB_TOKEN`
-> for the [GitHub MCP server](mcp-servers.md), `gh` writes use that token too. Give it
-> the write scopes you need, or don't export it globally (set it only for the
-> environment that starts OpenCode).
+> `gh auth login` credentials (`gh help environment`). Carter's read-only GitHub token
+> lives in a file, not in the environment, so that it never reaches `gh`. If your shell
+> still exports a read-only token as `GITHUB_TOKEN` (older instructions suggested it),
+> remove it: `carter pr` would use it and GitHub would refuse the write. `carter pr`
+> prints a notice naming such a variable.
+
+## What this release does and does not do
+
+The guards are **a speed bump until the plugin and the gate arrive (slice 2a)**: policies
+are literal command matches, not a boundary, and there is no shell isolation yet. Agent
+shells still inherit your SSH agent and `gh` login. The read-only GitHub token
+(`carter github-token set`) is stored but not injected into agent shells yet: only the
+`carter-github` MCP server reads the file. Agent commits still use your own git config.
+`carter check --host` says "plugin not installed" for as long as that is true.
 
 To see the values the agents use:
 
@@ -133,4 +212,4 @@ and Jira history remain the real record. The command details are in the
 ## Next
 
 - [Safety and permissions](safety-and-permissions.md)
-- [MCP servers](mcp-servers.md)
+- [MCP servers](mcp-servers.md): including the read-only GitHub token

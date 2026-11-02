@@ -49,7 +49,7 @@ IDS_BY_GROUP = {
     ],
 }
 
-# F4 + RFC §4.5; `gh status` is pending spike 4 (kept per the RFC, one data line to drop).
+# F4 + RFC §4.5 minus `gh status`, which spike 4 showed 403s with a fine-grained read-only PAT.
 GH_ALLOW_VERBS = (
     "pr view",
     "pr list",
@@ -61,7 +61,6 @@ GH_ALLOW_VERBS = (
     "run list",
     "repo view",
     "search",
-    "status",
 )
 
 # F6 / D46.

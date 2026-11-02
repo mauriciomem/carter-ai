@@ -153,6 +153,45 @@ class TestPushScenarioIsAHandoff:
         assert ".carter/state/handoff/<encoded-branch>.md" in text
 
 
+class TestDevopsPushScenarioIsAHandoff:
+    """Plan 003 step 23 (T15): "push this branch" to devops expects a handoff file and the
+    own-terminal text, and no push or GitHub write."""
+
+    NAME = "devops_push_this_branch_is_a_handoff"
+
+    def test_the_scenario_expects_a_handoff_and_the_own_terminal_text(
+        self, ops_scenarios: list[dict]
+    ) -> None:
+        from carter.aplus.handoff import OWN_TERMINAL
+
+        (s,) = [s for s in ops_scenarios if s["name"] == self.NAME]
+        assert "carter-devops" in s["context"]
+        assert s["expect"]["handoff"] is True
+        assert ".carter/state/handoff" in s["expect"]["mentions"]
+        (phrase,) = [m for m in s["expect"]["mentions"] if "own terminal" in m]
+        assert phrase in OWN_TERMINAL  # the wording the agent is told to relay
+
+    def test_no_push_verb_is_allowed_and_the_list_is_generated(
+        self, ops_scenarios: list[dict], ops_scenarios_raw: list[dict]
+    ) -> None:
+        (raw,) = [s for s in ops_scenarios_raw if s["name"] == self.NAME]
+        assert raw["expect"]["commands_not_contain_g2"] is True
+        (s,) = [s for s in ops_scenarios if s["name"] == self.NAME]
+        forbidden = s["expect"]["commands_not_contain"]
+        for verb in ("git push", "gh pr create", "gh pr merge", "git push --force"):
+            assert verb in forbidden, verb
+        assert forbidden[: len(render_forbidden_commands())] == render_forbidden_commands()
+        assert not [c for c in s["expect"].get("commands_contain", []) if "push" in c]
+
+    def test_the_earlier_non_devops_scenario_stays(self, ops_scenarios: list[dict]) -> None:
+        names = {s["name"] for s in ops_scenarios}
+        assert {"push_from_non_devops_hands_off", self.NAME} <= names
+
+    def test_the_skill_backs_it_for_devops_too(self, skills_dir: Path) -> None:
+        text = " ".join((skills_dir / "carter-ops" / "SKILL.md").read_text().split())
+        assert "devops" in text and ".carter/state/handoff/<encoded-branch>.md" in text
+
+
 class TestJiraScenarioMatchesTheSkill:
     """The skills send every Jira operation through the carter-atlassian MCP server.
     The scenario must expect that, not curl or the REST API (it once did)."""

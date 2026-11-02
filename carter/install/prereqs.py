@@ -11,15 +11,16 @@ import platform
 import re
 import shutil
 import subprocess
+from pathlib import Path
 
+from carter.home import tilde
 from carter.install.console import _log, log_ok, log_step, log_warn
+from carter.install.paths import token_path
 
 # Env vars the shipped MCP configs (mcp/*/*.json) read. carter-atlassian is the
-# official remote server (OAuth in the client), so it needs none.
-REQUIRED_ENV_VARS = (
-    "GITHUB_TOKEN",
-    "TFE_TOKEN",
-)
+# official remote server (OAuth in the client), so it needs none. carter-github reads
+# a file, not the environment (see `check_credentials`).
+REQUIRED_ENV_VARS = ("TFE_TOKEN",)
 
 
 # Minimum supported OpenCode release (the first with V2 permissions).
@@ -98,9 +99,20 @@ def detect_environment() -> None:
     _log(f"  OS: {platform.system()} | Python: {platform.python_version()} | uv: {uv}")
 
 
-def check_credentials() -> None:
-    """Warn about unset env vars the shipped MCP configs read. Never fails."""
+def check_credentials(base_dir: Path | None = None) -> None:
+    """Warn about credentials the shipped MCP configs read. Never fails.
+
+    ``carter-github`` reads the read-only token from ``~/.carter/secrets/gh-read.token``
+    (set with `carter github-token set`), never from an exported variable."""
     log_step("Checking credentials...")
+    token = token_path(base_dir)
+    if token.is_file() and not token.is_symlink():
+        log_ok("GitHub read-only token", tilde(token))
+    else:
+        log_warn(
+            "GitHub read-only token not found",
+            "Run `carter github-token set` in your own terminal (a read-only fine-grained token).",
+        )
     for var in REQUIRED_ENV_VARS:
         if os.environ.get(var):
             log_ok(var)

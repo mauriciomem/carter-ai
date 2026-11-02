@@ -12,11 +12,11 @@ Nothing here writes. The same pieces back ``carter guard status``.
 from __future__ import annotations
 
 from collections.abc import Callable, Mapping
-from dataclasses import dataclass
 from pathlib import Path
-from typing import Literal
 
-from carter import harness
+from carter import ghtoken, harness
+from carter.checkitems import Item, exit_code
+from carter.checkitems import render as render_items
 from carter.guard import consent, gitconfig, optout, permissions
 from carter.guard.configwrite import Reader, missing_statements, target_path
 from carter.guard.state import GuardState, load_or_empty_readonly
@@ -25,12 +25,9 @@ from carter.identity.errors import E_POLICIES_MISSING, E_STATE_INVALID
 from carter.identity.policyset import Statement, consent_groups
 from carter.identity.rules import load_rules
 from carter.install.jsonc import _load_jsonc
+from carter.install.mcp import config_target
 from carter.install.paths import guard_state_path
 
-Level = Literal["ok", "info", "warn", "red"]
-TOKEN_CHECK_PENDING = (
-    "read-only token: not checked in this build (the token commands are not part of it yet)"
-)
 BROKEN_CONFIG_HINT = (
     "A broken OpenCode config drops all policies and your providers: run `carter guard install`."
 )
@@ -50,31 +47,13 @@ PLUGIN_ABSENT = (
 )
 
 
-@dataclass(frozen=True)
-class Item:
-    level: Level
-    area: str
-    text: str
-    fix: str = ""
+__all__ = ["exit_code", "render", "run_host_checks"]
 
-    def render(self) -> str:
-        fix = f"\n      → {self.fix}" if self.fix else ""
-        return f"  {self.level.upper():<5} {self.area}: {self.text}{fix}"
-
-
-def exit_code(items: list[Item]) -> int:
-    return 1 if any(i.level == "red" for i in items) else 0
+MCP_FILE_TOKEN = "{file:~/.carter/secrets/gh-read.token}"
 
 
 def render(items: list[Item]) -> list[str]:
-    counts = {lv: sum(1 for i in items if i.level == lv) for lv in ("red", "warn")}
-    head = "carter check --host (read-only)"
-    tail = (
-        f"Host: {counts['red']} RED, {counts['warn']} WARN."
-        if counts["red"]
-        else (f"Host OK ({counts['warn']} WARN)." if counts["warn"] else "Host OK.")
-    )
-    return [head, *(i.render() for i in items), tail]
+    return render_items(items, "carter check --host (read-only)", "Host")
 
 
 def _statements_from_records(state: GuardState) -> list[Statement]:
@@ -236,6 +215,30 @@ def _declined(state: GuardState) -> list[Item]:
     ]
 
 
+def _mcp_token(base_dir: Path | None) -> list[Item]:
+    """Does the carter-github MCP entry read the PAT file? Names only, never the value."""
+    data = _load_jsonc(config_target(base_dir)) if config_target(base_dir).exists() else None
+    servers = ((data or {}).get("mcp") or {}).get("servers") or {}
+    entry = servers.get("carter-github")
+    if not isinstance(entry, dict):
+        return []
+    env = entry.get("environment") or entry.get("env") or {}
+    value = env.get("GITHUB_PERSONAL_ACCESS_TOKEN") if isinstance(env, dict) else None
+    if value == MCP_FILE_TOKEN:
+        return [Item("ok", "mcp token", "carter-github reads the token from gh-read.token")]
+    if isinstance(value, str) and value.startswith("{env:"):
+        text = "carter-github still reads its token from an environment variable"
+        return [Item("warn", "mcp token", text, "Run `carter install` to switch it to the file.")]
+    if isinstance(value, str) and value:
+        text = "carter-github has a literal token in the OpenCode config"
+        return [Item("red", "mcp token", text, "Remove it and run `carter github-token set`.")]
+    return [Item("warn", "mcp token", "carter-github has no token configured")]
+
+
+def _token(base_dir: Path | None) -> list[Item]:
+    return [*ghtoken.check_token(base_dir, required=False), *_mcp_token(base_dir)]
+
+
 def _env(server_env: Mapping[str, str]) -> list[Item]:
     names = [n for n in load_rules().warn_only if n in server_env]
     if not names:
@@ -285,7 +288,7 @@ def run_host_checks(
     guarded("project", lambda: _project_scope(where))
     guarded("D52", _optouts)
     guarded("workspace", lambda: _pending_pins(where))
-    items.append(Item("info", "token", TOKEN_CHECK_PENDING))
+    guarded("token", lambda: _token(base_dir))
     items.append(
         Item(
             "info",

@@ -8,6 +8,7 @@ from typing import Any
 
 from jinja2 import Environment, FileSystemLoader
 
+from carter.aplus.handoff import OWN_TERMINAL
 from carter.config import (
     PRIMARY_ROLE,
     V1_AGENT_KEYS,
@@ -37,6 +38,8 @@ def create_env(templates_dir: Path = TEMPLATES_DIR) -> Environment:
     env.globals["policy_frontmatter"] = policy_frontmatter
     env.globals["policy_gate_table"] = policy_gate_table
     env.globals["docs_language_phrase"] = docs_language_phrase
+    # The one sentence that tells the user where pushing happens (handoff.OWN_TERMINAL).
+    env.globals["own_terminal"] = OWN_TERMINAL
     # Only the primary orchestrator dispatches (flat one-level chain), so only it
     # renders the <agents> roster.
     env.globals["primary_role"] = PRIMARY_ROLE

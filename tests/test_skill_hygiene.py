@@ -284,3 +284,81 @@ def test_the_user_is_never_said_to_sign() -> None:
     for name in WORDING_FILES:
         text = (REPO / name).read_text(encoding="utf-8")
         assert not re.search(r"user is (?:the )?(?:commit )?author \(signed", text), name
+
+
+class TestCarterOpsGhReads:
+    """Spike 4: `gh repo view` and `gh search repos` take the repo positionally (no -R)."""
+
+    def test_the_positional_verbs_and_the_dash_r_placement_are_stated(self) -> None:
+        text = " ".join(_ops_text().split())
+        assert "`gh repo view <owner>/<repo>`" in text and "`gh search repos <query>`" in text
+        assert "have no `-R`" in text
+        assert "put `-R <owner>/<repo>` **after** the subcommand" in text
+        assert "`gh status` and `gh api` are denied" in text
+
+    def test_no_fence_shows_dash_r_on_the_positional_verbs(self) -> None:
+        for fence in _code_fences(_ops_text()):
+            assert "gh repo view -R" not in fence and "gh search repos -R" not in fence
+
+
+class TestOwnTerminalWordingHasOneHome:
+    """Plan 003 step 23: the sentence that says *where* pushing happens lives in
+    ``handoff.OWN_TERMINAL`` only; templates use the ``own_terminal`` global, skills and the
+    AGENTS.md rule carry it verbatim, and no file words it differently."""
+
+    SOURCES = (
+        "templates",
+        "skills",
+        "carter/install/components.py",
+        "carter/scaffold.py",
+    )
+
+    @staticmethod
+    def _files():
+        for name in TestOwnTerminalWordingHasOneHome.SOURCES:
+            path = REPO / name
+            yield from (sorted(path.rglob("*")) if path.is_dir() else [path])
+
+    def test_the_constant_is_the_sentence(self) -> None:
+        from carter.aplus.handoff import OWN_TERMINAL
+
+        assert OWN_TERMINAL == (
+            "Run `carter push` and then `carter pr` in your own terminal, not through an agent."
+        )
+        assert "!" not in OWN_TERMINAL  # spike 2: `!` has no TTY, so it is never suggested
+
+    def test_no_file_words_the_instruction_differently(self) -> None:
+        from carter.aplus.handoff import OWN_TERMINAL
+
+        drift = []
+        for path in self._files():
+            if not path.is_file() or path.suffix not in {".md", ".j2", ".py", ".yaml"}:
+                continue
+            text = " ".join(path.read_text(encoding="utf-8").split())
+            for match in re.finditer(r"[^.\n]*\bin your own terminal\b[^.\n]*", text):
+                sentence = match.group(0)
+                if "carter push" in sentence and OWN_TERMINAL.removesuffix(".") not in sentence:
+                    drift.append((str(path.relative_to(REPO)), sentence.strip()))
+        assert drift == []
+
+    def test_templates_use_the_global_not_a_copy(self) -> None:
+        for path in (REPO / "templates").rglob("*.j2"):
+            text = path.read_text(encoding="utf-8")
+            assert "not through an agent" not in text, path.name
+
+    def test_the_skill_and_the_rule_carry_it_verbatim(self) -> None:
+        from carter.aplus.handoff import OWN_TERMINAL
+        from carter.install.components import _ATTRIBUTION_RULE
+
+        skill = " ".join((REPO / "skills/carter-ops/SKILL.md").read_text().split())
+        pipeline = " ".join((REPO / "skills/carter-pipeline/SKILL.md").read_text().split())
+        assert (
+            OWN_TERMINAL in skill and OWN_TERMINAL in pipeline and OWN_TERMINAL in _ATTRIBUTION_RULE
+        )
+
+    def test_nothing_agent_facing_suggests_a_bang_shell(self) -> None:
+        for path in self._files():
+            if path.is_file() and path.suffix in {".md", ".j2"}:
+                text = path.read_text(encoding="utf-8")
+                assert "!carter push" not in text and "! carter push" not in text, path.name
+                assert "!carter pr" not in text and "!git push" not in text, path.name

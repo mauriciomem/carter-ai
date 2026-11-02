@@ -14,6 +14,9 @@ carter [--version] [--help] COMMAND [ARGS]
 | [`init`](#carter-init) | Create a workspace in a project directory |
 | [`update`](#carter-update) | Regenerate a workspace's agents from `carter.yaml` |
 | [`check`](#carter-check) | Validate a workspace and confirm OpenCode loads it |
+| [`github-token`](#carter-github-token) | Store and check the read-only GitHub token |
+| [`push`](#carter-push) | Push the current branch to `origin` after showing and checking it |
+| [`pr`](#carter-pr) | Open a pull request from the agent's handoff file |
 | [`save`](#carter-save) | Commit the workspace state to its private history |
 | [`ops`](#carter-ops) | Audit log and config helper used by the `ops:` flow |
 
@@ -158,6 +161,77 @@ unchanged since Carter wrote it (anything you edited is kept and reported). Keep
 | `-y`, `--yes` | Remove without asking. Without a terminal and without `--yes` the command is refused |
 | `--only GROUPS` | Remove only these groups' statements (and forget their consent) |
 
+## carter github-token
+
+The read-only GitHub token that the `carter-github` MCP server reads (create it as described
+in [MCP servers](../guides/mcp-servers.md#the-github-token)). Both commands refuse in an agent
+shell and print at most the first four characters of a token in an error.
+
+### carter github-token set
+
+```text
+carter github-token set
+```
+
+Reads one fine-grained `github_pat_` token from standard input (a hidden prompt on a
+terminal, or a pipe) and stores it in `~/.carter/secrets/gh-read.token` (directory 0700, file
+0600, written atomically), then records the path under `[github] read_token_file` in
+`~/.carter/config.toml`. It takes no arguments, so the token never reaches your shell
+history, and it needs a terminal. Classic (`ghp_`), OAuth (`gho_`), user, server and refresh
+tokens are refused with `E-PAT-TYPE`.
+
+### carter github-token check
+
+```text
+carter github-token check
+```
+
+Checks the stored token: the file (0600, yours, not a symlink, outside any repository:
+`E-PAT-PERM`), that GitHub accepts it and that it is a fine-grained token, its expiry (a
+warning within 14 days) and that it **cannot write**, by asking GitHub to create a branch at
+an all-zero commit, which no token can complete. "Resource not accessible" is read-only; any
+other answer to a write is red. It makes three requests (`GET /user`, `GET /user/repos`, the
+probe) to `$GITHUB_API_URL` (default `https://api.github.com`; plain http only for loopback).
+Exit 1 if anything is red. It cannot tell whether the token covers "All repositories": keep the
+selection narrow.
+
+## carter push
+
+```text
+carter push [--dry-run] [--set-upstream]
+```
+
+Pushes `HEAD` to the same-named branch on `origin`, after checks. **Own terminal only**:
+it refuses in an agent shell and in any shell without a terminal (including OpenCode's `!`
+shell) before running any git command. There are no other options and no arguments: no force,
+no tags, no other remote or refspec.
+
+| Option | Description |
+|--------|-------------|
+| `--dry-run` | Run every check and show what would be pushed and asked; push nothing |
+| `-u`, `--set-upstream` | Set `origin/<branch>` as the upstream |
+
+In order: repository and SSH settings that could run code with your credentials are shown
+and you decide; the target ref is fetched; the commits, files and hook or CI paths are listed
+(those in red); signatures of LLM-committed commits must verify (`E-B-UNSIGNED`); GitHub's
+protection for the branch is noted when the read-only token can see it; then it asks `y`
+(on the default branch, you type its name). Repository hooks are not run. See
+[Write operations](../guides/write-operations.md#pushing-and-pull-requests-the-handoff).
+
+## carter pr
+
+```text
+carter pr
+```
+
+Opens a pull request from `.carter/state/handoff/<encoded-branch>.md`, the only input it
+reads. **Own terminal only**, like `push`. The file's title, branch and body are scanned for
+secrets (`E-SECRET-SCAN`) before `gh` is run; `head_sha` must be part of the branch
+(`E-HANDOFF`). It shows the title, target, base and the first 40 lines of the body, asks
+`y/N`, runs `gh pr create` with your own `gh` login and deletes the file only after the pull
+request exists. If the repository is a fork, the target is its parent. If the branch is not on
+`origin` at `HEAD`, it runs the `carter push` flow first.
+
 ## carter check
 
 ```text
@@ -197,6 +271,9 @@ only if something is `RED`:
 - the files recorded in `guard-state.json` match their hashes;
 - the git include line, when Carter has one, is present and valid (this release has no
   Carter git key, so it says "not needed yet");
+- the read-only GitHub token, if you stored one: its file, type, expiry and that it cannot
+  write (the same checks as [`github-token check`](#carter-github-token-check)), and that the
+  `carter-github` MCP entry reads the token file;
 - declined groups, active `allow_project_opencode_edit` opt-outs, project config that can run
   code, and `carter.yaml` policy that `carter update` has not pinned yet.
 
@@ -240,7 +317,7 @@ when you run it, from `~/.carter/config.toml` and the environment:
 | `commits` | `allowed` or `refused` |
 | `refusal_reason` | The error code when `commits` is `refused` (for example `E-CONFIG` or `E-ROLE-B-TIER`) |
 | `footer` | Text appended to GitHub and Jira bodies |
-| `has_github_token` | Whether `GITHUB_TOKEN` is set |
+| `has_github_token` | Whether `GITHUB_TOKEN` is set in the environment (the token file is not counted) |
 
 An invalid `config.toml` gives `commits: refused` with `E-CONFIG`: agent commits stay off
 until it is fixed. Carter never reads your signing key.

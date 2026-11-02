@@ -34,6 +34,9 @@ E_POLICIES_MISSING = "E-POLICIES-MISSING"
 E_HUMAN_TERMINAL = "E-HUMAN-TERMINAL"
 E_STATE_INVALID = "E-STATE-INVALID"
 E_APLUS_ARGS = "E-APLUS-ARGS"
+E_PAT_TYPE = "E-PAT-TYPE"
+E_PAT_PERM = "E-PAT-PERM"
+E_GH_READONLY = "E-GH-READONLY"
 E_HANDOFF = "E-HANDOFF"
 E_SECRET_SCAN = "E-SECRET-SCAN"
 E_B_REPOCFG = "E-B-REPOCFG"
@@ -47,13 +50,17 @@ class ErrorEntry:
     where: str
     message: str
     remediation: str = ""
+    observed: tuple[str, ...] = ()  # raw strings seen in the wild (data only, spike transcripts)
 
 
 @cache
 def registry() -> dict[str, ErrorEntry]:
     """Every registered code, in Appendix B order."""
     text = resources.files("carter.identity").joinpath("errors.json").read_text("utf-8")
-    return {row["code"]: ErrorEntry(**row) for row in json.loads(text)["errors"]}
+    return {
+        row["code"]: ErrorEntry(**{**row, "observed": tuple(row.get("observed", ()))})
+        for row in json.loads(text)["errors"]
+    }
 
 
 MSG_CONFIG = registry()[E_CONFIG].message

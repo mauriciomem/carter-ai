@@ -144,19 +144,24 @@ class TestPushVerbsAreDenied:
 
 
 class TestGhAllowlist:
-    def test_is_the_rfc_list_minus_nothing_pending_spike_4(self) -> None:
+    def test_is_the_rfc_list_minus_gh_status(self) -> None:
         verbs = [v.verb for v in gh_allowlist()]
         assert verbs == [
             "pr view", "pr list", "pr diff", "pr checks", "issue view", "issue list",
-            "run view", "run list", "repo view", "search", "status",
+            "run view", "run list", "repo view", "search",
         ]  # fmt: skip
 
-    def test_gh_status_is_pending_spike_4(self) -> None:
-        # pending-spike-4: once the user runs `gh status` with a fine-grained PAT, either delete
-        # the entry (one data line) or drop the `pending` marker, and update this test.
-        (status,) = [v for v in gh_allowlist() if v.verb == "status"]
-        assert status.pending == "spike-4"
-        assert [v.verb for v in gh_allowlist() if v.pending] == ["status"]
+    def test_gh_status_was_dropped_after_spike_4_and_nothing_is_pending(self, statements) -> None:
+        # Spike 4: `gh status` -> HTTP 403 "Resource not accessible by personal access token".
+        assert "status" not in [v.verb for v in gh_allowlist()]
+        assert [v for v in gh_allowlist() if v.pending] == []
+        assert decide(statements, "shell", "gh status") == "deny"
+        assert "gh status" in raw()["gh_notes"]["dropped"] and "403" in raw()["gh_notes"]["dropped"]
+
+    def test_repo_view_and_search_repos_are_positional_not_dash_r(self) -> None:
+        note = raw()["gh_notes"]["positional"]
+        assert "gh repo view <owner>/<repo>" in note and "gh search repos <query>" in note
+        assert "never `-R`" in note and "after the subcommand" in note
 
     def test_gh_api_is_never_allowed(self, statements) -> None:
         for cmd in ("gh api repos/o/r", "gh api -X POST /x", "gh api"):
@@ -188,7 +193,7 @@ class TestGhAllowlist:
             "gh run list",
             "gh repo view o/r",
             "gh search prs foo",
-            "gh status",
+            "gh search repos carter",
         ):
             assert decide(statements, "shell", cmd) == "allow", cmd
 

@@ -22,7 +22,7 @@
     {"id": "credential-paths", "class": "Credential paths", "applies_from": "2a", "ref": "credential_paths", "items": ["security find-generic-password", "security find-internet-password"], "note": "Any token that references `credential_paths` after normalization.", "literals": [], "rfc": "C.4.1 row 10"},
     {"id": "control-files", "class": "Control files", "applies_from": "2a", "ref": "control_paths", "items": ["tee", "sed -i", "cp", "mv", "rm", "ln", "chmod", "truncate"], "note": "Write-capable references to `control_paths`: redirections (`>`, `>>`) and these commands, or interpreter args naming them.", "literals": [], "rfc": "C.4.1 row 11"}
   ],
-    "gh_notes": {"leading_repo_flag": "A leading `gh -R/--repo` matches no allow statement, so it fails closed; the gate (2a) rejects it with 'put -R after the subcommand'. No statement carries -R.", "api": "`gh api` is never allowed: it is covered by the `deny-gh` statement and no allow matches it.", "pending": "An entry with `pending` is kept per the RFC until the named spike resolves; dropping it is a one-line change here."},
+    "gh_notes": {"leading_repo_flag": "A leading `gh -R/--repo` matches no allow statement, so it fails closed; the gate (2a) rejects it with 'put -R after the subcommand'. No statement carries -R.", "api": "`gh api` is never allowed: it is covered by the `deny-gh` statement and no allow matches it.", "positional": "`gh repo view` and `gh search repos` take the repository or query positionally: write `gh repo view <owner>/<repo>` and `gh search repos <query>`, never `-R` (spike 4: `unknown shorthand flag: 'R'`). `gh pr`, `gh issue` and `gh run` verbs take `-R <owner>/<repo>` after the subcommand.", "dropped": "`gh status` is not allowlisted: with a fine-grained read-only token it fails with HTTP 403 `Resource not accessible by personal access token` (spike 4)."},
   "consent_groups": [
     {"id": "g2", "live": true, "effect": "agents can't push or write to GitHub from their shell (gh is read-only); per-agent carter_push/carter_pr denies. The plugin and shell isolation arrive in a later release: for now these are literal denies only"},
     {"id": "hooks", "live": false, "effect": "git hooks that guard agent commits and pushes (reserved: nothing to install yet)"},
@@ -45,8 +45,7 @@
     {"verb": "run view", "pattern": "gh run view *", "rfc": "4.5 gh read allowlist"},
     {"verb": "run list", "pattern": "gh run list *", "rfc": "4.5 gh read allowlist"},
     {"verb": "repo view", "pattern": "gh repo view *", "rfc": "4.5 gh read allowlist"},
-    {"verb": "search", "pattern": "gh search *", "rfc": "4.5 gh read allowlist"},
-    {"verb": "status", "pattern": "gh status *", "rfc": "4.5 gh read allowlist", "pending": "spike-4"}
+    {"verb": "search", "pattern": "gh search *", "rfc": "4.5 gh read allowlist"}
   ],
   "policy_set": [
     {"id": "deny-git-push", "group": "g2", "action": "tool.use", "resource": "shell:git push *", "effect": "deny", "rfc": "4.5 first bullet"},

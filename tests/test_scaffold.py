@@ -1165,3 +1165,28 @@ class TestScaffoldedStateValidates:
         checkpoint.write_text(example, encoding="utf-8")
 
         assert validate_checkpoint(checkpoint) == []
+
+
+class TestWorkspacePushRule:
+    """Plan 003 step 23: the workspace AGENTS.md carries one human-only push rule built from
+    ``handoff.OWN_TERMINAL`` (rendered through the ``own_terminal`` template global)."""
+
+    def test_the_rendered_rule_uses_the_constant(self, default_config, env):
+        from carter.aplus.handoff import OWN_TERMINAL
+
+        text = render_instructions(default_config, env)["AGENTS.md"]
+        (rule,) = [ln for ln in text.splitlines() if ln.startswith("- **Pushing**")]
+        assert OWN_TERMINAL in rule and "human-only" in rule and "`carter-ops`" in rule
+        assert "!" not in rule.replace("!=", "")  # never suggests a `!` shell
+
+    def test_the_global_rule_carries_the_same_sentence_once(self):
+        from carter.aplus.handoff import OWN_TERMINAL
+        from carter.install.components import _ATTRIBUTION_RULE, _OPENCODE_AGENTS_MD
+
+        assert _ATTRIBUTION_RULE.count(OWN_TERMINAL) == 1
+        assert _OPENCODE_AGENTS_MD.count(OWN_TERMINAL) == 1
+
+    def test_the_template_global_is_the_constant(self, env):
+        from carter.aplus.handoff import OWN_TERMINAL
+
+        assert env.globals["own_terminal"] == OWN_TERMINAL

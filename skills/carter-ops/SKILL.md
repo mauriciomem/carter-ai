@@ -85,10 +85,10 @@ Never run any of these (generated from `g2_rules.json`):
 | Code | Where | Message | What to do |
 |---|---|---|---|
 | `E-COMMIT-T1` | `carter commit`, T1 | No LLM signing key (T1): committed unsigned with `Co-authored-by: LLM`. | — |
-| `E-POLICY` | OpenCode policy | permission.rejected: Blocked by configuration policy | Same; for gh, use an allowlisted read verb with `-R` after the subcommand. |
-| `E-GH-READONLY` | gh write with read-only PAT | 401/403 at GitHub (exact text unverified) | Writes are human-only. |
-| `E-PAT-TYPE` | `github-token set` / plugin / check | Only fine-grained `github_pat_` tokens are accepted (this looks like `<4-char prefix>`). | — |
-| `E-PAT-PERM` | `github-token set` / plugin / check | Token file must be 0600, yours, not a symlink, outside any repo. | — |
+| `E-POLICY` | OpenCode policy | permission.rejected: Blocked by configuration policy | Same; for gh, use an allowlisted read verb: `gh pr\|issue\|run <verb> -R <owner>/<repo>` (put `-R` after the subcommand), and `gh repo view <owner>/<repo>` or `gh search repos <query>` positionally, with no `-R`. |
+| `E-GH-READONLY` | gh or git write with the read-only PAT | GitHub refused the write: the read-only token has no write access (`Resource not accessible by personal access token`, HTTP 403). | Writes are human-only. Run `carter push` and then `carter pr` in your own terminal, not through an agent. |
+| `E-PAT-TYPE` | `github-token set` / plugin / check | Only fine-grained `github_pat_` tokens are accepted (what was found is named by its type or at most a 4-character prefix, never quoted). | Create a read-only fine-grained token on the repositories Carter works on, then pipe it to `carter github-token set` in your own terminal. |
+| `E-PAT-PERM` | `github-token set` / plugin / check | Token file must be 0600, yours, not a symlink, outside any repo. | Fix the mode or location (the secrets directory must be 0700), or run `carter github-token set` again. |
 | `E-B-REPOCFG` | B, A+ | Config, hooks or SSH config at scope `<scope>` (`<key>`) could run code with your credentials; use `carter push` and review. | — |
 | `E-B-UNSIGNED` | B, A+ | Commits `<shas>` have the LLM as committer but no valid LLM signature; refused. | — |
 | `E-SECRET-SCAN` | `carter pr`, `carter_pr` | PR text matches a secret pattern (`<rule>`); refused. | — |
@@ -244,6 +244,12 @@ Read operations run directly without the `ops:` prefix — no approval needed:
 
 `git log`, `git status`, `git diff`, `git blame`, `git branch --list`,
 `gh issue list`, `gh pr list`, `gh pr view`, `gh pr diff`, `gh pr checks`, JQL queries via MCP.
+
+`gh` is read-only for agents and limited to `gh pr|issue|run view|list` (`pr diff`, `pr checks`),
+`gh repo view` and `gh search`; `gh status` and `gh api` are denied. Where `gh` needs a
+repository, put `-R <owner>/<repo>` **after** the subcommand (`gh pr view 3 -R o/r`, never
+`gh -R o/r pr view 3`). `gh repo view` and `gh search repos` take it positionally and have no
+`-R`: `gh repo view <owner>/<repo>`, `gh search repos <query>`.
 
 </boundaries>
 

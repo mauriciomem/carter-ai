@@ -73,3 +73,13 @@ def managed_roots(base_dir: Path | None) -> tuple[Path, ...]:
             carter / "run",
         )
     )
+
+
+def token_path(base_dir: Path | None) -> Path:
+    """``~/.carter/secrets/gh-read.token``: the read-only fine-grained PAT (App C.7)."""
+    return _carter_base(base_dir) / "secrets" / "gh-read.token"
+
+
+def carter_config_path(base_dir: Path | None) -> Path:
+    """``~/.carter/config.toml``: the identity and ``[github]`` settings."""
+    return _carter_base(base_dir) / "config.toml"
