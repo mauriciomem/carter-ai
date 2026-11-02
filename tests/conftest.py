@@ -2,16 +2,33 @@
 
 from __future__ import annotations
 
+import json
 import os
 import pwd
-from collections.abc import Callable
+import socket
+import sys
+import tempfile
+from collections.abc import Callable, Iterator
+from dataclasses import dataclass
 from pathlib import Path
 
 import pytest
 
+from host_guard import (
+    NetworkBlockedError,
+    changed,
+    digest_host,
+    is_allowed_connect,
+    is_local_host,
+)
+
 # Resolved once at import, before any fixture can redirect HOME. The hermetic fixture
 # compares against it, so it must not be recomputed lazily.
 _REAL_HOME = Path(pwd.getpwuid(os.getuid()).pw_dir).resolve()
+
+# Fingerprint of the real host files (git config, OpenCode config, ~/.carter state) taken
+# before any test runs; the session-end check fails the run if a test changed them.
+_REAL_HOST_BEFORE = digest_host(_REAL_HOME)
 
 # Ambient variables that change who git (or Carter) thinks the author is.
 _IDENTITY_ENV_VARS = (
@@ -31,6 +48,31 @@ _IDENTITY_ENV_VARS = (
     "CARTER_IDENTITY_ROLE",
     "CARTER_IDENTITY_MODE",
 )
+
+
+# Ambient variables that would let a test reach the developer's agent, tokens or config.
+_HOST_LEAK_VARS = (
+    "SSH_AUTH_SOCK",
+    "SSH_AGENT_PID",
+    "GIT_SSH",
+    "GIT_SSH_COMMAND",
+    "GH_TOKEN",
+    "GITHUB_TOKEN",
+    "GH_ENTERPRISE_TOKEN",
+    "GITHUB_ENTERPRISE_TOKEN",
+    "GH_HOST",
+    "GITHUB_API_URL",
+    "OPENCODE_CONFIG",
+    "OPENCODE_CONFIG_DIR",
+    "OPENCODE_CONFIG_CONTENT",
+)
+
+# Tools a test must never run for real: name -> the fixture that provides a safe stand-in.
+_GUARDED_TOOLS = {
+    "gh": "fake_gh",
+    "opencode": "fake_opencode",
+    "ssh-keygen": "real_ssh_keygen",
+}
 
 
 def _is_under(path: Path, root: Path) -> bool:
@@ -71,15 +113,126 @@ def _hermetic_env(
     monkeypatch.setenv("GIT_CONFIG_NOSYSTEM", "1")
     # GIT_CONFIG_KEY_<n> / GIT_CONFIG_VALUE_<n> inject config pairs; clear every index.
     injected = [v for v in os.environ if v.startswith(("GIT_CONFIG_KEY_", "GIT_CONFIG_VALUE_"))]
-    for var in (*_IDENTITY_ENV_VARS, *injected):
+    for var in (*_IDENTITY_ENV_VARS, *_HOST_LEAK_VARS, *injected):
         monkeypatch.delenv(var, raising=False)
+
+    # Sockets and temp files must not leak out of the sandbox either (plan 003, step 5).
+    runtime = home / ".run"
+    runtime.mkdir(mode=0o700)
+    tmpdir = home / "tmp"
+    tmpdir.mkdir()
+    monkeypatch.setenv("XDG_RUNTIME_DIR", str(runtime))
+    monkeypatch.setenv("TMPDIR", str(tmpdir))
+    monkeypatch.setattr(tempfile, "tempdir", str(tmpdir))  # gettempdir() caches its answer
+    # Subprocess git may only use local transports: no push or fetch can leave the machine.
+    monkeypatch.setenv("GIT_ALLOW_PROTOCOL", "file")
+    monkeypatch.setenv("GIT_TERMINAL_PROMPT", "0")
 
     # Fail closed: a regression here would let a test write the real ~/.gitconfig.
     assert Path.home().resolve() == home, "Path.home() ignores HOME; tests are not hermetic"
     assert home != _REAL_HOME, "fixture home is the real home"
     assert _is_under(Path(os.environ["GIT_CONFIG_GLOBAL"]), home)
     assert os.environ["GIT_CONFIG_NOSYSTEM"] == "1"
+    assert _is_under(Path(os.environ["XDG_RUNTIME_DIR"]), home)
     return home
+
+
+@pytest.fixture(scope="session")
+def real_host_digest() -> dict[str, str]:
+    """Fingerprint of the real host files before the session started (hashes only)."""
+    return dict(_REAL_HOST_BEFORE)
+
+
+@pytest.fixture(scope="session", autouse=True)
+def _real_host_untouched() -> Iterator[None]:
+    """Fail the run if any test changed the developer's real git config, OpenCode config
+    or ``~/.carter`` state (plan 003, step 5). Compares hashes taken at import time."""
+    yield
+    touched = changed(_REAL_HOST_BEFORE, digest_host(_REAL_HOME))
+    assert not touched, f"tests modified the real host files: {', '.join(touched)}"
+
+
+@pytest.fixture
+def blocked_connections(
+    tmp_path_factory: pytest.TempPathFactory, monkeypatch: pytest.MonkeyPatch
+) -> Iterator[list[str]]:
+    """Block every non-loopback socket connect and name lookup in the test process.
+
+    Yields the list of blocked attempts. A test that triggers the guard on purpose must
+    ``clear()`` it; otherwise the teardown fails, even if the code under test swallowed
+    the error. Loopback servers (``GITHUB_API_URL`` tests) and unix sockets under pytest's
+    temp tree keep working. Subprocesses are covered separately (``GIT_ALLOW_PROTOCOL``,
+    the ``gh``/``opencode`` stubs).
+    """
+    unix_root = tmp_path_factory.getbasetemp()
+    blocked: list[str] = []
+
+    def refuse(what: str) -> NetworkBlockedError:
+        message = f"network access is blocked in tests: {what}"
+        blocked.append(message)
+        return NetworkBlockedError(message)
+
+    real_connect = socket.socket.connect
+    real_connect_ex = socket.socket.connect_ex
+    real_getaddrinfo = socket.getaddrinfo
+
+    def connect(self: socket.socket, address: object) -> None:
+        if not is_allowed_connect(address, self.family, unix_root):
+            raise refuse(f"connect to {address!r}")
+        real_connect(self, address)  # type: ignore[arg-type]
+
+    def connect_ex(self: socket.socket, address: object) -> int:
+        if not is_allowed_connect(address, self.family, unix_root):
+            raise refuse(f"connect_ex to {address!r}")
+        return real_connect_ex(self, address)  # type: ignore[arg-type]
+
+    def getaddrinfo(host: object, *args: object, **kwargs: object):  # type: ignore[no-untyped-def]
+        if not is_local_host(host):
+            raise refuse(f"lookup of {host!r}")
+        return real_getaddrinfo(host, *args, **kwargs)  # type: ignore[arg-type]
+
+    monkeypatch.setattr(socket.socket, "connect", connect)
+    monkeypatch.setattr(socket.socket, "connect_ex", connect_ex)
+    monkeypatch.setattr(socket, "getaddrinfo", getaddrinfo)
+    yield blocked
+    assert not blocked, "; ".join(blocked)
+
+
+@pytest.fixture(autouse=True)
+def _network_guard(blocked_connections: list[str]) -> None:
+    """Every test runs with the network guard on."""
+
+
+@pytest.fixture
+def guard_bin(tmp_path_factory: pytest.TempPathFactory, monkeypatch: pytest.MonkeyPatch) -> Path:
+    """A per-test bin dir, first on PATH, whose ``gh``/``opencode``/``ssh-keygen`` refuse to run.
+
+    The stubs say which fixture to request. ``git`` is untouched (the real one, confined by the
+    hermetic env). The rest of PATH is kept so Python, sh and git keep working.
+    """
+    bindir = tmp_path_factory.mktemp("guardbin").resolve()
+    for tool, fixture in _GUARDED_TOOLS.items():
+        stub = bindir / tool
+        stub.write_text(
+            "#!/bin/sh\n"
+            f"echo \"carter test guard: the real '{tool}' must not run in tests; "
+            f'request the {fixture} fixture" >&2\n'
+            "exit 97\n"
+        )
+        stub.chmod(0o755)
+    monkeypatch.setenv("PATH", f"{bindir}{os.pathsep}{os.environ.get('PATH', '')}")
+    return bindir
+
+
+@pytest.fixture(autouse=True)
+def _tool_guard(guard_bin: Path) -> None:
+    """Every test starts with the real ``gh``, ``opencode`` and ``ssh-keygen`` shadowed."""
+
+
+@pytest.fixture
+def real_ssh_keygen(guard_bin: Path) -> None:
+    """Opt in to the real ``ssh-keygen`` (offline key generation and signature checks)."""
+    (guard_bin / "ssh-keygen").unlink(missing_ok=True)
 
 
 @pytest.fixture
@@ -132,11 +285,19 @@ def fake_opencode(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
         agents_output: str = "[]",
         agents_exit: int = 0,
         agents_sequence: list[str] | None = None,
+        config_output: str | None = None,
+        config_exit: int = 0,
+        config_sequence: list[str] | None = None,
     ) -> Path:
         """``agents_output``/``agents_exit`` drive ``opencode debug agents``.
 
         ``agents_sequence`` serves one output per call (repeating the last), to
         mimic OpenCode's service returning stale data before fresh data.
+
+        ``config_output``/``config_exit``/``config_sequence`` do the same for
+        ``opencode debug config`` (the resolved config the policy writer verifies against).
+        Left unset, ``debug config`` fails loudly (exit 2) rather than answering with the
+        agents list. Output is served byte for byte (no newline is added).
         """
         bindir = tmp_path / "fakebin"
         bindir.mkdir(exist_ok=True)
@@ -149,8 +310,28 @@ def fake_opencode(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
                 (bindir / f"agents.{i}.out").write_text(out)
             counter = bindir / "agents.calls"
             counter.write_text("0")
+            for stale in bindir.glob("config.*.out"):
+                stale.unlink()
+            config_outputs = config_sequence or (
+                [config_output] if config_output is not None else []
+            )
+            for i, out in enumerate(config_outputs, 1):
+                (bindir / f"config.{i}.out").write_text(out)
+            config_counter = bindir / "config.calls"
+            config_counter.write_text("0")
+            config_branch = (
+                f'  n=$(( $(/bin/cat "{config_counter}") + 1 )); echo "$n" > "{config_counter}"\n'
+                f'  [ "$n" -gt {len(config_outputs)} ] && n={len(config_outputs)}\n'
+                f'  /bin/cat "{bindir}/config.$n.out"; exit {config_exit}\n'
+                if config_outputs
+                else "  echo \"fake_opencode: config_output not set for 'debug config'\" >&2\n"
+                "  exit 2\n"
+            )
             script.write_text(
                 "#!/bin/sh\n"
+                'if [ "$1" = debug ] && [ "$2" = config ]; then\n'
+                f"{config_branch}"
+                "fi\n"
                 'if [ "$1" = debug ]; then\n'
                 f'  n=$(( $(/bin/cat "{counter}") + 1 )); echo "$n" > "{counter}"\n'
                 f'  [ "$n" -gt {len(outputs)} ] && n={len(outputs)}\n'
@@ -159,8 +340,79 @@ def fake_opencode(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
                 f"printf '%s\\n' '{version_output}'\n"
             )
             script.chmod(0o755)
-        monkeypatch.setenv("PATH", str(bindir))
+        # PATH holds only the fakes: a real opencode (or git) can never leak in. A fake gh
+        # requested earlier stays reachable.
+        dirs = [bindir, *([tmp_path / "fakegh"] if (tmp_path / "fakegh").is_dir() else [])]
+        monkeypatch.setenv("PATH", os.pathsep.join(str(d) for d in dirs))
         return bindir
+
+    return make
+
+
+_FAKE_GH = """#!{python}
+import json, os, sys
+
+here = os.path.dirname(os.path.abspath(__file__))
+with open(os.path.join(here, "gh.json")) as fh:
+    config = json.load(fh)
+argv = sys.argv[1:]
+with open(os.path.join(here, "gh.calls"), "a") as fh:
+    fh.write(json.dumps(argv) + "\\n")
+reply, matched = config["default"], -1
+for prefix, candidate in config["rules"].items():
+    words = prefix.split()
+    if argv[: len(words)] == words and len(words) > matched:
+        reply, matched = candidate, len(words)
+sys.stdout.write(reply.get("stdout", ""))
+sys.stderr.write(reply.get("stderr", ""))
+sys.exit(reply.get("rc", 0))
+"""
+
+
+@dataclass(frozen=True)
+class FakeGh:
+    """Handle on the fake ``gh``: where it lives and what it was asked to do."""
+
+    bindir: Path
+
+    def calls(self) -> list[list[str]]:
+        """Every invocation so far, as its argument list (oldest first)."""
+        log = self.bindir / "gh.calls"
+        if not log.exists():
+            return []
+        return [json.loads(line) for line in log.read_text().splitlines()]
+
+
+@pytest.fixture
+def fake_gh(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Callable[..., FakeGh]:
+    """Put a fake ``gh`` first on PATH (the rest of PATH stays, so ``git`` still works).
+
+    ``fake_gh(stdout="", stderr="", rc=0, rules=None)`` scripts the replies: ``rules`` maps
+    an argument prefix (``"auth status"``) to ``{"stdout", "stderr", "rc"}``; the longest
+    matching prefix wins, otherwise the default reply is used. Every call is recorded in
+    ``.calls()``. Calling it again replaces the script and keeps the call log.
+    """
+
+    def make(
+        stdout: str = "",
+        stderr: str = "",
+        rc: int = 0,
+        rules: dict[str, dict[str, object]] | None = None,
+    ) -> FakeGh:
+        bindir = tmp_path / "fakegh"
+        bindir.mkdir(exist_ok=True)
+        (bindir / "gh.json").write_text(
+            json.dumps(
+                {"default": {"stdout": stdout, "stderr": stderr, "rc": rc}, "rules": rules or {}}
+            )
+        )
+        script = bindir / "gh"
+        script.write_text(_FAKE_GH.format(python=sys.executable))
+        script.chmod(0o755)
+        entries = os.environ.get("PATH", "").split(os.pathsep)
+        if str(bindir) not in entries:
+            monkeypatch.setenv("PATH", os.pathsep.join([str(bindir), *entries]))
+        return FakeGh(bindir)
 
     return make
 
