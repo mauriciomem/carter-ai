@@ -22,7 +22,14 @@ import pytest
 
 from carter.home import carter_home
 from carter.install.paths import _opencode_base
-from host_guard import HOST_FILES, STAT_ONLY_FILES, changed, digest_host, is_local_host
+from host_guard import (
+    HOST_FILES,
+    STAT_ONLY_FILES,
+    changed,
+    digest_host,
+    is_allowed_connect,
+    is_local_host,
+)
 
 # Variables that can redirect git's author/committer or inject config.
 POLLUTION_VARS = (
@@ -437,13 +444,27 @@ class TestNetworkIsBlocked:
             sock.close()
         blocked_connections.clear()
 
-    def test_a_unix_socket_in_the_temp_tree_is_allowed(self, tmp_path: Path) -> None:
+    def test_a_unix_socket_in_the_temp_tree_is_allowed(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # A relative name: macOS temp paths (/private/var/folders/...) plus pytest's names
+        # exceed the 104-byte AF_UNIX limit, and "path too long" is not what is under test.
+        monkeypatch.chdir(tmp_path)
         sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
         try:
             with pytest.raises(FileNotFoundError):  # reached the OS: the guard let it through
-                sock.connect(str(tmp_path / "nobody-listens.sock"))
+                sock.connect("nobody-listens.sock")
         finally:
             sock.close()
+
+    def test_the_guard_judges_a_long_unix_path_without_touching_the_os(
+        self, tmp_path: Path
+    ) -> None:
+        long_inside = str(tmp_path / ("d" * 120) / "nobody-listens.sock")  # > 108 bytes
+        assert len(long_inside) > 108
+        assert is_allowed_connect(long_inside, socket.AF_UNIX, tmp_path) is True
+        outside = "/run/user/0/" + "d" * 120 + ".sock"
+        assert is_allowed_connect(outside, socket.AF_UNIX, tmp_path) is False
 
     def test_a_loopback_http_server_still_works(self) -> None:
         class Handler(http.server.BaseHTTPRequestHandler):
