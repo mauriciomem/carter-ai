@@ -2,6 +2,15 @@
 
 <!-- version list -->
 
+## v0.17.1 (2026-11-02)
+
+### Bug Fixes
+
+- **config**: Make identity optional and align the jira_comment eval with the skill
+  ([#43](https://github.com/mauriciomem/carter-ai/pull/43),
+  [`3f4d25e`](https://github.com/mauriciomem/carter-ai/commit/3f4d25e4ae57973727bb9a8908cfb7895b9fcb2a))
+
+
 ## v0.17.0 (2026-11-01)
 
 ### Features
