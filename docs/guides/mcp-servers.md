@@ -86,8 +86,9 @@ to avoid duplicate tools.
 only read. Classic tokens (`ghp_`) and tokens from `gh auth token` (`gho_`) are refused.
 Create it at <https://github.com/settings/personal-access-tokens>:
 
-- **Repository access:** only the repositories Carter works on. Never "All repositories":
-  Carter cannot check this for you, because GitHub does not show it to the token.
+- **Repository access:** prefer only the repositories Carter works on. "All repositories" is
+  accepted but wider than needed: it lets agents read every repository the token covers.
+  Carter cannot check the selection for you, because GitHub does not show it to the token.
 - **Permissions, all Read-only:** Metadata, Contents, Pull requests, Issues, Actions,
   Checks and Commit statuses. Grant nothing with Write.
 - **Expiry:** 90 days or less. `carter github-token check` warns 14 days before.
@@ -109,7 +110,11 @@ entry reads `{file:~/.carter/secrets/gh-read.token}`, so nothing sits in your en
 the OpenCode config. `check` verifies the file (mode 0600, yours, not a symlink, outside any
 repository), that GitHub accepts the token, how long it lasts, and that it **cannot write**:
 it asks GitHub to create a branch pointing at an all-zero commit, which no token can
-complete; "Resource not accessible" means read-only, anything else is flagged red. Both
+complete; "Resource not accessible" means read-only, anything else is flagged red. The attempt
+goes to a repository **you own** (the newest one the token can see), never to another
+organisation's, and the repository's name is never printed. If the token's resource owner is an
+organisation you own no repository through it: the check says the probe was skipped, and you
+can choose one with `[github] probe_repo = "owner/name"` in `~/.carter/config.toml`. Both
 commands refuse in an agent shell and print at most the first four characters of a token
 in an error. `carter check --host` repeats these checks.
 

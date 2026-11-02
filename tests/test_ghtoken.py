@@ -9,6 +9,7 @@ from __future__ import annotations
 import json
 import os
 import stat
+from dataclasses import replace
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -25,6 +26,8 @@ from gh_api import EXPIRY_HEADER, SPIKE_401, SPIKE_403, SPIKE_404, SPIKE_422, ZE
 TAIL = "SENTINELSENTINEL_abcdefghijklmnopqrstuvwxyz0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ"
 TOKEN = "github_pat_11AAAAAAA0" + TAIL
 NOW = datetime(2026, 11, 2, 12, 0, tzinfo=UTC)
+OWNED = "carter-llm/zz-probe-repo"  # the default repository of gh_api.readonly_token_world
+PRIVATE_NAMES = {"carter-llm", "zz-probe-repo", OWNED}
 
 
 def leaks(token: str, *texts: str, n: int = 5) -> list[str]:
@@ -358,7 +361,7 @@ class TestCheck:
         assert [(r.method, r.path.split("?")[0]) for r in github_api.requests] == [
             ("GET", "/user"),
             ("GET", "/user/repos"),
-            ("POST", "/repos/o/r/git/refs"),
+            ("POST", f"/repos/{OWNED}/git/refs"),
         ]
         assert github_api.unexpected == []
         post = github_api.requests[-1]
@@ -400,27 +403,34 @@ class TestCheck:
     @pytest.mark.parametrize("status", [422, 201])
     def test_a_writable_token_is_red(self, stored, github_api, status: int) -> None:
         github_api.readonly_token_world()
-        github_api.on("POST", "/repos/o/r/git/refs", Reply(status, SPIKE_422))
+        github_api.on("POST", f"/repos/{OWNED}/git/refs", Reply(status, SPIKE_422))
         got = levels(ghtoken.check_token(stored, now=NOW))
-        assert any("WRITABLE" in t and "o/r" in t for t in got["red"])
+        assert any("WRITABLE" in t and "a repository you own" in t for t in got["red"])
+        assert PRIVATE_NAMES.isdisjoint(" ".join(got["red"]).split())
 
     def test_probe_404_means_unprobed_not_ok(self, stored, github_api) -> None:
         github_api.readonly_token_world()
-        github_api.on("POST", "/repos/o/r/git/refs", Reply(404, SPIKE_404))
+        github_api.on("POST", f"/repos/{OWNED}/git/refs", Reply(404, SPIKE_404))
         got = levels(ghtoken.check_token(stored, now=NOW))
         assert "red" not in got and any("unprobed" in w for w in got["warn"])
         assert not any("read-only" in t for t in got.get("ok", []))
 
-    def test_no_covered_repository_is_unprobed(self, stored, github_api) -> None:
+    def test_no_repository_of_your_own_skips_the_probe_with_an_info(
+        self, stored, github_api
+    ) -> None:
         github_api.readonly_token_world()
         github_api.on("GET", "/user/repos", Reply(200, "[]"))
         got = levels(ghtoken.check_token(stored, now=NOW))
-        assert any("unprobed" in w and "covers no repository" in w for w in got["warn"])
+        assert "red" not in got and "warn" not in got
+        assert any("skipped" in t and "[github] probe_repo" in t for t in got["info"])
+        assert not any("read-only" in t for t in got.get("ok", []))  # never green unprobed
         assert [r.method for r in github_api.requests] == ["GET", "GET"]  # nothing to POST to
 
     def test_an_unexpected_403_text_is_unprobed(self, stored, github_api) -> None:
         github_api.readonly_token_world()
-        github_api.on("POST", "/repos/o/r/git/refs", Reply(403, '{"message":"SAML enforcement"}'))
+        github_api.on(
+            "POST", f"/repos/{OWNED}/git/refs", Reply(403, '{"message":"SAML enforcement"}')
+        )
         got = levels(ghtoken.check_token(stored, now=NOW))
         assert "red" not in got and any("unprobed" in w for w in got["warn"])
 
@@ -441,7 +451,11 @@ class TestCheck:
     def test_the_repository_selection_is_documented_as_an_info(self, stored, github_api) -> None:
         github_api.readonly_token_world()
         got = levels(ghtoken.check_token(stored, now=NOW))
-        assert any("repository selection" in t and "narrow" in t for t in got["info"])
+        (text,) = [t for t in got["info"] if t.startswith("repository selection")]
+        assert "Prefer selecting only the repositories Carter works on" in text
+        assert "'All repositories' lets agents read every repo the token covers" in text
+        assert "accepted, but wider than needed" in text
+        assert "never" not in text.lower() and "keep it narrow" not in text
 
     def test_nothing_reachable_is_red_for_the_type_and_warn_for_the_probe(
         self, stored, github_api
@@ -499,7 +513,7 @@ class TestCheck:
 
     def test_the_token_never_appears_in_any_item(self, stored, github_api) -> None:
         github_api.readonly_token_world(expiry="2026-11-10 00:00:00 UTC")
-        github_api.on("POST", "/repos/o/r/git/refs", Reply(422, SPIKE_422))
+        github_api.on("POST", f"/repos/{OWNED}/git/refs", Reply(422, SPIKE_422))
         assert leaks(TOKEN[11:], repr(ghtoken.check_token(stored, now=NOW))) == []
 
 
@@ -550,7 +564,7 @@ class TestCheckCommand:
         human_tty(True)
         ghtoken.store_token(TOKEN, tmp_path)
         github_api.readonly_token_world()
-        github_api.on("POST", "/repos/o/r/git/refs", Reply(422, SPIKE_422))
+        github_api.on("POST", f"/repos/{OWNED}/git/refs", Reply(422, SPIKE_422))
         res = self.run(tmp_path)
         assert res.exit_code == 1 and "WRITABLE" in res.output
 
@@ -595,3 +609,146 @@ class TestModuleHygiene:
         assert "Resource not accessible by personal access token" in SPIKE_403
         assert json.loads(SPIKE_422)["message"] == "Object does not exist"
         assert EXPIRY_HEADER == "Github-Authentication-Token-Expiration"
+
+
+class TestProbeRepository:
+    """The write probe must land on a repository the token's USER owns (never another
+    organisation's, which a fine-grained token may merely read), and must never print its
+    name or owner (the first live run printed an organisation's repository)."""
+
+    @pytest.fixture
+    def stored(self, tmp_path: Path) -> Path:
+        ghtoken.store_token(TOKEN, tmp_path)
+        return tmp_path
+
+    def posts(self, github_api) -> list[str]:
+        return [r.path for r in github_api.requests if r.method == "POST"]
+
+    def test_the_listing_asks_for_repositories_you_own_most_recently_updated_first(
+        self, stored, github_api
+    ) -> None:
+        github_api.readonly_token_world()
+        ghtoken.check_token(stored, now=NOW)
+        (listing,) = [r.path for r in github_api.requests if r.path.startswith("/user/repos")]
+        assert "affiliation=owner" in listing and "sort=updated" in listing
+        assert "per_page=" in listing
+
+    def test_an_owned_repository_is_probed_and_reported_without_its_name(
+        self, stored, github_api
+    ) -> None:
+        github_api.readonly_token_world()
+        items = ghtoken.check_token(stored, now=NOW)
+        assert self.posts(github_api) == [f"/repos/{OWNED}/git/refs"]
+        (probe,) = [i for i in items if i.area == "write probe"]
+        assert probe.level == "ok" and "a repository you own" in probe.text
+        assert not any(name in repr(items) for name in PRIVATE_NAMES)
+
+    def test_a_repository_of_another_owner_is_never_probed(self, stored, github_api) -> None:
+        github_api.readonly_token_world()
+        other = [{"full_name": "other-org/internal-thing", "owner": {"login": "other-org"}}]
+        github_api.on("GET", "/user/repos", Reply(200, json.dumps(other)))
+        items = ghtoken.check_token(stored, now=NOW)
+        assert self.posts(github_api) == []
+        (probe,) = [i for i in items if i.area == "write probe"]
+        assert probe.level == "info" and "skipped" in probe.text
+        assert "other-org" not in repr(items) and "internal-thing" not in repr(items)
+
+    def test_the_owner_match_ignores_case(self, stored, github_api) -> None:
+        github_api.readonly_token_world()
+        listing = [{"full_name": OWNED, "owner": {"login": OWNED.split("/")[0].upper()}}]
+        github_api.on("GET", "/user/repos", Reply(200, json.dumps(listing)))
+        ghtoken.check_token(stored, now=NOW)
+        assert self.posts(github_api) == [f"/repos/{OWNED}/git/refs"]
+
+    def test_the_first_owned_repository_wins_when_the_listing_mixes_owners(
+        self, stored, github_api
+    ) -> None:
+        github_api.readonly_token_world()
+        mixed = [
+            {"full_name": "other-org/x", "owner": {"login": "other-org"}},
+            {"full_name": OWNED, "owner": {"login": "carter-llm"}},
+        ]
+        github_api.on("GET", "/user/repos", Reply(200, json.dumps(mixed)))
+        ghtoken.check_token(stored, now=NOW)
+        assert self.posts(github_api) == [f"/repos/{OWNED}/git/refs"]
+
+    @pytest.mark.parametrize("junk", ["not json", "{}", '[{"full_name": 5}]', '[{"owner": 1}]'])
+    def test_a_strange_listing_skips_the_probe_without_crashing(
+        self, stored, github_api, junk: str
+    ) -> None:
+        github_api.readonly_token_world()
+        github_api.on("GET", "/user/repos", Reply(200, junk))
+        items = ghtoken.check_token(stored, now=NOW)
+        assert self.posts(github_api) == []
+        assert not any(i.level == "red" for i in items)
+
+    def test_a_failing_listing_is_an_unprobed_warning(self, stored, github_api) -> None:
+        github_api.readonly_token_world()
+        github_api.on("GET", "/user/repos", Reply(500, "boom"))
+        items = ghtoken.check_token(stored, now=NOW)
+        (probe,) = [i for i in items if i.area == "write probe"]
+        assert probe.level == "warn" and "unprobed" in probe.text and self.posts(github_api) == []
+
+    def configure(self, base: Path, probe_repo: str) -> None:
+        from carter.identity import load_identity
+        from carter.identity.schema import Github
+        from carter.identity.writer import write_config
+        from carter.install.paths import carter_config_path
+
+        path = carter_config_path(base)
+        current = load_identity(path)
+        write_config(replace(current, github=Github(probe_repo=probe_repo), state="current"), path)
+
+    def test_an_explicit_probe_repo_is_used_and_nothing_is_listed(self, stored, github_api) -> None:
+        github_api.readonly_token_world()
+        github_api.on("POST", "/repos/acme-corp/probe-target/git/refs", Reply(403, SPIKE_403))
+        self.configure(stored, "acme-corp/probe-target")
+        items = ghtoken.check_token(stored, now=NOW)
+        assert self.posts(github_api) == ["/repos/acme-corp/probe-target/git/refs"]
+        assert not [r for r in github_api.requests if r.path.startswith("/user/repos")]
+        (probe,) = [i for i in items if i.area == "write probe"]
+        assert probe.level == "ok" and "the configured probe repository" in probe.text
+        assert "acme-corp" not in repr(items) and "probe-target" not in repr(items)
+
+    def test_a_writable_explicit_probe_repo_is_red_without_naming_it(
+        self, stored, github_api
+    ) -> None:
+        github_api.readonly_token_world()
+        github_api.on("POST", "/repos/acme-corp/probe-target/git/refs", Reply(422, SPIKE_422))
+        self.configure(stored, "acme-corp/probe-target")
+        items = ghtoken.check_token(stored, now=NOW)
+        (probe,) = [i for i in items if i.area == "write probe"]
+        assert probe.level == "red" and "WRITABLE" in probe.text
+        assert "acme-corp" not in repr(items)
+
+    @pytest.mark.parametrize("bad", ["notarepo", "a/b/c", "../x", "a b/c", "-x/y", "a/"])
+    def test_a_malformed_probe_repo_is_ignored_with_an_info_and_the_owned_one_is_used(
+        self, stored, github_api, bad: str
+    ) -> None:
+        github_api.readonly_token_world()
+        self.configure(stored, bad)
+        items = ghtoken.check_token(stored, now=NOW)
+        assert any(
+            i.level == "info" and "probe_repo" in i.text and "owner/name" in i.text for i in items
+        )
+        assert self.posts(github_api) == [f"/repos/{OWNED}/git/refs"]
+        assert bad not in repr(items) or bad == "notarepo"
+
+    def test_a_broken_config_does_not_stop_the_check(self, stored, github_api) -> None:
+        from carter.install.paths import carter_config_path
+
+        carter_config_path(stored).write_text("not = [toml")
+        github_api.readonly_token_world()
+        ghtoken.check_token(stored, now=NOW)
+        assert self.posts(github_api) == [f"/repos/{OWNED}/git/refs"]
+
+    def test_the_cli_output_never_contains_the_repository_name_or_owner(
+        self, stored, github_api, human_tty
+    ) -> None:
+        human_tty(True)
+        github_api.readonly_token_world()
+        res = CliRunner().invoke(
+            main, ["github-token", "check", "--base-dir", str(stored)], catch_exceptions=False
+        )
+        assert res.exit_code == 0 and "a repository you own" in res.output
+        assert "zz-probe-repo" not in res.output and "carter-llm" not in res.output

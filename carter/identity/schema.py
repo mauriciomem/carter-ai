@@ -77,6 +77,7 @@ class Github:
     """``[github]``."""
 
     read_token_file: str = ""
+    probe_repo: str = ""  # optional "owner/name" for the token write probe (never printed)
 
 
 @dataclass(frozen=True)

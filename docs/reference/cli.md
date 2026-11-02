@@ -189,11 +189,12 @@ carter github-token check
 Checks the stored token: the file (0600, yours, not a symlink, outside any repository:
 `E-PAT-PERM`), that GitHub accepts it and that it is a fine-grained token, its expiry (a
 warning within 14 days) and that it **cannot write**, by asking GitHub to create a branch at
-an all-zero commit, which no token can complete. "Resource not accessible" is read-only; any
-other answer to a write is red. It makes three requests (`GET /user`, `GET /user/repos`, the
+an all-zero commit, which no token can complete, on a repository you own (or `[github]
+probe_repo`); its name is never printed. "Resource not accessible" is read-only; any other
+answer to a write is red; with no repository of yours visible the probe is skipped (INFO). It makes three requests (`GET /user`, `GET /user/repos`, the
 probe) to `$GITHUB_API_URL` (default `https://api.github.com`; plain http only for loopback).
-Exit 1 if anything is red. It cannot tell whether the token covers "All repositories": keep the
-selection narrow.
+Exit 1 if anything is red. It cannot tell whether the token covers "All repositories"; it prefers a narrow
+selection (only the repositories Carter works on) and says so.
 
 ## carter push
 

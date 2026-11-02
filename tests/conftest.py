@@ -484,3 +484,12 @@ def human_tty(monkeypatch: pytest.MonkeyPatch) -> Callable[[bool], None]:
         monkeypatch.setattr(terminal, "_isatty", lambda _stream: on)
 
     return set_tty
+
+
+@pytest.fixture(autouse=True)
+def _no_real_verify_waits(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The guard writer re-reads OpenCode's config with real pauses (a service that reloads
+    asynchronously); tests that rely on it say so by patching ``_sleep`` themselves."""
+    from carter.guard import configwrite
+
+    monkeypatch.setattr(configwrite, "_sleep", lambda _seconds: None)

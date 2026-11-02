@@ -17,6 +17,11 @@ Behaviour notes:
   agent file is ``settle`` seconds old before the first call, and treat a result
   as stale unless every agent's description, model and permission block match
   what was rendered — retrying with bounded backoff until they do.
+- ``debug config`` (OpenCode 2.1.4) prints a JSON list of config sources, not one object:
+  ``document`` entries carry each parsed file as ``info``; a file that does not parse has no
+  entry; a statement OpenCode rejects is simply absent. ``read_debug_config`` folds the
+  documents into one mapping. Right after a write the service can still show the old file
+  for a moment (the guard writer re-reads), and the first ``debug agents`` can be ``[]``.
 - Effective permissions are OpenCode's base rules followed by the agent's emitted
   rules (with ``~`` expanded); OpenCode may append its own rules after them. The
   check therefore requires the emitted rules as one contiguous, in-order block.
@@ -273,11 +278,54 @@ def read_debug_config(
         raise DebugConfigError(
             f"`opencode debug config` printed unparsable output ({exc.msg} at {exc.pos})"
         ) from None
-    if not isinstance(data, dict):
-        raise DebugConfigError(
-            "`opencode debug config` printed unparsable output (expected an object)"
-        )
-    return data
+    return _resolve(data)
+
+
+def _bad(why: str) -> DebugConfigError:
+    return DebugConfigError(f"`opencode debug config` printed unparsable output ({why})")
+
+
+def _merge(into: dict[str, Any], info: Mapping[str, Any]) -> None:
+    """Fold one document's ``info`` into the resolved mapping: dict blocks (providers, agents)
+    are extended key by key, lists (policies, an agent's permissions) are appended in order,
+    anything else is overridden by the later source."""
+    for key, value in info.items():
+        current = into.get(key)
+        if isinstance(value, dict) and isinstance(current, dict):
+            _merge(current, value)
+        elif isinstance(value, list) and isinstance(current, list):
+            current.extend(value)
+        else:
+            into[key] = json.loads(json.dumps(value))  # a private copy
+
+
+def _resolve(data: Any) -> dict[str, Any]:
+    """The resolved config from ``debug config`` output, in either shape.
+
+    OpenCode 2.1.4 prints a list of config sources (``document`` entries carrying the parsed
+    file as ``info``, in precedence order, plus ``directory`` entries); other versions are
+    taken to print one object. Anything else fails closed. Statements OpenCode rejected are
+    absent from ``info`` and a file it could not parse has no ``document`` entry, so the
+    callers' "is it still there" comparisons see exactly what OpenCode will enforce."""
+    if isinstance(data, dict):
+        return data
+    if not isinstance(data, list) or not data:
+        raise _bad("expected an object or a non-empty list of config sources")
+    merged: dict[str, Any] = {}
+    for source in data:
+        if not isinstance(source, dict) or not isinstance(source.get("type"), str):
+            raise _bad("a config source is not an object with a type")
+        if source["type"] != "document":
+            continue  # directories (and kinds this version does not know) carry no settings
+        info = source.get("info")
+        if not isinstance(info, dict):
+            raise _bad("a config document has no info object")
+        for block in ("policies", "providers", "provider"):
+            kind = list if block == "policies" else dict
+            if block in info and not isinstance(info[block], kind):
+                raise _bad(f"`{block}` has an unexpected type")
+        _merge(merged, info)
+    return merged
 
 
 def provider_ids(debug_config: Mapping[str, Any]) -> set[str]:
@@ -312,18 +360,32 @@ def read_agent_ids(
     which: Callable[[str], str | None] | None = None,
     home: Path | None = None,
     timeout: float = DEFAULT_TIMEOUT,
+    sleep: Callable[[float], None] | None = None,
+    attempts: int = DEFAULT_ATTEMPTS,
+    backoff: Sequence[float] = DEFAULT_BACKOFF,
 ) -> list[str]:
     """Ids of every agent OpenCode knows (`opencode debug agents`, cwd ``$HOME``), in order.
 
     Used to find the built-in agents (`build`, `plan`, ...) that need Carter's per-agent
-    denies. Raises ``DebugConfigError`` (same typed failure as the config reader)."""
+    denies. The first call after OpenCode's service starts can print ``[]`` (observed on
+    2.1.4); an empty list is never real (the built-ins always exist), so it is retried with
+    the same bounded backoff as ``validate_agents``. Raises ``DebugConfigError`` (same typed
+    failure as the config reader)."""
     opencode = (which or _which)("opencode")
     if not opencode:
         raise DebugConfigError("opencode not found on PATH")
-    try:
-        agents = _call(opencode, home if home is not None else Path.home(), runner, timeout)
-    except subprocess.TimeoutExpired as exc:
-        raise DebugConfigError(f"`opencode debug agents` timed out after {timeout:g}s") from exc
-    except _CallError as exc:
-        raise DebugConfigError(str(exc)) from exc
-    return [str(a["id"]) for a in agents if isinstance(a.get("id"), str)]
+    do_sleep = sleep or time.sleep
+    tries = max(1, attempts)
+    for attempt in range(tries):
+        if attempt:
+            do_sleep(backoff[min(attempt - 1, len(backoff) - 1)] if backoff else 0)
+        try:
+            agents = _call(opencode, home if home is not None else Path.home(), runner, timeout)
+        except subprocess.TimeoutExpired as exc:
+            raise DebugConfigError(f"`opencode debug agents` timed out after {timeout:g}s") from exc
+        except _CallError as exc:
+            raise DebugConfigError(str(exc)) from exc
+        ids = [str(a["id"]) for a in agents if isinstance(a.get("id"), str)]
+        if ids:
+            return ids
+    raise DebugConfigError(f"`opencode debug agents` listed no agents after {tries} attempts")

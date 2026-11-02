@@ -61,7 +61,7 @@ Find your symptom, then apply the fix. If nothing here helps, open an
 |---------|-----|
 | `carter install` says the guards were skipped | No terminal and no `--yes`. Run `carter guard install` in a terminal |
 | `Error: E-HUMAN-TERMINAL` | The command runs only in your own terminal, not through an agent. If you are not an agent, this shell inherited agent variables: start the terminal fresh |
-| `Error: E-POLICIES-MISSING: … not loaded` | OpenCode dropped a policy (a broken config drops all of them and your providers). `carter guard install` already restored your config from the backup; check the file with `opencode debug config`, then try again |
+| `Error: E-POLICIES-MISSING: … not loaded` | OpenCode dropped a policy (a broken config drops all of them and your providers; a statement it rejects is dropped without a message). Carter re-reads for a few seconds first, because OpenCode's background service reloads the file a moment after it changes. `carter guard install` already restored your config from the backup; check the file with `opencode debug config`, then try again |
 | After a guard write OpenCode lost a provider | The write is rolled back automatically. If it ever isn't, restore `~/.carter/backups/<timestamp>/opencode.json[c]` over your config |
 | `carter guard status` or `check --host` says `MISSING` for a policy | Re-run `carter guard install`; if it keeps failing, `carter guard install --print-policies` and paste the block yourself |
 | `Error: E-STATE-INVALID` | `~/.carter/guard-state.json` is unreadable or from a newer Carter. Carter never rebuilds it: fix or move the file, then run `carter guard install` |

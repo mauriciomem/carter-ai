@@ -201,6 +201,7 @@ footer = "_This comment was generated with Carter._"
 
 [github]
 read_token_file = ""      # set by `carter github-token set`: ~/.carter/secrets/gh-read.token
+probe_repo = ""           # optional "owner/name" for the token's write probe (never printed)
 
 [workspaces."/abs/path"]
 max_tier = "t1"           # optional cap: t0 | t1, set by hand
@@ -212,7 +213,7 @@ require_tier = "t2"       # pinned by `carter update`
 |-------|------|
 | `[identity]` | `role`, `login`, `id`, `name`, `email`, `mode` |
 | `[identity.signing]`, `[identity.disclosure]` | Reserved for later releases; read and kept, not used yet |
-| `[github]` | `read_token_file`: where `carter github-token set` stored the read-only token. A path only, never the token itself |
+| `[github]` | `read_token_file`: where `carter github-token set` stored the read-only token (a path only, never the token itself). `probe_repo`: optional `owner/name` that `github-token check` uses for its refused write attempt instead of a repository you own |
 | `[attribution]` | `footer`: appended to GitHub and Jira bodies |
 | `[workspaces."<path>"]` | `max_tier`, `role`, `require_tier`, `allow_project_opencode_edit`. The path is the resolved absolute path of the workspace |
 

@@ -37,7 +37,7 @@ from carter.install.paths import carter_config_path, token_path
 PAT_PREFIX = "github_pat_"
 _WRONG_TYPE_PREFIXES = ("ghp_", "gho_", "ghu_", "ghs_", "ghr_")
 _PAT_RE = re.compile(r"github_pat_[A-Za-z0-9_]{20,255}")
-_FULL_NAME_RE = re.compile(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+")
+_FULL_NAME_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9-]*/[A-Za-z0-9_.][A-Za-z0-9_.-]*")
 _EXPIRY_RE = re.compile(r"\d{4}-\d\d-\d\d \d\d:\d\d:\d\d UTC")
 EXPIRY_HEADER = "Github-Authentication-Token-Expiration"
 EXPIRY_WARN = timedelta(days=14)
@@ -275,37 +275,84 @@ def _expiry_item(header: str | None, now: datetime) -> Item:
     return Item("ok", "expiry", text)
 
 
-def _probe(base: str, token: str) -> list[Item]:
-    repos = request(base, "GET", "/user/repos?per_page=1", token)
+def _valid_repo(name: object) -> bool:
+    """``owner/name`` with GitHub's character sets, and no ``.``/``..`` segment (the value
+    ends up in a URL path)."""
+    if not isinstance(name, str) or not _FULL_NAME_RE.fullmatch(name):
+        return False
+    return not any(part in (".", "..") for part in name.split("/"))
+
+
+def _owned_repo(base: str, token: str, login: str) -> tuple[str | None, Item | None]:
+    """A repository owned by ``login`` that the token can see: ``(full name, None)``, or
+    ``(None, the item that explains why there is none)``. Repositories of other owners (an
+    organisation the token merely reads) are never considered."""
+    path = "/user/repos?affiliation=owner&sort=updated&per_page=30"
+    reply = request(base, "GET", path, token)
+    if reply.status != 200:
+        text = f"unprobed: cannot list repositories (HTTP {reply.status})"
+        return None, Item("warn", "write probe", text)
     try:
-        names = [r["full_name"] for r in json.loads(repos.text)] if repos.status == 200 else None
-    except (ValueError, KeyError, TypeError):
-        names = None
-    if names is None:
-        return [
-            Item("warn", "write probe", f"unprobed: cannot list repositories (HTTP {repos.status})")
-        ]
-    if not names or not _FULL_NAME_RE.fullmatch(str(names[0])):
-        return [Item("warn", "write probe", "unprobed: the token covers no repository")]
-    repo = str(names[0])
+        listing = json.loads(reply.text)
+    except ValueError:
+        listing = None
+    for entry in listing if isinstance(listing, list) else []:
+        owner = entry.get("owner") if isinstance(entry, dict) else None
+        name = entry.get("full_name") if isinstance(entry, dict) else None
+        if (
+            isinstance(owner, dict)
+            and isinstance(owner.get("login"), str)
+            and owner["login"].lower() == login.lower()
+            and _valid_repo(name)
+        ):
+            return str(name), None
+    text = (
+        "skipped: no repository owned by the token's user is visible to it, so no write was "
+        'attempted; set `[github] probe_repo = "owner/name"` in config.toml to choose one'
+    )
+    return None, Item("info", "write probe", text)
+
+
+def _configured_probe_repo(base_dir: Path | None) -> tuple[str, list[Item]]:
+    """``[github] probe_repo`` if set and well formed (a malformed one is ignored with an info)."""
+    try:
+        value = load_identity(carter_config_path(base_dir)).github.probe_repo
+    except (ConfigError, OSError):
+        return "", []
+    if not value:
+        return "", []
+    if _valid_repo(value):
+        return value, []
+    text = "ignored: [github] probe_repo is not owner/name; using a repository you own instead"
+    return "", [Item("info", "write probe", text)]
+
+
+def _probe(base: str, token: str, login: str, base_dir: Path | None) -> list[Item]:
+    """The one write attempt. It never prints the repository's name or owner."""
+    configured, notes = _configured_probe_repo(base_dir)
+    repo, skipped = (configured, None) if configured else _owned_repo(base, token, login)
+    if repo is None:
+        return [*notes, skipped] if skipped else notes
+    which = "the configured probe repository" if configured else "a repository you own"
     body = {"ref": PROBE_REF, "sha": ZERO_SHA}
     reply = request(base, "POST", f"/repos/{repo}/git/refs", token, body)
     verdict = classify_probe(reply.status, reply.text)
     if verdict == "read-only":
-        return [
-            Item("ok", "write probe", f"GitHub refused a write to {repo}: the token is read-only")
-        ]
-    if verdict == "writable":
+        item = Item(
+            "ok", "write probe", f"GitHub refused a write to {which}: the token is read-only"
+        )
+    elif verdict == "writable":
         fix = (
             "revoke it and create a read-only token (Contents and Pull requests: read), "
             "then run `carter github-token set`"
         )
-        return [
-            Item("red", "write probe", f"token is WRITABLE on {repo} (HTTP {reply.status})", fix)
-        ]
-    return [
-        Item("warn", "write probe", f"unprobed: unexpected answer for {repo} (HTTP {reply.status})")
-    ]
+        item = Item(
+            "red", "write probe", f"token is WRITABLE on {which} (HTTP {reply.status})", fix
+        )
+    else:
+        text = f"unprobed: unexpected answer for {which} (HTTP {reply.status})"
+        item = Item("warn", "write probe", text)
+    return [*notes, item]
 
 
 def _file_items(path: Path, required: bool) -> tuple[list[Item], str | None]:
@@ -330,11 +377,20 @@ def _file_items(path: Path, required: bool) -> tuple[list[Item], str | None]:
     return [Item("ok", "file", f"{path} (0600, yours, outside any repository)")], token
 
 
+def _login(me: Reply) -> str:
+    try:
+        login = json.loads(me.text).get("login")
+    except (ValueError, AttributeError):
+        return ""
+    return login if isinstance(login, str) else ""
+
+
 def check_token(
     base_dir: Path | None = None, *, now: datetime | None = None, required: bool = True
 ) -> list[Item]:
     """Every check on the stored token, as items. Makes three requests at most: ``GET /user``,
-    ``GET /user/repos`` and the one write probe GitHub must refuse."""
+    ``GET /user/repos`` and the one write probe GitHub must refuse (on a repository the token's
+    user owns, or ``[github] probe_repo``; its name is never printed)."""
     now = now or datetime.now(UTC)
     items, token = _file_items(token_path(base_dir), required)
     if token is None:
@@ -365,13 +421,15 @@ def check_token(
         ]
     items.append(Item("ok", "type", f"`{PAT_PREFIX}` fine-grained token accepted by GitHub"))
     items.append(_expiry_item(me.headers.get(EXPIRY_HEADER.lower()), now))
-    items += _probe(base, token)
+    login = _login(me)
+    items += _probe(base, token, login, base_dir)
     items.append(
         Item(
             "info",
             "repository selection",
-            "keep it narrow: only the repositories Carter works on, never 'All repositories' "
-            "(GitHub does not expose this to the token, so Carter cannot check it)",
+            "Prefer selecting only the repositories Carter works on; 'All repositories' lets "
+            "agents read every repo the token covers (accepted, but wider than needed). GitHub "
+            "does not show the selection to the token, so Carter cannot check it",
         )
     )
     return items

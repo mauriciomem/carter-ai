@@ -551,3 +551,103 @@ class TestRemove:
         fake_opencode()
         res = self.run_remove(tmp_path, state)
         assert res.changed is False and state.opencode_policies == []
+
+
+class TestVerifyWaitsForTheService:
+    """OpenCode 2.1.4's background service reloads a changed config asynchronously: the first
+    `debug config` right after a write still shows the old file (observed: gone within
+    0.5 s). The verify step must re-read before it concludes a statement is lost and rolls
+    back; otherwise the very first live install is undone for nothing."""
+
+    @pytest.fixture
+    def pauses(self, monkeypatch: pytest.MonkeyPatch) -> list[float]:
+        seen: list[float] = []
+        monkeypatch.setattr(configwrite, "_sleep", seen.append)
+        return seen
+
+    @staticmethod
+    def sequence(answers: list[dict | Exception]):
+        calls: list[int] = []
+
+        def read() -> dict:
+            calls.append(1)
+            answer = answers[min(len(calls), len(answers)) - 1]
+            if isinstance(answer, Exception):
+                raise answer
+            return answer
+
+        return read, calls
+
+    @staticmethod
+    def loaded(stmts: list[Statement]) -> dict:
+        return json.loads(dbg(stmts))
+
+    def test_a_stale_first_read_is_retried_and_the_write_stands(
+        self, tmp_path: Path, cfg: Path, pauses: list[float]
+    ) -> None:
+        write_cfg(cfg, {"providers": PROVIDERS})
+        stale, fresh = self.loaded([]), self.loaded([A, B])
+        read, calls = self.sequence([stale, stale, stale, fresh])  # before, after, after, after
+        state, result = run_apply(tmp_path, [A, B], reader=read)
+        assert result.changed and len(calls) == 4
+        assert pauses == [0.25, 0.5]
+        assert [p["resource"] for p in json.loads(cfg.read_text())["policies"]] == [
+            "shell:aaa *",
+            "shell:bbb *",
+        ]
+
+    def test_a_read_that_fails_while_the_service_restarts_is_retried_too(
+        self, tmp_path: Path, cfg: Path, pauses: list[float]
+    ) -> None:
+        write_cfg(cfg, {"providers": PROVIDERS})
+        read, calls = self.sequence([self.loaded([]), harness_error(), self.loaded([A])])
+        run_apply(tmp_path, [A], reader=read)
+        assert len(calls) == 3 and pauses == [0.25]
+
+    def test_statements_that_never_appear_still_roll_back_after_the_bounded_wait(
+        self, tmp_path: Path, cfg: Path, pauses: list[float]
+    ) -> None:
+        write_cfg(cfg, {"providers": PROVIDERS})
+        before = cfg.read_bytes()
+        read, calls = self.sequence([self.loaded([])])
+        with pytest.raises(IdentityError) as exc:
+            run_apply(tmp_path, [A], reader=read)
+        assert exc.value.code == E_POLICIES_MISSING
+        assert cfg.read_bytes() == before
+        assert len(calls) == 1 + configwrite.VERIFY_ATTEMPTS
+        assert pauses == [0.25, 0.5, 1.0, 2.0]
+
+    def test_a_lost_provider_is_rolled_back_after_the_same_wait(
+        self, tmp_path: Path, cfg: Path, pauses: list[float]
+    ) -> None:
+        write_cfg(cfg, {"providers": PROVIDERS})
+        before = cfg.read_bytes()
+        broken = {"providers": {}, "policies": as_json([A])}
+        read, _calls = self.sequence([self.loaded([A]), broken])
+        with pytest.raises(IdentityError):
+            run_apply(tmp_path, [A], reader=read)
+        assert cfg.read_bytes() == before and len(pauses) == 4
+
+    def test_a_first_good_read_does_not_wait(
+        self, tmp_path: Path, cfg: Path, pauses: list[float]
+    ) -> None:
+        write_cfg(cfg, {"providers": PROVIDERS})
+        read, calls = self.sequence([self.loaded([]), self.loaded([A])])
+        run_apply(tmp_path, [A], reader=read)
+        assert len(calls) == 2 and pauses == []
+
+    def test_a_read_that_always_fails_after_the_write_rolls_back(
+        self, tmp_path: Path, cfg: Path, pauses: list[float]
+    ) -> None:
+        write_cfg(cfg, {"providers": PROVIDERS})
+        before = cfg.read_bytes()
+        read, _calls = self.sequence([self.loaded([]), harness_error()])
+        with pytest.raises(configwrite.PolicyWriteError, match="rolled back"):
+            run_apply(tmp_path, [A], reader=read)
+        assert cfg.read_bytes() == before and len(pauses) == 4
+
+
+def harness_error() -> Exception:
+    from carter.harness import DebugConfigError
+
+    return DebugConfigError("`opencode debug config` exited 1")

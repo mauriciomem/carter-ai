@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import copy
 import os
+import time
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -33,6 +34,14 @@ Commit = Callable[[Path], None]  # runs after a successful write (or when nothin
 
 class PolicyWriteError(Exception):
     """The config was not (or could not safely be) changed. The message says why."""
+
+
+# OpenCode's background service reloads a changed config asynchronously: on 2.1.4 the first
+# `debug config` after a write can still show the old file (gone within 0.5 s). A statement
+# only counts as lost if it is still missing after these bounded re-reads.
+VERIFY_ATTEMPTS = 5
+VERIFY_BACKOFF = (0.25, 0.5, 1.0, 2.0)
+_sleep = time.sleep
 
 
 @dataclass
@@ -71,6 +80,35 @@ def _lost(message: str, items: list[str]) -> IdentityError:
     return IdentityError(
         E_POLICIES_MISSING, template.replace("`<statement>`", shown), detail=message
     )
+
+
+def _verified(
+    read: Reader, providers_before: set[str], expected: Sequence[Statement]
+) -> tuple[list[str], list[str]]:
+    """``(lost providers, missing statement ids)`` once OpenCode answers consistently.
+
+    Re-reads up to ``VERIFY_ATTEMPTS`` times with ``VERIFY_BACKOFF`` pauses and stops at the
+    first read with nothing lost. A read that fails is retried too (the service may be
+    restarting); if none succeeded the last failure is raised."""
+    failure: DebugConfigError | None = None
+    lost: list[str] = []
+    missing: list[str] = []
+    for attempt in range(VERIFY_ATTEMPTS):
+        if attempt:
+            _sleep(VERIFY_BACKOFF[min(attempt - 1, len(VERIFY_BACKOFF) - 1)])
+        try:
+            after = read()
+        except DebugConfigError as exc:
+            failure = exc
+            continue
+        failure = None
+        lost = sorted(providers_before - provider_ids(after))
+        missing = [s.id for s in missing_statements(after, expected)]
+        if not lost and not missing:
+            break
+    if failure is not None:
+        raise failure
+    return lost, missing
 
 
 def transact(
@@ -132,12 +170,10 @@ def transact(
             atomic_write_bytes(real.with_name(real.name + BACKUP_SUFFIX), original, mode=0o600)
     _write_json_atomic(target, edited)
     try:
-        after = read()
+        lost, missing = _verified(read, providers_before, expected)
     except DebugConfigError as exc:
         _rollback(real, original, result.backup)
         raise PolicyWriteError(f"rolled back: cannot verify the written config ({exc})") from exc
-    lost = sorted(providers_before - provider_ids(after))
-    missing = [s.id for s in missing_statements(after, expected)]
     if lost or missing:
         _rollback(real, original, result.backup)
         what = missing + [f"provider {p}" for p in lost]

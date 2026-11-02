@@ -322,7 +322,10 @@ class TestMcpServersGithubToken:
         for needle in (
             "fine-grained personal access token",
             "Classic tokens (`ghp_`)",
-            'Never "All repositories"',
+            '"All repositories" is accepted but wider than needed',
+            "never to another organisation's",
+            "`[github] probe_repo",
+            "the repository's name is never printed",
             "Metadata, Contents, Pull requests, Issues, Actions, Checks and Commit statuses",
             "90 days or less",
             "SAML single sign-on",
@@ -403,3 +406,25 @@ class TestTroubleshootingHandoffRows:
 
         for code in set(re.findall(r"`Error: (E-[A-Z0-9-]+)", text("troubleshooting.md"))):
             assert code in registry(), code
+
+
+class TestProbeRepositoryDocs:
+    def test_cli_reference_describes_the_owned_repository_probe(self) -> None:
+        block = " ".join(
+            section(text("reference/cli.md"), "carter github-token check", "###").split()
+        )
+        assert "on a repository you own" in block and "its name is never printed" in block
+        assert "skipped (INFO)" in block and "prefers a narrow selection" in block
+        assert "keep the selection narrow" not in block
+
+    def test_the_guides_never_say_all_repositories_is_forbidden(self) -> None:
+        for name, body in all_user_docs().items():
+            flat = " ".join(body.split())
+            assert 'Never "All repositories"' not in flat, name
+            assert "never 'All repositories'" not in flat, name
+
+    def test_probe_repo_is_in_the_configuration_example_and_the_schema(self) -> None:
+        from carter.identity.schema import Github
+
+        assert Github().probe_repo == ""
+        assert "probe_repo" in text("reference/configuration.md")

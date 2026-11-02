@@ -320,6 +320,9 @@ class TestReadOnlyAndQuiet:
         assert host().output == first
 
 
+OWNED = "carter-llm/zz-probe-repo"
+
+
 class TestToken:
     """The token items of ``check --host`` (step 21): the same checks as ``github-token check``."""
 
@@ -347,9 +350,10 @@ class TestToken:
         from gh_api import SPIKE_422, Reply
 
         self.provisioned(stack, github_api)
-        github_api.on("POST", "/repos/o/r/git/refs", Reply(422, SPIKE_422))
+        github_api.on("POST", f"/repos/{OWNED}/git/refs", Reply(422, SPIKE_422))
         res = host()
         assert res.exit_code == 1 and any("WRITABLE" in t for t in levels(res.output)["RED"])
+        assert "zz-probe-repo" not in res.output and "carter-llm" not in res.output
 
     def test_an_expiry_within_14_days_warns(self, stack, github_api) -> None:
         from datetime import UTC, datetime, timedelta

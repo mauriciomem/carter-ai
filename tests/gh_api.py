@@ -109,11 +109,18 @@ class FakeGitHub:
     def on(self, method: str, path: str, reply: Reply | Callable[[Recorded], Reply]) -> None:
         self.routes[(method, path)] = reply
 
-    def readonly_token_world(self, owner_repo: str = "o/r", *, expiry: str | None = None) -> None:
-        """What a read-only fine-grained PAT sees: GET /user and /user/repos work, writes 403."""
+    def readonly_token_world(
+        self, owner_repo: str = "carter-llm/zz-probe-repo", *, expiry: str | None = None
+    ) -> None:
+        """What a read-only fine-grained PAT sees: GET /user and /user/repos work, writes 403.
+
+        ``owner_repo`` is a repository the token's user owns (the owner is the login of
+        ``GET /user``), so the default name is distinctive: tests grep output for it."""
+        owner = owner_repo.split("/")[0]
         headers = {"X-Accepted-Github-Permissions": "allows_permissionless_access=true"}
         if expiry:
             headers[EXPIRY_HEADER] = expiry
-        self.on("GET", "/user", Reply(200, json.dumps({"login": "carter-llm"}), headers))
-        self.on("GET", "/user/repos", Reply(200, json.dumps([{"full_name": owner_repo}])))
+        self.on("GET", "/user", Reply(200, json.dumps({"login": owner}), headers))
+        listing = [{"full_name": owner_repo, "owner": {"login": owner}}]
+        self.on("GET", "/user/repos", Reply(200, json.dumps(listing)))
         self.on("POST", f"/repos/{owner_repo}/git/refs", Reply(403, SPIKE_403))
