@@ -9,8 +9,9 @@ import pytest
 from carter import ghtoken
 from carter.install import prereqs
 from carter.install.paths import token_path
+from sentinels import fine_grained
 
-PAT = "github_pat_11AAAAAAA0PREREQSENTINEL_abcdefghijklmnopqrstuvwxyz0123456789ABCDEFGH"
+PAT = fine_grained("PREREQSENTINEL")
 
 
 def run(capsys: pytest.CaptureFixture[str], base: Path) -> str:

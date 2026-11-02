@@ -21,6 +21,7 @@ from carter.identity.errors import E_POLICIES_MISSING, E_STATE_INVALID
 from carter.install.mcp import config_target
 from carter.install.paths import carter_gitconfig_path, guard_state_path
 from guard.helpers import debug_config, tree_hash
+from sentinels import fine_grained, prefixed
 
 
 def guard(*args: str):
@@ -294,8 +295,8 @@ class TestReadOnlyAndQuiet:
         self, stack, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         installed(stack)
-        monkeypatch.setenv("GH_TOKEN", "ghp_ENVSENTINEL0123456789abcdef0123456789")
-        monkeypatch.setenv("GITHUB_TOKEN", "github_pat_ENVSENTINEL")
+        monkeypatch.setenv("GH_TOKEN", prefixed("ghp_", "ENVSENTINEL"))
+        monkeypatch.setenv("GITHUB_TOKEN", fine_grained("ENVSENTINEL"))
         stack.fake(before=debug_config(stack.live[1:]))  # provider settings carry sk-SENTINEL
         res = CliRunner().invoke(main, ["check", "--host"], catch_exceptions=False)
         assert "SENTINEL" not in res.output and "SENTINEL" not in (res.stderr_bytes or b"").decode()
@@ -322,7 +323,7 @@ class TestReadOnlyAndQuiet:
 class TestToken:
     """The token items of ``check --host`` (step 21): the same checks as ``github-token check``."""
 
-    TOKEN = "github_pat_11AAAAAAA0HOSTSENTINEL_abcdefghijklmnopqrstuvwxyz0123456789ABCDEFGH"
+    TOKEN = fine_grained("HOSTSENTINEL")
 
     def provisioned(self, stack, github_api, **world) -> None:
         from carter import ghtoken
@@ -393,7 +394,7 @@ class TestToken:
     def test_a_literal_token_in_the_mcp_entry_is_red_and_never_printed(self, stack) -> None:
         installed(stack)
         stack.fake(before=debug_config(stack.live))
-        self.mcp(stack, "github_pat_LITERALSENTINEL0123456789")
+        self.mcp(stack, fine_grained("LITERALSENTINEL"))
         res = host()
         assert res.exit_code == 1 and "LITERALSENTINEL" not in res.output
         assert any("literal token" in t for t in levels(res.output)["RED"])

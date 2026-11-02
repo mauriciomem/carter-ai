@@ -15,6 +15,7 @@ from carter.aplus import repocfg
 from carter.aplus.findings import Finding
 from carter.identity import IdentityError
 from carter.identity.errors import E_B_REPOCFG
+from sentinels import prefixed
 
 ORIGIN = "git@github.com:owner/repo.git"
 
@@ -275,7 +276,7 @@ class TestHookFiles:
 
 class TestFindingShape:
     def test_values_never_appear_in_a_finding(self, repo: Path) -> None:
-        secret = "ghp_SECRETVALUE0123456789abcdef0123456789"
+        secret = prefixed("ghp_", "SECRETVALUE")
         git(
             "config",
             "--local",

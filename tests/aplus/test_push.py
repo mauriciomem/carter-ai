@@ -20,6 +20,7 @@ from carter.aplus import protection, push, run
 from carter.aplus.handoff import OWN_TERMINAL
 from carter.cli import main
 from carter.identity.errors import E_APLUS_ARGS, E_B_UNSIGNED, E_CONFIG, E_HUMAN_TERMINAL
+from sentinels import fine_grained, prefixed
 
 Calls = list[tuple[str, tuple[str, ...]]]
 
@@ -383,8 +384,8 @@ class TestWhatYouAreShown:
     def test_nothing_secret_reaches_the_output(
         self, work: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        monkeypatch.setenv("GH_TOKEN", "ghp_ENVSENTINEL0123456789")
-        monkeypatch.setenv("GITHUB_TOKEN", "github_pat_ENVSENTINEL")
+        monkeypatch.setenv("GH_TOKEN", prefixed("ghp_", "ENVSENTINEL"))
+        monkeypatch.setenv("GITHUB_TOKEN", fine_grained("ENVSENTINEL"))
         git("remote", "set-url", "origin", "https://user:URLSECRET@127.0.0.1:9/o/r.git", cwd=work)
         res = push_cli(input="y\n")
         assert res.exit_code == 1 and "cannot fetch from origin" in res.output
