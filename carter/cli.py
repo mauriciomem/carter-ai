@@ -406,8 +406,19 @@ def update(target_dir: str, dry_run: bool, assume_yes: bool) -> None:
     is_flag=True,
     help="Skip the `opencode debug agents` harness validation step.",
 )
-def check(target_dir: str, no_harness: bool) -> None:
+@click.option(
+    "--host",
+    is_flag=True,
+    help="Check this machine instead (policies, guard files, git include); read-only.",
+)
+def check(target_dir: str, no_harness: bool, host: bool) -> None:
     """Validate workspace integrity and that OpenCode loads the Carter agents."""
+    if host:
+        from carter.hostcheck import exit_code, render, run_host_checks
+
+        items = run_host_checks(cwd=Path(target_dir).resolve())
+        click.echo("\n".join(render(items)))
+        raise SystemExit(exit_code(items))
     target = Path(target_dir).resolve()
     config_path = target / ".carter" / "carter.yaml"
     errors: list[str] = []
@@ -594,7 +605,7 @@ def ops(args: tuple[str, ...]) -> None:
     All arguments are passed through to the carter-ops CLI, e.g.:
 
         carter ops audit --operation git-flow --result success
-        carter ops policy-override --category remote-write --action "git push" --tier native-ask
+        carter ops policy-override --category remote-write --action "vault read x" --tier native-ask
         carter ops config --emit
     """
     from carter.ops.carter_ops import main as ops_main

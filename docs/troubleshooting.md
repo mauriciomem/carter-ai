@@ -30,7 +30,7 @@ Find your symptom, then apply the fix. If nothing here helps, open an
 
 | Symptom | Fix |
 |---------|-----|
-| A push is denied | Only DevOps may push. Ask Maestro to hand the push to carter-devops |
+| A push or a `gh` write is denied ("Blocked by configuration policy") | Expected: agents never push or write to GitHub. The work is handed to you |
 | Maestro asks before every commit | Expected: Maestro has read-only permissions, so local writes ask |
 | A risky command stopped asking | Someone chose "Allow always" at a prompt. Remove the saved allow rule; see [OpenCode permissions](https://opencode.ai/v2/docs/permissions/) |
 | An MCP tool asks every time | Expected: MCP tools have no specific rule. Choose "Allow always" for tools you trust |
@@ -55,8 +55,22 @@ Find your symptom, then apply the fix. If nothing here helps, open an
 | `carter install` printed a "commit rule" note | Your global `AGENTS.md` has your edits, so Carter left it alone. Merge the rule from `~/.carter/upgrade-notes/<version>.md` |
 | A warning about `identity.git_account` or `identity.bot_name` | Both are deprecated and ignored. Delete them from `.carter/carter.yaml` |
 
+## Guards
+
+| Symptom | Fix |
+|---------|-----|
+| `carter install` says the guards were skipped | No terminal and no `--yes`. Run `carter guard install` in a terminal |
+| `Error: E-HUMAN-TERMINAL` | The command runs only in your own terminal, not through an agent. If you are not an agent, this shell inherited agent variables: start the terminal fresh |
+| `Error: E-POLICIES-MISSING: … not loaded` | OpenCode dropped a policy (a broken config drops all of them and your providers). `carter guard install` already restored your config from the backup; check the file with `opencode debug config`, then try again |
+| After a guard write OpenCode lost a provider | The write is rolled back automatically. If it ever isn't, restore `~/.carter/backups/<timestamp>/opencode.json[c]` over your config |
+| `carter guard status` or `check --host` says `MISSING` for a policy | Re-run `carter guard install`; if it keeps failing, `carter guard install --print-policies` and paste the block yourself |
+| `Error: E-STATE-INVALID` | `~/.carter/guard-state.json` is unreadable or from a newer Carter. Carter never rebuilds it: fix or move the file, then run `carter guard install` |
+| Every git command fails with "bad config line … gitconfig" | Carter's included git file is malformed. `carter guard remove` unsets the include line without needing git to work; this release writes no such file |
+| My `opencode.jsonc` comments disappeared after the guards | Carter rewrote the file as JSON. The original is `opencode.jsonc.carter-backup`; use `--print-policies` to paste by hand next time |
+
 ## Uninstalling
 
 | Symptom | Fix |
 |---------|-----|
+| `carter uninstall` kept my policies | Without a terminal and without `--yes` the guards are kept; run `carter guard remove`, or `carter uninstall --yes` |
 | `carter uninstall` left files behind | By design. Files you edited are kept (those edited since the last install are listed as `⚠ Kept …`), and memories, `config.toml` and `audit.log` are never removed. Delete them by hand if you don't need them |

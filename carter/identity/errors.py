@@ -6,9 +6,11 @@ and the carter-ops skill embeds ``render_error_table()``; a parity test fails on
 
 ``slice`` is the first slice that can raise a code. Slice 1 raises ``E-CONFIG`` and
 ``E-ROLE-B-TIER`` and carries the text of ``E-TIER-REQUIRED`` (enforced by 2a/2b) and
-``E-COMMIT-T1`` (``carter commit``, 2b). Every other code is registered with its Appendix B
-wording and raised by its own slice. Messages hold placeholders such as ``<t>``, never
-values read from the environment, a config or a key.
+``E-COMMIT-T1`` (``carter commit``, 2b); slice 1G raises the policy, handoff, secret-scan,
+A+ and human-terminal codes. Every other code is registered with its Appendix B wording and
+raised by its own slice. ``render_error_table()`` lists the codes up to ``CURRENT_SLICE``.
+Messages hold placeholders such as ``<t>``, never values read from the environment, a config
+or a key.
 """
 
 from __future__ import annotations
@@ -18,8 +20,8 @@ from dataclasses import dataclass
 from functools import cache
 from importlib import resources
 
-SLICES = ("1", "1G", "2a", "2b", "2c", "B", "CI-E")
-CURRENT_SLICE = "1"
+from carter.identity.rules import CURRENT_SLICE, SLICES  # one constant for the whole package
+
 ERRORS_BEGIN = "<!-- errors:begin -->"
 ERRORS_END = "<!-- errors:end -->"
 
@@ -31,6 +33,11 @@ E_COMMIT_T1 = "E-COMMIT-T1"
 E_POLICIES_MISSING = "E-POLICIES-MISSING"
 E_HUMAN_TERMINAL = "E-HUMAN-TERMINAL"
 E_STATE_INVALID = "E-STATE-INVALID"
+E_APLUS_ARGS = "E-APLUS-ARGS"
+E_HANDOFF = "E-HANDOFF"
+E_SECRET_SCAN = "E-SECRET-SCAN"
+E_B_REPOCFG = "E-B-REPOCFG"
+E_B_UNSIGNED = "E-B-UNSIGNED"
 
 
 @dataclass(frozen=True)

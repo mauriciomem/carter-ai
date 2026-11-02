@@ -180,13 +180,30 @@ class TestRenderErrorTable:
         assert table == render_error_table()
 
     def test_slice_1_lists_only_slice_1_codes_in_registry_order(self):
-        rows = [ln for ln in render_error_table().splitlines() if ln.startswith("| `E-")]
+        rows = [ln for ln in render_error_table(current="1").splitlines() if ln.startswith("| `E-")]
         codes = [re.match(r"\| `([^`]+)`", ln).group(1) for ln in rows]
         assert codes == [c for c in registry() if c in SLICE_1]
+
+    def test_the_current_slice_is_1g_and_lists_its_codes_too(self):
+        # plan 003 step 22: one constant (rules.CURRENT_SLICE), imported by errors.py
+        assert errors_mod.CURRENT_SLICE == "1G"
+        rows = [ln for ln in render_error_table().splitlines() if ln.startswith("| `E-")]
+        codes = {re.match(r"\| `([^`]+)`", ln).group(1) for ln in rows}
+        in_1g = {c for c, e in registry().items() if e.slice in {"1", "1G"}}
+        assert codes == in_1g
+        assert {
+            "E-POLICY",
+            "E-GH-READONLY",
+            "E-HANDOFF",
+            "E-SECRET-SCAN",
+            "E-HUMAN-TERMINAL",
+        } <= codes
+        assert "E-PUSH-GUARD" not in codes  # the pre-push hook is 2a (freeze F10)
 
     def test_later_slices_extend_it(self):
         assert "E-GATE" in render_error_table(current="2a")
         assert "E-GATE" not in render_error_table()
+        assert "E-PUSH-GUARD" in render_error_table(current="2a")
 
     def test_cells_escape_pipes(self):
         assert "\\|" not in render_error_table() or all(

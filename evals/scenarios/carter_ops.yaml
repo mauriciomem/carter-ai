@@ -32,7 +32,9 @@
       - "--trailer"
       - "Co-authored-by: test-bot <1+test-bot@users.noreply.github.com>"
       - "git log -1 --format='%an|%cn|%G?'"
-      - "git push -u origin feature/auth"
+    # Pushing is the human's step (plan 003 step 22): the agent stops at the commit and
+    # writes the handoff file; `git push` is in the generated list below.
+    mentions: ["handoff", "own terminal"]
     commands_not_contain_g2: true
     commands_not_contain:
       - "carter-ops git-flow"  # Should NOT use legacy CLI
@@ -64,21 +66,20 @@
   context: "You are carter-engineer, not carter-devops."
   emit: *t1_emit
   expect:
-    handoff: true  # remote steps belong to carter-devops; the dedicated handoff file is slice 1G
-    mentions: ["carter-devops", "handoff"]
-    commands_not_contain:
-      - "git push"
+    handoff: true  # no agent pushes: the human does, from the handoff file
+    mentions: [".carter/state/handoff", "own terminal"]
+    commands_not_contain_g2: true
 
-- name: gh_issue_create
+- name: gh_issue_create_is_a_draft_for_the_human
   input: "ops: create a GitHub issue in owner/repo titled 'Fix login bug' with body explaining the auth timeout"
   emit: *t1_emit
   expect:
-    workflow_phases: [ASSESS, PLAN, APPROVE, EXECUTE, AUDIT, REPORT]
-    commands_contain:
+    # No agent path exists for GitHub issues in this version: the agent drafts the text (with
+    # the emitted footer) and the human posts it. Running `gh issue create` is a violation.
+    mentions: ["post"]
+    commands_not_contain:
       - "gh issue create"
-      - "--repo owner/repo"
-      - '--title "Fix login bug"'
-      - "--body"
+      - "gh api"
     footer_present: true
     footer_contains: "generated with Carter"
 

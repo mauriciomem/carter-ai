@@ -58,10 +58,46 @@ Useful options:
 |--------|--------|
 | `--mcp` | Also configure the MCP servers. See [MCP servers](mcp-servers.md) |
 | `--mcp-servers github,terraform` | Only these MCP servers (with `--mcp`) |
+| `-y`, `--yes` | Also install the policy guards without asking |
 | `--bot-name NAME` | Deprecated and ignored (prints a warning). See [Attribution](write-operations.md#attribution) |
 | `-q` / `-v` / `--debug` | Less or more output |
 
 The full list is in the [CLI reference](../reference/cli.md#carter-install).
+
+## Guards
+
+After the agents are installed, `carter install` offers the policy guards (the same as
+running `carter guard install`). In a terminal it asks about each group, with a one-line
+effect:
+
+| Group | What it does |
+|-------|--------------|
+| `g2` | Agents can't push or write to GitHub from their shell; `gh` is read-only; per-agent denies for the push and PR tools. |
+| `sudo-docker` | Agents can't run `sudo` or `docker`; Packer docker builds must be typed in your terminal. |
+| `read-edit-denies` | Agents can't read SSH keys, `gh`/git credentials or the read-only token, and can't edit `~/.ssh`. |
+| `config-edit` | Agents can't edit OpenCode config, git hooks and config, or Carter's own config and control files. |
+
+Nothing is written without your yes. With no terminal (CI, a script) and without `--yes`,
+the agents and skills are installed as before and the guards are skipped with a notice;
+`carter install --yes` accepts every group. Declined groups are remembered and listed by
+`carter guard status` and `carter check --host` as residuals.
+
+The policies go into your OpenCode config in one atomic write. Carter keeps a backup,
+asks OpenCode for the resolved config before and after, and restores the backup if a
+provider or a statement was lost. Preview with `carter guard install --dry-run`. If the
+config has comments, rewriting drops them: the original is kept as `<name>.carter-backup`,
+or use `--print-policies` and paste the block yourself. **Restart the OpenCode server** (or
+OpenCode) after the policies change so it reloads its config.
+
+**What this is, in this release:** the policies are literal command matches, a speed bump
+and not a boundary. The plugin and the shell isolation that would make them one are not
+installed yet, agent shells still inherit your SSH agent and `gh` login, and agent commits
+still use your own git config. `carter check --host` says "plugin not installed" for as long
+as that is true.
+
+Remove them with `carter guard remove` (or `carter uninstall`). Only what Carter wrote and
+you have not changed is removed; the read-only token file and `~/.carter/state/audit/` stay.
+`carter uninstall --keep-guards` leaves the guards in place.
 
 ## 3. Check it worked
 

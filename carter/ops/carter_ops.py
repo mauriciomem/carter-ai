@@ -16,19 +16,22 @@ Exit codes:
 
 Usage (via the ``carter`` CLI):
   carter ops audit --operation git-flow --params '{"branch":"x"}' --result success
-  carter ops policy-override --category remote-write --action "git push" --tier native-ask
+  carter ops policy-override --category remote-write --action "vault read x" --tier native-ask
   carter ops config --emit
 """
 
 from __future__ import annotations
 
 import json
+import re
 import sys
 from datetime import UTC, datetime
 from typing import Any
 
-from carter.config import RISK_TAXONOMY
+from carter.aplus.handoff import OWN_TERMINAL
+from carter.config import _BASH_COMMANDS, RISK_TAXONOMY
 from carter.home import carter_home
+from carter.identity.rules import forbidden_classes
 from carter.ops.config import Config
 
 AUDIT_LOG = carter_home() / "audit.log"
@@ -129,6 +132,33 @@ MAX_TEXT_LEN = 500
 
 _OVERRIDE_TIERS = ("native-deny", "native-ask", "prose-backstop")
 
+_SEGMENT = re.compile(r"[;&|\n`()]+")
+
+
+def _github_write_prefixes() -> list[list[str]]:
+    """Word lists of every GitHub-write command: the ``github-write`` shell table (what the
+    agent permissions deny) plus the ``push-verbs`` class of ``g2_rules.json``."""
+    prefixes = [p.removesuffix(" *") for p in _BASH_COMMANDS["github-write"]]
+    prefixes += [
+        item for c in forbidden_classes(all_slices=True) if c.id == "push-verbs" for item in c.items
+    ]
+    return [p.lower().split() for p in dict.fromkeys(prefixes)]
+
+
+def is_github_write(action: str) -> bool:
+    """Does ``action`` name a GitHub write (push, PR/issue write, release, API)?
+
+    True when, within one shell segment, the words of any GitHub-write command appear in
+    order (so ``git -C repo push`` and ``run: git push && echo`` match). Deliberately broad:
+    refusing an override that could not weaken anything costs nothing."""
+    for segment in _SEGMENT.split(action.lower()):
+        tokens = segment.split()
+        for words in _github_write_prefixes():
+            position = iter(tokens)
+            if all(word in position for word in words):
+                return True
+    return False
+
 
 def _handle_policy_override(params: dict[str, Any]) -> int:
     """Record a single-action strictness-policy override in the audit ledger.
@@ -169,6 +199,24 @@ def _handle_policy_override(params: dict[str, Any]) -> int:
             "--tier must be one of: "
             + ", ".join(_OVERRIDE_TIERS)
             + " (no blanket/session-wide overrides)"
+        )
+        return 1
+
+    if is_github_write(action):
+        # Every GitHub write is human-only (RFC-0007 D31): the ledger must not suggest otherwise.
+        _audit(
+            {
+                "timestamp": datetime.now(UTC).isoformat(),
+                "event": "policy-override-refused",
+                "category": category,
+                "action": action,
+                "tier": tier,
+                "authorized": False,
+            }
+        )
+        emit_error(
+            "GitHub writes (push, PR, issue, comment, release, API) are human-only; "
+            f"policy-override cannot change that. {OWN_TERMINAL}"
         )
         return 1
 

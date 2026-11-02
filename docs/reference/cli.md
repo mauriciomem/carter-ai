@@ -104,12 +104,70 @@ terminal and without `--yes` the policy is not pinned and `update` says so. Edit
 difference and never overwrites the file), or when `config.toml` is invalid or still
 schema 1 (run `carter install` first).
 
+## carter guard
+
+Policy guards for OpenCode (human terminal only). They refuse in an agent shell; a
+`--dry-run` or `--print-policies` run writes nothing and works anywhere. `status` is
+read-only and works anywhere. Errors print as `Error: <E-CODE>: <message>` and exit 1.
+
+### carter guard install
+
+```text
+carter guard install [--dry-run] [--yes] [--only GROUPS] [--print-policies]
+```
+
+Writes consented policies and per-agent denies into your OpenCode config
+(`opencode.json` or `.jsonc`) in one atomic, verified write, and records what it owns in
+`~/.carter/guard-state.json`. Every group is shown with a one-line effect and needs your yes.
+
+| Option | Description |
+|--------|-------------|
+| `--dry-run` | Show the groups, the statements it would add and the per-agent denies; write nothing |
+| `-y`, `--yes` | Accept every group without asking. Without a terminal and without `--yes` nothing is installed (a notice says so, exit 0) |
+| `--only GROUPS` | Comma-separated: `g2`, `hooks`, `sudo-docker`, `read-edit-denies`, `config-edit`, `alias`, `repo_hooks`. `hooks`, `alias` and `repo_hooks` have nothing to install in this version and are never recorded |
+| `--print-policies` | Print the `policies` block to paste by hand and exit |
+
+If a provider or a statement is missing after the write, the config is restored from the
+backup and the command fails with `E-POLICIES-MISSING`. See
+[Install: guards](../guides/install.md#guards).
+
+### carter guard status
+
+```text
+carter guard status
+```
+
+Read-only. Lists the consents (declined groups are residuals), each recorded statement as
+`loaded` or `MISSING`, file drift, and the include state. It works with an absent or corrupt
+guard state and says so.
+
+### carter guard remove
+
+```text
+carter guard remove [--dry-run] [--yes] [--only GROUPS]
+```
+
+Removes the policies, per-agent denies and Carter's git files, each only where it is
+unchanged since Carter wrote it (anything you edited is kept and reported). Keeps
+`~/.carter/secrets/gh-read.token` (with a reminder to delete and revoke it) and
+`~/.carter/state/audit/`.
+
+| Option | Description |
+|--------|-------------|
+| `--dry-run` | Show what would be removed; write nothing |
+| `-y`, `--yes` | Remove without asking. Without a terminal and without `--yes` the command is refused |
+| `--only GROUPS` | Remove only these groups' statements (and forget their consent) |
+
 ## carter check
 
 ```text
-carter check [--no-harness] [TARGET_DIR]
+carter check [--no-harness] [--host] [TARGET_DIR]
 ```
 
+With `--host`, check this machine instead of a workspace (read-only, names only; see
+[below](#carter-check---host)).
+
+Validate a workspace. Exits with status 1 and lists the problems if any check fails:
 Validate a workspace. Exits with status 1 and lists the problems if any check fails:
 
 - agent files, `AGENTS.md` and knowledge files exist;
@@ -127,6 +185,22 @@ purpose.
 
 On success, `carter check` also prints each agent's model, because Carter can't
 verify that your provider offers it.
+
+### carter check --host
+
+Checks the guards on this machine. It never writes and never prints environment values,
+tokens or provider settings. Each line is `OK`, `INFO`, `WARN` or `RED`; the exit code is 1
+only if something is `RED`:
+
+- every policy Carter owns is loaded by OpenCode (`E-POLICIES-MISSING` names the missing
+  one), your providers are still loaded, and the per-agent denies are still in the config;
+- the files recorded in `guard-state.json` match their hashes;
+- the git include line, when Carter has one, is present and valid (this release has no
+  Carter git key, so it says "not needed yet");
+- declined groups, active `allow_project_opencode_edit` opt-outs, project config that can run
+  code, and `carter.yaml` policy that `carter update` has not pinned yet.
+
+Items that need the plugin (slice 2a) are reported as not installed, never as passing.
 
 ## carter save
 

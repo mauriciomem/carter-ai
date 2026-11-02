@@ -212,6 +212,21 @@ require_tier = "t2"       # pinned by `carter update`
 | `[attribution]` | `footer`: appended to GitHub and Jira bodies |
 | `[workspaces."<path>"]` | `max_tier`, `role`, `require_tier`, `allow_project_opencode_edit`. The path is the resolved absolute path of the workspace |
 
+### Letting agents edit a project's OpenCode config
+
+By default the guards deny agents any edit of OpenCode config files, `.opencode/`, git hooks
+and git config. To allow it in one workspace (the resolved absolute path), set this by hand
+in your own terminal:
+
+```toml
+[workspaces."/abs/path/to/project"]
+allow_project_opencode_edit = true
+```
+
+It takes effect only when a human runs `carter guard install` or `carter update`: both list
+every active opt-out and ask (`--yes` skips only the question). `carter check --host` lists
+them too. A path that no longer exists or contains `*` or `?` is skipped with a message.
+
 Tiers: T0 is nothing configured (commits carry `Assisted-by: Carter`), T1 is an LLM
 account without a key (`Co-authored-by: <login> <address>`), T2 adds a signing key. A
 workspace `max_tier` lowers the tier for that workspace, never raises it. Unset optional

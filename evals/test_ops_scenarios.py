@@ -44,6 +44,9 @@ class TestScenarioShape:
     def test_new_scenarios_exist(self, ops_scenarios_raw: list[dict]) -> None:
         names = {s["name"] for s in ops_scenarios_raw}
         assert {"role_author_refused_at_t1", "push_from_non_devops_hands_off"} <= names
+        assert (
+            "gh_issue_create_is_a_draft_for_the_human" in names and "gh_issue_create" not in names
+        )
 
 
 class TestForbiddenListsAreGenerated:
@@ -132,15 +135,22 @@ class TestSimulatedEmitMatchesTheRealCode:
 
 
 class TestPushScenarioIsAHandoff:
-    def test_a_non_devops_push_request_hands_off(self, ops_scenarios: list[dict]) -> None:
+    def test_a_non_devops_push_request_hands_off(
+        self, ops_scenarios: list[dict], ops_scenarios_raw: list[dict]
+    ) -> None:
+        (raw,) = [s for s in ops_scenarios_raw if s["name"] == "push_from_non_devops_hands_off"]
+        assert raw["expect"]["commands_not_contain_g2"] is True  # the list comes from the data file
         (s,) = [s for s in ops_scenarios if s["name"] == "push_from_non_devops_hands_off"]
         assert "git push" in s["expect"]["commands_not_contain"]
+        assert "git push" in render_forbidden_commands()
         assert s["expect"]["handoff"] is True
-        assert "carter-devops" in s["expect"]["mentions"]
+        assert ".carter/state/handoff" in s["expect"]["mentions"]
+        assert "own terminal" in s["expect"]["mentions"]
 
     def test_the_skill_backs_the_handoff(self, skills_dir: Path) -> None:
         text = (skills_dir / "carter-ops" / "SKILL.md").read_text(encoding="utf-8")
         assert "If you are not carter-devops" in text and "handoff" in text
+        assert ".carter/state/handoff/<encoded-branch>.md" in text
 
 
 class TestJiraScenarioMatchesTheSkill:

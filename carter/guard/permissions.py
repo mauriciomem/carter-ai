@@ -194,3 +194,15 @@ def converge(
     diff.added = sorted(owned_now - before)
     diff.removed = sorted(before - owned_now)
     return diff
+
+
+def present(config: dict[str, Any], record: dict[str, Any]) -> bool:
+    """Is the recorded per-agent deny still in ``config`` exactly as Carter wrote it?"""
+    agent, tool = record["agent"], record["key"].removeprefix(KEY_PREFIX)
+    if record.get("form") == "v1":
+        entry = (config.get("agent") or {}).get(agent)
+        perm = entry.get("permission") if isinstance(entry, dict) else None
+        return isinstance(perm, dict) and perm.get(tool) == record["value"]
+    entry = (config.get("agents") or {}).get(agent)
+    rules = entry.get("permissions") if isinstance(entry, dict) else None
+    return isinstance(rules, list) and _rule(tool) in rules

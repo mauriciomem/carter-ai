@@ -14,20 +14,19 @@ and post-hoc audit logging. Run commands directly in the terminal — no interme
 
 - **Local steps** — `git status`, `git add`, `git commit`, branch creation, `git log`,
   `carter ops audit` — run directly in whichever agent received `ops:`.
-- **Remote steps** — `git push`, PR/issue create/merge/comment/edit, releases,
-  Jira writes — are performed **only by carter-devops**, the sole `remote-write`
-  holder. The harness denies these commands to every other agent.
-- **Outward text** (PR/issue bodies, review comments, release notes, Jira comments)
-  goes through **carter-narrator**'s redaction pass before devops transmits it.
+- **Pushing and every other GitHub write** — `git push`, PR/issue create/merge/comment/edit,
+  releases, `gh api` — are **human-only**. No agent runs them, carter-devops included, and the
+  harness denies them to all of them. You finish the local work and write a **handoff file**
+  (see "Push and PR"); the human pushes and opens the PR from their own terminal.
+- **Jira and Slack writes** are remote steps performed **only by carter-devops** (they ask first).
+- **Outward text** (PR bodies, review comments, release notes, Jira comments) goes through
+  **carter-narrator**'s redaction pass before it is written into a handoff or posted.
 
 ### If you are not carter-devops
 
-Do the local steps, then stop and return a handoff to the maestro — do not attempt
-the remote commands. The handoff contains:
-
-- what to push / open / post (operation and exact commands),
-- the branch name and commit SHA(s),
-- any drafted outward text (PR/issue body, Jira comment) for the narrator pass.
+Do the local steps, then stop and return a handoff to the maestro. For a Jira or Slack write
+the handoff names the operation and the exact text for the narrator pass. A push or PR is not
+yours to hand to carter-devops either: use the handoff file below.
 
 </routing>
 
@@ -56,6 +55,11 @@ own git config, so the user is both author and committer, and they are unsigned.
 goes only through the trailer. Never pass `--author`, `--no-verify`, `-s` or `-S`, and never add
 a `Signed-off-by` unless the user asks for it on that commit.
 
+**Interim shape of the guards:** the policies that deny `git push` and GitHub writes are
+literal command matches; the plugin and shell isolation that would make them a boundary are not
+installed yet (`carter guard status` says so). Do not test them, and do not look for another
+way to push: there is none to use, and trying is a violation, not a workaround.
+
 </config>
 
 <guardrails>
@@ -69,19 +73,33 @@ Never run any of these (generated from `g2_rules.json`):
 
 - **Commit-creating verbs:** `--no-verify`, `-n`, `--no-gpg-sign`, `-S`, `--gpg-sign`, `-S<arg>`, `--gpg-sign=<arg>`, `-s`, `--signoff`, `--reset-author`, `--author`. `-n` is forbidden for `commit` only (it means `--no-verify` there; `merge -n` is `--no-stat`). Bare `-S` is not used before signing arrives (slice 2b).
 - **Staging:** `git add -A`, `git add .`, `git commit -a`.
+- **Push verbs:** `git push`, `git send-pack`.
 - **Env prefixes, assignments and unsets:** `GIT_AUTHOR_*`, `GIT_COMMITTER_*`, `GIT_CONFIG*`, `GIT_SSH*`, `GIT_ASKPASS`, `GIT_EXEC_PATH`, `GIT_DIR`, `HOME`, `XDG_CONFIG_HOME`, `CARTER_*`, `AGENT`, `OPENCODE*`. Forbidden as a `VAR=` prefix, with `env`/`env -u`, `unset` and `export`.
 - **git config:** `git config --global`, `git config --system`, `git config --file`, `git config --worktree`, `git config <key> <value>`. Any write at any scope is forbidden; only `--get*`, `--list` and `--show-*` pass.
 - **-c and --config-env=:** `hook.*`, `core.hooksPath`, `core.sshCommand`, `core.askPass`, `core.fsmonitor`, `commit.gpgsign`, `user.*`, `gpg.*`, `alias.*`, `include*`, `credential.*`, `url.*`, `remote.*`, `http.*`, `protocol.*`, `carter.*`.
 - **Plumbing:** `commit-tree`, `fast-import`, `filter-branch`, `filter-repo`, `replace`, `update-ref`. `update-ref` is forbidden with a raw SHA.
+- **Human-only Carter verbs:** `carter push`, `carter pr`, `carter identity add/remove/unlock/lock`, `carter guard *`, `carter github-token set`, `carter broker *`.
 <!-- forbidden:end -->
 
 <!-- errors:begin -->
 | Code | Where | Message | What to do |
 |---|---|---|---|
 | `E-COMMIT-T1` | `carter commit`, T1 | No LLM signing key (T1): committed unsigned with `Co-authored-by: LLM`. | — |
+| `E-POLICY` | OpenCode policy | permission.rejected: Blocked by configuration policy | Same; for gh, use an allowlisted read verb with `-R` after the subcommand. |
+| `E-GH-READONLY` | gh write with read-only PAT | 401/403 at GitHub (exact text unverified) | Writes are human-only. |
+| `E-PAT-TYPE` | `github-token set` / plugin / check | Only fine-grained `github_pat_` tokens are accepted (this looks like `<4-char prefix>`). | — |
+| `E-PAT-PERM` | `github-token set` / plugin / check | Token file must be 0600, yours, not a symlink, outside any repo. | — |
+| `E-B-REPOCFG` | B, A+ | Config, hooks or SSH config at scope `<scope>` (`<key>`) could run code with your credentials; use `carter push` and review. | — |
+| `E-B-UNSIGNED` | B, A+ | Commits `<shas>` have the LLM as committer but no valid LLM signature; refused. | — |
+| `E-SECRET-SCAN` | `carter pr`, `carter_pr` | PR text matches a secret pattern (`<rule>`); refused. | — |
+| `E-HANDOFF` | `carter pr` | No valid handoff at `.carter/state/handoff/<branch>.md`, or `head_sha` is not an ancestor of HEAD. | — |
 | `E-CONFIG` | any identity command | config.toml is invalid; agent commits are disabled until fixed. | Never falls back to defaults. |
 | `E-ROLE-B-TIER` | role b without T2 | Role `author` needs a signing key; refusing (no downgrade). | — |
 | `E-TIER-REQUIRED` | plugin (agent commit blocked) / `carter commit`, below the pinned `require_tier` | This workspace requires tier `<t>`; configure the LLM identity. | — |
+| `E-POLICIES-MISSING` | `carter check --host`, `carter guard install` (verify and rollback) | Policy `<statement>` not loaded — a broken OpenCode config drops all of them and your providers. | — |
+| `E-APLUS-ARGS` | `carter push` (added beyond Appendix B, plan 003 step 6 F10) | `carter push` pushes only the current branch to `origin`: no detached HEAD, no other remote. | Check out the branch you want to push; there are no flags for force, tags or other remotes. |
+| `E-HUMAN-TERMINAL` | `carter guard install\|remove`, `github-token set\|check`, `push`, `pr` (added beyond Appendix B, plan 003 step 6 F10) | This command runs only in your own terminal: this shell looks like an agent's, or it has no TTY. If you are not an agent, this shell inherited agent variables; restart the app from a clean terminal. | Open a terminal that OpenCode did not start and run the command there. |
+| `E-STATE-INVALID` | `carter guard *` (added beyond Appendix B, plan 003 step 6 F10) | ~/.carter/guard-state.json is unreadable or from a newer Carter; nothing was changed. | Run `carter guard status` to see the problem; fix or move the file yourself. Carter never rebuilds it. |
 <!-- errors:end -->
 
 </guardrails>
@@ -128,20 +146,16 @@ Commit messages, branch names and PR text are always in English, whatever langua
 chats in. If `--trailer` is unavailable (git < 2.32), put the `coauthor_trailer` line as the
 last paragraph of the message.
 
-### Push (carter-devops only)
-
-```bash
-git push -u origin <branch-name>
-```
-
-### Complete flow (branch + commit + push — push by carter-devops only)
+### Finish the branch locally
 
 ```bash
 git checkout <base> && git pull origin <base> && git checkout -b <branch-name>
 git add <file1> <file2> ...
 git commit -m "<subject>" -m "<body>" --trailer "<coauthor_trailer>"
-git push -u origin <branch-name>
+git log -1 --format='%an|%cn|%G?'
 ```
+
+Then stop at the commit: pushing is the human's step (next section).
 
 ### Commit message conventions
 
@@ -151,35 +165,47 @@ git push -u origin <branch-name>
 
 </git-operations>
 
-<github-operations>
+<push-and-pr>
 
-## GitHub Operations (via gh CLI — carter-devops only)
+## Push and PR (the human does it)
 
-Append the `footer` from `carter ops config --emit` to ALL `--body` values, after a
-`---` separator.
+You never push and never open or edit anything on GitHub. When a branch is ready, write the
+handoff file `.carter/state/handoff/<encoded-branch>.md` with your file tools, where
+`<encoded-branch>` is the branch name with `%` written as `%25` and `/` as `%2F`
+(`feat/x` → `feat%2Fx.md`). Front matter has exactly these keys, nothing else; quote the
+`title` (it often contains a colon):
 
-When the body is a code review, write it in the `carter-code-review` register
-(default Standard) — conversational, scoped to the diff, no full severity table
-unless a deep review was requested. For non-review PR/issue bodies, use the
-**Brief register** (defined in `carter-docs`): lead with the ask, concise, scoped.
+```markdown
+---
+title: "feat: one line, Conventional Commits style"
+base: main
+draft: false
+head_sha: <40 lowercase hex characters: git rev-parse HEAD>
+repo: <owner/name>
+---
 
-### Commands
-
-```bash
-# Create issue
-gh issue create --repo <owner/repo> --title "<title>" --body "<body>" [--label "<labels>"]
-
-# Comment on issue
-gh issue comment <number> --repo <owner/repo> --body "<body>"
-
-# Create PR
-gh pr create --repo <owner/repo> --title "<title>" --head <branch> --base <base> --body "<body>" [--draft]
-
-# Comment on PR
-gh pr comment <number> --repo <owner/repo> --body "<body>"
+PR description in Markdown. Append the `footer` from `carter ops config --emit` after a `---`.
 ```
 
-</github-operations>
+Write the description in the `carter-code-review` register when it is a code review (default
+Standard); otherwise use the **Brief register** (defined in `carter-docs`): lead with the ask,
+concise, scoped.
+
+The file is untrusted input to the human's `carter pr`: it reads only these keys, scans the
+title, branch and body for secrets, shows everything and asks. Put no tokens, keys, internal
+URLs or credentials paths in it (the narrator's redaction pass comes first).
+
+Then tell the user, in these words:
+
+Run `carter push` and then `carter pr` in your own terminal, not through an agent.
+
+Rules: never prefix the commands with `!` and never ask the user to paste them into the TUI;
+never pass `--force` or any flag to a push; never write the handoff for a branch you did not
+finish or whose commits you did not verify with `git log -1 --format='%an|%cn|%G?'`. For an
+issue, a PR comment, a review or a release there is no agent path in this version: give the
+user the drafted text (with the footer) to post themselves.
+
+</push-and-pr>
 
 <jira-operations>
 
@@ -200,12 +226,12 @@ Append the `footer` from `carter ops config --emit` to ALL body text.
 
 | Error | Recovery |
 |-------|----------|
-| Push rejected (non-fast-forward) | `git pull origin <branch> --rebase` then retry push |
+| Local branch is behind its remote | `git pull origin <branch> --rebase`, then update the handoff `head_sha`; the human pushes |
 | Branch already exists | Ask user: switch to existing branch or pick a new name? |
 | A commit fails or `commits` is `refused` | Stop. Report `refusal_reason` (see the error table); do not retry with other flags |
 | Jira auth error | Re-authenticate the `carter-atlassian` MCP server (OAuth) in your client |
-| `gh` not found | Suggest installing the GitHub CLI (`gh`) |
-| Remote command denied | You are not carter-devops — return the handoff (see Routing) |
+| `gh` not found | Reads only: suggest installing the GitHub CLI (`gh`) |
+| A push or `gh` write is denied (`E-POLICY`, "Blocked by configuration policy") | Expected: write the handoff file; never retry another way |
 | `coauthor_trailer` missing or wrong | Re-run `carter ops config --emit` and use its value |
 
 </error-recovery>
@@ -217,7 +243,7 @@ Append the `footer` from `carter ops config --emit` to ALL body text.
 Read operations run directly without the `ops:` prefix — no approval needed:
 
 `git log`, `git status`, `git diff`, `git blame`, `git branch --list`,
-`gh issue list`, `gh pr list`, `gh pr view`, JQL queries via MCP.
+`gh issue list`, `gh pr list`, `gh pr view`, `gh pr diff`, `gh pr checks`, JQL queries via MCP.
 
 </boundaries>
 
