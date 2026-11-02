@@ -143,6 +143,47 @@ class TestPushScenarioIsAHandoff:
         assert "If you are not carter-devops" in text and "handoff" in text
 
 
+class TestJiraScenarioMatchesTheSkill:
+    """The skills send every Jira operation through the carter-atlassian MCP server.
+    The scenario must expect that, not curl or the REST API (it once did)."""
+
+    SERVER = "carter-atlassian"
+    REST_MARKERS = ("curl", "rest/api")
+
+    def test_scenario_expects_mcp_and_forbids_curl_rest(self, ops_scenarios: list[dict]) -> None:
+        (s,) = [s for s in ops_scenarios if s["name"] == "jira_comment"]
+        expect = s["expect"]
+        assert self.SERVER in expect["mentions"]
+        assert "PROJ-123" in expect["mentions"]
+        for marker in self.REST_MARKERS:
+            assert marker in expect["commands_not_contain"], marker
+
+    def test_no_scenario_requires_curl_or_rest_for_jira(self, ops_scenarios: list[dict]) -> None:
+        for s in ops_scenarios:
+            expected = [*s["expect"].get("commands_contain", []), *s["expect"].get("mentions", [])]
+            for marker in self.REST_MARKERS:
+                assert not any(marker in item for item in expected), (s["name"], marker)
+
+    def test_both_skills_name_the_same_server(self, skills_dir: Path) -> None:
+        for skill in ("carter-ops", "carter-atlassian"):
+            text = (skills_dir / skill / "SKILL.md").read_text(encoding="utf-8")
+            assert self.SERVER in text, skill
+            assert "curl" not in text and "rest/api" not in text, skill
+
+    def test_the_server_is_one_carter_ships(self, repo_root: Path) -> None:
+        shipped = json.loads((repo_root / "mcp" / "opencode" / "atlassian.json").read_text())
+        assert self.SERVER in shipped
+
+    def test_jira_writes_are_a_devops_step_in_the_skill(self, skills_dir: Path) -> None:
+        """The scenario's context makes the model carter-devops because the skill says so."""
+        text = (skills_dir / "carter-ops" / "SKILL.md").read_text(encoding="utf-8")
+        assert "Jira writes are remote steps: carter-devops performs them" in text
+
+    def test_scenario_is_run_by_a_live_test(self, repo_root: Path) -> None:
+        source = (repo_root / "evals" / "test_live.py").read_text(encoding="utf-8")
+        assert '"jira_comment"' in source
+
+
 def test_live_evals_no_longer_substitute_identity_into_the_skill(repo_root: Path) -> None:
     source = (repo_root / "evals" / "test_live.py").read_text(encoding="utf-8")
     for stale in ("{{BOT_", "{{SIGNING_KEY", "bot_name", "signing_key"):

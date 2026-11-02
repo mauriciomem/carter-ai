@@ -267,6 +267,23 @@ class TestLiveCarterOps:
         for cmd in scenario["expect"]["commands_not_contain"]:
             assert cmd not in response, f"Found forbidden command '{cmd}' in response"
 
+    def test_jira_comment_goes_through_the_mcp_server(
+        self, ops_skill_content: str, ops_scenarios: list[dict]
+    ) -> None:
+        scenario = next(s for s in ops_scenarios if s["name"] == "jira_comment")
+        system = _build_system_prompt(ops_skill_content)
+
+        response = _call_model(
+            system,
+            f"{scenario['input']}\n\n{_emit_context(scenario)}"
+            "Do not use any tools. Show me the plan.",
+        )
+
+        for needle in scenario["expect"]["mentions"]:
+            assert needle.lower() in response.lower(), f"Missing '{needle}' in response"
+        for cmd in scenario["expect"]["commands_not_contain"]:
+            assert cmd.lower() not in response.lower(), f"Found forbidden '{cmd}' in response"
+
     def test_non_devops_push_is_a_handoff(
         self, ops_skill_content: str, ops_scenarios: list[dict]
     ) -> None:
