@@ -2,6 +2,33 @@
 
 <!-- version list -->
 
+## v0.18.0 (2026-11-03)
+
+### Bug Fixes
+
+- **guard**: Read OpenCode 2.1.4 debug output and probe only owned repos
+  ([#44](https://github.com/mauriciomem/carter-ai/pull/44),
+  [`00f23af`](https://github.com/mauriciomem/carter-ai/commit/00f23af0986db86848c69b1b0dae5cbc10de8663))
+
+### Features
+
+- **aplus**: Handoff model, A+ safety checks and carter check --host
+  ([#44](https://github.com/mauriciomem/carter-ai/pull/44),
+  [`00f23af`](https://github.com/mauriciomem/carter-ai/commit/00f23af0986db86848c69b1b0dae5cbc10de8663))
+
+- **aplus**: Human-run carter push / carter pr, read-only token, devops handoff
+  ([#44](https://github.com/mauriciomem/carter-ai/pull/44),
+  [`00f23af`](https://github.com/mauriciomem/carter-ai/commit/00f23af0986db86848c69b1b0dae5cbc10de8663))
+
+- **guard**: Consented global policies, guard state and carter guard
+  ([#44](https://github.com/mauriciomem/carter-ai/pull/44),
+  [`00f23af`](https://github.com/mauriciomem/carter-ai/commit/00f23af0986db86848c69b1b0dae5cbc10de8663))
+
+- **guard**: Human-only GitHub writes and consented global guards
+  ([#44](https://github.com/mauriciomem/carter-ai/pull/44),
+  [`00f23af`](https://github.com/mauriciomem/carter-ai/commit/00f23af0986db86848c69b1b0dae5cbc10de8663))
+
+
 ## v0.17.1 (2026-11-02)
 
 ### Bug Fixes
