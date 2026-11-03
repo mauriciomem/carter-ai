@@ -370,3 +370,110 @@ class TestCheckWorkspaceFiles:
         result = CliRunner().invoke(main, ["check", str(ws), "--no-harness"])
         assert result.exit_code == 0, result.output
         assert "Unparseable frontmatter" not in result.output
+
+
+# --- `opencode debug config` reader (plan 003 step 10; RFC-0007 App C.6.3 step 4) ---------
+
+SENTINEL = "sk-SENTINEL-provider-key-0123456789"
+DEBUG_CONFIG = {
+    "providers": {"anthropic": {"settings": {"apiKey": SENTINEL}}, "openai": {}},
+    "policies": [{"action": "tool.use", "resource": "shell:sudo *", "effect": "deny"}],
+}
+
+
+class TestReadDebugConfig:
+    def test_runs_debug_config_in_home_and_parses_json(self, tmp_path: Path) -> None:
+        calls: list[tuple] = []
+
+        def runner(argv, **kw):
+            calls.append((argv, kw))
+            return subprocess.CompletedProcess(argv, 0, stdout=json.dumps(DEBUG_CONFIG), stderr="")
+
+        got = harness.read_debug_config(
+            runner=runner, which=lambda _c: "/x/opencode", home=tmp_path
+        )
+        assert got == DEBUG_CONFIG
+        argv, kw = calls[0]
+        assert argv == ["/x/opencode", "debug", "config"]
+        assert kw["cwd"] == tmp_path
+        assert kw["stdin"] == subprocess.DEVNULL and kw["text"] is True
+
+    def test_cwd_defaults_to_the_home_directory(self) -> None:
+        seen = {}
+
+        def runner(argv, **kw):
+            seen.update(kw)
+            return subprocess.CompletedProcess(argv, 0, stdout="{}", stderr="")
+
+        harness.read_debug_config(runner=runner, which=lambda _c: "/x/opencode")
+        assert seen["cwd"] == Path.home()
+
+    @pytest.mark.parametrize("stdout", ["", "not json", "[1, 2]", '"text"', "null"])
+    def test_garbage_is_a_typed_error(self, stdout: str) -> None:
+        def runner(argv, **kw):
+            return subprocess.CompletedProcess(argv, 0, stdout=stdout, stderr="")
+
+        with pytest.raises(harness.DebugConfigError):
+            harness.read_debug_config(runner=runner, which=lambda _c: "/x/opencode")
+
+    def test_nonzero_exit_is_a_typed_error(self) -> None:
+        def runner(argv, **kw):
+            return subprocess.CompletedProcess(argv, 3, stdout=json.dumps(DEBUG_CONFIG), stderr="x")
+
+        with pytest.raises(harness.DebugConfigError, match="exited 3"):
+            harness.read_debug_config(runner=runner, which=lambda _c: "/x/opencode")
+
+    def test_timeout_is_a_typed_error(self) -> None:
+        def runner(argv, **kw):
+            raise subprocess.TimeoutExpired(argv, 1)
+
+        with pytest.raises(harness.DebugConfigError, match="timed out"):
+            harness.read_debug_config(runner=runner, which=lambda _c: "/x/opencode", timeout=1)
+
+    def test_missing_opencode_is_a_typed_error(self) -> None:
+        with pytest.raises(harness.DebugConfigError, match="not found"):
+            harness.read_debug_config(which=lambda _c: None)
+
+    def test_oserror_is_a_typed_error(self) -> None:
+        def runner(argv, **kw):
+            raise PermissionError("nope")
+
+        with pytest.raises(harness.DebugConfigError):
+            harness.read_debug_config(runner=runner, which=lambda _c: "/x/opencode")
+
+    def test_the_text_never_reaches_logs_or_error_messages(
+        self, caplog: pytest.LogCaptureFixture, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        caplog.set_level("DEBUG")
+        for stdout, code in ((json.dumps(DEBUG_CONFIG), 0), (json.dumps(DEBUG_CONFIG) + "{", 0),
+                             (json.dumps(DEBUG_CONFIG), 1)):  # fmt: skip
+
+            def runner(argv, _o=stdout, _c=code, **kw):
+                return subprocess.CompletedProcess(argv, _c, stdout=_o, stderr=SENTINEL)
+
+            try:
+                harness.read_debug_config(runner=runner, which=lambda _c: "/x/opencode")
+            except harness.DebugConfigError as exc:
+                assert SENTINEL not in str(exc)
+        out = capsys.readouterr()
+        assert SENTINEL not in caplog.text + out.out + out.err
+
+    def test_works_against_fake_opencode(self, fake_opencode) -> None:
+        fake_opencode(config_output=json.dumps(DEBUG_CONFIG))
+        assert harness.read_debug_config() == DEBUG_CONFIG
+
+    def test_fake_opencode_failure_is_typed(self, fake_opencode) -> None:
+        fake_opencode(config_output="boom", config_exit=3)
+        with pytest.raises(harness.DebugConfigError):
+            harness.read_debug_config()
+
+    def test_provider_ids_and_statements_helpers(self) -> None:
+        assert harness.provider_ids(DEBUG_CONFIG) == {"anthropic", "openai"}
+        assert harness.provider_ids({"provider": {"acme": {}}}) == {"acme"}  # V1 spelling
+        assert harness.provider_ids({}) == set()
+        assert harness.policy_statements(DEBUG_CONFIG) == [
+            {"action": "tool.use", "resource": "shell:sudo *", "effect": "deny"}
+        ]
+        v1 = {"experimental": {"policies": [{"action": "a", "resource": "r", "effect": "deny"}]}}
+        assert harness.policy_statements(v1) == [{"action": "a", "resource": "r", "effect": "deny"}]
+        assert harness.policy_statements({"policies": "junk"}) == []

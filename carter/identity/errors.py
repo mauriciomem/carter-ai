@@ -6,9 +6,11 @@ and the carter-ops skill embeds ``render_error_table()``; a parity test fails on
 
 ``slice`` is the first slice that can raise a code. Slice 1 raises ``E-CONFIG`` and
 ``E-ROLE-B-TIER`` and carries the text of ``E-TIER-REQUIRED`` (enforced by 2a/2b) and
-``E-COMMIT-T1`` (``carter commit``, 2b). Every other code is registered with its Appendix B
-wording and raised by its own slice. Messages hold placeholders such as ``<t>``, never
-values read from the environment, a config or a key.
+``E-COMMIT-T1`` (``carter commit``, 2b); slice 1G raises the policy, handoff, secret-scan,
+A+ and human-terminal codes. Every other code is registered with its Appendix B wording and
+raised by its own slice. ``render_error_table()`` lists the codes up to ``CURRENT_SLICE``.
+Messages hold placeholders such as ``<t>``, never values read from the environment, a config
+or a key.
 """
 
 from __future__ import annotations
@@ -18,8 +20,8 @@ from dataclasses import dataclass
 from functools import cache
 from importlib import resources
 
-SLICES = ("1", "1G", "2a", "2b", "2c", "B", "CI-E")
-CURRENT_SLICE = "1"
+from carter.identity.rules import CURRENT_SLICE, SLICES  # one constant for the whole package
+
 ERRORS_BEGIN = "<!-- errors:begin -->"
 ERRORS_END = "<!-- errors:end -->"
 
@@ -27,6 +29,18 @@ E_CONFIG = "E-CONFIG"
 E_ROLE_B_TIER = "E-ROLE-B-TIER"
 E_TIER_REQUIRED = "E-TIER-REQUIRED"
 E_COMMIT_T1 = "E-COMMIT-T1"
+# Slice 1G (plan 003). The last two are not in Appendix B; the architect added them (F10).
+E_POLICIES_MISSING = "E-POLICIES-MISSING"
+E_HUMAN_TERMINAL = "E-HUMAN-TERMINAL"
+E_STATE_INVALID = "E-STATE-INVALID"
+E_APLUS_ARGS = "E-APLUS-ARGS"
+E_PAT_TYPE = "E-PAT-TYPE"
+E_PAT_PERM = "E-PAT-PERM"
+E_GH_READONLY = "E-GH-READONLY"
+E_HANDOFF = "E-HANDOFF"
+E_SECRET_SCAN = "E-SECRET-SCAN"
+E_B_REPOCFG = "E-B-REPOCFG"
+E_B_UNSIGNED = "E-B-UNSIGNED"
 
 
 @dataclass(frozen=True)
@@ -36,13 +50,17 @@ class ErrorEntry:
     where: str
     message: str
     remediation: str = ""
+    observed: tuple[str, ...] = ()  # raw strings seen in the wild (data only, spike transcripts)
 
 
 @cache
 def registry() -> dict[str, ErrorEntry]:
     """Every registered code, in Appendix B order."""
     text = resources.files("carter.identity").joinpath("errors.json").read_text("utf-8")
-    return {row["code"]: ErrorEntry(**row) for row in json.loads(text)["errors"]}
+    return {
+        row["code"]: ErrorEntry(**{**row, "observed": tuple(row.get("observed", ()))})
+        for row in json.loads(text)["errors"]
+    }
 
 
 MSG_CONFIG = registry()[E_CONFIG].message

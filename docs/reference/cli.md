@@ -14,6 +14,9 @@ carter [--version] [--help] COMMAND [ARGS]
 | [`init`](#carter-init) | Create a workspace in a project directory |
 | [`update`](#carter-update) | Regenerate a workspace's agents from `carter.yaml` |
 | [`check`](#carter-check) | Validate a workspace and confirm OpenCode loads it |
+| [`github-token`](#carter-github-token) | Store and check the read-only GitHub token |
+| [`push`](#carter-push) | Push the current branch to `origin` after showing and checking it |
+| [`pr`](#carter-pr) | Open a pull request from the agent's handoff file |
 | [`save`](#carter-save) | Commit the workspace state to its private history |
 | [`ops`](#carter-ops) | Audit log and config helper used by the `ops:` flow |
 
@@ -31,6 +34,7 @@ Install Carter for OpenCode 2.1 or newer. Writes to `~/.config/opencode/` and
 | `--mcp-servers TEXT` | Comma-separated subset: `github`, `terraform`, `atlassian`. Default: all. Only with `--mcp` |
 | `--bot-name TEXT` | Deprecated and ignored: prints a warning. The co-author now comes from the LLM identity in `~/.carter/config.toml` (see [Attribution](../guides/write-operations.md#attribution)) |
 | `--base-dir DIRECTORY` | Install into another base directory (for testing) |
+| `-y`, `--yes` | Also install the policy guards without asking. Without a terminal and without `--yes` the guards are skipped with a notice |
 | `-q`, `--quiet` | Errors only |
 | `-v`, `--verbose` | Detailed output |
 | `--debug` | Debug output |
@@ -50,6 +54,12 @@ files, `carter-*` MCP servers and the install manifest. Edited files, memories,
 | Option | Description |
 |--------|-------------|
 | `--base-dir DIRECTORY` | Uninstall from another base directory (for testing) |
+| `--keep-guards` | Leave the policies, per-agent denies, include line and guard state in place |
+| `-y`, `--yes` | Remove the guards without asking. Without a terminal and without `--yes` they are kept |
+
+Unless `--keep-guards` is given, uninstall first removes the policy guards it installed,
+only where it is unchanged since (anything you edited is kept and reported). A guard
+problem is printed and makes the exit code 1 but never stops the rest of the removal.
 
 ## carter init
 
@@ -97,12 +107,142 @@ terminal and without `--yes` the policy is not pinned and `update` says so. Edit
 difference and never overwrites the file), or when `config.toml` is invalid or still
 schema 1 (run `carter install` first).
 
+## carter guard
+
+Policy guards for OpenCode (human terminal only). They refuse in an agent shell; a
+`--dry-run` or `--print-policies` run writes nothing and works anywhere. `status` is
+read-only and works anywhere. Errors print as `Error: <E-CODE>: <message>` and exit 1.
+
+### carter guard install
+
+```text
+carter guard install [--dry-run] [--yes] [--only GROUPS] [--print-policies]
+```
+
+Writes consented policies and per-agent denies into your OpenCode config
+(`opencode.json` or `.jsonc`) in one atomic, verified write, and records what it owns in
+`~/.carter/guard-state.json`. Every group is shown with a one-line effect and needs your yes.
+
+| Option | Description |
+|--------|-------------|
+| `--dry-run` | Show the groups, the statements it would add and the per-agent denies; write nothing |
+| `-y`, `--yes` | Accept every group without asking. Without a terminal and without `--yes` nothing is installed (a notice says so, exit 0) |
+| `--only GROUPS` | Comma-separated: `g2`, `hooks`, `sudo-docker`, `read-edit-denies`, `config-edit`, `alias`, `repo_hooks`. `hooks`, `alias` and `repo_hooks` have nothing to install in this version and are never recorded |
+| `--print-policies` | Print the `policies` block to paste by hand and exit |
+
+If a provider or a statement is missing after the write, the config is restored from the
+backup and the command fails with `E-POLICIES-MISSING`. See
+[Install: guards](../guides/install.md#guards).
+
+### carter guard status
+
+```text
+carter guard status
+```
+
+Read-only. Lists the consents (declined groups are residuals), each recorded statement as
+`loaded` or `MISSING`, file drift, and the include state. It works with an absent or corrupt
+guard state and says so.
+
+### carter guard remove
+
+```text
+carter guard remove [--dry-run] [--yes] [--only GROUPS]
+```
+
+Removes the policies, per-agent denies and Carter's git files, each only where it is
+unchanged since Carter wrote it (anything you edited is kept and reported). Keeps
+`~/.carter/secrets/gh-read.token` (with a reminder to delete and revoke it) and
+`~/.carter/state/audit/`.
+
+| Option | Description |
+|--------|-------------|
+| `--dry-run` | Show what would be removed; write nothing |
+| `-y`, `--yes` | Remove without asking. Without a terminal and without `--yes` the command is refused |
+| `--only GROUPS` | Remove only these groups' statements (and forget their consent) |
+
+## carter github-token
+
+The read-only GitHub token that the `carter-github` MCP server reads (create it as described
+in [MCP servers](../guides/mcp-servers.md#the-github-token)). Both commands refuse in an agent
+shell and print at most the first four characters of a token in an error.
+
+### carter github-token set
+
+```text
+carter github-token set
+```
+
+Reads one fine-grained `github_pat_` token from standard input (a hidden prompt on a
+terminal, or a pipe) and stores it in `~/.carter/secrets/gh-read.token` (directory 0700, file
+0600, written atomically), then records the path under `[github] read_token_file` in
+`~/.carter/config.toml`. It takes no arguments, so the token never reaches your shell
+history, and it needs a terminal. Classic (`ghp_`), OAuth (`gho_`), user, server and refresh
+tokens are refused with `E-PAT-TYPE`.
+
+### carter github-token check
+
+```text
+carter github-token check
+```
+
+Checks the stored token: the file (0600, yours, not a symlink, outside any repository:
+`E-PAT-PERM`), that GitHub accepts it and that it is a fine-grained token, its expiry (a
+warning within 14 days) and that it **cannot write**, by asking GitHub to create a branch at
+an all-zero commit, which no token can complete, on a repository you own (or `[github]
+probe_repo`); its name is never printed. "Resource not accessible" is read-only; any other
+answer to a write is red; with no repository of yours visible the probe is skipped (INFO). It makes three requests (`GET /user`, `GET /user/repos`, the
+probe) to `$GITHUB_API_URL` (default `https://api.github.com`; plain http only for loopback).
+Exit 1 if anything is red. It cannot tell whether the token covers "All repositories"; it prefers a narrow
+selection (only the repositories Carter works on) and says so.
+
+## carter push
+
+```text
+carter push [--dry-run] [--set-upstream]
+```
+
+Pushes `HEAD` to the same-named branch on `origin`, after checks. **Own terminal only**:
+it refuses in an agent shell and in any shell without a terminal (including OpenCode's `!`
+shell) before running any git command. There are no other options and no arguments: no force,
+no tags, no other remote or refspec.
+
+| Option | Description |
+|--------|-------------|
+| `--dry-run` | Run every check and show what would be pushed and asked; push nothing |
+| `-u`, `--set-upstream` | Set `origin/<branch>` as the upstream |
+
+In order: repository and SSH settings that could run code with your credentials are shown
+and you decide; the target ref is fetched; the commits, files and hook or CI paths are listed
+(those in red); signatures of LLM-committed commits must verify (`E-B-UNSIGNED`); GitHub's
+protection for the branch is noted when the read-only token can see it; then it asks `y`
+(on the default branch, you type its name). Repository hooks are not run. See
+[Write operations](../guides/write-operations.md#pushing-and-pull-requests-the-handoff).
+
+## carter pr
+
+```text
+carter pr
+```
+
+Opens a pull request from `.carter/state/handoff/<encoded-branch>.md`, the only input it
+reads. **Own terminal only**, like `push`. The file's title, branch and body are scanned for
+secrets (`E-SECRET-SCAN`) before `gh` is run; `head_sha` must be part of the branch
+(`E-HANDOFF`). It shows the title, target, base and the first 40 lines of the body, asks
+`y/N`, runs `gh pr create` with your own `gh` login and deletes the file only after the pull
+request exists. If the repository is a fork, the target is its parent. If the branch is not on
+`origin` at `HEAD`, it runs the `carter push` flow first.
+
 ## carter check
 
 ```text
-carter check [--no-harness] [TARGET_DIR]
+carter check [--no-harness] [--host] [TARGET_DIR]
 ```
 
+With `--host`, check this machine instead of a workspace (read-only, names only; see
+[below](#carter-check---host)).
+
+Validate a workspace. Exits with status 1 and lists the problems if any check fails:
 Validate a workspace. Exits with status 1 and lists the problems if any check fails:
 
 - agent files, `AGENTS.md` and knowledge files exist;
@@ -120,6 +260,25 @@ purpose.
 
 On success, `carter check` also prints each agent's model, because Carter can't
 verify that your provider offers it.
+
+### carter check --host
+
+Checks the guards on this machine. It never writes and never prints environment values,
+tokens or provider settings. Each line is `OK`, `INFO`, `WARN` or `RED`; the exit code is 1
+only if something is `RED`:
+
+- every policy Carter owns is loaded by OpenCode (`E-POLICIES-MISSING` names the missing
+  one), your providers are still loaded, and the per-agent denies are still in the config;
+- the files recorded in `guard-state.json` match their hashes;
+- the git include line, when Carter has one, is present and valid (this release has no
+  Carter git key, so it says "not needed yet");
+- the read-only GitHub token, if you stored one: its file, type, expiry and that it cannot
+  write (the same checks as [`github-token check`](#carter-github-token-check)), and that the
+  `carter-github` MCP entry reads the token file;
+- declined groups, active `allow_project_opencode_edit` opt-outs, project config that can run
+  code, and `carter.yaml` policy that `carter update` has not pinned yet.
+
+Items that need the plugin (slice 2a) are reported as not installed, never as passing.
 
 ## carter save
 
@@ -159,7 +318,7 @@ when you run it, from `~/.carter/config.toml` and the environment:
 | `commits` | `allowed` or `refused` |
 | `refusal_reason` | The error code when `commits` is `refused` (for example `E-CONFIG` or `E-ROLE-B-TIER`) |
 | `footer` | Text appended to GitHub and Jira bodies |
-| `has_github_token` | Whether `GITHUB_TOKEN` is set |
+| `has_github_token` | Whether `GITHUB_TOKEN` is set in the environment (the token file is not counted) |
 
 An invalid `config.toml` gives `commits: refused` with `E-CONFIG`: agent commits stay off
 until it is fixed. Carter never reads your signing key.

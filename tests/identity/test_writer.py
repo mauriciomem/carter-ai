@@ -424,6 +424,7 @@ class TestReadsNeverWrite:
             "carter/identity/migrate.py",
             "carter/identity/pin.py",  # only `carter update` calls it
             "carter/cli.py",  # `carter update` (lazy import, WriterError)
+            "carter/ghtoken.py",  # only `github-token set` calls it (records read_token_file)
         }
         importers = set()
         for src in (REPO / "carter").rglob("*.py"):

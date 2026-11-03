@@ -25,7 +25,7 @@ Three ideas decide the effect for any action:
 |----------|----------|---------------------|----------|
 | **read** | read and search files, `git status`, `git diff` | allow | allow |
 | **local-write** | edit files, run commands and tests, `git commit` | allow | allow |
-| **remote-write** | `git push`, `gh pr create`, `gh issue comment`, `gh api`, `vault read` | ask | ask |
+| **remote-write** | Jira and Slack writes, `vault read` (the `git push` and `gh` write commands are denied to every agent) | ask | ask |
 | **dangerous** | `terraform apply`, `kubectl apply`, `helm upgrade`, `rm -rf`, `git push --force` | ask | **deny** |
 
 The exact command patterns are in the
@@ -41,8 +41,11 @@ The exact command patterns are in the
 
 What that means in practice:
 
-- **Only DevOps can push or change infrastructure.** If the Engineer tries
-  `git push`, OpenCode denies it, and the work is handed to DevOps.
+- **Nobody pushes.** `git push` and the `gh` write commands are denied to every agent,
+  DevOps included; you push with `carter push` and open the pull request with
+  `carter pr`, in your own terminal ([Write operations](write-operations.md#pushing-and-pull-requests-the-handoff)).
+  A finished branch is handed over as a file.
+- **Only DevOps can change infrastructure** and send Jira and Slack text.
 - **Read-only agents still can, but must ask.** Maestro, Architect and Learner get a
   prompt before they edit a file or run a shell command, including `git commit`.
 - **Remote and dangerous commands are denied** to every agent except DevOps.
@@ -103,7 +106,7 @@ policy:
 ```
 
 Grant an extra category to one agent. Be careful: this one breaks the "only DevOps
-pushes" rule.
+changes things" rule. It does not allow pushing, which is denied for every agent.
 
 ```yaml
 policy:

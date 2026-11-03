@@ -20,6 +20,12 @@ uninstall.
 | `~/.carter/audit.log` | Log of `ops:` operations and policy exceptions | Kept | Kept |
 | `~/.carter/backups/<timestamp>/` | Files replaced by an install | Added to | Kept |
 | `~/.carter/manifest.json` | What Carter installed, with checksums | Rewritten | Removed |
+| `~/.carter/guard-state.json` (0600) | What `carter guard install` owns: consents, statements, per-agent denies, file hashes. Separate from `manifest.json` so an older installer can't drop it | Updated in place, never rebuilt; unchanged content is not rewritten | Removed by `guard remove` / `uninstall` (kept with `--keep-guards`) |
+| `~/.config/opencode/opencode.json` or `.jsonc` → `policies`, `agents` | Carter's policy block (the tail of `policies`) and the per-agent `carter_push`/`carter_pr` denies | Re-appended at the tail; your own entries are kept | Removed only where unchanged |
+| `~/.carter/backups/<timestamp>/opencode.json[c]` (0600) | Copy of your OpenCode config before a guard write | Added to | Kept |
+| `~/.carter/gitconfig` and `gitconfig.d/` | Carter's own git keys behind one `include.path` line. **Not written in this release** (no Carter git key yet) | n/a | Removed only if unchanged |
+| `~/.carter/secrets/gh-read.token` (0600, in a 0700 directory) | The read-only GitHub token, written by `carter github-token set`; read by the `carter-github` MCP entry, `github-token check`, `check --host` and `carter push` | Replaced atomically by `set`; never touched by guards | Kept, with a reminder to delete and revoke it |
+| `~/.carter/state/audit/` | Audit store | Kept | Kept |
 
 Uninstall uses the checksums in the manifest to decide whether you edited a file.
 Anything you changed is kept and reported as `⚠ Kept …`.
@@ -34,6 +40,7 @@ Anything you changed is kept and reported as `⚠ Kept …`.
 | `.carter/knowledge/` | 5 project knowledge files | Never touched |
 | `.carter/state/plans/active/`, `completed/` | Plans | Never touched |
 | `.carter/state/sessions/checkpoint.md` | Session checkpoint | Never touched |
+| `.carter/state/handoff/<branch>.md` | A branch's PR handoff written by an agent (`/` is written `%2F`). Never part of the `.carter/.git` snapshots, because it may hold unredacted text. Read only by `carter pr`, which deletes it after the pull request is created | Never touched |
 | `.carter/.git/` | Private history of `.carter/` (`carter save`) | Never touched |
 | `.gitignore` | Gets a `.carter/` line with `--single` | Never touched |
 
@@ -51,7 +58,7 @@ Anything you changed is kept and reported as `⚠ Kept …`.
 
 | Variable | Used by |
 |----------|---------|
-| `GITHUB_TOKEN` | The `carter-github` MCP server; reported by `carter ops config --emit` |
+| `GITHUB_TOKEN` | Not used by Carter's MCP server (it reads `~/.carter/secrets/gh-read.token`). `carter ops config --emit` only reports whether it is set |
 | `TFE_TOKEN` | The `carter-terraform` MCP server |
 | `TFE_ADDRESS` | Optional, for Terraform Enterprise; unset means HCP Terraform |
 | `NO_COLOR` | Set to disable colored installer output |

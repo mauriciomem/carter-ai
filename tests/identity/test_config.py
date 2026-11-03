@@ -318,7 +318,7 @@ class TestSchemaNames:
         assert "previous_public_keys" in names["identity.signing"]
         assert names["identity.disclosure"] == ("assisted_by",)
         assert names["attribution"] == ("footer",)
-        assert names["github"] == ("read_token_file",)
+        assert names["github"] == ("read_token_file", "probe_repo")
         assert names['workspaces."<abs path>"'] == (
             "allow_project_opencode_edit",
             "max_tier",

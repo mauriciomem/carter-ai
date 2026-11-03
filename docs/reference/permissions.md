@@ -47,7 +47,9 @@ A pattern ending in ` *` also matches the bare command (`git push *` matches
 `git push`). This is a list of common risky commands, not a sandbox: anything else
 falls to rule 6.
 
-`gh api *` is denied to every agent except DevOps, read-only calls included.
+`git push *`, the `gh` write commands and `gh api *` are denied to every agent, DevOps
+included, and `gh api` is denied even for reads. Pushing and pull requests are done by you with
+`carter push` and `carter pr`.
 
 ## Effects per level
 

@@ -148,8 +148,9 @@ Design patterns, TDD and testing strategy, code review (quality, security, testa
 
 You read for context and write code/tests locally; remote writes are not yours to
 make. Tool scoping is enforced by Carter's strictness policy, not this prose:
-- **carter-github**: Read PRs, issues, and code for context. Creating/merging PRs
-  or issues is a `remote-write` handed off to carter-devops — not done here.
+- **carter-github**: Read PRs, issues, and code for context. Pushing and every GitHub
+  write are human-only: hand a finished branch to carter-devops, who writes the handoff
+  file; the user then runs `carter push` and `carter pr` in their own terminal.
 - **carter-terraform**: Review Terraform configurations for context.
 
 </mcp>

@@ -1,0 +1,27 @@
+[
+  {
+    "type": "document",
+    "path": "/home/user/.config/opencode/opencode.jsonc",
+    "info": {
+      "policies": [
+        {
+          "action": "tool.use",
+          "resource": "shell:git push *",
+          "effect": "deny"
+        },
+        {
+          "action": "tool.use",
+          "resource": "shell:git send-pack *",
+          "effect": "deny"
+        }
+      ],
+      "providers": {
+        "example": {}
+      }
+    }
+  },
+  {
+    "type": "directory",
+    "path": "/home/user/.config/opencode"
+  }
+]

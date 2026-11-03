@@ -88,3 +88,15 @@ def _write_json(path: Path, data: dict) -> None:
     """
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(data, indent=2) + "\n")
+
+
+def _write_json_atomic(path: Path, data: dict) -> Path:
+    """Like ``_write_json`` but atomic and symlink-preserving (the live OpenCode config).
+
+    Writes onto ``realpath`` so a dotfile-managed link stays a link, keeps an existing
+    file's permission bits, and leaves the old file intact if anything fails."""
+    from carter.install.atomic import atomic_write_bytes
+
+    return atomic_write_bytes(
+        path, (json.dumps(data, indent=2) + "\n").encode(), follow_symlinks=True
+    )

@@ -168,7 +168,7 @@ class TestPolicyOverrideSubcommand:
                 "--category",
                 "remote-write",
                 "--action",
-                "git push origin main",
+                "vault read secret/app",
                 "--tier",
                 "native-ask",
                 "--reason",
@@ -182,7 +182,7 @@ class TestPolicyOverrideSubcommand:
         entry = json.loads(lines[0])
         assert entry["event"] == "policy-override"
         assert entry["category"] == "remote-write"
-        assert entry["action"] == "git push origin main"
+        assert entry["action"] == "vault read secret/app"
         assert entry["tier"] == "native-ask"
         assert entry["reason"] == "hotfix release"
         # Honesty: the ledger records, it does not authorize/lift a deny.
@@ -312,7 +312,7 @@ class TestPolicyOverrideSubcommand:
                     "--category",
                     "remote-write",
                     "--action",
-                    "git push",
+                    "vault write secret/app",
                     "--tier",
                     "native-ask",
                 ]
@@ -386,3 +386,94 @@ class TestHelp:
         result = CliRunner().invoke(main, ["ops", "--help"])
         assert result.exit_code == 0
         assert "Usage: carter ops" in result.output
+
+
+class TestPolicyOverrideRefusesGithubWrites:
+    """Plan 003 step 22 (C21, D31): every GitHub write is human-only, so the override ledger
+    cannot be used to weaken it. The refusal points at A+ and is itself audited."""
+
+    GITHUB_WRITES = [
+        "git push",
+        "git push origin main",
+        "git push --force origin main",
+        "git send-pack origin main",
+        "git -C repo push",
+        "gh pr create --title x",
+        "gh pr merge 3",
+        "gh pr comment 3",
+        "gh pr review 3",
+        "gh pr edit 3",
+        "gh issue create",
+        "gh issue comment 4",
+        "gh issue edit 4",
+        "gh release create v1",
+        "gh api repos/o/r/issues",
+        "gh api -X POST /x",
+        "GH PR CREATE",
+        "  git   push  ",
+        "run: git push && echo done",
+    ]
+    ALLOWED = [
+        "vault read secret/app",
+        "terraform apply",
+        "post release notes in Slack",
+        "add a Jira comment",
+        "gh pr view 3",
+        "gh issue list",
+        "git pull origin main",
+        "git status",
+        "push notifications to staging",
+    ]
+
+    def run(self, action: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, **flags: str):
+        from carter.ops import carter_ops
+
+        monkeypatch.setattr(carter_ops, "AUDIT_LOG", tmp_path / "audit.log")
+        argv = ["policy-override", "--category", flags.get("category", "remote-write"),
+                "--action", action, "--tier", flags.get("tier", "native-ask")]  # fmt: skip
+        return carter_ops.main(argv)
+
+    @pytest.mark.parametrize("action", GITHUB_WRITES)
+    @pytest.mark.parametrize("tier", ["native-deny", "native-ask", "prose-backstop"])
+    def test_github_writes_are_refused_at_every_tier(
+        self, action: str, tier: str, tmp_path: Path, monkeypatch, capsys
+    ) -> None:
+        assert self.run(action, tmp_path, monkeypatch, tier=tier) == 1
+        err = capsys.readouterr().err
+        assert "carter push" in err and "carter pr" in err and "own terminal" in err
+
+    @pytest.mark.parametrize("category", ["read", "local-write", "remote-write", "dangerous"])
+    def test_the_category_does_not_matter(self, category: str, tmp_path, monkeypatch) -> None:
+        assert self.run("git push", tmp_path, monkeypatch, category=category) == 1
+
+    @pytest.mark.parametrize("action", ALLOWED)
+    def test_other_overrides_still_work(self, action: str, tmp_path, monkeypatch) -> None:
+        assert self.run(action, tmp_path, monkeypatch) == 0
+
+    def test_the_refusal_is_recorded_in_the_audit_log_and_never_authorizes(
+        self, tmp_path, monkeypatch
+    ) -> None:
+        self.run("git push --force origin main", tmp_path, monkeypatch)
+        (line,) = (tmp_path / "audit.log").read_text().strip().splitlines()
+        entry = json.loads(line)
+        assert entry["event"] == "policy-override-refused"
+        assert entry["authorized"] is False and entry["action"] == "git push --force origin main"
+        assert entry["category"] == "remote-write"
+
+    def test_a_refusal_prints_nothing_on_stdout(self, tmp_path, monkeypatch, capsys) -> None:
+        self.run("gh pr create", tmp_path, monkeypatch)
+        assert capsys.readouterr().out == ""
+
+    def test_the_refusal_text_is_the_handoff_constant(self, tmp_path, monkeypatch, capsys) -> None:
+        from carter.aplus.handoff import OWN_TERMINAL
+
+        self.run("git push", tmp_path, monkeypatch)
+        assert OWN_TERMINAL in capsys.readouterr().err
+
+    def test_the_matching_list_comes_from_the_rule_tables(self) -> None:
+        from carter.config import _BASH_COMMANDS
+        from carter.ops import carter_ops
+
+        for pattern in _BASH_COMMANDS["github-write"]:
+            assert carter_ops.is_github_write(pattern.removesuffix(" *")), pattern
+        assert carter_ops.is_github_write("git send-pack")  # from the push-verbs class

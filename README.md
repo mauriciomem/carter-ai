@@ -14,7 +14,7 @@ and anything risky (a push, a `terraform apply`) waits for your approval.
 - **Specialists, not a generalist.** Each agent has its own instructions, model and
   permissions, so answers stay focused on one domain.
 - **Safe by default.** Agents ask before risky actions, and only the DevOps agent can
-  push code or change infrastructure.
+  change infrastructure. No agent pushes: you do, with `carter push`.
 - **Writes stay under your control.** Commits, pull requests and Jira updates are
   shown as a plan first and run only after you say yes.
 - **It remembers.** Lessons, decisions and plans are saved as plain Markdown files
@@ -34,7 +34,7 @@ flowchart LR
 | **Maestro** | Anything. It answers simple questions itself and routes the rest |
 | **Architect** | System design, cloud architecture, trade-offs, decision records |
 | **Engineer** | Code, tests, refactoring, code review |
-| **DevOps** | CI/CD, Terraform, containers, git. The only agent that pushes |
+| **DevOps** | CI/CD, Terraform, containers, git. Prepares the handoff; you push |
 | **Security** | Threat models, secure code review, vulnerability triage |
 | **Learner** | Explanations and research, with sources |
 | **PM** | Plans, roadmaps, risks |
@@ -90,8 +90,9 @@ or memory: see [Your first workspace](docs/guides/first-workspace.md).
 ## Safety in one paragraph
 
 Every agent starts from "ask before doing anything". Reading and searching are free.
-Local edits are allowed only for agents that need them. Pushing, publishing and
-Vault secret reads are reserved for DevOps and always ask. Destructive or
+Local edits are allowed only for agents that need them. Pushing and every GitHub write
+are yours (`carter push`, `carter pr`); publishing to Jira and Slack and Vault secret
+reads are reserved for DevOps and always ask. Destructive or
 infrastructure-changing commands ask too, and in `strict` mode they are blocked
 outright. OpenCode enforces these rules, not the model. Read
 [Safety and permissions](docs/guides/safety-and-permissions.md) for the details and

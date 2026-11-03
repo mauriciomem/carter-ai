@@ -29,6 +29,7 @@ RFC_APPENDIX = (
 )
 CODE_RE = re.compile(r"^E-[A-Z0-9]+(?:-[A-Z0-9]+)*$")
 SLICE_1 = {E_CONFIG, E_ROLE_B_TIER, E_TIER_REQUIRED, E_COMMIT_T1}
+ADDED_BEYOND_APPENDIX_B = {"E-HUMAN-TERMINAL", "E-STATE-INVALID", "E-APLUS-ARGS"}
 
 
 class TestRegistry:
@@ -83,7 +84,8 @@ class TestRegistry:
             if row.startswith("| E-"):
                 first = row.split("|")[1]
                 in_rfc.update(re.findall(r"E-[A-Z0-9-]+", first))
-        assert set(registry()) == in_rfc
+        # Codes the 1G architect gate added beyond Appendix B (plan 003 step 6, F10).
+        assert set(registry()) - ADDED_BEYOND_APPENDIX_B == in_rfc
 
 
 class TestUsedByCode:
@@ -178,13 +180,30 @@ class TestRenderErrorTable:
         assert table == render_error_table()
 
     def test_slice_1_lists_only_slice_1_codes_in_registry_order(self):
-        rows = [ln for ln in render_error_table().splitlines() if ln.startswith("| `E-")]
+        rows = [ln for ln in render_error_table(current="1").splitlines() if ln.startswith("| `E-")]
         codes = [re.match(r"\| `([^`]+)`", ln).group(1) for ln in rows]
         assert codes == [c for c in registry() if c in SLICE_1]
+
+    def test_the_current_slice_is_1g_and_lists_its_codes_too(self):
+        # plan 003 step 22: one constant (rules.CURRENT_SLICE), imported by errors.py
+        assert errors_mod.CURRENT_SLICE == "1G"
+        rows = [ln for ln in render_error_table().splitlines() if ln.startswith("| `E-")]
+        codes = {re.match(r"\| `([^`]+)`", ln).group(1) for ln in rows}
+        in_1g = {c for c, e in registry().items() if e.slice in {"1", "1G"}}
+        assert codes == in_1g
+        assert {
+            "E-POLICY",
+            "E-GH-READONLY",
+            "E-HANDOFF",
+            "E-SECRET-SCAN",
+            "E-HUMAN-TERMINAL",
+        } <= codes
+        assert "E-PUSH-GUARD" not in codes  # the pre-push hook is 2a (freeze F10)
 
     def test_later_slices_extend_it(self):
         assert "E-GATE" in render_error_table(current="2a")
         assert "E-GATE" not in render_error_table()
+        assert "E-PUSH-GUARD" in render_error_table(current="2a")
 
     def test_cells_escape_pipes(self):
         assert "\\|" not in render_error_table() or all(
@@ -197,3 +216,39 @@ class TestRenderErrorTable:
         for row in render_error_table().splitlines():
             if row.startswith("| `E-"):
                 assert row.count("|") - row.count("\\|") == 5
+
+
+class TestObservedTexts:
+    """Spike 4 (plan 003, 2026-11-02): the strings GitHub really sent for a read-only PAT."""
+
+    def test_gh_readonly_stores_the_observed_lines_and_the_api_message(self):
+        entry = registry()["E-GH-READONLY"]
+        assert entry.observed == (
+            "remote: Permission to <o>/<r>.git denied to <login>.",
+            "fatal: unable to access 'https://github.com/<o>/<r>.git/': "
+            "The requested URL returned error: 403",
+            "gh: Resource not accessible by personal access token (HTTP 403)",
+        )
+        assert "Resource not accessible by personal access token" in entry.message
+        assert "unverified" not in entry.message
+        assert "carter push" in entry.remediation and "own terminal" in entry.remediation
+
+    def test_observed_is_data_only_and_empty_elsewhere(self):
+        assert all(e.observed == () for c, e in registry().items() if c != "E-GH-READONLY")
+        assert "observed" not in render_error_table()
+
+    def test_the_policy_remediation_says_which_gh_verbs_are_positional(self):
+        text = registry()["E-POLICY"].remediation
+        assert "-R <owner>/<repo>" in text and "after the subcommand" in text
+        assert "gh repo view <owner>/<repo>" in text and "gh search repos <query>" in text
+        assert "no `-R`" in text
+
+
+class TestPatCodes:
+    def test_pat_type_and_perm_say_what_to_do_and_never_promise_to_quote(self):
+        type_, perm = registry()["E-PAT-TYPE"], registry()["E-PAT-PERM"]
+        assert (
+            "carter github-token set" in type_.remediation and "own terminal" in type_.remediation
+        )
+        assert "this looks like" not in type_.message and "4-character prefix" in type_.message
+        assert "0700" in perm.remediation and "carter github-token set" in perm.remediation

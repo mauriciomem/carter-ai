@@ -14,6 +14,7 @@ import tempfile
 from pathlib import Path
 
 from carter import __version__
+from carter.aplus.handoff import OWN_TERMINAL
 from carter.home import tilde
 from carter.identity import ConfigError
 from carter.identity.migrate import MigrationError, ensure_config
@@ -171,6 +172,8 @@ _ATTRIBUTION_RULE = (
     " `--author`, `--no-verify`, `-s` or `-S`, and never add `Signed-off-by` unless the"
     " user asks for it on that commit. Credit comes only from the `coauthor_trailer` that"
     " `carter ops config --emit` prints; if `commits` is `refused`, stop and report.\n"
+    "- Pushing and every other GitHub write are human-only. When a branch is ready, write"
+    " the handoff file (`carter-ops` skill) and tell the user: " + OWN_TERMINAL + "\n"
 )
 
 # The "Git & Language" global rules (also rendered into the workspace AGENTS.md).
@@ -189,10 +192,14 @@ _OPENCODE_GIT_LANGUAGE = (
 
 _OPENCODE_AGENTS_MD = _OPENCODE_AGENTS_MD_BASE + _OPENCODE_COMMUNICATION + _OPENCODE_GIT_LANGUAGE
 
-# sha256 of the global AGENTS.md text shipped up to v0.16.x. A file with exactly this
-# content was never edited by the user, so it is upgraded in place.
+# sha256 of each global AGENTS.md text Carter shipped before this one: up to v0.16.x, and
+# v0.17.x (commit rule only, without the handoff rule). A file with exactly one of these
+# was never edited by the user, so it is upgraded in place.
 _KNOWN_PREVIOUS_AGENTS_MD_SHA256 = frozenset(
-    {"f96032e740c9fc9660d0798c36ed38b53aa12d7323b21bddf338834ca37d5401"}
+    {
+        "f96032e740c9fc9660d0798c36ed38b53aa12d7323b21bddf338834ca37d5401",
+        "252415df75dd375f9afe2189572c14b90930f35e14f2ac14eeb26752f1e86eeb",
+    }
 )
 
 
@@ -201,7 +208,7 @@ def _upgrade_note_text() -> str:
         f"# Carter {__version__}: commit attribution rule\n\n"
         "Your global rules file (`~/.config/opencode/AGENTS.md`) has your own edits, so Carter\n"
         "left it alone. Replace the commit/author/signing line in its Git & Language section\n"
-        "with this rule:\n\n" + _ATTRIBUTION_RULE
+        "with these two rules (commits, and pushing as a human-only step):\n\n" + _ATTRIBUTION_RULE
     )
 
 

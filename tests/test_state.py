@@ -459,3 +459,95 @@ class TestSingleChokePoint:
         pollute_git_env()
         init_workspace(tmp_path / "ws", config, git_state=True)
         assert os.environ["GIT_AUTHOR_NAME"] == "Polluter"  # scrubbed per call, not globally
+
+
+class TestHandoffIsNeverSnapshotted:
+    """Plan 003 step 17 (C26): ``.carter/state/handoff/`` holds PR bodies that may carry
+    unredacted text, so it never enters the state repo, whatever ``git add -A`` would do."""
+
+    def _repo(self, tmp_path: Path, config: dict) -> Path:
+        carter_dir = init_workspace(tmp_path, config)
+        (carter_dir / "state" / "handoff").mkdir(parents=True, exist_ok=True)
+        return carter_dir
+
+    def _tracked(self, carter_dir: Path) -> list[str]:
+        return _git(carter_dir, "ls-files").stdout.split()
+
+    def test_handoff_files_stay_untracked_but_other_state_commits(self, tmp_path, config):
+        carter_dir = self._repo(tmp_path, config)
+        (carter_dir / "state" / "handoff" / "feat%2Fx.md").write_text("secret body\n")
+        (carter_dir / "state" / "sessions" / "note.md").write_text("n\n")
+        assert commit_state(carter_dir, "snapshot") is True
+        tracked = self._tracked(carter_dir)
+        assert "state/sessions/note.md" in tracked
+        assert not [t for t in tracked if "handoff" in t]
+        assert (carter_dir / "state" / "handoff" / "feat%2Fx.md").exists()
+
+    def test_a_snapshot_with_only_handoff_changes_is_nothing_to_commit(self, tmp_path, config):
+        carter_dir = self._repo(tmp_path, config)
+        (carter_dir / "state" / "handoff" / "a.md").write_text("x\n")
+        assert commit_state(carter_dir, "snapshot") is False
+
+    def test_the_exclusion_survives_git_add_dash_a(self, tmp_path, config):
+        carter_dir = self._repo(tmp_path, config)
+        commit_state(carter_dir, "prime")
+        (carter_dir / "state" / "handoff" / "a.md").write_text("x\n")
+        assert _git(carter_dir, "add", "-A").returncode == 0
+        assert "handoff" not in _git(carter_dir, "diff", "--cached", "--name-only").stdout
+
+    def test_an_older_repo_with_tracked_handoff_files_untracks_them_without_deleting(
+        self, tmp_path, config
+    ):
+        carter_dir = self._repo(tmp_path, config)
+        leaked = carter_dir / "state" / "handoff" / "old.md"
+        leaked.write_text("tracked by an older Carter\n")
+        # simulate the old behaviour: no exclusion, file committed
+        (carter_dir / ".git" / "info" / "exclude").write_text("")
+        _git(carter_dir, "add", "-f", "state/handoff/old.md")
+        _git(
+            carter_dir, "-c", "user.name=t", "-c", "user.email=t@t.invalid", "commit", "-qm", "old"
+        )
+        assert any("handoff" in t for t in self._tracked(carter_dir))
+        leaked.write_text("tracked by an older Carter, edited\n")
+        assert commit_state(carter_dir, "snapshot") is True
+        assert not [t for t in self._tracked(carter_dir) if "handoff" in t]
+        assert leaked.read_text().endswith("edited\n")  # still on disk
+
+    def test_the_exclude_entry_is_added_once(self, tmp_path, config):
+        carter_dir = self._repo(tmp_path, config)
+        for _ in range(3):
+            commit_state(carter_dir, "again", allow_empty=True)
+        exclude = (carter_dir / ".git" / "info" / "exclude").read_text()
+        assert exclude.splitlines().count("state/handoff/") == 1
+
+    def test_existing_user_exclude_lines_are_kept(self, tmp_path, config):
+        carter_dir = self._repo(tmp_path, config)
+        exclude = carter_dir / ".git" / "info" / "exclude"
+        exclude.write_text("# mine\nscratch/\n")
+        commit_state(carter_dir, "x", allow_empty=True)
+        text = exclude.read_text()
+        assert "scratch/" in text and "state/handoff/" in text and text.startswith("# mine")
+
+    def test_the_code_path_used_by_save_excludes_the_directory(self):
+        import carter.state as state_mod
+
+        source = Path(state_mod.__file__).read_text(encoding="utf-8")
+        assert "state/handoff/" in source and "info" in source and "exclude" in source
+        # init goes through commit_state as well, so a fresh repo is covered from its first commit
+        assert "commit_state(directory" in source
+
+    def test_save_via_the_cli_leaves_handoff_out(self, tmp_path, config):
+        from click.testing import CliRunner
+
+        from carter.cli import main
+
+        carter_dir = self._repo(tmp_path, config)
+        (carter_dir / "state" / "handoff" / "b.md").write_text("body\n")
+        (carter_dir / "state" / "sessions" / "s.md").write_text("s\n")
+        res = CliRunner().invoke(main, ["save", str(tmp_path)], catch_exceptions=False)
+        assert res.exit_code == 0
+        assert not [t for t in self._tracked(carter_dir) if "handoff" in t]
+
+    def test_no_git_state_workspace_is_unaffected(self, tmp_path, config):
+        carter_dir = init_workspace(tmp_path, config, git_state=False)
+        assert commit_state(carter_dir, "x") is False

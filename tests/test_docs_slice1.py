@@ -153,7 +153,6 @@ class TestInterimShapeIsStatedPlainly:
                 continue
             body = path.read_text(encoding="utf-8")
             assert "carter identity" not in body, path
-            assert "carter guard" not in body, path
 
     def test_attribution_text_mentions_the_three_tiers(self) -> None:
         doc = section(text("guides/write-operations.md"), "Attribution")

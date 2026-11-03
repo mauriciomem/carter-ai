@@ -199,6 +199,10 @@ email = ""                # <id>+<login>@users.noreply.github.com
 [attribution]
 footer = "_This comment was generated with Carter._"
 
+[github]
+read_token_file = ""      # set by `carter github-token set`: ~/.carter/secrets/gh-read.token
+probe_repo = ""           # optional "owner/name" for the token's write probe (never printed)
+
 [workspaces."/abs/path"]
 max_tier = "t1"           # optional cap: t0 | t1, set by hand
 role = "co-author"        # pinned by `carter update`
@@ -208,9 +212,25 @@ require_tier = "t2"       # pinned by `carter update`
 | Table | Keys |
 |-------|------|
 | `[identity]` | `role`, `login`, `id`, `name`, `email`, `mode` |
-| `[identity.signing]`, `[identity.disclosure]`, `[github]` | Reserved for later releases; read and kept, not used yet |
+| `[identity.signing]`, `[identity.disclosure]` | Reserved for later releases; read and kept, not used yet |
+| `[github]` | `read_token_file`: where `carter github-token set` stored the read-only token (a path only, never the token itself). `probe_repo`: optional `owner/name` that `github-token check` uses for its refused write attempt instead of a repository you own |
 | `[attribution]` | `footer`: appended to GitHub and Jira bodies |
 | `[workspaces."<path>"]` | `max_tier`, `role`, `require_tier`, `allow_project_opencode_edit`. The path is the resolved absolute path of the workspace |
+
+### Letting agents edit a project's OpenCode config
+
+By default the guards deny agents any edit of OpenCode config files, `.opencode/`, git hooks
+and git config. To allow it in one workspace (the resolved absolute path), set this by hand
+in your own terminal:
+
+```toml
+[workspaces."/abs/path/to/project"]
+allow_project_opencode_edit = true
+```
+
+It takes effect only when a human runs `carter guard install` or `carter update`: both list
+every active opt-out and ask (`--yes` skips only the question). `carter check --host` lists
+them too. A path that no longer exists or contains `*` or `?` is skipped with a message.
 
 Tiers: T0 is nothing configured (commits carry `Assisted-by: Carter`), T1 is an LLM
 account without a key (`Co-authored-by: <login> <address>`), T2 adds a signing key. A

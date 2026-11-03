@@ -1,0 +1,55 @@
+[
+  {
+    "type": "document",
+    "path": "/home/user/.config/opencode/opencode.jsonc",
+    "info": {
+      "$schema": "https://opencode.ai/config.json",
+      "policies": [
+        {
+          "action": "tool.use",
+          "resource": "shell:git push *",
+          "effect": "deny"
+        },
+        {
+          "action": "tool.use",
+          "resource": "shell:git send-pack *",
+          "effect": "deny"
+        }
+      ],
+      "agents": {
+        "build": {
+          "permissions": [
+            {
+              "action": "carter_push",
+              "resource": "*",
+              "effect": "deny"
+            }
+          ]
+        }
+      },
+      "providers": {
+        "example": {}
+      }
+    }
+  },
+  {
+    "type": "directory",
+    "path": "/home/user/.config/opencode"
+  },
+  {
+    "type": "document",
+    "path": "/home/user/proj/opencode.jsonc",
+    "info": {
+      "policies": [
+        {
+          "action": "tool.use",
+          "resource": "shell:git send-pack *",
+          "effect": "deny"
+        }
+      ],
+      "providers": {
+        "proj-only": {}
+      }
+    }
+  }
+]

@@ -38,11 +38,17 @@ def run(
     base_dir: Path | None = None,
     verbosity: int = 1,
     mcp_servers: list[str] | None = None,
-) -> None:
+    *,
+    guards: bool = False,
+    assume_yes: bool = False,
+) -> int:
     """Run the Carter system-level install for OpenCode.
 
     Parameters mirror the ``carter install`` options. ``mcp_servers`` is the
-    opt-in subset; ``None`` installs the full shipped set.
+    opt-in subset; ``None`` installs the full shipped set. With ``guards`` the install ends
+    by running ``carter guard install`` (consented policies; a non-TTY run without
+    ``assume_yes`` skips it with a notice). A guard failure is printed and returned as 1; it
+    never undoes or aborts the rest of the install.
 
     Raises:
         PrerequisiteError: OpenCode is missing or older than 2.1.
@@ -61,7 +67,7 @@ def run(
     check_optional_tools()
 
     if mcp:
-        check_credentials()
+        check_credentials(base_dir)
     else:
         log_step("Skipping MCP credentials (no --mcp flag)")
 
@@ -117,3 +123,9 @@ def run(
             f"{updated} updated, {unchanged} unchanged",
             level=2,
         )
+
+    if not guards:
+        return 0
+    from carter.guard.wiring import install_guards
+
+    return install_guards(base_dir, assume_yes=assume_yes)

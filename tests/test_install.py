@@ -281,13 +281,13 @@ class TestOfficialGitHubServer:
         for tool in self.EXPECTED_TOOLS:
             assert tool in cmd, f"surgical tool {tool!r} absent"
 
-    def test_token_is_env_placeholder_not_literal(self) -> None:
+    def test_token_is_a_file_placeholder_not_literal_not_env(self) -> None:
         entry = self._github_cfg()
         env = entry.get("env") or entry.get("environment", {})
-        # The PAT is passed by env placeholder ({env:VAR}), never a baked literal.
-        assert any("{env:" in str(v) for v in env.values()), (
-            "GitHub token must be an env placeholder"
-        )
+        # RFC-0007 App C.7: the read-only PAT lives in a 0600 file, never in the environment
+        # (an exported GITHUB_TOKEN would also reach agent shells) and never baked in.
+        assert env == {"GITHUB_PERSONAL_ACCESS_TOKEN": "{file:~/.carter/secrets/gh-read.token}"}
+        assert "{env:" not in str(env) and "github_pat_" not in str(env)
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -875,6 +875,47 @@ class TestGlobalAttributionRule:
 
     def test_rule_is_short(self) -> None:
         assert len(_ATTRIBUTION_RULE) <= 600
+
+    def test_the_rule_carries_the_handoff_sentence_and_stays_short(self) -> None:
+        from carter.aplus.handoff import OWN_TERMINAL
+
+        assert OWN_TERMINAL in _ATTRIBUTION_RULE and "human-only" in _ATTRIBUTION_RULE
+        assert len(_ATTRIBUTION_RULE) <= 700  # AGENTS.md loads every session
+
+    def test_unmodified_v017_file_is_upgraded_in_place(self, base_dir: Path) -> None:
+        # v0.17.x shipped the commit rule without the push rule: no user edit, so upgrade.
+        push_rule = _ATTRIBUTION_RULE.splitlines(keepends=True)[1]
+        v017 = _OPENCODE_AGENTS_MD.replace(push_rule, "")
+        assert v017 != _OPENCODE_AGENTS_MD
+        agents_md = base_dir / "opencode" / "AGENTS.md"
+        agents_md.parent.mkdir(parents=True)
+        agents_md.write_text(v017)
+
+        manifest = self._install(base_dir)
+
+        assert agents_md.read_text() == _OPENCODE_AGENTS_MD
+        assert str(agents_md) in manifest["files"]
+        assert not (base_dir / "carter" / "upgrade-notes").exists()
+
+    def test_a_modified_v017_file_is_kept_and_the_note_has_both_rules(
+        self, base_dir: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        from carter import __version__
+        from carter.aplus.handoff import OWN_TERMINAL
+
+        push_rule = _ATTRIBUTION_RULE.splitlines(keepends=True)[1]
+        mine = _OPENCODE_AGENTS_MD.replace(push_rule, "") + "\n## Mine\n"
+        agents_md = base_dir / "opencode" / "AGENTS.md"
+        agents_md.parent.mkdir(parents=True)
+        agents_md.write_text(mine)
+
+        self._install(base_dir)
+
+        assert agents_md.read_text() == mine
+        printed = capsys.readouterr().out
+        note = (base_dir / "carter" / "upgrade-notes" / f"{__version__}.md").read_text()
+        for text in (printed, note):
+            assert _ATTRIBUTION_RULE in text and OWN_TERMINAL in text
 
     def test_unmodified_v016_file_is_upgraded_in_place(self, base_dir: Path) -> None:
         agents_md = base_dir / "opencode" / "AGENTS.md"

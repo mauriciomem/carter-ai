@@ -45,3 +45,41 @@ def manifest_path(base_dir: Path | None) -> Path:
 
 def backups_dir(base_dir: Path | None) -> Path:
     return _carter_base(base_dir) / "backups"
+
+
+def guard_state_path(base_dir: Path | None) -> Path:
+    """``~/.carter/guard-state.json``: G2 ownership, kept apart from ``manifest.json``."""
+    return _carter_base(base_dir) / "guard-state.json"
+
+
+def carter_gitconfig_path(base_dir: Path | None) -> Path:
+    """``~/.carter/gitconfig``: every global git key Carter owns (D61), included by one line."""
+    return _carter_base(base_dir) / "gitconfig"
+
+
+def managed_roots(base_dir: Path | None) -> tuple[Path, ...]:
+    """Directories whose files uninstall may delete (path-component containment, resolved).
+
+    ``~/.carter/{bin,hooks,run}`` are listed for the files slice 2a installs there; in 1G they
+    hold nothing. ``guard remove`` deletes its own files by code, not through these roots."""
+    carter = _carter_base(base_dir)
+    return tuple(
+        p.resolve()
+        for p in (
+            _opencode_base(base_dir),
+            knowledge_dir(base_dir),
+            carter / "bin",
+            carter / "hooks",
+            carter / "run",
+        )
+    )
+
+
+def token_path(base_dir: Path | None) -> Path:
+    """``~/.carter/secrets/gh-read.token``: the read-only fine-grained PAT (App C.7)."""
+    return _carter_base(base_dir) / "secrets" / "gh-read.token"
+
+
+def carter_config_path(base_dir: Path | None) -> Path:
+    """``~/.carter/config.toml``: the identity and ``[github]`` settings."""
+    return _carter_base(base_dir) / "config.toml"

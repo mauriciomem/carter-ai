@@ -63,9 +63,9 @@ class TestSchema:
         for marker in raw()["isolation_markers"]:
             assert set(marker) == {"name", "match", "value"}
 
-    def test_reserved_keys_are_empty_and_named(self):
+    def test_reserved_keys_are_empty_and_named(self):  # 1G filled gh_read_allowlist and policy_set
         data = raw()
-        assert data["reserved"] == ["isolation_vars", "gh_read_allowlist", "policy_set"]
+        assert data["reserved"] == ["isolation_vars"]
         for key in data["reserved"]:
             assert data[key] == [], f"{key} is reserved for a later slice"
 
@@ -218,12 +218,13 @@ class TestForbiddenCoversEveryClassOfC41:
         assert "commit-tree" in by_id["plumbing"].items
         assert "raw SHA" in by_id["plumbing"].note
 
-    def test_slice_1_enforces_the_commit_recipe_not_the_gate_or_push_rules(self):
+    def test_slice_1g_enforces_the_recipe_the_push_verbs_and_the_human_only_verbs(self):
         enforced = {e.id for e in forbidden_classes()}
-        assert CURRENT_SLICE == "1"
+        assert CURRENT_SLICE == "1G"
         assert {"commit-flags", "staging", "env-overrides", "git-config-writes"} <= enforced
-        # devops pushing is unchanged until slice 1G; the gate is slice 2a
-        assert not {"push-verbs", "other-verbs", "human-only-carter", "control-files"} & enforced
+        assert {"push-verbs", "human-only-carter"} <= enforced  # plan 003 step 22
+        # the gate and the control-plane rules are slice 2a: data only until then
+        assert not {"other-verbs", "credential-paths", "control-files"} & enforced
 
     def test_a_later_slice_extends_without_a_schema_change(self):
         later = {e.id for e in forbidden_classes(current="2a")}
@@ -287,7 +288,7 @@ class TestRenderers:
         cmds = render_forbidden_commands()
         for needed in ("--author", "--no-verify", "git commit -S", "git add -A", "git add ."):
             assert needed in cmds
-        assert "git push" not in cmds  # 1G
+        assert "git push" in cmds and "git send-pack" in cmds  # enforced from 1G (step 22)
 
     def test_block_is_marked_and_names_every_enforced_item(self):
         block = render_forbidden_block()
@@ -299,7 +300,8 @@ class TestRenderers:
                 assert f"`{item}`" in block, item
             if entry.note:
                 assert entry.note in block
-        assert "git push" not in block
+        assert "`git push`" in block and "`git send-pack`" in block
+        assert "carter push" in block and "carter pr" in block and "carter guard *" in block
 
     def test_block_is_deterministic(self):
         assert render_forbidden_block() == render_forbidden_block()

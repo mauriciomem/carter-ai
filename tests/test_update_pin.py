@@ -370,3 +370,22 @@ class TestWorkspaceLevelNoteOnly:
 
     def test_a_fresh_workspace_has_nothing_to_report(self, ws):
         assert "not rewritten" not in update(ws, "--yes").output
+
+    def test_a_workspace_with_the_commit_rule_but_no_push_rule_gets_the_push_rule(self, ws):
+        from carter.aplus.handoff import OWN_TERMINAL
+
+        agents = ws / "AGENTS.md"
+        agents.write_text("# Mine\n- **Commits**: use the coauthor_trailer.\n")
+
+        out = update(ws, "--yes").output
+
+        assert "not rewritten" in out and OWN_TERMINAL in out
+        assert "- **Pushing**" in out and "- **Commits**" not in out  # only what is missing
+        assert agents.read_text() == "# Mine\n- **Commits**: use the coauthor_trailer.\n"
+
+    def test_a_current_workspace_file_gets_no_note(self, ws):
+        from carter.aplus.handoff import OWN_TERMINAL
+
+        agents = ws / "AGENTS.md"
+        agents.write_text(f"# Mine\ncoauthor_trailer\n{OWN_TERMINAL}\n")
+        assert "not rewritten" not in update(ws, "--yes").output

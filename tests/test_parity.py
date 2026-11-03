@@ -367,12 +367,74 @@ class TestNoFalseReadOnlyClaim:
         )
 
 
+class TestNoAgentPushes:
+    """Plan 003 step 12 (T14): no agent pushes; devops is the sole caller of B.
+
+    Structural half: the rendered frontmatter of every Carter agent. The prose half (the
+    devops template no longer claims it pushes) lands with step 23, so this step ends green.
+    """
+
+    PUSH_VERBS = ("git push", "gh pr create", "gh pr merge", "gh api", "gh release")
+
+    @staticmethod
+    def _rules(rendered_agents_dir: Path) -> dict[str, list[dict]]:
+        out: dict[str, list[dict]] = {}
+        for agent in sorted(rendered_agents_dir.glob("carter-*.md")):
+            out[agent.stem.removeprefix("carter-")] = _parse_frontmatter(agent.read_text())[
+                "permissions"
+            ]
+        assert out
+        return out
+
+    def test_no_agent_has_a_push_allow_or_ask(self, rendered_agents_dir: Path) -> None:
+        offenders = []
+        for role, rules in self._rules(rendered_agents_dir).items():
+            for rule in rules:
+                if rule["action"] != "shell" or not rule["resource"].startswith(self.PUSH_VERBS):
+                    continue
+                # `git push --force *` is a dangerous-category gate, but a later plain
+                # `git push *` deny wins (last match), so check the effective verdict.
+                verdict = [
+                    r["effect"]
+                    for r in rules
+                    if r["action"] == "shell" and r["resource"] == "git push *"
+                ][-1]
+                if rule["resource"] == "git push --force *":
+                    assert verdict == "deny", role
+                elif rule["effect"] != "deny":
+                    offenders.append((role, rule["resource"], rule["effect"]))
+        assert not offenders, f"agents can still push or write to GitHub: {offenders}"
+
+    def test_only_devops_lacks_the_carter_broker_deny(self, rendered_agents_dir: Path) -> None:
+        for role, rules in self._rules(rendered_agents_dir).items():
+            denies = {r["action"] for r in rules if r["effect"] == "deny"}
+            has_both = {"carter_push", "carter_pr"} <= denies
+            assert has_both is (role != "devops"), role
+            if role == "devops":
+                assert not {r["action"] for r in rules} & {"carter_push", "carter_pr"}
+
+    def test_the_broker_denies_come_from_the_data_file(self, rendered_agents_dir: Path) -> None:
+        from carter.identity.policyset import agent_permission_denies, agent_permission_exempt
+
+        rules = self._rules(rendered_agents_dir)
+        for role, agent_rules in rules.items():
+            expected = [] if role in agent_permission_exempt() else list(agent_permission_denies())
+            got = [r["action"] for r in agent_rules if r["action"] in agent_permission_denies()]
+            assert got == expected, role
+
+    def test_the_global_policy_set_never_names_the_broker_tools(self) -> None:
+        # D46 is per-agent: a global deny would block devops as well.
+        from carter.identity.policyset import policy_set
+
+        assert not [s for s in policy_set() if "carter_" in s.resource]
+
+
 class TestProseMatchesAllowlist:
     """The inverse of the read-only bug: an agent whose allowlist lacks
     ``remote-write`` must not claim 'Full access' in its Tool Access prose. On a
-    non-enforcing harness the advisory prose wins, so an over-claim would let a
-    non-pusher remote-write — breaking the single-pusher invariant (only devops
-    holds ``remote-write``).
+    non-enforcing harness the advisory prose wins, so an over-claim would let an
+    agent without ``remote-write`` write remotely — breaking the sole-holder invariant
+    (only devops holds ``remote-write``).
     """
 
     def test_non_pusher_agents_dont_claim_full_access(self, rendered_agents_dir: Path) -> None:
@@ -514,3 +576,93 @@ class TestCarterOpsSkillGeneratedBlocks:
 
         text = self.SKILL.read_text(encoding="utf-8")
         assert sync_text(sync_text(text)) == sync_text(text)
+
+
+class TestHandoffProse:
+    """Plan 003 step 23 (T14, text half): the agent-facing prose matches the push model.
+
+    Nobody pushes. A finished branch is a handoff file, then the human runs ``carter push`` and
+    ``carter pr``. Jira and Slack stay with devops. The one sentence about *where* comes from
+    ``handoff.OWN_TERMINAL`` and nowhere else."""
+
+    @staticmethod
+    def _body(rendered_agents_dir: Path, role: str) -> str:
+        """The prose after the frontmatter (the permission rules legitimately name `git push`)."""
+        text = (rendered_agents_dir / f"carter-{role}.md").read_text()
+        return " ".join(text.split("\n---\n", 1)[1].split())
+
+    def test_devops_describes_the_handoff_and_no_longer_pushes(
+        self, rendered_agents_dir: Path
+    ) -> None:
+        from carter.aplus.handoff import OWN_TERMINAL
+
+        body = self._body(rendered_agents_dir, "devops")
+        assert OWN_TERMINAL in body
+        assert ".carter/state/handoff/<encoded-branch>.md" in body and "`carter-ops`" in body
+        assert "`carter push`" in body and "`carter pr`" in body  # as the human's commands
+        assert "Jira and Slack writes stay with you" in body
+        assert "Pushing and GitHub writes are human-only" in body
+        for gone in ("git push", "gh pr create", "gh pr merge", "Full access — create PRs"):
+            assert gone not in body, gone
+        assert "single pusher" not in body and "sole pusher" not in body.lower()
+
+    def test_devops_says_a_broker_may_come_but_does_not_name_tools_as_usable(
+        self, rendered_agents_dir: Path
+    ) -> None:
+        body = self._body(rendered_agents_dir, "devops")
+        assert "later release" in body and "do not look for them or try them" in body
+        assert "carter_push" not in body and "carter_pr" not in body
+
+    @pytest.mark.parametrize("role", ["engineer", "maestro", "pm", "security", "narrator"])
+    def test_other_agents_route_pushing_to_the_handoff(
+        self, rendered_agents_dir: Path, role: str
+    ) -> None:
+        body = self._body(rendered_agents_dir, role)
+        assert "human-only" in body, role
+        assert "single pusher" not in body and "Only devops can push" not in body
+        assert "sole holder of `remote-write` and `dangerous` — the single" not in body
+
+    def test_engineer_and_maestro_hand_the_branch_to_devops_for_the_handoff_file(
+        self, rendered_agents_dir: Path
+    ) -> None:
+        from carter.aplus.handoff import OWN_TERMINAL
+
+        engineer = self._body(rendered_agents_dir, "engineer")
+        assert "carter-devops" in engineer and "handoff file" in engineer
+        assert "`carter push` and `carter pr`" in engineer
+        maestro = self._body(rendered_agents_dir, "maestro")
+        assert OWN_TERMINAL in maestro and "handoff file" in maestro
+        assert "carter-devops" in maestro and "Jira and Slack" in maestro
+
+    def test_the_narrator_transmits_nothing_to_github(self, rendered_agents_dir: Path) -> None:
+        body = self._body(rendered_agents_dir, "narrator")
+        assert "Nobody transmits to GitHub" in body
+        assert "redaction handoff" in body and "remote-write" in body and "transmit" in body
+
+    def test_denied_roles_do_not_claim_the_github_mcp(self, rendered_agents_dir: Path) -> None:
+        from carter.identity.policyset import agent_mcp_denies
+
+        action, roles = agent_mcp_denies()
+        assert roles  # the data names at least one role
+        for role in roles:
+            text = (rendered_agents_dir / f"carter-{role}.md").read_text()
+            frontmatter = _parse_frontmatter(text)["permissions"]
+            assert {"action": action, "resource": "*", "effect": "deny"} in frontmatter
+            tool_access = text.split("## Tool Access", 1)[1]
+            assert "carter-github" in tool_access, role
+            line = next(ln for ln in tool_access.splitlines() if "carter-github" in ln)
+            assert "Not available to you" in line, role
+
+    def test_roles_that_keep_the_github_mcp_describe_it_as_reads(
+        self, rendered_agents_dir: Path
+    ) -> None:
+        from carter.identity.policyset import agent_mcp_denies
+
+        _, denied = agent_mcp_denies()
+        for agent in sorted(rendered_agents_dir.glob("carter-*.md")):
+            role = agent.stem.removeprefix("carter-")
+            text = agent.read_text()
+            if role in denied or "**carter-github**" not in text:
+                continue
+            line = next(ln for ln in text.splitlines() if "**carter-github**" in ln)
+            assert "full access" not in line.lower(), role

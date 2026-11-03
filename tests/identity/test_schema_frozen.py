@@ -33,7 +33,7 @@ FROZEN_NAMES = {
     ),
     "identity.disclosure": ("assisted_by",),
     "attribution": ("footer",),
-    "github": ("read_token_file",),
+    "github": ("read_token_file", "probe_repo"),
     'workspaces."<abs path>"': (
         "allow_project_opencode_edit",
         "max_tier",
@@ -66,7 +66,7 @@ FROZEN_SPEC = {
     },
     Disclosure: {"assisted_by": (False, None)},
     Attribution: {"footer": ("_This comment was generated with Carter._", None)},
-    Github: {"read_token_file": ("", None)},
+    Github: {"read_token_file": ("", None), "probe_repo": ("", None)},
     Workspace: {
         "allow_project_opencode_edit": (False, None),
         "max_tier": ("", ("t0", "t1")),
