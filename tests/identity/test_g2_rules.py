@@ -63,11 +63,10 @@ class TestSchema:
         for marker in raw()["isolation_markers"]:
             assert set(marker) == {"name", "match", "value"}
 
-    def test_reserved_keys_are_empty_and_named(self):  # 1G filled gh_read_allowlist and policy_set
+    def test_nothing_is_reserved_any_more(self):  # 1G filled two keys, 2a fills isolation_vars
         data = raw()
-        assert data["reserved"] == ["isolation_vars"]
-        for key in data["reserved"]:
-            assert data[key] == [], f"{key} is reserved for a later slice"
+        assert data["reserved"] == []
+        assert data["isolation_vars"] and all(isinstance(v, str) for v in data["isolation_vars"])
 
     def test_every_forbidden_entry_is_traceable_and_complete(self):
         ids = set()

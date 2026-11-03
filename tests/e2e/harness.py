@@ -30,7 +30,7 @@ import sys
 import time
 import urllib.error
 import urllib.request
-from collections.abc import Iterable, Mapping, Sequence
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -172,7 +172,8 @@ class Rig:
     use_netns: bool = False
     extra_config: Mapping[str, Any] = field(default_factory=dict)
     plugins: Mapping[str, str] = field(default_factory=dict)
-    extra_files: Mapping[str, str] = field(default_factory=dict)
+    extra_files: Mapping[str, str | Callable[[Path], str]] = field(default_factory=dict)
+    executable: Sequence[str] = ()  # extra_files paths to chmod 0755
     ws_files: Mapping[str, str] = field(default_factory=dict)
     server_env_extra: Mapping[str, str] = field(default_factory=dict)
     port: int = 0
@@ -240,7 +241,10 @@ class Rig:
             target = self.home / rel
             refuse_real_home(target, self.real_home)
             target.parent.mkdir(parents=True, exist_ok=True)
-            target.write_text(content.replace("__LOGS__", str(self.logs)))
+            text = content(self.home) if callable(content) else content
+            target.write_text(text.replace("__LOGS__", str(self.logs)))
+            if rel in self.executable:
+                target.chmod(0o755)
         for rel, content in self.ws_files.items():
             target = self.ws / rel
             target.parent.mkdir(parents=True, exist_ok=True)

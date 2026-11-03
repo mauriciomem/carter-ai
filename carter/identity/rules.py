@@ -48,6 +48,18 @@ class ForbiddenClass:
     verbs: tuple[str, ...] = ()
     scoped_flags: tuple[dict[str, Any], ...] = ()
     note: str = ""
+    group: str = "g2"  # the consent group whose decline skips this rule (gate --skip-groups)
+    hint: str = ""  # one line, shown to the model with the rule id; no leading `!`
+    item_groups: tuple[tuple[str, str], ...] = ()  # per-item group overrides (sudo/docker/podman)
+
+
+@dataclass(frozen=True)
+class GateRule:
+    """A rule id only the gate raises (G7); the other 11 ids are ``ForbiddenClass.id``."""
+
+    id: str
+    rfc: str
+    hint: str
 
 
 @dataclass(frozen=True)
@@ -63,12 +75,28 @@ class Rules:
     credential_paths: tuple[str, ...]
     control_paths: tuple[str, ...]
     forbidden: tuple[ForbiddenClass, ...]
+    isolation_vars: tuple[str, ...] = ()
+
+
+@cache
+def _data() -> dict[str, Any]:
+    text = resources.files("carter.identity").joinpath("g2_rules.json").read_text("utf-8")
+    return json.loads(text)
+
+
+def gate_rules() -> tuple[GateRule, ...]:
+    """The four rule ids that exist only in the gate (G7)."""
+    return tuple(GateRule(**row) for row in _data()["gate_rules"])
+
+
+def plugin_defaults() -> dict[str, Any]:
+    """Defaults for ``isolation.json``'s ``plugin`` block (G4); paths are filled at install."""
+    return dict(_data()["plugin"])
 
 
 @cache
 def load_rules() -> Rules:
-    text = resources.files("carter.identity").joinpath("g2_rules.json").read_text("utf-8")
-    data = json.loads(text)
+    data = _data()
     return Rules(
         version=data["version"],
         agent_signals=tuple(data["agent_signals"]),
@@ -80,6 +108,7 @@ def load_rules() -> Rules:
         warn_only=tuple(data["warn_only"]),
         credential_paths=tuple(data["credential_paths"]),
         control_paths=tuple(data["control_paths"]),
+        isolation_vars=tuple(data["isolation_vars"]),
         forbidden=tuple(
             ForbiddenClass(
                 id=e["id"],
@@ -91,6 +120,9 @@ def load_rules() -> Rules:
                 verbs=tuple(e.get("verbs", ())),
                 scoped_flags=tuple(e.get("scoped_flags", ())),
                 note=e.get("note", ""),
+                group=e["group"],
+                hint=e["hint"],
+                item_groups=tuple(e.get("item_groups", {}).items()),
             )
             for e in data["forbidden"]
         ),

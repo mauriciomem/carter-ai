@@ -60,6 +60,29 @@ jobs:
         # cron (carries the `live` marker, excluded by -m "not live").
         run: uv run pytest evals/ -m "not live" -q
 
+  plugin:
+    # Skeleton (plan 004 step 9; wired fully in step 33). The TypeScript plugin has no npm
+    # dependencies and no build: Node strips the types itself (>= 22.18; 24 is the target).
+    name: plugin (node ${{ matrix.node }}, ${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+        node: ["24", "22.18"]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up Node
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: ${{ matrix.node }}
+
+      - name: node --test (no dependencies, no build)
+        run: node --test "tests/plugin/*.test.ts"
+
   install-smoke:
     # `floor` = minimum supported OpenCode (required). `latest` = newest 2.x
     # (informational; allowed to fail so upstream drift doesn't block PRs).

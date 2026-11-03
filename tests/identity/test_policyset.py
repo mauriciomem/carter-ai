@@ -59,9 +59,9 @@ class TestOldLoaderContract:
             assert data[key]
         assert load_rules().credential_paths[0] == "/.ssh/"
 
-    def test_reserved_loses_only_the_two_filled_keys(self) -> None:
-        assert raw()["reserved"] == ["isolation_vars"]
-        assert raw()["isolation_vars"] == []
+    def test_nothing_is_reserved_after_2a(self) -> None:  # 1G filled two keys, 2a the last
+        assert raw()["reserved"] == []
+        assert raw()["isolation_vars"]
 
     def test_filled_keys_are_not_empty_any_more(self) -> None:
         assert raw()["policy_set"] and raw()["gh_read_allowlist"]

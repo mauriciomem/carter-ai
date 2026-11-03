@@ -43,6 +43,7 @@ class ConsentGroup:
     id: str
     live: bool
     effect: str
+    rev: int = 1  # bumped when a group gains content that needs a fresh yes (D65)
 
 
 @dataclass(frozen=True)
@@ -64,7 +65,10 @@ def _data() -> dict[str, Any]:
 
 def consent_groups() -> tuple[ConsentGroup, ...]:
     """The seven consent groups of C.6.1, in order; ``live`` ones have content in 1G."""
-    return tuple(ConsentGroup(g["id"], g["live"], g["effect"]) for g in _data()["consent_groups"])
+    return tuple(
+        ConsentGroup(g["id"], g["live"], g["effect"], g.get("rev", 1))
+        for g in _data()["consent_groups"]
+    )
 
 
 def policy_set() -> tuple[Statement, ...]:
