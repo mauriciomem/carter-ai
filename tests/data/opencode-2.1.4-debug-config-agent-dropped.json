@@ -1,0 +1,50 @@
+[
+  {
+    "type": "document",
+    "path": "/home/user/.config/opencode/opencode.jsonc",
+    "info": {
+      "$schema": "https://opencode.ai/config.json",
+      "model": {
+        "providerID": "mock",
+        "model": "mock-1"
+      },
+      "policies": [
+        {
+          "action": "provider.use",
+          "resource": "*",
+          "effect": "deny"
+        },
+        {
+          "action": "provider.use",
+          "resource": "mock",
+          "effect": "allow"
+        }
+      ],
+      "providers": {
+        "mock": {
+          "name": "Mock",
+          "models": {
+            "mock-1": {
+              "name": "Mock 1"
+            }
+          }
+        }
+      },
+      "agents": {
+        "plan": {
+          "permissions": [
+            {
+              "action": "carter_push",
+              "resource": "*",
+              "effect": "deny"
+            }
+          ]
+        }
+      }
+    }
+  },
+  {
+    "type": "directory",
+    "path": "/home/user/.config/opencode"
+  }
+]
