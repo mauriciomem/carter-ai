@@ -292,8 +292,6 @@ class TestReadAndEditDenies:
 
     def test_control_paths_data_is_covered_by_edit_denies(self, statements) -> None:
         for entry in load_rules().control_paths:
-            if entry.startswith("<"):  # "<plugin dir>" placeholder
-                continue
             sample = entry.replace("~", HOME)
             sample = sample + "x" if sample.endswith("/") else sample
             assert decide(statements, "edit", sample) == "deny", entry

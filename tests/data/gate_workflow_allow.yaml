@@ -1,0 +1,37 @@
+# Commands agents ran in plans 002-004 (their notes and step files): none may be refused.
+# NOT here: `CARTER_E2E=1 ...` / `CARTER_PERF=1 ...` prefixes: CARTER_* assignments are refused by design (C.4.1) - the human runs those.
+# Seed for step 36, which grows it to >= 40 from the rehearsal. Same fields as the corpus, expect: allow.
+version: 1
+cases:
+- {id: wf-pytest, command: uv run pytest -q, expect: allow, why: plan 003 baseline}
+- {id: wf-pytest-evals, command: 'uv run pytest evals -m "not live" -q', expect: allow, why: plan 003 baseline}
+- {id: wf-ruff, command: uv run ruff check, expect: allow, why: plan 003 baseline}
+- {id: wf-ruff-format, command: uv run ruff format --check, expect: allow, why: plan 003 baseline}
+- {id: wf-mypy, command: uv run mypy, expect: allow, why: plan 003 baseline}
+- {id: wf-pytest-pipe, command: 'uv run pytest -q -p no:cacheprovider 2>&1 | tail -3', expect: allow, why: plan 004 M1}
+- {id: wf-git-status, command: git status --short, expect: allow, why: everyday}
+- {id: wf-git-log, command: git log --oneline | head -5, expect: allow, why: everyday}
+- {id: wf-git-diff-stat, command: 'git diff --stat 00f23af..HEAD | tail -1', expect: allow, why: plan 004 step 1}
+- {id: wf-git-revlist, command: 'git rev-list --count 00f23af..HEAD', expect: allow, why: plan 004 step 1}
+- {id: wf-git-branch, command: git branch --show-current, expect: allow, why: plan 004 step 1}
+- {id: wf-git-bundle-verify, command: git bundle verify /tmp/x.bundle, expect: allow, why: plan 003 lessons}
+- {id: wf-git-hook-list, command: git hook list --show-scope commit-msg, expect: allow, why: plan 003 spike 1}
+- {id: wf-git-add-paths, command: git add tests/gate/test_budget.py carter/gate/__init__.py, expect: allow, why: explicit paths}
+- {id: wf-node-test, command: 'node --test "tests/plugin/*.test.ts"', expect: allow, why: plan 004 M2}
+- {id: wf-hosthash, command: python3 /tmp/opencode/2a/hosthash.py, expect: allow, why: plan 004 step 1}
+- {id: wf-opencode-version, command: opencode --version, expect: allow, why: plan 004 step 1}
+- {id: wf-unshare, command: unshare -rn true, expect: allow, why: plan 004 step 1}
+- {id: wf-cd-pytest, command: 'cd /home/user/carter-ai && uv run pytest tests/guard -q', expect: allow, why: cd then test}
+- {id: wf-ls-scratch, command: ls /tmp/opencode/2a, expect: allow, why: plan 004 notes}
+- {id: wf-cat-notes, command: 'cat .carter/state/plans/active/004-slice-2a-plugin/notes.md | head -40', expect: allow, why: reading plan notes}
+- {id: wf-rg, command: 'rg -n "gate" tests -l', expect: allow, why: search}
+- {id: wf-sed-n, command: sed -n 1,40p carter/identity/rules.py, expect: allow, why: reading}
+- {id: wf-wc, command: wc -l carter/identity/*.py, expect: allow, why: reading}
+- {id: wf-uv-build, command: SETUPTOOLS_SCM_PRETEND_VERSION=0.0.1 uv build --wheel -o /tmp/opencode/2a/wheel, expect: allow, why: plan 004 M2}
+- {id: wf-python-heredoc, command: "python3 - <<'EOF'\nimport json\nprint(json.dumps({'a': 1}))\nEOF", expect: allow, why: small inline scripts without git or gh}
+- {id: wf-mkdir-tmp, command: mkdir -p /tmp/opencode/2a/m2 && cd /tmp/opencode/2a, expect: allow, why: scratch directory}
+- {id: wf-ps, command: pgrep -af mock_llm | head -3, expect: allow, why: process check}
+- {id: wf-timeout-script, command: timeout 600 python3 /tmp/opencode/2a/explore4.py /home/user/.opencode/bin/opencode, expect: allow, why: plan 004 M1 spikes}
+- {id: wf-diff-hash, command: diff /tmp/opencode/2a/hash-before.txt /tmp/opencode/2a/hash-after.txt && echo same, expect: allow, why: host hash check}
+- {id: wf-npm-view, command: npm view @opencode/cli@2.1.2 version, expect: allow, why: plan 004 step 1}
+- {id: wf-uv-tool, command: uv tool install --from /tmp/opencode/2a/probe-proj carter-ai, expect: allow, why: plan 004 step 7}

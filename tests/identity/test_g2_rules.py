@@ -114,9 +114,11 @@ class TestValuesFollowTheRfc:
             "~/.carter/run/",
             "~/.carter/isolation.json",
             "~/.carter/gitconfig",
+            "~/.carter/gitconfig.d/",
             "~/.carter/config.toml",
             "~/.carter/guard-state.json",
-            "<plugin dir>",
+            "~/.config/opencode/plugin/",  # G9: both directories load plugins (spike B)
+            "~/.config/opencode/plugins/",
         )
 
     def test_isolation_markers_match_by_carters_exact_values(self):
@@ -189,7 +191,9 @@ class TestForbiddenCoversEveryClassOfC41:
 
     def test_n_is_no_verify_only_for_commit(self):
         (entry,) = [e for e in forbidden_classes(all_slices=True) if e.id == "commit-flags"]
-        assert [(f["flag"], f["verbs"]) for f in entry.scoped_flags] == [("-n", ["commit"])]
+        assert [(f["flag"], f["verbs"]) for f in entry.scoped_flags] == [
+            ("-n", ["commit", "am"])
+        ]  # git am -n is --no-verify too
         assert set(entry.verbs) == {
             "commit",
             "merge",

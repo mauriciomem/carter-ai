@@ -639,9 +639,16 @@ def _register_aplus() -> None:
     main.add_command(pr)
 
 
+def _register_gate() -> None:
+    from carter.gate_cli import gate
+
+    main.add_command(gate)
+
+
 _register_guard()
 _register_github_token()
 _register_aplus()
+_register_gate()
 
 
 if __name__ == "__main__":

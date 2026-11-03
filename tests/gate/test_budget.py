@@ -10,9 +10,9 @@ Skeleton from plan 004 step 7 (spike F); step 21 fills the corpus run. What the 
   ``carter.identity/__init__`` pulls ``config``, ``errors``, ``importlib.resources`` (+25 ms).
   Together: p95 42 ms warm / 80-96 ms cold, against 16 / 33 ms when both are lazy.
 
-The ``xfail`` test below pins the first half of that design requirement (step 21 adds the
-``carter.identity`` half once ``carter.gate`` exists). It is strict, so it fails the run the
-moment step 21 makes the import lazy (remove the marker then).
+Step 21 made both imports lazy; ``TestStartupFloor`` pins it (``import carter`` must not load
+``importlib.metadata``, and the gate must not load ``carter.identity``, ``importlib.resources``,
+``importlib.metadata``, ``pathlib`` or ``subprocess``).
 
 The corpus run is opt-in (``CARTER_PERF=1``) and skips until ``tests/data/gate_corpus.yaml`` exists
 (step 17). ``CARTER_GATE_PYTHON`` points it at the ``uv tool`` interpreter (CI does this).
@@ -26,7 +26,7 @@ import statistics
 import subprocess
 import sys
 import time
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from pathlib import Path
 
 import pytest
@@ -48,17 +48,47 @@ def percentile(samples: Sequence[float], p: float) -> float:
 
 
 def measure(
-    argv: Sequence[str], payloads: Sequence[bytes], runs: int, env: dict[str, str]
+    argv: Sequence[str],
+    payloads: Sequence[bytes],
+    runs: int,
+    env: dict[str, str],
+    before: Callable[[], None] | None = None,
 ) -> list[float]:
-    """Wall time in ms of ``runs`` spawns of ``argv``, cycling through ``payloads`` on stdin."""
+    """Wall time in ms of ``runs`` spawns of ``argv``, cycling through ``payloads`` on stdin.
+
+    Exit codes 0 (allow) and 1 (deny) are both normal answers; ``before`` runs untimed."""
     samples: list[float] = []
     for i in range(runs):
+        if before:
+            before()
         start = time.perf_counter()
-        subprocess.run(
-            argv, input=payloads[i % len(payloads)], env=env, capture_output=True, check=True
-        )
+        done = subprocess.run(argv, input=payloads[i % len(payloads)], env=env, capture_output=True)
         samples.append((time.perf_counter() - start) * 1000)
+        assert done.returncode in (0, 1), done.stderr[-300:]
     return samples
+
+
+def drop_file_cache(python: str) -> Callable[[], None]:
+    """``posix_fadvise(DONTNEED)`` over the interpreter's tree and the stdlib: a cold-cache run
+    without root (Linux; elsewhere the cold figure is simply not measured)."""
+    roots = {
+        os.path.dirname(os.path.dirname(os.path.realpath(python))),
+        os.path.dirname(os.__file__),
+    }
+    roots.add(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+    def drop() -> None:
+        for root in roots:
+            for dirpath, _dirs, files in os.walk(root):
+                for name in files:
+                    try:
+                        fd = os.open(os.path.join(dirpath, name), os.O_RDONLY)
+                        os.posix_fadvise(fd, 0, 0, os.POSIX_FADV_DONTNEED)
+                        os.close(fd)
+                    except OSError:
+                        pass
+
+    return drop
 
 
 class TestMeasurementHelpers:
@@ -94,9 +124,6 @@ def _watched_modules_after(statement: str) -> set[str]:
 class TestStartupFloor:
     """Design requirements for step 21 (see the module docstring)."""
 
-    strict = pytest.mark.xfail(strict=True, reason="plan 004 step 21 makes carter/__init__ lazy")
-
-    @strict
     def test_importing_carter_does_not_import_importlib_metadata(self) -> None:
         assert "importlib.metadata" not in _watched_modules_after("import carter")
 
@@ -110,16 +137,34 @@ class TestStartupFloor:
         assert out  # eager today, lazy (PEP 562 module __getattr__) after step 21: same value
 
 
+def corpus_payloads() -> list[bytes]:
+    """Every corpus command that needs no fixture, as the plugin would send it (UTF-8 stdin)."""
+    import yaml  # noqa: PLC0415 - test-only
+
+    cases = yaml.safe_load(CORPUS.read_text(encoding="utf-8"))["cases"]
+    return [
+        c["command"].encode() for c in cases if "setup" not in c and "{tmp}" not in c["command"]
+    ]
+
+
 @pytest.mark.skipif(
     os.environ.get("CARTER_PERF") != "1", reason="perf run is opt-in: CARTER_PERF=1"
 )
-def test_gate_p95_is_under_the_budget_including_interpreter_startup() -> None:
-    if not CORPUS.exists():
-        pytest.skip("the frozen gate corpus lands in plan 004 step 17; step 21 fills this test")
+@pytest.mark.parametrize("cold", [False, True], ids=["warm", "cold"])
+def test_gate_p95_is_under_the_budget_including_interpreter_startup(cold: bool) -> None:
+    """RFC C.4.2: p95 < 100 ms per command over the whole corpus, interpreter start-up included.
+
+    ``CARTER_GATE_PYTHON`` points at a ``uv tool`` interpreter (CI does this); the default is the
+    test interpreter. Prints p50/p95/max for the PR description."""
+    if cold and not hasattr(os, "posix_fadvise"):
+        pytest.skip("cold-cache runs need posix_fadvise (Linux)")
     python = os.environ.get("CARTER_GATE_PYTHON", sys.executable)
-    payloads = [
-        json.dumps({"command": "git status", "cwd": "/tmp"}).encode()
-    ]  # step 21: from the corpus
+    payloads = corpus_payloads()
     env = {"PATH": os.environ["PATH"], "HOME": os.environ.get("HOME", "/tmp")}
-    samples = measure([python, "-I", "-m", "carter.gate", "--json"], payloads, RUNS, env)
-    assert percentile(samples, 95) < BUDGET_MS, f"p95 {percentile(samples, 95):.1f} ms"
+    runs = 40 if cold else max(RUNS, len(payloads))
+    before = drop_file_cache(python) if cold else None
+    samples = measure([python, "-I", "-m", "carter.gate", "--json"], payloads, runs, env, before)
+    p50, p95 = statistics.median(samples), percentile(samples, 95)
+    label = "cold" if cold else "warm"
+    print(f"gate {label}: n={len(samples)} p50={p50:.1f} p95={p95:.1f} max={max(samples):.1f} ms")
+    assert p95 < BUDGET_MS

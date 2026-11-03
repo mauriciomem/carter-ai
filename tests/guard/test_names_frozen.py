@@ -199,7 +199,13 @@ FORBIDDEN_IDS = (
 GATE_ONLY_IDS = ("dynamic-command", "interpreter-git", "git-alias", "gate-input")
 # G7: the consent group a rule belongs to (`--skip-groups`). Everything not listed is `g2`.
 GROUP_OF_RULE = {"credential-paths": "read-edit-denies", "control-files": "config-edit"}
-GROUP_OF_VERB = {"sudo": "sudo-docker", "docker": "sudo-docker", "podman": "sudo-docker"}
+GROUP_OF_VERB = {
+    "sudo": "sudo-docker",
+    "docker": "sudo-docker",
+    "podman": "sudo-docker",
+    "doas": "sudo-docker",  # gate additions: the same privilege class
+    "pkexec": "sudo-docker",
+}
 
 # G10: consent group revisions at 2a (g2 moves to 2 with the plugin).
 CONSENT_REVS = {
