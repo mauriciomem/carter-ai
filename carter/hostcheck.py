@@ -23,7 +23,7 @@ from carter.guard import consent, gitconfig, optout, permissions, repohooks
 from carter.guard.configwrite import Reader, missing_statements, target_path
 from carter.guard.state import GuardState, load_or_empty_readonly
 from carter.identity import ConfigError, load_identity
-from carter.identity.errors import E_POLICIES_MISSING, E_STATE_INVALID
+from carter.identity.errors import E_CONFIG, E_POLICIES_MISSING, E_STATE_INVALID
 from carter.identity.policyset import Statement, consent_groups
 from carter.identity.rules import load_rules
 from carter.install.jsonc import _load_jsonc
@@ -273,6 +273,7 @@ def run_host_checks(
     opencode_version: tuple[int, int, int] | None = None,
     git_version: tuple[int, int] | None = None,
     tier: str = "t0",
+    fetch: Any = None,
 ) -> list[Item]:
     """All host checks, in a stable order. Never raises for a failing check.
 
@@ -329,6 +330,7 @@ def run_host_checks(
         except gitconfig.GitError:
             mode = None
     guarded("git", lambda: g2.repo_items(state, base_dir, where, _workspace_paths(), tier, mode))
+    guarded("identity", lambda: _identity(state, base_dir, where, git_version, fetch))
     guarded("versions", lambda: g2.version_items(opencode_version, git_version))
     guarded("plugin files", lambda: g2.foreign_plugin_items(base_dir, where))
     guarded("project", lambda: _project_scope(where))
@@ -346,6 +348,7 @@ def run_host_checks(
 
 def live_readers() -> dict[str, Any]:
     """The readers ``carter check --host`` passes to ``run_host_checks`` (real processes)."""
+    from carter import hostcheck_id  # noqa: PLC0415 - hostcheck_id imports identity_show, which imports us
     from carter.identity.resolve import configured_tier
     from carter.install import prereqs
 
@@ -361,7 +364,36 @@ def live_readers() -> dict[str, Any]:
         ),
         "git_version": repohooks.git_version("git"),
         "tier": tier,
+        "fetch": hostcheck_id.live_fetch,
     }
+
+
+def _identity(
+    state: GuardState,
+    base_dir: Path | None,
+    cwd: Path,
+    git_version: tuple[int, int] | None,
+    fetch: Any,
+) -> list[Item]:
+    """The slice-2b items (``hostcheck_id``); a broken config is E-CONFIG, never defaults."""
+    from carter import hostcheck_id  # noqa: PLC0415
+    from carter.identity.env import workspace_for  # noqa: PLC0415
+
+    try:
+        cfg = load_identity()
+    except ConfigError as exc:
+        return [
+            Item(
+                "red",
+                "identity",
+                f"{E_CONFIG}: {exc.detail}",
+                "Fix config.toml; agent commits are off.",
+            )
+        ]
+    return hostcheck_id.identity_items(
+        cfg, state, cwd=cwd, base_dir=base_dir, git=git_version, fetch=fetch,
+        workspace=workspace_for(cfg, str(cwd)),
+    )  # fmt: skip
 
 
 def _safe_loaded(reader: Reader | None) -> dict | None:

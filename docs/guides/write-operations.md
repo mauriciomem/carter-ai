@@ -114,21 +114,23 @@ See [Troubleshooting](../troubleshooting.md#guards).
 
 ## Attribution
 
-You stay the author of everything. **Until Carter can sign with a separate LLM identity
-(a later release), agent commits use your own git config and are unsigned.** That is the
-same author and committer as before, minus the signature: Carter no longer asks git to
-sign with your key.
+You stay the author of everything. Without a signing key for the LLM (tiers T0 and T1),
+agent commits use your own git config and are unsigned. **With one (tier T2), the LLM is the
+committer and signs the commit with its own key, while you stay the author.** Carter never
+asks git to sign with *your* key. Setting this up is described in
+[Identity and signing](identity-and-signing.md).
 
-- **Commits** use your `git config user.name` and email for both author and committer.
-  The agent never passes `--author`, `--no-verify`, `-s` or `-S`, and never adds
-  `Signed-off-by` unless you ask for it on that commit. Carter is credited only with the
-  trailer that `carter ops config --emit` prints, which depends on the tier:
+- **Commits** use your `git config user.name` and email as the author, and as the committer
+  below T2. The agent never passes `--author`, `--no-verify`, `-s`, `-S` or any signing
+  option, and never adds `Signed-off-by` unless you ask for it on that commit. Carter is
+  credited only with the trailer that `carter ops config --emit` prints, which depends on
+  the tier:
 
   | Tier | What is configured | Trailer |
   |------|--------------------|---------|
   | T0 | nothing | `Assisted-by: Carter` (no email) |
   | T1 | an LLM GitHub account, no key | `Co-authored-by: <login> <id+login@users.noreply.github.com>` |
-  | T2 | account and signing key | the same trailer for now; signing arrives later |
+  | T2 | account and signing key | `Co-authored-by: <login> <id+login@users.noreply.github.com>`; the commit is also signed by the LLM key |
 
   ```bash
   git add src/auth.py
@@ -136,9 +138,11 @@ sign with your key.
   git log -1 --format='%an|%cn|%G?'    # you|you|N
   ```
 
-  The agent checks that last line: author and committer are you and the signature
-  status is `N` (unsigned). If the emit says `commits: refused`, the agent stops and
-  tells you why instead of committing.
+  The agent checks that last line. Below T2 the author and committer are you and the
+  signature status is `N` (unsigned). At T2 the committer is the LLM identity and the status
+  is `G` or `E` (a signature exists), never `N`. If the emit says `commits: refused`, the agent
+  stops and tells you why instead of committing. If the LLM key is locked, the commit fails,
+  your changes stay staged, and the agent asks you to run `carter identity unlock`.
 - **GitHub** pull requests are created by `carter pr` with your own `gh` login. There is
   no agent path for issues, comments, reviews or releases: the agent gives you the text,
   ending with the `footer` from the same command (default
@@ -157,7 +161,7 @@ LLM identity, so you are at T0 and nothing else is needed. An older file is migr
 [configuration reference](../reference/configuration.md#user-config-carterconfigtoml).
 
 - `carter install --bot-name` is deprecated and ignored.
-- The old `signing_key` setting is dropped; Carter never reads your signing key.
+- The old `signing_key` setting is dropped; Carter never reads your signing key. The LLM's own key is set up with `carter identity add` ([guide](identity-and-signing.md)).
 - `carter pr` uses `gh` with your own login, so run `gh auth login` first.
 
 > [!WARNING]
@@ -180,10 +184,11 @@ as long as that is true.
 With the plugin (see [Install: the plugin](install.md#the-plugin-g2-revision-2)) the shell
 isolation applies: every agent shell is isolated and a command gate rejects what the literal matches cannot see. Pushing and
 pull requests are still yours: the agent writes the handoff file, you run `carter push` and
-`carter pr`. Agent commits are made with your name and email, **unsigned**, with the trailer
-below. If you have a signing key and no cap, your effective tier is T2 and agent commits are
-**blocked** until agent signing ships: set `max_tier = "t1"` for the workspace in
-`~/.carter/config.toml` to let agents commit unsigned there (see the
+`carter pr`. Agent commits are made with your name as the author and the trailer below: unsigned
+below T2, signed by the LLM identity at T2. If your effective tier is T2 and anything needed for
+signing is missing (the key is not unlocked, the shim changed, the config is broken), the
+commit **fails and stays staged**; it is never made unsigned. To let agents commit unsigned in a
+workspace, set `max_tier = "t1"` for it (see the
 [configuration reference](../reference/configuration.md#user-config-carterconfigtoml)). The
 limits of all this are listed in
 [Safety and permissions](safety-and-permissions.md#what-the-guards-cannot-do).

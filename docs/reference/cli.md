@@ -197,7 +197,7 @@ either `--private-key`, `--agent-socket` or `--signing-program` you get T2 (sign
 It checks first, with unauthenticated reads of GitHub (no token is sent): the account is a `User`,
 its id is the configured one, the key is registered as an **SSH signing key** on the account and is
 **not** an authentication key (`https://github.com/<login>.keys`), and it is not your own
-`user.signingkey`. It needs git 2.40 or newer and OpenSSH 8.9 or newer. A public key is a `.pub`
+`user.signingkey`. It needs git 2.40 or newer and OpenSSH 8.4 or newer. A public key is a `.pub`
 file or a `key::` literal; a private key is refused as a public key without echoing a byte of it,
 and `--private-key` is only stored as a path. Any failed check writes **nothing**
 (`E-IDENTITY-CHECK`, or `E-GITHUB-UNREACHABLE` for a network, rate-limit or server problem).
@@ -484,7 +484,18 @@ only if something is `RED`:
   write (the same checks as [`github-token check`](#carter-github-token-check)), and that the
   `carter-github` MCP entry reads the token file;
 - declined groups, active `allow_project_opencode_edit` opt-outs, project config that can run
-  code, and `carter.yaml` policy that `carter update` has not pinned yet.
+  code, and `carter.yaml` policy that `carter update` has not pinned yet;
+- **the LLM identity** (when one is configured): the tier mirror in `~/.carter/gitconfig`
+  against `config.toml` (`RED` when they sit on opposite sides of T2, because agent commits then
+  fail; `WARN` otherwise, with "run `carter update`"), each cap fragment (`RED` when missing or
+  malformed: a malformed one makes git fail inside that workspace), linked worktrees where the
+  cap does not follow the path (`WARN`, by path), and at T2 the signing shim (hash, and the
+  socket it names), the agent state (a locked key is `INFO`: "agent commits will fail until you
+  unlock"; the wrong key or a stale socket is `WARN`), `allowed_signers`, whether the key is
+  absent from `https://github.com/<login>.keys` (`RED` if it is an authentication key; `INFO`
+  "not checked" offline; no token is sent) and listed as a signing key (`WARN` if not), the four
+  hook events, an older git on the machine, and git 2.40 or newer (`E-GIT-OLD`). T2 with no commit
+  guard installed is `RED`; `identity.role = author` is a `WARN` (blocked until 2c).
 
 Without the plugin the check says "plugin not installed" (never a pass), and shows
 "g2 rev 2 pending" when the plugin is waiting for your confirmation.

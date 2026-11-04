@@ -643,4 +643,4 @@ def test_h16_the_2b_error_codes_exist_with_the_2b_tag() -> None:
 def test_h16_the_current_slice_moves_only_in_step_27() -> None:
     from carter.identity.rules import CURRENT_SLICE
 
-    assert CURRENT_SLICE == "2a"
+    assert CURRENT_SLICE == "2b"  # moved by step 27, as frozen

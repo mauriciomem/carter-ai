@@ -41,7 +41,9 @@ Never use remembered, typed or example values. The JSON has these keys:
 |-----|--------------------|
 | `tier` | `t0` (nothing configured), `t1` (LLM account, no key) or `t2` (account and key) |
 | `role`, `role_source` | Who the commit is attributed to, and where that setting came from |
-| `coauthor_trailer` | The exact trailer line for every commit message you make |
+| `author`, `committer` | `human` or `llm`: who git records. At T2 the committer is `llm` and the plugin sets it up; below T2 both are `human` |
+| `signer_fpr` | The LLM key's public fingerprint at T2, else empty. Use it only to compare with `git log` |
+| `coauthor_trailer`, `coauthor_linked` | The exact trailer line for every commit message you make, and whether GitHub credits it (`true` for `Co-authored-by`) |
 | `commits` | `allowed` or `refused` |
 | `refusal_reason` | The error code when `commits` is `refused` (see the error table below) |
 | `footer` | Text appended to GitHub and Jira bodies |
@@ -50,10 +52,15 @@ When `commits` is `refused`, stop. Make no commit. Report the `refusal_reason` c
 message from the error table to the user. Do not edit the config, retry with other flags, or
 work around it.
 
-**Interim shape (until signing arrives in slice 2b):** your commits are made with the user's
-own git config, so the user is both author and committer, and they are unsigned. Credit
-goes only through the trailer. Never pass `--author`, `--no-verify`, `-s` or `-S`, and never add
-a `Signed-off-by` unless the user asks for it on that commit.
+**Commit shape by tier.** The user is always the author (their own git config). Below T2 (`t0`,
+`t1`, or a workspace capped by `max_tier`) the user is also the committer and the commit is
+unsigned; credit goes only through the trailer. At `t2` the plugin gives your shell the signing
+environment: the committer is the LLM identity and the commit is signed with its key while the
+human has that key unlocked. You change nothing for this: the same `git commit` recipe works at
+every tier. Never pass `--author`, `--no-verify`, `-s`, `-S`, `--gpg-sign` or `--no-gpg-sign`,
+never set `GIT_COMMITTER_*` or any `-c` signing option, and never add a `Signed-off-by` unless the
+user asks for it on that commit. Do not run `carter commit` or `git ai-commit`: they are for the
+user's own terminal.
 
 **What the guards are:** the policies that deny `git push` and GitHub writes are literal
 command matches. Once the user has confirmed group `g2` at revision 2, the Carter plugin is
@@ -74,7 +81,7 @@ These two blocks are generated from Carter's data files; do not edit them by han
 <!-- forbidden:begin -->
 Never run any of these (generated from `g2_rules.json`):
 
-- **Commit-creating verbs:** `--no-verify`, `-n`, `--no-gpg-sign`, `-S`, `--gpg-sign`, `-S<arg>`, `--gpg-sign=<arg>`, `-s`, `--signoff`, `--reset-author`, `--author`. `-n` is forbidden for `commit` only (it means `--no-verify` there; `merge -n` is `--no-stat`). Bare `-S` is not used before signing arrives (slice 2b).
+- **Commit-creating verbs:** `--no-verify`, `-n`, `--no-gpg-sign`, `-S`, `--gpg-sign`, `-S<arg>`, `--gpg-sign=<arg>`, `-s`, `--signoff`, `--reset-author`, `--author`. `-n` is forbidden for `commit` only (it means `--no-verify` there; `merge -n` is `--no-stat`). Bare `-S` is never used: at T2 the LLM key signs through the environment.
 - **Staging:** `git add -A`, `git add .`, `git commit -a`.
 - **Push verbs:** `git push`, `git send-pack`.
 - **Env prefixes, assignments and unsets:** `GIT_AUTHOR_*`, `GIT_COMMITTER_*`, `GIT_CONFIG*`, `GIT_SSH*`, `GIT_ASKPASS`, `GIT_EXEC_PATH`, `GIT_DIR`, `HOME`, `XDG_CONFIG_HOME`, `CARTER_*`, `AGENT`, `OPENCODE*`. Forbidden as a `VAR=` prefix, with `env`/`env -u`, `unset` and `export`.
@@ -90,11 +97,20 @@ Never run any of these (generated from `g2_rules.json`):
 <!-- errors:begin -->
 | Code | Where | Message | What to do |
 |---|---|---|---|
+| `E-SIGN-LOCKED` | agent `git commit` | The LLM signing key isn't loaded. Nothing was committed; your changes are still staged. Run `carter identity unlock` in your own terminal, then ask me to retry. | A password-manager variant says "approve the signing request in <app>". |
+| `E-SIGN-NOAGENT` | agent `git commit` | The LLM signing key isn't loaded. Nothing was committed; your changes are still staged. Run `carter identity unlock` in your own terminal, then ask me to retry. | Same; `unlock` restarts a stale agent. |
 | `E-COMMIT-T1` | `carter commit`, T1 | No LLM signing key (T1): committed unsigned with `Co-authored-by: LLM`. | — |
+| `E-SIGN-AGENT-REFUSE` | `carter commit`, agent shell | Refusing: key locked and this is an agent shell [D36]. Changes left staged. | — |
+| `E-SHIM-REFUSED` | shim | Signing refused: only the configured LLM key via the agent may sign (no `-S<key>`). | — |
 | `E-ISOLATION-MISSING` | plugin, agent shell creation | Carter isolation file is missing, invalid, or doesn't match its install-time hash; agent shells are disabled. Run `carter guard install` in your terminal. | — |
-| `E-SIGN-UNAVAILABLE` | plugin, agent `git commit` at T2 | The LLM signing identity is unavailable (<reason>); agent commits are blocked, not downgraded. Changes are still staged. Run `carter check --host`. | — |
+| `E-SIGN-UNAVAILABLE` | plugin, agent `git commit` at T2 | The LLM signing identity is unavailable (<reason>); agent commits are blocked, not downgraded. Changes are still staged. Run `carter check --host`. | <reason> is one of: config-error, tier-required, role-b-not-built, key-missing, fingerprint-mismatch, shim-missing, sign-unavailable. |
 | `E-SELFTEST` | first shell-tool call (state `failed`) | Carter plugin self-test failed on OpenCode <v>: all shells are treated as agent shells and B is disabled. See `carter check --host`. | — |
+| `E-GUARD-NOIDENT` | prepare-commit-msg (T2) | carter-guard: agent commits need the Carter identity block (plugin not loaded?). | Check the plugin is loaded (`carter check --host`); restart OpenCode; no per-command fallback. |
+| `E-GUARD-COMMITTER` | prepare-commit-msg (T2) | carter-guard: commit rejected: committer is <x>, expected <y> | Remove `GIT_COMMITTER_*` overrides; re-run `carter identity add` if `carter.llmEmail` is stale. |
+| `E-GUARD-SIGNCFG` | prepare-commit-msg (T2) | commit.gpgsign is not true / gpg.format is not ssh / user.signingkey is not a key:: literal / gpg.ssh.program is not the Carter shim | Don't pass `-c` signing overrides (forbidden list). |
+| `E-GUARD-TRAILER` | commit-msg | Co-authored-by trailer missing | `prepare-commit-msg` adds it; re-run without editing it out. |
 | `E-GUARD-T01SIGN` | prepare-commit-msg (T0/T1, capped) | Signing attempted below T2: agent commits here are unsigned [D51]. Don't pass `-S` or override `commit.gpgsign`. If you just changed `max_tier`, run `carter update`. | — |
+| `E-GUARD-UNSIGNED` | post-commit (warn only) | carter-guard(post-commit): HEAD <sha> is unsigned or not signed by the LLM key | Warning, never undone; re-commit without `--no-gpg-sign`; A+/B will refuse the push otherwise. |
 | `E-PUSH-GUARD` | pre-push | carter-guard: agent push blocked (<reason>) | Pushes are human-only: write the handoff and tell the user: Run `carter push` and then `carter pr` in your own terminal, not through an agent. |
 | `E-PUSH-ISOLATED` | agent `git push origin` | fatal: 'no_push' does not appear to be a git repository | Same: pushes are human-only. |
 | `E-POLICY` | OpenCode policy | permission.rejected: Blocked by configuration policy | Same; for gh, use an allowlisted read verb: `gh pr\|issue\|run <verb> -R <owner>/<repo>` (put `-R` after the subcommand), and `gh repo view <owner>/<repo>` or `gh search repos <query>` positionally, with no `-R`. |
@@ -137,13 +153,50 @@ Carter command gate screens every command before it runs. What that means for yo
 - Stage explicit paths. `git add -A`, `git add .` and `git commit -a` are rejected.
 - There is no SSH in your shell: fetch and pull use HTTPS with a read-only token, which works
   only for repositories that token covers. When a fetch fails, ask the user to fetch.
-- Your commits are unsigned at this tier, and the user stays the author. Do not ask for signing.
+- Below T2 your commits are unsigned and the user stays author and committer; at T2 they are signed by the LLM key (see "Signing failures"). Never ask for signing flags.
 - `E-ISOLATION-MISSING`, `E-SELFTEST` and `E-GATE-FAIL` mean the plugin or its files need the
   human: ask the user to run `carter check --host` in their own terminal, and wait.
 - `carter check --probe` tells the user whether this shell is isolated; run it only when the
   user asks for it.
 
 </guardrails>
+
+<signing>
+
+## Signing failures (T2)
+
+At T2 a commit fails, and **nothing is created**, when the key cannot sign. Your changes stay
+staged. What you may see, and what it means:
+
+| You see | Code | Meaning |
+|---------|------|---------|
+| `error: Couldn't find key in agent?` or `Couldn't get agent socket`, then `fatal: failed to write commit object` | `E-SIGN-LOCKED` / `E-SIGN-NOAGENT` | the key is locked, expired, or the agent stopped |
+| `Signing refused: only the configured LLM key` | `E-SHIM-REFUSED` | something asked for another key; you did not cause it with a normal commit |
+| the plugin warning `The LLM signing identity is unavailable (<reason>)` | `E-SIGN-UNAVAILABLE` | the identity or shim is broken; `<reason>` names which part |
+| a `carter-guard:` line from a git hook | `E-GUARD-NOIDENT`, `-COMMITTER`, `-SIGNCFG`, `-TRAILER`, `-T01SIGN`, `-UNSIGNED` | a commit hook rejected or warned |
+
+**One action for a locked or unavailable key:** stop, leave the changes staged, and tell the user:
+"The LLM signing key is locked. Run `carter identity unlock` in your own terminal (or
+`carter check --host` to see why), then ask me to retry." Retry **once**, and only when asked.
+
+**For a hook rejection, fix the cause, never skip the hook:**
+
+- `E-GUARD-TRAILER`: the message lost its `Co-authored-by` or `Assisted-by` line (an editor or a
+  reword removed it). Commit again with `-m` and the `--trailer` from the recipe.
+- `E-GUARD-T01SIGN`: you (or a command) asked for a signature below T2. Remove the signing option.
+- `E-GUARD-NOIDENT`, `E-GUARD-COMMITTER`, `E-GUARD-SIGNCFG`: the plugin did not load, the committer
+  was overridden, or a signing option was set. Stop and tell the user (restart the agent from a
+  clean terminal; `carter check --host`). Do not set any variable or `-c` option to fix it.
+- `E-GUARD-UNSIGNED` (after the commit): a warning that the commit is unsigned or signed by the
+  wrong key. Tell the user; do not amend, rewrite or retry to make it go away.
+
+**Never**, for any of these: retry with `-c`, `--no-gpg-sign`, `-S<key>`, `--no-verify`, another
+committer, a `GIT_COMMITTER_*` or `CARTER_*` variable, or `git ai-commit`; never run
+`carter identity unlock` or `lock` (they refuse inside OpenCode); never edit config, the shim or
+the hooks. With `E-ROLE-B-TIER` (role `author`, not built yet), `E-TIER-REQUIRED` or `E-CONFIG`
+(`commits` is `refused`) you stop and report as above.
+
+</signing>
 
 <workflow>
 
@@ -179,9 +232,12 @@ git log -1 --format='%an|%cn|%G?'
 ```
 
 Replace `<coauthor_trailer>` with the value from `carter ops config --emit`. Stage named
-files only. Verify the commit with the last command: `%an` and `%cn` must both equal
-`git config user.name`, and `%G?` must be `N` (unsigned). If not, stop and report; never fix
-it with `--author`, `--reset-author` or a signing flag.
+files only. Verify the commit with the last command. Below T2 (`committer` is `human`): `%an`
+and `%cn` must both equal `git config user.name`, and `%G?` must be `N` (unsigned). At T2
+(`committer` is `llm`): `%an` equals `git config user.name`, `%cn` is the LLM committer, and `%G?`
+is `G` or `E` (a signature exists; `E` only means this shell has no allowed-signers file), never
+`N`. If it does not match, stop and report; never fix it with `--author`, `--reset-author` or a
+signing flag.
 
 Commit messages, branch names and PR text are always in English, whatever language the user
 chats in. If `--trailer` is unavailable (git < 2.32), put the `coauthor_trailer` line as the

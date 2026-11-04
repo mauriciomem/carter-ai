@@ -182,7 +182,7 @@ class TestTheResidualsAreHonest:
             "(the accepted D67 residual)",
             "`.git/hooks/` and `.git/config`",
             "The read-only token is visible to the model",
-            "unsigned until signing ships",
+            "unsigned below T2",
             '`max_tier = "t1"`',
             "Fail closed",
         ):
@@ -192,7 +192,7 @@ class TestTheResidualsAreHonest:
         wo = norm(
             section(text("guides/write-operations.md"), "What this release does and does not do")
         )
-        assert "blocked** until agent signing ships" in wo and '`max_tier = "t1"`' in wo
+        assert "**fails and stays staged**" in wo and '`max_tier = "t1"`' in wo
         assert "speed bump" in wo and "unsigned" in wo
         guide = norm(text("guides/install.md"))
         assert "None. `git fetch`/`pull`/`clone` go over HTTPS" in guide

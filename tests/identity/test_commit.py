@@ -69,6 +69,27 @@ class TestScreen:
         assert "does not accept" in str(err.value) and "git commit" in str(err.value)
 
     @pytest.mark.parametrize(
+        "flag",
+        ["--no-verif", "--no-ver", "--no-v", "--no-", "--no", "--n", "--no-gpg-s", "--no-gpg",
+         "--gpg-s=KEYID", "--gpg=KEYID", "--gp=K", "--g=K", "--gpg-sig", "--auth=x <x@y>", "--au=x",
+         "--a=x", "--sign", "--signo", "--s"],
+    )  # fmt: skip
+    def test_git_accepts_unambiguous_abbreviations_so_they_are_refused_too(self, flag: str) -> None:
+        """Found by the step-29 review: only the spelled-out names were refused, so
+        `--gpg-s=<keyid>` would have signed with the human's key."""
+        with pytest.raises(CommitRefused):
+            screen_args([flag, "-m", "x"])
+
+    @pytest.mark.parametrize(
+        "flag",
+        ["--amend", "--all", "--allow-empty", "--no-edit", "--no-signoff", "--short", "--status",
+         "--squash=HEAD", "--reset-author", "--reuse-message=HEAD", "--trailer=A: b", "--message=x",
+         "--fixup=HEAD", "--dry-run", "--quiet", "--verbose", "--only", "--include", "--cleanup=strip"],
+    )  # fmt: skip
+    def test_legitimate_long_options_that_look_similar_pass(self, flag: str) -> None:
+        assert screen_args([flag])[0] == [flag]
+
+    @pytest.mark.parametrize(
         ("args", "kept"),
         [
             (["-a", "-m", "x"], ["-a", "-m", "x"]),

@@ -192,19 +192,41 @@ class TestRenderErrorTable:
         codes = [re.match(r"\| `([^`]+)`", ln).group(1) for ln in rows]
         assert codes == [c for c in registry() if c in SLICE_1]
 
-    def test_the_current_slice_is_2a_and_lists_every_code_up_to_it(self):
-        # plan 004 step 34: one constant (rules.CURRENT_SLICE), imported by errors.py
-        assert errors_mod.CURRENT_SLICE == "2a"
+    def test_the_current_slice_is_2b_and_lists_every_agent_facing_code_up_to_it(self):
+        # plan 005 step 27: one constant (rules.CURRENT_SLICE), imported by errors.py
+        assert errors_mod.CURRENT_SLICE == "2b"
         rows = [ln for ln in render_error_table().splitlines() if ln.startswith("| `E-")]
         codes = {re.match(r"\| `([^`]+)`", ln).group(1) for ln in rows}
-        upto = {c for c, e in registry().items() if e.slice in {"1", "1G", "2a"}}
+        upto = {
+            c for c, e in registry().items()
+            if e.slice in {"1", "1G", "2a", "2b"} and c not in errors_mod.HUMAN_FACING
+        }  # fmt: skip
         assert codes == upto
+        agent_2b = {
+            "E-SIGN-LOCKED", "E-SIGN-NOAGENT", "E-SIGN-UNAVAILABLE", "E-SIGN-AGENT-REFUSE",
+            "E-SHIM-REFUSED", "E-GUARD-NOIDENT", "E-GUARD-COMMITTER", "E-GUARD-SIGNCFG",
+            "E-GUARD-TRAILER", "E-GUARD-T01SIGN", "E-GUARD-UNSIGNED", "E-TIER-CAPPED",
+            "E-TIER-REQUIRED", "E-ROLE-B-TIER",
+        }  # fmt: skip
+        assert agent_2b <= codes
+        human = {
+            "E-UNLOCK-TTY",
+            "E-UNLOCK-OPENCODE",
+            "E-UNLOCK-NOPASS",
+            "E-UNLOCK-PATH",
+            "E-UNLOCK-BADPASS",
+            "E-SIGN-HUMAN-FALLBACK",
+            "E-SSH-OLD",
+            "E-IDENTITY-CHECK",
+            "E-GITHUB-UNREACHABLE",
+        }
+        assert not human & codes and human <= set(registry())  # in the docs, not in the agent table
         assert {
             "E-POLICY", "E-GH-READONLY", "E-HANDOFF", "E-SECRET-SCAN", "E-HUMAN-TERMINAL",
             "E-ISOLATION-MISSING", "E-GATE", "E-GATE-FAIL", "E-PUSH-GUARD", "E-GIT-OLD",
             "E-OPENCODE-VERSION", "E-SIGN-UNAVAILABLE",
         } <= codes  # fmt: skip
-        assert "E-GUARD-UNSIGNED" not in codes and "E-B-CALLER" not in codes  # 2b and B
+        assert "E-B-CALLER" not in codes  # B
 
     def test_earlier_slices_are_a_prefix_and_later_ones_extend_it(self):
         assert "E-GATE" not in render_error_table(current="1G")

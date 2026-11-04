@@ -115,11 +115,12 @@ the real work; the command gate is a speed bump in front of it, not a sandbox.
 - **The read-only token is visible to the model.** It is in the environment of the agent's
   shell (`GH_TOKEN`), so it is only as safe as a read-only fine-grained token is: give it the
   fewest repositories and no write permission.
-- **Agent commits are unsigned until signing ships.** The author and committer are you, the
-  trailer credits Carter, and a squash merge makes this moot for `main`. If your tier is T2
-  (a signing key and no cap), agent commits are **blocked** until agent signing ships; set
-  `max_tier = "t1"` in the workspace's table of `~/.carter/config.toml` to allow unsigned agent
-  commits there.
+- **Agent commits are unsigned below T2.** The author and committer are you, the trailer
+  credits Carter, and a squash merge makes this moot for `main`. At T2 the LLM identity signs;
+  if it cannot, the commit fails and stays staged. Set `max_tier = "t1"` in a workspace's table
+  of `~/.carter/config.toml` to allow unsigned agent commits there. The residuals of signing
+  itself (same-user access to the agent socket, a skipped `commit-msg` check, paths no hook sees) are listed in
+  [Identity and signing](identity-and-signing.md#what-signing-does-not-protect).
 - **A false self-test failure is conservative.** If another plugin rejects a command after
   Carter's, the self-test can end `failed`; then every shell, yours in the `!` prompt
   included, is treated as an agent shell until you restart OpenCode.

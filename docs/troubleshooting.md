@@ -50,7 +50,7 @@ Find your symptom, then apply the fix. If nothing here helps, open an
 | Symptom | Fix |
 |---------|-----|
 | The agent stops and reports `E-CONFIG` | `~/.carter/config.toml` is invalid, or a signing section is incomplete. Agent commits stay off until it is fixed. `carter ops config --emit` shows `commits: refused`. If it is still a schema-1 file, run `carter install` to migrate it |
-| The agent reports `E-ROLE-B-TIER` | The role is `author`, which needs a signing key. Set `role: co-author` in `carter.yaml` and run `carter update`, or add the key (not available yet) |
+| The agent reports `E-ROLE-B-TIER` | The role is `author`. It needs a signing key and is not available in this release: set `role: co-author` in `carter.yaml` and run `carter update` |
 | `carter update` says "Not pinned" | The `identity` policy is only applied after you confirm. Run it in a terminal, or pass `--yes` |
 | `carter install` printed a "commit rule" note | Your global `AGENTS.md` has your edits, so Carter left it alone. Merge the rule from `~/.carter/upgrade-notes/<version>.md` |
 | A warning about `identity.git_account` or `identity.bot_name` | Both are deprecated and ignored. Delete them from `.carter/carter.yaml` |
@@ -91,10 +91,34 @@ Find your symptom, then apply the fix. If nothing here helps, open an
 | `E-SELFTEST`: the self-test failed | Another OpenCode plugin may reject commands after Carter's. Every shell is then treated as an agent shell until the server restarts. Restart OpenCode from a clean terminal; if it repeats, disable the other plugin |
 | My agent cannot fetch over SSH | By design: agent shells have no SSH agent. Fetch and pull use HTTPS with the read-only token, which covers public repositories and the repositories that token was created for. Fetch yourself, or add the repository to the token (`carter github-token set`) |
 | My agent cannot run `python -c` | The gate refuses interpreter code that mentions `git` or `gh` (rule `interpreter-git`). Ask the agent to use the git command directly, or run it yourself |
-| My agent's commit is blocked and `carter ops config --emit` shows a tier of `t2` | At T2 agent commits are blocked until agent signing ships. Set `max_tier = "t1"` for the workspace in `~/.carter/config.toml` |
+| My agent's commit failed and `carter ops config --emit` shows a tier of `t2` | See [Signing and the LLM identity](#signing-and-the-llm-identity): usually the key is locked (`carter identity unlock`). To let agents commit unsigned in a workspace, set `max_tier = "t1"` for it in `~/.carter/config.toml` and run `carter update` |
 | `carter check --host` says the `pre-push` hook is inactive | The include line is not in your global git config (it is a symlink or read-only, so Carter did not write it). Add the printed `git config --global --add include.path …` line to your dotfiles |
 | `carter check --host` says "git cannot parse … every git command fails" | Delete `~/.carter/gitconfig` and run `carter guard install` again |
 | `opencode serve`, `opencode run` or `opencode service start`/`restart`/`stop`/`set` from an agent shell is refused | By design (rule `other-verbs`): a server started from an agent shell would inherit its isolated environment. e2e and spikes that start a server are run by you (`tests/e2e/run.sh`) or CI; restart the service yourself, from a clean terminal. `opencode service status` and `get` are allowed |
+
+## Signing and the LLM identity
+
+| Symptom | Fix |
+|---------|-----|
+| My agent's commit failed with `error: Couldn't find key in agent?` or `Couldn't get agent socket` and then `fatal: failed to write commit object` (`E-SIGN-LOCKED`, `E-SIGN-NOAGENT`) | The LLM signing key is locked, expired (the default lifetime is 8 hours) or the agent stopped. Nothing was committed and the changes are still staged. In your own terminal run `carter identity unlock`, then ask the agent to retry |
+| `Error: E-UNLOCK-OPENCODE` | `unlock` refuses inside OpenCode: in an agent shell, in the `!` prompt and in the integrated terminal (OpenCode sets `OPENCODE_TERMINAL` in every shell it starts). Open a terminal that OpenCode did not start |
+| `Error: E-UNLOCK-TTY` | `unlock` needs a terminal on stdin and stderr to ask for the passphrase. Run it in your own terminal |
+| `Error: E-UNLOCK-NOPASS` | The key has no passphrase, so any program of yours could sign as the LLM without unlocking. Add a passphrase (`ssh-keygen -p -f <key>`) or pass `--allow-no-passphrase` knowingly |
+| `Error: E-UNLOCK-PATH` or a socket-path length message | Something that is not our agent's socket sits at the socket path, or the path is too long (104 bytes on macOS, 108 on Linux). Carter never removes what is not its own socket: remove the file yourself or shorten `$TMPDIR`/`XDG_RUNTIME_DIR` |
+| `Error: E-UNLOCK-BADPASS` | `ssh-add` rejected the passphrase. Try again; an empty line ends the attempt |
+| `Signing refused: only the configured LLM key via the agent may sign` (`E-SHIM-REFUSED`) | Something asked git to sign with another key (a `-S<key>`, a `user.signingkey` override). Agent commits never need that. Check `carter check --host` and remove the override |
+| The agent reports `E-SIGN-UNAVAILABLE` with a reason in brackets | The signing identity is broken, so the commit was blocked instead of made unsigned. `<reason>` is `config-error` (fix `config.toml`), `tier-required`, `role-b-not-built`, `key-missing` or `fingerprint-mismatch` (run `carter identity add` again) or `shim-missing` (the signing shim is gone or changed: run `carter identity add` again). `carter identity show` and `carter check --host` say which |
+| A commit hook printed `carter-guard: …` (`E-GUARD-NOIDENT`, `E-GUARD-COMMITTER`, `E-GUARD-SIGNCFG`) | The agent's commit did not carry the identity block the plugin sets, or something overrode the committer or a signing option. If you just changed `max_tier`, run `carter update`; otherwise restart OpenCode from a clean terminal and run `carter check --host` |
+| `E-GUARD-TRAILER`: "Co-authored-by trailer missing" | A message editor (or a reword) removed or moved the trailer. Commit again with `-m` and the trailer; editing the message after the trailer is rejected because GitHub would not credit it |
+| `E-GUARD-T01SIGN`: "Signing attempted below T2" | A signature was requested where the tier is T0, T1 or capped. Remove `-S` and any `commit.gpgsign` option; if you changed `max_tier`, run `carter update` |
+| `E-GUARD-UNSIGNED` after a commit | A warning, never an undo: the commit is unsigned or not signed by the LLM key (a signing option was skipped, or the key changed). Re-create it, or run `carter identity verify`. `carter push` refuses such a commit (`E-B-UNSIGNED`) |
+| `E-TIER-CAPPED` / `E-TIER-REQUIRED` | A workspace `max_tier` lowers the tier (agent commits are unsigned there); `require_tier` is a minimum the workspace cannot meet (`carter commit` and the plugin refuse). After a change of `max_tier` run `carter update`; the guard reads the cap from `~/.carter/gitconfig` |
+| `Error: E-IDENTITY-CHECK` from `carter identity add` | The account or the key failed a check and nothing was written. The message names it: not a `User` account, an id mismatch, the key is not registered as an SSH **signing** key, it is registered as an **authentication** key, it is your own key, or a private key was given as the public key |
+| `Error: E-GITHUB-UNREACHABLE` | The unauthenticated checks could not reach GitHub (network, a 5xx, or a rate limit with the reset time). Nothing was written; try again later |
+| `E-SSH-OLD` or `E-GIT-OLD` from `identity add` | Signing needs git 2.40 or newer and OpenSSH 8.4 or newer (`ssh_bin_dir` can point at a newer one, for example Homebrew's). Nothing was written |
+| `E-SIGN-HUMAN-FALLBACK`: `carter commit` says it committed unsigned | The key was locked and you answered no to the unlock question (or there is no terminal): the commit is unsigned with the `Co-authored-by` trailer. Your own key is never used. Run `carter identity unlock` and commit again if you want it signed |
+| GitHub shows "Unverified" on a commit | The LLM account may have vigilant mode on and the commit was unsigned, or signed with a key that is not registered as a signing key on that account. See [the guide](guides/identity-and-signing.md#the-vigilant-mode-table) |
+| `carter identity unlock` seems to do nothing under a password manager | With `agent_socket` or `program` set, the key lives in the password manager and Carter has nothing to unlock: approve the signing request there |
 
 ## Uninstalling
 

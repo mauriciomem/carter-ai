@@ -874,7 +874,7 @@ class TestGlobalAttributionRule:
         assert "`refused`" in _ATTRIBUTION_RULE and "stop" in _ATTRIBUTION_RULE
 
     def test_rule_is_short(self) -> None:
-        assert len(_ATTRIBUTION_RULE) <= 600
+        assert len(_ATTRIBUTION_RULE) <= 700  # AGENTS.md loads every session (plan 005: +committer)
 
     def test_the_rule_carries_the_handoff_sentence_and_stays_short(self) -> None:
         from carter.aplus.handoff import OWN_TERMINAL
@@ -884,8 +884,14 @@ class TestGlobalAttributionRule:
 
     def test_unmodified_v017_file_is_upgraded_in_place(self, base_dir: Path) -> None:
         # v0.17.x shipped the commit rule without the push rule: no user edit, so upgrade.
-        push_rule = _ATTRIBUTION_RULE.splitlines(keepends=True)[1]
-        v017 = _OPENCODE_AGENTS_MD.replace(push_rule, "")
+        first, push_rule = _ATTRIBUTION_RULE.splitlines(keepends=True)[:2]
+        old_first = (
+            "- Commits: the user is the author and committer (their own git config). Never pass"
+            " `--author`, `--no-verify`, `-s` or `-S`, and never add `Signed-off-by` unless the"
+            " user asks for it on that commit. Credit comes only from the `coauthor_trailer` that"
+            " `carter ops config --emit` prints; if `commits` is `refused`, stop and report.\n"
+        )
+        v017 = _OPENCODE_AGENTS_MD.replace(first, old_first).replace(push_rule, "")
         assert v017 != _OPENCODE_AGENTS_MD
         agents_md = base_dir / "opencode" / "AGENTS.md"
         agents_md.parent.mkdir(parents=True)
@@ -895,6 +901,31 @@ class TestGlobalAttributionRule:
 
         assert agents_md.read_text() == _OPENCODE_AGENTS_MD
         assert str(agents_md) in manifest["files"]
+        assert not (base_dir / "carter" / "upgrade-notes").exists()
+
+    def test_unmodified_v018_file_is_upgraded_in_place_to_the_signing_aware_rule(
+        self, base_dir: Path
+    ) -> None:
+        import hashlib
+
+        old_rule = (
+            "- Commits: the user is the author and committer (their own git config). Never pass"
+            " `--author`, `--no-verify`, `-s` or `-S`, and never add `Signed-off-by` unless the"
+            " user asks for it on that commit. Credit comes only from the `coauthor_trailer` that"
+            " `carter ops config --emit` prints; if `commits` is `refused`, stop and report.\n"
+        )
+        v018 = _OPENCODE_AGENTS_MD.replace(_ATTRIBUTION_RULE.splitlines(keepends=True)[0], old_rule)
+        assert (
+            hashlib.sha256(v018.encode()).hexdigest()
+            == "7aea1b84a6693292380e2c15796dcd33b612e8c2787af40e90b1b3c83f31e0a1"
+        )
+        agents_md = base_dir / "opencode" / "AGENTS.md"
+        agents_md.parent.mkdir(parents=True)
+        agents_md.write_text(v018)
+
+        self._install(base_dir)
+
+        assert agents_md.read_text() == _OPENCODE_AGENTS_MD
         assert not (base_dir / "carter" / "upgrade-notes").exists()
 
     def test_a_modified_v017_file_is_kept_and_the_note_has_both_rules(

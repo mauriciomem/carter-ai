@@ -82,8 +82,13 @@ class TestNoHumanKey:
         # ... and `identity add` compares the LLM key with the human's `user.signingkey` so it can
         # refuse it (step 15): it reads only a `key::` literal or a `.pub` file, never a private key
         compare = offenders.pop("carter/identity_add.py", [])
+        # ... and `check --probe` asks the agent shell's effective config whether the key is the
+        # LLM's `key::` literal (a scratch repo, the agent's own environment; never a file)
+        probe = offenders.pop("carter/guard/probe.py", [])
         assert offenders == {}
         assert set(block) == {"user.signingkey"} and set(compare) == {"user.signingkey"}
+        assert set(probe) == {"user.signingkey"}
+        assert "key::" in (REPO / "carter/guard/probe.py").read_text(encoding="utf-8")
         add = (REPO / "carter/identity_add.py").read_text(encoding="utf-8")
         assert "a private key file is never opened" in add
         text = (REPO / "carter/identity/payload.py").read_text(encoding="utf-8")

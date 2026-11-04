@@ -1,3 +1,4 @@
+# ruff: noqa: E501
 """``carter check --probe`` (plan 004 step 31; RFC-0007 §4.7, freeze G19).
 
 The agent environment is the reference isolation block applied to a plain environment
@@ -204,3 +205,68 @@ class TestCommand:
 
     def test_it_is_registered_in_the_help(self) -> None:
         assert "--probe" in self.invoke("--help").output
+
+
+class TestCommitProbeIsTierAware:
+    """Plan 005 step 23: unsigned at t0/t1, the signing block present at T2, never the human's key."""
+
+    def t2_env(self, home: Path, *, with_block: bool = True) -> dict[str, str]:
+        import hashlib
+        import json
+
+        from carter.identity.payload import fingerprint_of, shim_path, to_git_env
+
+        blob = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIBQUck5VvSpXHhZ5JFCGxR3zhC07GvQUN5j6rv6VJbaY"
+        (home / ".carter").mkdir(parents=True, exist_ok=True)
+        (home / ".carter" / "config.toml").write_text(
+            'schema = 2\n[identity]\nlogin = "bot"\nid = 7\nemail = "7+bot@users.noreply.github.com"\n'
+            f'[identity.signing]\nfingerprint = "{fingerprint_of(blob)}"\npublic_key = "{blob}"\n'
+            'private_key_path = "/x/key"\n'
+        )
+        shim = shim_path(home)
+        shim.parent.mkdir(parents=True, exist_ok=True)
+        shim.write_text("#!/bin/sh\n")
+        shim.chmod(0o755)
+        digest = hashlib.sha256(shim.read_bytes()).hexdigest()
+        (home / ".carter" / "guard-state.json").write_text(
+            json.dumps({"files": [{"path": str(shim), "sha256": f"sha256:{digest}"}]})
+        )
+        env = agent_env(home)
+        if not with_block:
+            return env
+        from carter.identity import env as entry
+
+        block = entry.answer(os.getcwd(), env, None, home)["signing"]
+        return to_git_env(env, block).env
+
+    def test_a_t2_shell_with_the_block_passes_as_signing_present(
+        self, home: Path, empty_gh: Path
+    ) -> None:
+        got = probe.commit_unsigned(self.t2_env(home), subprocess.run, home)
+        assert got.status == "PASS" and "signing block present (T2)" in got.reason
+
+    def test_a_t2_shell_without_the_block_fails(self, home: Path, empty_gh: Path) -> None:
+        got = probe.commit_unsigned(self.t2_env(home, with_block=False), subprocess.run, home)
+        assert got.status == "FAIL" and "no signing block" in got.reason
+
+    def test_a_t2_block_that_names_another_program_fails(self, home: Path, empty_gh: Path) -> None:
+        env = self.t2_env(home)
+        for k, v in list(env.items()):
+            if k.startswith("GIT_CONFIG_KEY_") and v == "gpg.ssh.program":
+                env["GIT_CONFIG_VALUE_" + k.removeprefix("GIT_CONFIG_KEY_")] = "/usr/bin/ssh-keygen"
+        got = probe.commit_unsigned(env, subprocess.run, home)
+        assert got.status == "FAIL" and "not the Carter shim" in got.reason
+
+    def test_a_t2_setup_that_cannot_sign_is_blocked_and_the_probe_says_why(
+        self, home: Path, empty_gh: Path
+    ) -> None:
+        from carter.identity.isolation import BLOCKING_GIT_CONFIG
+        from carter.identity.isolation_apply import append_git_config
+        from carter.identity.payload import shim_path
+
+        env = self.t2_env(home, with_block=False)
+        shim_path(home).write_text("#!/bin/sh\n# edited\n")  # hash no longer recorded: shim-missing
+        # what the plugin does then: the isolation entries plus the blocking pair (gpgsign true)
+        append_git_config(env, int(env["GIT_CONFIG_COUNT"]), [list(p) for p in BLOCKING_GIT_CONFIG])
+        got = probe.commit_unsigned(env, subprocess.run, home)
+        assert got.status == "PASS" and "signing blocked: shim-missing" in got.reason

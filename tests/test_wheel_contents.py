@@ -28,6 +28,20 @@ REQUIRED = (
     "carter/gate/rules.py",
     "carter/guard/plugin.py",
     "carter/guard/hooks.py",
+    # plan 005 (2b): the identity commands, the tier mirror, the commit core, the GitHub client
+    "carter/identity/mirror.py",
+    "carter/identity/commit.py",
+    "carter/identity/github.py",
+    "carter/identity/github_http.py",
+    "carter/identity/agent.py",
+    "carter/guard/mirror_io.py",
+    "carter/guard/alias.py",
+    "carter/identity_add.py",
+    "carter/identity_remove.py",
+    "carter/identity_show.py",
+    "carter/identity_verify.py",
+    "carter/commit_cli.py",
+    "carter/hostcheck_id.py",
 )
 
 

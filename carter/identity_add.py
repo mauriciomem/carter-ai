@@ -166,6 +166,12 @@ def plan_add(
         raise IdentityError(E_CONFIG, detail="config.toml is schema 1; run `carter install` first")
     user = _github(github.get_user, req.login, env)
     ident = current.identity
+    base_url = github.api_base(env)
+    api_notes = (
+        [f"GitHub API: {base_url} (not api.github.com; set by GITHUB_API_URL)"]
+        if base_url != github.DEFAULT_API
+        else []
+    )
     if ident.login and ident.login.lower() != user.login.lower():
         raise fail(
             E_IDENTITY_CHECK, "another LLM identity is configured; `carter identity remove` first"
@@ -186,7 +192,12 @@ def plan_add(
             )
         return _finish(
             AddPlan(
-                replace(current, identity=new_ident, state="current"), user.login, user.id, "", ""
+                replace(current, identity=new_ident, state="current"),
+                user.login,
+                user.id,
+                "",
+                "",
+                notes=api_notes,
             ),
             home,
         )
@@ -203,7 +214,7 @@ def plan_add(
         raise fail(
             E_IDENTITY_CHECK, "registered as an authentication key; register a signing-only key"
         )
-    notes = []
+    notes = list(api_notes)
     private = os.path.abspath(os.path.expanduser(req.private_key)) if req.private_key else ""
     if private and not os.path.isfile(private):
         notes.append("the private key file does not exist yet (checked with stat only)")

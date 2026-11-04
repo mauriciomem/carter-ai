@@ -59,7 +59,7 @@ VALUE_LONG = frozenset({
     "--message", "--file", "--reuse-message", "--reedit-message", "--template", "--fixup",
     "--squash", "--date", "--cleanup", "--trailer", "--pathspec-from-file",
 })  # fmt: skip
-LONG_REFUSED = {"--no-verify", "--no-gpg-sign", "--signoff", "--author"}
+LONG_REFUSED = ("--no-verify", "--no-gpg-sign", "--signoff", "--author")
 BARE_S = "dropped a bare -S/--gpg-sign: the LLM signs by itself, and your key is never used"
 
 
@@ -98,7 +98,7 @@ def _screen(args: Sequence[str]) -> tuple[list[str], list[str], int]:
             kept.append(tok)
         elif tok.startswith("--"):
             name = tok.split("=", 1)[0]
-            if name in LONG_REFUSED:
+            if _refused_long(name):  # git accepts any unambiguous prefix: --no-verif, --auth=x
                 bad.append(name)
             elif name == "--gpg-sign":
                 bad.append("--gpg-sign=<arg>") if "=" in tok else notes.append(BARE_S)
@@ -118,6 +118,16 @@ def _screen(args: Sequence[str]) -> tuple[list[str], list[str], int]:
             "commit itself. Use `git commit` yourself for those."
         )
     return kept, notes, len(kept) if sep < 0 else sep
+
+
+def _refused_long(name: str) -> bool:
+    """A refused long option, spelled out or abbreviated (any prefix, ambiguous ones included:
+    git would refuse those itself). ``--gpg-sign`` in full is handled by the caller."""
+    bare = name[2:]
+    if not bare:
+        return False
+    abbreviated_gpg = "gpg-sign".startswith(bare) and bare != "gpg-sign"
+    return abbreviated_gpg or any(full[2:].startswith(bare) for full in LONG_REFUSED)
 
 
 def _short_cluster(tok: str, bad: list[str], notes: list[str]) -> tuple[str, bool]:

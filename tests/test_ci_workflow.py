@@ -48,6 +48,7 @@ class TestJobs:
             "git-old",
             "macos-sh",
             "install-smoke",
+            "identity-ssh",
         ],
     )
     def test_the_job_exists(self, ci: dict, name: str) -> None:
@@ -82,6 +83,34 @@ class TestJobs:
         )
         assert entries["latest"]["experimental"] is True
         assert "workflow_dispatch" in (ci.get("on") or ci.get(True))
+
+    def test_identity_ssh_runs_on_both_systems_and_always_checks_for_stray_agents(
+        self, ci: dict
+    ) -> None:
+        job = ci["jobs"]["identity-ssh"]
+        assert set(job["strategy"]["matrix"]["os"]) == {"ubuntu-latest", "macos-latest"}
+        text = yaml.dump(job)
+        assert (
+            "tests/identity" in text
+            and "test_carter_guard_2b.py" in text
+            and "/usr/bin/ssh -V" in text
+        )
+        last = job["steps"][-1]
+        assert last["if"] == "always()" and "pgrep" in last["run"]
+
+    def test_every_job_that_starts_agents_has_the_if_always_cleanup_check(self, ci: dict) -> None:
+        for name in ("identity-ssh", "e2e-contract"):
+            last = ci["jobs"][name]["steps"][-1]
+            assert last.get("if") == "always()" and "ssh-agent" in last["run"], name
+
+    def test_the_2b_checks_are_in_the_existing_jobs(self, ci: dict) -> None:
+        text = lambda name: yaml.dump(ci["jobs"][name])  # noqa: E731
+        assert "test_plugin_entry_roundtrip.py" in text("plugin")
+        assert "test_repohooks_2b.py" in text("git-old") and "test_hook_matrix.py" in text(
+            "git-old"
+        )
+        assert "test_shim.py" in text("macos-sh") and "socket path length" in text("macos-sh")
+        assert "includes the 2b scenarios" in text("e2e-contract")
 
     def test_git_old_runs_the_marker_in_a_bookworm_container(self, ci: dict) -> None:
         job = ci["jobs"]["git-old"]

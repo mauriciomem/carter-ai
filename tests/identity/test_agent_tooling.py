@@ -244,3 +244,20 @@ class TestSocketPathBudget:
     )
     def test_fallback_locations_fit(self, path: str) -> None:
         assert len(path.encode()) < 104
+
+
+class TestOnlyARealSshAgentIsEverKilled:
+    """Found by the step-29 review: a command line that merely mentions `ssh-agent` and the socket
+    directory (an editor opening a file there) must not be recognised as the agent."""
+
+    def test_the_program_must_be_ssh_agent(self) -> None:
+        from carter.identity.agent_proc import is_ssh_agent
+
+        assert is_ssh_agent("ssh-agent -a /home/u/.carter/run/agent.sock -s")
+        assert is_ssh_agent("/usr/bin/ssh-agent -a /run/user/1000/carter/agent.sock -s")
+        assert is_ssh_agent("/opt/my dir/bin/ssh-agent -a /x/agent.sock -s")  # spaces in the path
+        assert not is_ssh_agent("vim /home/u/.carter/run/ssh-agent.notes")
+        assert not is_ssh_agent("tail -f /home/u/.carter/run/ssh-agent.log")
+        assert not is_ssh_agent("sh -c ssh-agent /home/u/.carter/run/x")
+        assert not is_ssh_agent("/usr/bin/ssh-add -l")
+        assert not is_ssh_agent("")

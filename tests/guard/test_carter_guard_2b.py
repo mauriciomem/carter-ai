@@ -607,3 +607,54 @@ class TestRealSigning:
         assert done.returncode == 0, done.stderr
         assert "unsigned or not signed" in done.stderr
         assert "E-GUARD-UNSIGNED" in (world.chome / "run" / "guard.log").read_text()
+
+
+class TestHostileInput:
+    """Step-29 review: nothing in a commit message, a branch name or a path reaches a shell."""
+
+    NASTY = "x $(touch PWNED) `touch PWNED2` ; touch PWNED3 \"'\\\\ %s %d ${HOME} \u00e9\n\nbody $(touch PWNED4)"
+
+    def test_a_message_full_of_shell_syntax_is_kept_verbatim_and_runs_nothing(
+        self, world: World, sh: list[str]
+    ) -> None:
+        world.configure("t2")
+        done = world.run_hook(sh, "prepare-commit-msg", self.NASTY + "\n", world.env())
+        assert done.returncode == 0, done.stderr
+        text = (world.repo / "MSG").read_text()
+        assert text.startswith(self.NASTY) and text.endswith(f"{COAUTHOR}\n")
+        assert not [p for p in world.repo.iterdir() if p.name.startswith("PWNED")]
+        again = world.run_hook(sh, "commit-msg", text, world.env())
+        assert again.returncode == 0, again.stderr
+
+    def test_a_body_line_that_looks_like_the_trailer_does_not_satisfy_commit_msg(
+        self, world: World, sh: list[str]
+    ) -> None:
+        world.configure("t1")
+        fake = "subject\n\nCo-authored-by: x <x@y>\n\nmore text after it\n"
+        # the trailer is not in the last paragraph, so it is not a trailer: rejected
+        assert world.run_hook(sh, "commit-msg", fake, world.env()).returncode == 1
+
+    def test_a_hostile_branch_name_and_pathname_do_not_matter(self, world: World) -> None:
+        world.configure("t1")
+        world.install_repo_hooks()
+        weird = world.repo / "a b'c;d$(touch PWNED5).txt"
+        weird.write_text("x\n")
+        world.git("add", "-A")
+        world.git("checkout", "-q", "-b", "feat/x;touch-PWNED6")
+        done = world.git("commit", "-q", "-m", "ok")
+        assert done.returncode == 0, done.stderr
+        assert not [p for p in world.repo.iterdir() if p.name.startswith("PWNED")]
+        assert COAUTHOR in world.message()
+
+    def test_post_commit_ignores_a_caller_supplied_config_variable_in_the_real_hook(
+        self, world: World
+    ) -> None:
+        """The hook command sets CARTER_GUARD_CONFIG inline, so a value in the caller's environment
+        cannot make the script read another file as the tier mirror."""
+        world.configure("t2")
+        world.install_repo_hooks()
+        liar = world.repo.parent / "liar-gitconfig"
+        liar.write_text("[carter]\n\ttier = t0\n")
+        env = world.env(block=False, extra={"CARTER_GUARD_CONFIG": str(liar)})
+        done = world.git("commit", "-q", "--allow-empty", "-m", "x", env=env)
+        assert done.returncode == 1 and registry()["E-GUARD-NOIDENT"].message in done.stderr

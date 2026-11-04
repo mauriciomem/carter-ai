@@ -103,7 +103,7 @@ the limits.
 Start with the [docs index](docs/README.md). The most useful pages:
 
 - [Using Carter](docs/guides/using-carter.md) · [Safety](docs/guides/safety-and-permissions.md) ·
-  [Write operations](docs/guides/write-operations.md) · [MCP servers](docs/guides/mcp-servers.md)
+  [Write operations](docs/guides/write-operations.md) · [Identity and signing](docs/guides/identity-and-signing.md) · [MCP servers](docs/guides/mcp-servers.md)
 - [CLI](docs/reference/cli.md) · [Configuration](docs/reference/configuration.md) ·
   [Troubleshooting](docs/troubleshooting.md) · [Contributing](docs/contributing/development.md)
 

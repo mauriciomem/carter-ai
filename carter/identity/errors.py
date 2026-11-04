@@ -106,6 +106,16 @@ class IdentityError(Exception):
         self.detail = detail
 
 
+# 2b (plan 005 step 6 rule): the agent table lists what an agent can meet; these are shown to the
+# human at a terminal and live in the docs and `carter` output instead.
+HUMAN_FACING = frozenset(
+    {
+        "E-UNLOCK-TTY", "E-UNLOCK-OPENCODE", "E-UNLOCK-NOPASS", "E-UNLOCK-PATH", "E-UNLOCK-BADPASS",
+        "E-SIGN-HUMAN-FALLBACK", "E-SSH-OLD", "E-IDENTITY-CHECK", "E-GITHUB-UNREACHABLE",
+    }
+)  # fmt: skip
+
+
 def _cell(text: str) -> str:
     return text.replace("|", "\\|")
 
@@ -116,7 +126,7 @@ def render_error_table(current: str = CURRENT_SLICE) -> str:
     ``blocks.py`` keeps the carter-ops skill's copy equal to this rendering."""
     lines = [ERRORS_BEGIN, "| Code | Where | Message | What to do |", "|---|---|---|---|"]
     for entry in registry().values():
-        if SLICES.index(entry.slice) <= SLICES.index(current):
+        if entry.code not in HUMAN_FACING and SLICES.index(entry.slice) <= SLICES.index(current):
             lines.append(
                 f"| `{entry.code}` | {_cell(entry.where)} | {_cell(entry.message)} "
                 f"| {_cell(entry.remediation) or '—'} |"

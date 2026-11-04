@@ -254,11 +254,15 @@ class TestAlias:
             and parts[6] == ""
         )
 
-    def test_an_agent_shell_cannot_use_the_alias_the_gate_refuses_bang_aliases(self) -> None:
+    def test_an_agent_shell_cannot_use_the_alias_the_gate_refuses_bang_aliases(
+        self, repo: Path
+    ) -> None:
+        """Agents commit with the plugin environment; the `!`-alias is a shell escape, so the gate
+        refuses it (rule `git-alias`) once it is configured."""
         from carter.gate import check
+        from carter.guard.alias import ALIAS_KEY, ALIAS_VALUE
 
-        assert check("git ai-commit -m x").decision in (
-            "deny",
-            "allow",
-        )  # the alias value itself is a shell escape
-        assert check('git -c alias.x="!sh" x').decision == "deny"
+        subprocess.run(["git", "config", "--global", ALIAS_KEY, ALIAS_VALUE], check=True)
+        for command in ("git ai-commit -m x", "git ai-commit"):
+            decision = check(command, cwd=str(repo))
+            assert decision.decision == "deny" and decision.rule == "git-alias", command

@@ -281,6 +281,13 @@ class TestHash:
         assert rendered == golden["doc"]
         assert isolation.sha256_hex(isolation.canonical_bytes(rendered)) == golden["sha256"]
 
+    def test_the_2a_hash_is_unchanged_by_slice_2b(self) -> None:
+        """Plan 005 step 23: signing adds nothing to isolation.json, so no g2 re-consent."""
+        assert (
+            V["isolation"]["sha256"]
+            == "d5456e7d8b82dd91b901cc3ade43fb8dbeecd0bfcbe32556f754797782a40a6e"
+        )
+
 
 class TestApplyOracle:
     @pytest.mark.parametrize("case", V["isolation"]["apply"], ids=lambda c: c["name"])

@@ -44,6 +44,14 @@ def alive(pid: int) -> bool:
     return not _ps("-p", str(pid), "-o", "stat=").strip().startswith("Z")
 
 
+def is_ssh_agent(command: str) -> bool:
+    """Is the program of this command line ``ssh-agent``? (Not a text that merely mentions it.)"""
+    program = (
+        command.strip().split(" -", 1)[0].strip()
+    )  # up to the first option; spaces in a path ok
+    return os.path.basename(program) == "ssh-agent"
+
+
 def verified_agent(pidfile: Path, sock: Path) -> int | None:
     """The pid in ``pidfile`` if (and only if) it is an ``ssh-agent`` serving ``sock``."""
     try:
@@ -53,7 +61,7 @@ def verified_agent(pidfile: Path, sock: Path) -> int | None:
     if not text.isdigit():
         return None
     command = _ps("-p", text, "-o", "command=")
-    return int(text) if "ssh-agent" in command and str(sock) in command else None
+    return int(text) if is_ssh_agent(command) and str(sock) in command else None
 
 
 def agents_under(directory: Path) -> list[int]:
@@ -61,7 +69,7 @@ def agents_under(directory: Path) -> list[int]:
     found = []
     for line in _ps("-u", str(os.getuid()), "-o", "pid=,command=").splitlines():
         pid, _, command = line.strip().partition(" ")
-        if pid.isdigit() and "ssh-agent" in command and f"{directory}{os.sep}" in command:
+        if pid.isdigit() and is_ssh_agent(command) and f"{directory}{os.sep}" in command:
             found.append(int(pid))
     return found
 

@@ -146,12 +146,18 @@ class TestCarterOpsRecipe:
         assert re.search(r"`commits` is `refused`[^.]*stop", text, re.I)
         assert "report" in text.lower() and "`refusal_reason`" in text
 
-    def test_interim_shape_is_stated(self) -> None:
+    def test_the_commit_shape_by_tier_is_stated(self) -> None:
         text = " ".join(_ops_text().split())
-        assert "user's own git config" in text
-        assert "unsigned" in text
-        for flag in ("--author", "--no-verify", "-s", "-S"):
+        assert "their own git config" in text and "Below T2" in text and "unsigned" in text
+        assert "At `t2` the plugin gives your shell the signing environment" in text
+        for flag in ("--author", "--no-verify", "-s", "-S", "--no-gpg-sign"):
             assert f"`{flag}`" in text
+        for key in ("author", "committer", "signer_fpr", "coauthor_linked"):
+            assert f"`{key}`" in text, key
+
+    def test_the_verify_step_is_tier_aware_and_never_accepts_n_at_t2(self) -> None:
+        text = " ".join(_ops_text().split())
+        assert "`%G?` is `G` or `E`" in text and "never `N`" in text
 
     def test_footer_is_the_emitted_one(self) -> None:
         text = _ops_text()
@@ -390,7 +396,7 @@ class TestCarterOpsGate:
         assert "Put `-R <owner>/<repo>` after the `gh` subcommand" in gate
         assert "Stage explicit paths" in gate and "`git add -A`" in gate
         assert "no SSH in your shell" in gate and "HTTPS with a read-only token" in gate
-        assert "unsigned at this tier" in gate
+        assert "Below T2 your commits are unsigned" in gate
         for code in ("E-ISOLATION-MISSING", "E-GATE-FAIL"):
             assert f"`{code}`" in gate
         assert "ask the user to run `carter check --host`" in gate
@@ -426,3 +432,60 @@ class TestCarterOpsGate:
         assert "refused by the Carter command gate" in text
         assert "is not retried in another spelling or through a script" in text
         assert "retry with" not in text.lower().replace("do not retry with", "")
+        assert "carter identity unlock" in text  # signing failures: ask the human, never bypass
+
+
+# ─── carter-ops: signing failures (plan 005 step 27) ───
+
+
+class TestCarterOpsSigningFailures:
+    def section(self) -> str:
+        return " ".join(_section("signing").split())
+
+    def test_the_raw_git_strings_map_to_the_codes(self) -> None:
+        text = self.section()
+        for raw in (
+            "error: Couldn't find key in agent?",
+            "Couldn't get agent socket",
+            "fatal: failed to write commit object",
+        ):
+            assert raw in text, raw
+        for code in (
+            "E-SIGN-LOCKED",
+            "E-SIGN-NOAGENT",
+            "E-SIGN-UNAVAILABLE",
+            "E-SHIM-REFUSED",
+            "E-GUARD-TRAILER",
+            "E-GUARD-T01SIGN",
+            "E-GUARD-UNSIGNED",
+            "E-ROLE-B-TIER",
+            "E-TIER-REQUIRED",
+        ):
+            assert f"`{code}`" in text, code
+
+    def test_the_one_action_is_stop_stage_and_ask_the_human(self) -> None:
+        text = self.section()
+        assert "stop, leave the changes staged" in text
+        assert "Run `carter identity unlock` in your own terminal" in text
+        assert "Retry **once**, and only when asked" in text
+
+    def test_every_bypass_is_named_as_forbidden(self) -> None:
+        text = self.section()
+        assert re.search(r"\*\*Never\*\*[^.]*`-c`[^.]*`--no-gpg-sign`[^.]*`-S<key>`", text)
+        for needle in (
+            "`--no-verify`",
+            "`GIT_COMMITTER_*`",
+            "`git ai-commit`",
+            "never run `carter identity unlock`",
+        ):
+            assert needle in text, needle
+
+    def test_a_hook_rejection_is_fixed_never_skipped(self) -> None:
+        text = self.section()
+        assert "fix the cause, never skip the hook" in text
+        assert "Do not set any variable or `-c` option to fix it" in text
+
+    def test_there_is_one_commit_recipe_and_it_has_no_signing_flag(self) -> None:
+        fences = "\n".join(_code_fences(_section("git-operations")))
+        assert fences.count("git commit -m") == 2 and "-S" not in fences.replace("-Sx", "")
+        assert "carter commit" not in fences and "ai-commit" not in fences

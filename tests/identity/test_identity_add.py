@@ -103,6 +103,17 @@ class TestT1:
         assert fake.authorized_requests() == []
 
 
+class TestApiNote:
+    def test_a_non_default_api_is_named_in_the_plan_t1_and_t2(
+        self, fake: FakeGitHub, key: KeyPair
+    ) -> None:
+        """Step-29 review: the user sees which server answered the checks when GITHUB_API_URL is set."""
+        register(fake, key.blob)
+        for req in (identity_add.AddRequest(LOGIN), request(key)):
+            plan = identity_add.plan_add(req)
+            assert any(n.startswith(f"GitHub API: {fake.url}") for n in plan.notes), plan.notes
+
+
 class TestT2:
     def add(self, key: KeyPair, home: Path, **over: object) -> list[str]:
         return identity_add.apply_add(identity_add.plan_add(request(key, **over)))

@@ -156,8 +156,23 @@ def _root_owned_false(path: str) -> bool:
     )
 
 
-def commit_unsigned(env: Mapping[str, str], runner: Runner) -> Result:
-    """Effective ``commit.gpgsign=false`` and the four ``gpg.*program`` are the root-owned false."""
+def _expected_signing(env: Mapping[str, str], home: Path | None) -> tuple[str, str | None]:
+    """``(effective tier, reason)`` as the plugin's entry sees this shell's workspace; an entry
+    that cannot be asked counts as "not T2" (the probe then keeps its unsigned expectation)."""
+    from carter.identity import env as entry  # noqa: PLC0415 - only this probe needs the config
+
+    try:
+        got = entry.answer(os.getcwd(), env, None, home)
+    except Exception:  # a probe must answer, never crash  # noqa: BLE001
+        return "t0", None
+    return str(got.get("effective", "t0")), got.get("reason")
+
+
+def commit_unsigned(env: Mapping[str, str], runner: Runner, home: Path | None = None) -> Result:
+    """Tier-aware: unsigned at t0/t1 and under a cap (``commit.gpgsign=false`` and the four
+    ``gpg.*program`` the root-owned false); at T2 a signing block is present (the LLM's key through
+    the Carter shim, the other three programs the false), or, when the block cannot be built, the
+    blocking entries (every signature fails). The human's key is never reachable in any case."""
     scratch = Path(tempfile.mkdtemp(prefix="carter-probe-"))
     try:
         _run(runner, ["git", "init", "-q"], env, scratch, 20)
@@ -166,7 +181,11 @@ def commit_unsigned(env: Mapping[str, str], runner: Runner) -> Result:
             done = _run(runner, ["git", "config", "--get", key], env, scratch, 20)
             return done.stdout.strip() if done.returncode == 0 else ""
 
-        if value("commit.gpgsign") != "false":
+        tier, reason = _expected_signing(env, home)
+        sign = value("commit.gpgsign")
+        if tier == "t2" and reason is None:
+            return _signing_block(env, value)
+        if sign != "false" and not (tier == "t2" and reason):
             return Result("FAIL", "commit_unsigned", "commit.gpgsign is not false")
         bad = [k for k in GPG_PROGRAMS if not _root_owned_false(value(k))]
     except (subprocess.TimeoutExpired, OSError):
@@ -175,7 +194,21 @@ def commit_unsigned(env: Mapping[str, str], runner: Runner) -> Result:
         shutil.rmtree(scratch, ignore_errors=True)
     if bad:
         return Result("FAIL", "commit_unsigned", f"{', '.join(bad)} is not the root-owned false")
-    return Result("PASS", "commit_unsigned")
+    return Result("PASS", "commit_unsigned", f"signing blocked: {reason}" if reason else "")
+
+
+def _signing_block(env: Mapping[str, str], value: Callable[[str], str]) -> Result:
+    name = "commit_unsigned"
+    if value("commit.gpgsign") != "true" or value("gpg.format") != "ssh":
+        return Result("FAIL", name, "T2 is configured but this shell has no signing block")
+    if not value("user.signingkey").startswith("key::") or not env.get("CARTER_IDENTITY"):
+        return Result("FAIL", name, "the signing block is incomplete")
+    if os.path.basename(value("gpg.ssh.program")) != "carter-ssh-sign":
+        return Result("FAIL", name, "gpg.ssh.program is not the Carter shim")
+    bad = [k for k in GPG_PROGRAMS[:3] if not _root_owned_false(value(k))]
+    if bad:
+        return Result("FAIL", name, f"{', '.join(bad)} is not the root-owned false")
+    return Result("PASS", name, "signing block present (T2)")
 
 
 def agent_tagged(env: Mapping[str, str]) -> Result:
@@ -196,7 +229,7 @@ def run_probes(
         ssh_denied(env, runner, which),
         gh_pat_only(env, where, runner, which),
         push_refused(env, runner),
-        commit_unsigned(env, runner),
+        commit_unsigned(env, runner, where),
         agent_tagged(env),
     ]
 

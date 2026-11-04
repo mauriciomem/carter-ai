@@ -143,18 +143,18 @@ class TestInterimShapeIsStatedPlainly:
         doc = " ".join(section(text("guides/write-operations.md"), "Attribution").split())
         assert "your own git config" in doc or "your `git config`" in doc
         assert "unsigned" in doc
-        assert "later release" in doc
         assert "carter ops config --emit" in doc
         assert "`-S`" in doc and "`--author`" in doc
 
-    def test_no_doc_promises_signing_or_isolation_as_available(self) -> None:
+    def test_every_identity_command_the_docs_name_exists(self) -> None:
+        """Was "no doc promises signing" in the interim releases; with slice 2b the docs describe
+        it, so the rule is that they name only commands that exist (plan 005 step 28)."""
+        real = {"add", "show", "verify", "unlock", "lock", "remove"}
         for path in DOCS.rglob("*.md"):
             if any(part in {"adr", "rfcs"} for part in path.parts):
                 continue
-            if path == DOCS / "reference" / "cli.md":
-                continue  # the reference lists the commands that exist (2b: unlock, lock; plan 005)
-            body = path.read_text(encoding="utf-8")
-            assert "carter identity" not in body, path
+            named = set(re.findall(r"carter identity (\w[\w-]*)", path.read_text(encoding="utf-8")))
+            assert named <= real | {"env"}, (path, named - real)
 
     def test_attribution_text_mentions_the_three_tiers(self) -> None:
         doc = section(text("guides/write-operations.md"), "Attribution")
