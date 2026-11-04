@@ -49,6 +49,7 @@ class TestJobs:
             "macos-sh",
             "install-smoke",
             "identity-ssh",
+            "ci-template",
         ],
     )
     def test_the_job_exists(self, ci: dict, name: str) -> None:
@@ -62,6 +63,13 @@ class TestJobs:
         }
         runs = " ".join(s.get("run", "") for s in steps(ci["jobs"]["plugin"]))
         assert "node --test" in runs and "tests/test_plugin_parity.py" in runs
+
+    def test_ci_template_checks_both_variants_with_the_checker_and_actionlint(
+        self, ci: dict
+    ) -> None:
+        text = yaml.dump(ci["jobs"]["ci-template"])
+        assert "carter ci check" in text and "actionlint" in text and "comment=comment" in text
+        assert "tests/ci" in text and "actionlint-py==" in text
 
     def test_gate_budget_measures_the_installed_tool_and_is_required(self, ci: dict) -> None:
         job = ci["jobs"]["gate-budget"]

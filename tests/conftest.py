@@ -48,6 +48,11 @@ _REAL_SSH_BEFORE = ssh_surface(_REAL_HOME, _REAL_SSH_AUTH_SOCK)
 
 # Ambient variables that change who git (or Carter) thinks the author is.
 _IDENTITY_ENV_VARS = (
+    # Plan 008: a CI runner (GITHUB_ACTIONS, CI) means "review run, no commits" to the resolver, and
+    # CARTER_IDENTITY_MODE sets it by hand. The suite must behave the same on a laptop and in CI.
+    "CI",
+    "GITHUB_ACTIONS",
+    "CARTER_IDENTITY_MODE",
     "GIT_AUTHOR_NAME",
     "GIT_AUTHOR_EMAIL",
     "GIT_AUTHOR_DATE",

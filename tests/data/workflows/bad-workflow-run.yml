@@ -1,0 +1,19 @@
+# expect: CI001 (workflow_run runs with secrets after an untrusted workflow)
+name: after
+on:
+  workflow_run:
+    workflows: [ci]
+    types: [completed]
+permissions:
+  contents: read
+concurrency:
+  group: x
+  cancel-in-progress: true
+jobs:
+  j:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - run: echo hi

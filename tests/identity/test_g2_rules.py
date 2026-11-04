@@ -224,7 +224,7 @@ class TestForbiddenCoversEveryClassOfC41:
 
     def test_slice_2a_enforces_every_class_of_the_table(self):
         enforced = {e.id for e in forbidden_classes()}
-        assert CURRENT_SLICE == "B"  # bumped by plan 007; 2a classes stay enforced
+        assert CURRENT_SLICE == "CI-E"  # bumped by plan 008; 2a classes stay enforced
         assert {"commit-flags", "staging", "env-overrides", "git-config-writes"} <= enforced
         assert {"push-verbs", "human-only-carter"} <= enforced  # plan 003 step 22
         # plan 004 step 34: the gate and control-plane rules are text now, no longer data only

@@ -1847,3 +1847,12 @@ cases:
   command: cat ~/.carter/state/audit/b.jsonl
   expect: allow
   why: slice B - reading the audit is fine (it holds no secret by construction)
+- id: cie-ci-install
+  command: carter ci install review --comment
+  expect: deny
+  rule: human-only-carter
+  why: slice CI-E - an agent-written workflow is executable config; the installer is human-only (App C.10)
+- id: ok-ci-review
+  command: carter ci review
+  expect: allow
+  why: slice CI-E - the review driver is what the workflow runs; it only reads and writes the summary

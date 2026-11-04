@@ -172,6 +172,50 @@ jobs:
       - name: The real ssh -G of this OS is judged by the C.5 key list
         run: uv run pytest tests/broker/test_ssh_g_live.py -q
 
+  ci-template:
+    # Plan 008 step 5 (the one change to this file that the plan names): the review-only workflow
+    # template that `carter ci install review` writes to users' repositories. Both variants are
+    # rendered, checked by Carter's structural checker (no write permission, SHA pins, pull_request
+    # only, no script injection...) and by actionlint, and this repository's own workflows are
+    # linted too. No secrets and no network beyond installing actionlint.
+    name: ci-template (checker + actionlint)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2
+        with:
+          python-version: "3.14"
+
+      - name: Install locked deps (with dev extra)
+        run: uv sync --locked --extra dev
+
+      - name: Install actionlint (pinned)
+        run: |
+          uv tool install "actionlint-py==1.7.12.25"
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+          "$HOME/.local/bin/actionlint" -version
+
+      - name: Render both variants, then check them and this repository's workflows
+        run: |
+          uv run python - <<'PY'
+          import os
+          from carter.ci import template
+          out = os.environ["RUNNER_TEMP"]
+          for name, comment in (("review.yml", False), ("review-comment.yml", True)):
+              open(os.path.join(out, name), "w").write(template.render(comment=comment))
+          PY
+          uv run carter ci check "$RUNNER_TEMP/review.yml"
+          uv run carter ci check "$RUNNER_TEMP/review-comment.yml"
+          actionlint "$RUNNER_TEMP/review.yml" "$RUNNER_TEMP/review-comment.yml"
+          actionlint .github/workflows/*.yml
+
+      - name: The checker and template tests (actionlint is on PATH, so its cases run)
+        run: uv run pytest tests/ci tests/identity/test_mode.py -q
+
   gate-budget:
     # RFC App C.4.2: p95 < 100 ms per gate call, interpreter start-up included, measured on the
     # installed tool (`uv tool install .`) the plugin will really call. Required check. If it

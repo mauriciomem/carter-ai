@@ -1,0 +1,17 @@
+# expect: CI013 (a self-hosted runner runs untrusted PR code on your machine)
+name: self
+on:
+  pull_request:
+permissions:
+  contents: read
+concurrency:
+  group: x
+  cancel-in-progress: true
+jobs:
+  j:
+    runs-on: [self-hosted, linux]
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - run: echo hi

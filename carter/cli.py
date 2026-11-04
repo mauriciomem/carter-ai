@@ -721,6 +721,12 @@ def _register_commit() -> None:
     main.add_command(commit_cmd)
 
 
+def _register_ci() -> None:
+    from carter.ci_cli import ci
+
+    main.add_command(ci)
+
+
 def _register_identity() -> None:
     from carter.identity_cli import identity
 
@@ -733,6 +739,7 @@ _register_commit()
 _register_github_token()
 _register_aplus()
 _register_gate()
+_register_ci()
 
 
 if __name__ == "__main__":

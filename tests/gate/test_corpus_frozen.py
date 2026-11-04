@@ -16,8 +16,9 @@ from gate import corpus
 # interpreter program importing carter.broker, `carter broker`) and +1 allow case (another module);
 # the security review (step 22) added the audit store as a control path: +1 deny (a forged line),
 # +1 allow (reading the audit).
-FROZEN_SHA256 = "bb1356f65538f6071e199884cd611af7f8ace620fffbeee414bb1fca5c3f083f"
-FROZEN_COUNTS = {"deny": 238, "allow": 136}
+# Slice CI-E (plan 008): +1 deny (`carter ci install` is human-only), +1 allow (`carter ci review`).
+FROZEN_SHA256 = "559ea380275fec1f3ae3d847dfec522ca50a451de696a4e082d5a95d4b11b9f4"
+FROZEN_COUNTS = {"deny": 239, "allow": 137}
 
 
 def test_the_corpus_hash_is_the_reviewed_one() -> None:

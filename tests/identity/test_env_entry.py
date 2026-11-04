@@ -64,6 +64,28 @@ def run(tmp_path: Path, config: str | None, cwd: Path | None = None, *, shim: bo
     return entry.answer(str(cwd or tmp_path), {}, str(path), home)
 
 
+class TestReviewMode:
+    """Plan 008 step 4: in CI (context E) the entry answers ``review-mode``, never a block."""
+
+    def test_a_full_t2_setup_in_ci_gets_no_signing_block(self, tmp_path: Path) -> None:
+        path = tmp_path / "config.toml"
+        path.write_text("schema = 2\n" + IDENT + SIGNING)
+        home = tmp_path / "home"
+        (home / ".carter").mkdir(parents=True)
+        install_shim(home)
+        got = entry.answer(str(tmp_path), {"GITHUB_ACTIONS": "true"}, str(path), home)
+        assert got["reason"] == "review-mode" and "signing" not in got
+        assert got["tier"] == "t2" and "review-mode" in payload.REASONS
+
+    def test_the_explicit_mode_does_the_same_outside_ci(self, tmp_path: Path) -> None:
+        got = entry.answer(str(tmp_path), {"CARTER_IDENTITY_MODE": "review"}, None, tmp_path)
+        assert got["reason"] == "review-mode" and "signing" not in got
+
+    def test_a_bad_mode_is_a_config_error_not_a_pass(self, tmp_path: Path) -> None:
+        got = entry.answer(str(tmp_path), {"CARTER_IDENTITY_MODE": "bogus"}, None, tmp_path)
+        assert got["reason"] == "config-error"
+
+
 class TestAnswer:
     def test_absent_file_is_t0_and_not_blocked(self, tmp_path: Path) -> None:
         got = run(tmp_path, None)

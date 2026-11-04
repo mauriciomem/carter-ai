@@ -164,6 +164,29 @@ def plan(
     )
 
 
+class TestReviewModeRefusesEveryTier:
+    """Plan 008 step 4: a CI review run (context E) makes no commits, at any tier."""
+
+    @pytest.mark.parametrize("tier", ["t0", "t1", "t2"])
+    @pytest.mark.parametrize(
+        "env", [{"GITHUB_ACTIONS": "true"}, {"CARTER_IDENTITY_MODE": "review"}]
+    )
+    def test_carter_commit_refuses_with_the_registered_code(
+        self, tier: str, env: dict[str, str]
+    ) -> None:
+        with pytest.raises(IdentityError) as exc:
+            plan(cfg_of(tier), "-m", "x", env=env)
+        assert exc.value.code == "E-CI-REVIEW" and "review run" in str(exc.value)
+
+    def test_an_agent_in_ci_is_refused_the_same_way(self) -> None:
+        with pytest.raises(IdentityError) as exc:
+            plan(cfg_of("t1"), "-m", "x", agent=True, env={"CI": "true"})
+        assert exc.value.code == "E-CI-REVIEW"
+
+    def test_outside_ci_the_same_config_still_plans_a_commit(self) -> None:
+        assert plan(cfg_of("t1"), "-m", "x").shape == "unsigned"
+
+
 class TestPlanBelowT2:
     def test_t1_is_unsigned_with_the_trailer_the_four_programs_and_a_warning(self) -> None:
         got = plan(cfg_of("t1"), "-m", "x")

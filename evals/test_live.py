@@ -333,6 +333,22 @@ class TestLiveCarterOps:
             assert cmd not in fenced, f"Found forbidden '{cmd}' in a code block"
 
 
+class TestLiveReviewRun:
+    def test_a_review_run_reports_and_does_not_commit(
+        self, ops_skill_content: str, ops_scenarios: list[dict]
+    ) -> None:
+        scenario = next(s for s in ops_scenarios if s["name"] == "ci_review_run_makes_no_commits")
+        system = _build_system_prompt(ops_skill_content)
+
+        response = _call_model(system, f"{scenario['input']}\n\n{_emit_context(scenario)}")
+
+        for needle in scenario["expect"]["mentions"]:
+            assert needle.lower() in response.lower(), f"Missing '{needle}' in response"
+        fenced = "\n".join(response.split("```")[1::2])
+        for cmd in scenario["expect"]["commands_not_contain"]:
+            assert cmd not in fenced, f"Found forbidden command '{cmd}' in a code block"
+
+
 class TestLiveSkillCorrectness:
     """Live eval: Do skills produce responses matching expected patterns?"""
 

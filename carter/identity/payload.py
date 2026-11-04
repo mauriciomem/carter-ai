@@ -15,7 +15,8 @@ LLM-authored commit the human's key signs (hazard H7) cannot be produced. The hu
 only *checked* here (``human-identity-invalid``); the hook re-reads it at commit time.
 
 Reasons (H3, K3), in the order they are decided: ``config-error``, ``tier-required``,
-``key-missing``, ``fingerprint-mismatch``, ``shim-missing``, ``human-identity-invalid``.
+``key-missing``, ``fingerprint-mismatch``, ``shim-missing``, ``human-identity-invalid``. Slice CI-E
+adds ``review-mode`` (decided right after ``config-error``): a review run never commits.
 """
 
 from __future__ import annotations
@@ -31,7 +32,7 @@ from pathlib import Path
 from typing import Any
 
 from carter.identity.coauthor import Human
-from carter.identity.errors import E_CONFIG, E_ROLE_B_TIER
+from carter.identity.errors import E_CI_REVIEW, E_CONFIG, E_ROLE_B_TIER
 from carter.identity.isolation_apply import (
     Applied,
     append_git_config,
@@ -59,6 +60,7 @@ REASONS = (
     "fingerprint-mismatch",
     "shim-missing",
     "human-identity-invalid",
+    "review-mode",  # slice CI-E: a review run makes no commits, so there is nothing to sign with
 )
 
 SHIM_REL = ".carter/bin/carter-ssh-sign"
@@ -149,6 +151,8 @@ def build_payload(
     overrides the resolved role (``carter commit`` passes ``co-author``: it ignores the role)."""
     if res.refusal_reason == E_CONFIG:
         return Built(reason="config-error")
+    if res.refusal_reason == E_CI_REVIEW:
+        return Built(reason="review-mode")
     if res.refusal_reason == E_ROLE_B_TIER or _tier_unmet(res):
         return Built(reason="tier-required")
     if res.tier != "t2":

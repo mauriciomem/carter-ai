@@ -17,6 +17,7 @@ uninstall.
 | `~/.carter/config.toml` | Schema-2 settings: LLM identity, footer, per-workspace policy | Created if missing; a schema-1 file is migrated once (original kept as `config.toml.schema1.bak`); otherwise left alone | Kept |
 | `~/.carter/config.toml.schema1.bak` | Copy of the file before its migration | Never overwritten | Kept |
 | `~/.carter/upgrade-notes/<version>.md` | The new commit rule, when your global `AGENTS.md` has your edits and could not be updated | Written once per version | Kept |
+| `<repo>/.github/workflows/carter-review.yml` | The review-only workflow, written by `carter ci install review` in the repository you run it in (first line: a hash of the rest, so an edited file is never overwritten) | Refreshed if unedited | Never removed by Carter (it is your repository's file) |
 | `~/.carter/state/audit/audit.log` | Log of `ops:` operations and policy exceptions (moved here from `~/.carter/audit.log` the first time it is written) | Kept | Kept |
 | `~/.carter/state/audit/b.jsonl` (dir 0700, file 0600) | One line per decision of the [B tools](../guides/push-and-pr-tools.md): time, agent, session, repo, branch, range, commit count, decision, code, dwell. Never an environment, a credentialed URL or a title. Rotates at 5 MiB (three older files kept) | Appended by the broker | Kept |
 | `~/.carter/backups/<timestamp>/` | Files replaced by an install | Added to | Kept |

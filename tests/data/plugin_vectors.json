@@ -1634,7 +1634,8 @@
    "key-missing",
    "fingerprint-mismatch",
    "shim-missing",
-   "human-identity-invalid"
+   "human-identity-invalid",
+   "review-mode"
   ],
   "cases": [
    {

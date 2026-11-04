@@ -439,6 +439,7 @@ TIER_REASONS_2B = (
     "fingerprint-mismatch",
     "shim-missing",
     "human-identity-invalid",  # 2c (K3): replaces role-b-not-built
+    "review-mode",  # CI-E (plan 008 C4): context E makes no commits
 )
 
 # H5: the keys of Carter's gitconfig, and the fragment name rule (step 13).
@@ -655,7 +656,11 @@ def test_h16_the_2b_error_codes_exist_with_the_2b_tag() -> None:
 def test_h16_the_current_slice_moves_only_in_step_27() -> None:
     from carter.identity.rules import CURRENT_SLICE
 
-    assert CURRENT_SLICE in ("2c", "B")  # 2c moved it in plan 006 step 11 (K13), B in plan 007
+    assert CURRENT_SLICE in (
+        "2c",
+        "B",
+        "CI-E",
+    )  # 2c moved it in plan 006 step 11 (K13), B in plan 007
 
 
 # ---------------------------------------------------------------------------------------------
@@ -707,7 +712,7 @@ def test_k5_the_role_b_signing_env_keys_and_the_role_a_keys_stay() -> None:
 def test_k3_the_reasons_replace_role_b_not_built() -> None:
     payload = pytest.importorskip("carter.identity.payload")
     assert "role-b-not-built" not in payload.REASONS
-    assert payload.REASONS[-1] == "human-identity-invalid"
+    assert payload.REASONS[-2] == "human-identity-invalid"  # CI-E appended review-mode after it
 
 
 def test_k2_the_human_identity_problems_and_fallbacks() -> None:
@@ -751,7 +756,7 @@ def test_k10_identity_add_has_the_role_option() -> None:
 def test_k13_the_current_slice_is_2c_once_step_11_has_run() -> None:
     from carter.identity.rules import CURRENT_SLICE
 
-    if CURRENT_SLICE not in ("2c", "B"):
+    if CURRENT_SLICE not in ("2c", "B", "CI-E"):
         pytest.skip("CURRENT_SLICE moves to 2c in step 11")
     assert "E-HUMAN-IDENTITY" in registry()
 
@@ -932,12 +937,113 @@ def test_b16_the_b_error_codes_exist_with_the_b_tag() -> None:
         assert reg[older].slice == "1G"
 
 
-def test_b18_the_current_slice_is_b() -> None:
+def test_b18_the_current_slice_is_b_or_later() -> None:
     from carter.identity.rules import CURRENT_SLICE
 
-    assert CURRENT_SLICE == "B"
+    assert CURRENT_SLICE in ("B", "CI-E")  # plan 008 moved it to CI-E
 
 
 def test_b19_the_ts_budgets() -> None:
     assert len((REPO / "carter/plugin/broker.ts").read_text().splitlines()) <= BROKER_TS_MAX_LINES
     assert len((REPO / "carter/plugin/index.ts").read_text().splitlines()) <= INDEX_TS_MAX_LINES
+
+
+# ---------------------------------------------------------------------------------------------
+# Slice CI-E (plan 008 step 3, freeze C1-C14), frozen before dependent code. Same rules as above.
+# ---------------------------------------------------------------------------------------------
+
+MODULES_CIE = (
+    "carter/ci/__init__.py", "carter/ci/template.py", "carter/ci/check.py",
+    "carter/ci/review.py", "carter/ci/install.py", "carter/ci_cli.py",
+    "carter/identity/mode.py", "templates/ci/carter-review.yml.tmpl",
+    "tests/data/workflows/good-minimal.yml",
+)  # fmt: skip
+CIE_WORKFLOW_REL = ".github/workflows/carter-review.yml"
+CIE_ENVIRONMENT, CIE_SECRET = "carter-review", "LLM_API_KEY"  # C5
+CIE_COMMANDS = ("check", "install", "review")  # C1, C12
+CIE_INSTALL_OPTIONS = ("--comment", "--dry-run", "--force")
+CIE_MODES = ("auto", "interactive", "review")  # C3
+CIE_UNBUILT = ("commit", "scheduled", "ci", "c", "d")  # CI contexts C and D (RFC §4.1)
+CIE_MODE_ENV = "CARTER_IDENTITY_MODE"
+CIE_ERROR = "E-CI-REVIEW"  # C4
+CIE_REASON = "review-mode"  # the identity entry's reason
+CIE_RULES = tuple(f"CI{n:03d}" for n in range(14))  # C9: CI000-CI013
+CIE_DRIVER_ENV = (
+    "LLM_API_KEY", "CARTER_CI_BASE_SHA", "CARTER_CI_KEY_ENV", "CARTER_CI_MODEL",
+    "CARTER_CI_COMMENT_FILE", "GITHUB_STEP_SUMMARY", "GITHUB_EVENT_PATH",
+)  # fmt: skip
+CIE_AGENT = "carter-ci-reviewer"  # C6
+CIE_READ_ONLY = ("read", "glob", "grep")  # C7
+CIE_COMMENT_JOB = "comment"  # C8
+CIE_GATE_ITEM = "carter ci install"  # added to the human-only Carter verbs
+
+
+@pytest.mark.parametrize("path", MODULES_CIE)
+def test_cie_module_paths_exist(path: str) -> None:
+    assert (REPO / path).exists(), f"{path} is frozen but missing"
+
+
+def test_cie_c1_the_installer_shape() -> None:
+    click = pytest.importorskip("click")
+    from carter.ci_cli import ci
+
+    assert isinstance(ci, click.Group) and tuple(sorted(ci.commands)) == CIE_COMMANDS
+    options = {o for p in ci.commands["install"].params for o in getattr(p, "opts", ())}
+    assert set(CIE_INSTALL_OPTIONS) <= options
+    import carter.ci as pkg
+
+    assert pkg.WORKFLOW_REL == CIE_WORKFLOW_REL
+
+
+def test_cie_c3_the_modes_and_their_precedence() -> None:
+    from carter.identity import mode
+
+    assert mode.MODES == CIE_MODES and mode.ENV_MODE == CIE_MODE_ENV
+    assert tuple(mode.UNBUILT) == CIE_UNBUILT
+    assert mode.resolve_mode("", {"CI": "true"}).mode == "review"  # auto in CI
+    assert mode.resolve_mode("interactive", {}).mode == "interactive"
+    assert mode.resolve_mode("review", {CIE_MODE_ENV: "interactive"}).source == "env"
+
+
+def test_cie_c4_the_refusal_code_and_the_reason() -> None:
+    from carter.identity import payload
+
+    entry = registry()[CIE_ERROR]
+    assert entry.slice == "CI-E" and "\n" not in entry.message and "review run" in entry.message
+    assert CIE_REASON in payload.REASONS
+
+
+def test_cie_c5_the_secret_and_the_environment() -> None:
+    import carter.ci as pkg
+
+    assert (pkg.ENVIRONMENT, pkg.SECRET) == (CIE_ENVIRONMENT, CIE_SECRET)
+
+
+def test_cie_c6_c7_the_review_agent_can_only_read() -> None:
+    from carter.ci import review
+
+    assert review.AGENT == CIE_AGENT and tuple(review.ALLOWED_ACTIONS) == CIE_READ_ONLY
+    assert tuple(review.build_profile()["agents"]) == (CIE_AGENT,)
+    for name in CIE_DRIVER_ENV:
+        assert name in (REPO / "carter/ci/review.py").read_text() or name == "LLM_API_KEY"
+
+
+def test_cie_c8_c9_the_comment_job_and_the_rule_ids() -> None:
+    import carter.ci as pkg
+    from carter.ci import check
+
+    assert pkg.COMMENT_JOB == CIE_COMMENT_JOB
+    for rule in CIE_RULES:
+        assert rule in (check.__doc__ or ""), rule
+
+
+def test_cie_c10_the_current_slice_is_ci_e() -> None:
+    from carter.identity.rules import CURRENT_SLICE
+
+    assert CURRENT_SLICE == "CI-E"
+
+
+def test_cie_the_installer_is_a_human_only_carter_verb() -> None:
+    data = json.loads((REPO / "carter/identity/g2_rules.json").read_text())
+    (cls,) = [c for c in data["forbidden"] if c["id"] == "human-only-carter"]
+    assert CIE_GATE_ITEM in cls["items"]

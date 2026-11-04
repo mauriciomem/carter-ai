@@ -436,6 +436,48 @@ secrets (`E-SECRET-SCAN`) before `gh` is run; `head_sha` must be part of the bra
 request exists. If the repository is a fork, the target is its parent. If the branch is not on
 `origin` at `HEAD`, it runs the `carter push` flow first.
 
+## carter ci
+
+Review-only CI (context E). Guide: [Review-only CI](../guides/ci-review.md).
+
+### carter ci install
+
+```text
+carter ci install review [--comment] [--dry-run] [--force]
+```
+
+Writes `.github/workflows/carter-review.yml` in the repository that contains the current
+directory, and nothing else. **Own terminal only**: it refuses in an agent shell and, unless
+`--dry-run`, in a shell without a terminal. It never overwrites a file you edited (the file starts
+with a hash line over the rest); it refreshes an unedited one.
+
+| Option | Description |
+|--------|-------------|
+| `--comment` | Opt in to a pull request comment: a second job with `pull-requests: write` (widens the scope; the installer says so) |
+| `--dry-run` | Print the workflow and write nothing |
+| `--force` | Replace a file that was edited by hand |
+
+### carter ci review
+
+```text
+carter ci review [--comment]
+```
+
+What the workflow runs. Reads `LLM_API_KEY`, `CARTER_CI_BASE_SHA` and optionally `CARTER_CI_KEY_ENV`,
+`CARTER_CI_MODEL`, `GITHUB_STEP_SUMMARY`, `GITHUB_EVENT_PATH` and `CARTER_CI_COMMENT_FILE`; runs a
+read-only OpenCode and writes the review to the summary. Exit 0 for a completed review (or a skip
+in CI when the key is absent), 1 for a driver failure. `--comment` also prints the review body.
+
+### carter ci check
+
+```text
+carter ci check FILE
+```
+
+Checks a workflow file against the review-only rules: `pull_request` only, `contents: read`, no
+`write` outside the documented comment job, SHA pins, timeout, concurrency, no persisted checkout
+credentials, the secret only in a step's `env`, no `${{ }}` in `run:`. Exit 1 when a rule is broken.
+
 ## carter check
 
 ```text
@@ -586,8 +628,9 @@ when you run it, from `~/.carter/config.toml` and the environment:
 | `author`, `committer` | `human` or `llm`: who git records. The author is `llm` only in role `author` at T2 |
 | `coauthor_trailer` | The trailer line for commit messages: `Assisted-by: Carter` at T0, `Co-authored-by: <login> <noreply address>` above; in role `author` it is **your** line, `Co-authored-by: <user.name> <user.email>` |
 | `coauthor_linked` | Whether GitHub credits that trailer (from the cache; role `author` needs your address linked) |
+| `mode` | `interactive`, or `review` in a CI review run ([Review-only CI](../guides/ci-review.md)) |
 | `commits` | `allowed` or `refused` |
-| `refusal_reason` | The error code when `commits` is `refused` (for example `E-CONFIG`, `E-ROLE-B-TIER` or `E-HUMAN-IDENTITY`) |
+| `refusal_reason` | The error code when `commits` is `refused` (for example `E-CONFIG`, `E-ROLE-B-TIER`, `E-HUMAN-IDENTITY` or `E-CI-REVIEW`) |
 | `footer` | Text appended to GitHub and Jira bodies |
 | `has_github_token` | Whether `GITHUB_TOKEN` is set in the environment (the token file is not counted) |
 

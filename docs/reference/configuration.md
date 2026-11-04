@@ -220,7 +220,7 @@ require_tier = "t2"       # pinned by `carter update`
 
 | Table | Keys |
 |-------|------|
-| `[identity]` | `role`, `login`, `id`, `name`, `email`, `mode` |
+| `[identity]` | `role`, `login`, `id`, `name`, `email`, `mode` (`auto`, `interactive` or `review`; `CARTER_IDENTITY_MODE` wins; in a detected CI `auto` is `review`, which refuses commits. See [Review-only CI](../guides/ci-review.md#modes)) |
 | `[identity.signing]` | The LLM's signing key, written by `carter identity add`: `public_key`, `fingerprint`, `private_key_path` (a path, never read), `previous_public_keys` (kept after a rotation so old commits verify), `ssh_bin_dir` (default `/usr/bin`; where `ssh-keygen`, `ssh-agent` and `ssh-add` come from), `ttl` (how long `identity unlock` keeps the key, default `8h`), `agent_socket` or `program` (a password manager instead of Carter's own agent) |
 | `[identity.disclosure]` | Reserved for a later release; read and kept, not used yet |
 | `[github]` | `read_token_file`: where `carter github-token set` stored the read-only token (a path only, never the token itself). `probe_repo`: optional `owner/name` that `github-token check` uses for its refused write attempt instead of a repository you own |

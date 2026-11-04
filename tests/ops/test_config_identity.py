@@ -150,6 +150,7 @@ class TestIdentityFromTheResolver:
             "tier",
             "role",
             "role_source",
+            "mode",  # CI-E (plan 008 C4)
             "author",
             "committer",
             "signer_fpr",
@@ -160,6 +161,23 @@ class TestIdentityFromTheResolver:
             "footer",
             "has_github_token",
         }
+
+    def test_a_ci_run_is_a_review_run_and_commits_are_refused(self, cfg_file, capsys, monkeypatch):
+        cfg_file.write_text(T1)
+        monkeypatch.setenv("GITHUB_ACTIONS", "true")
+        data = emit(capsys)
+        assert (data["mode"], data["commits"], data["refusal_reason"]) == (
+            "review",
+            "refused",
+            "E-CI-REVIEW",
+        )
+        assert data["coauthor_trailer"] == "" and data["committer"] == "human"
+
+    def test_outside_ci_the_mode_is_interactive(self, cfg_file, capsys, monkeypatch):
+        cfg_file.write_text(T1)
+        for name in ("GITHUB_ACTIONS", "CI", "CARTER_IDENTITY_MODE"):
+            monkeypatch.delenv(name, raising=False)
+        assert emit(capsys)["mode"] == "interactive"
 
     def test_values_follow_the_process_environment_at_runtime(self, cfg_file, capsys, monkeypatch):
         cfg_file.write_text(T1)

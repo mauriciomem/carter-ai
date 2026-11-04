@@ -16,12 +16,15 @@ from dataclasses import dataclass
 from typing import Literal
 
 from carter.identity.errors import (
+    E_CI_REVIEW,
     E_CONFIG,
     E_ROLE_B_TIER,
+    MSG_CI_REVIEW,
     MSG_CONFIG,
     MSG_ROLE_B_TIER,
     IdentityError,
 )
+from carter.identity.mode import resolve_mode
 from carter.identity.schema import ROLES, TIERS, IdentityConfig, Workspace
 
 ENV_ROLE = "CARTER_IDENTITY_ROLE"
@@ -164,11 +167,17 @@ class Resolution:
     migration_needed: bool
     warnings: tuple[str, ...] = ()
     refusal_detail: str = ""  # key names only, never values
+    mode: str = (
+        "interactive"  # `interactive` or `review` (CI context E); "" when the mode is invalid
+    )
+    mode_source: str = "default"  # env | config | auto | default
 
     def ensure_commits_allowed(self) -> None:
         """Raise ``IdentityError`` carrying the refusal code if commits are refused."""
         if self.refusal_reason == E_ROLE_B_TIER:
             raise IdentityError(E_ROLE_B_TIER, MSG_ROLE_B_TIER)
+        if self.refusal_reason == E_CI_REVIEW:
+            raise IdentityError(E_CI_REVIEW, MSG_CI_REVIEW)
         if self.refusal_reason == E_CONFIG:
             raise IdentityError(E_CONFIG, MSG_CONFIG, self.refusal_detail)
 
@@ -195,12 +204,18 @@ def resolve(
     warnings = list(role.warnings)
     reason, detail = "", ""
     missing = _missing_for_t2(cfg)
-    if not cfg.needs_migration and _has_signing_material(cfg) and missing:
+    chosen = resolve_mode(cfg.identity.mode, env)
+    if chosen.error:  # an invalid mode never falls back to anything that may commit
+        reason, detail = E_CONFIG, chosen.error
+        warnings.append(detail)
+    elif not cfg.needs_migration and _has_signing_material(cfg) and missing:
         reason = E_CONFIG
         detail = "signing is configured but incomplete; missing or inconsistent: " + ", ".join(
             missing
         )
         warnings.append(detail)
+    elif chosen.mode == "review":
+        reason = E_CI_REVIEW  # context E: read, review, report; never commit
     elif role.role == "author" and tier != "t2":
         reason = E_ROLE_B_TIER
     if reason != E_CONFIG and configured == "t0" and _identity_touched(cfg):
@@ -217,4 +232,6 @@ def resolve(
         migration_needed=cfg.needs_migration,
         warnings=tuple(warnings),
         refusal_detail=detail,
+        mode=chosen.mode,
+        mode_source=chosen.source,
     )

@@ -34,6 +34,7 @@ class Config:
     role_source: str = ""
     commits: str = "refused"
     refusal_reason: str = ""
+    mode: str = "interactive"  # `review` in a CI review run (context E): commits are refused
     coauthor_trailer: str = ""
     author: str = ""  # "human" or "llm": who git records as the author
     committer: str = ""  # "human" below T2, "llm" at T2
@@ -98,6 +99,7 @@ class Config:
             tier=res.tier,
             role=res.role,
             role_source=res.role_source,
+            mode=res.mode,
             commits="refused" if refusal else res.commits,
             refusal_reason=refusal,
             coauthor_trailer=trailer,

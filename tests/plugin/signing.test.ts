@@ -126,6 +126,7 @@ test("every reason, a block with a reason, a block at t0/t1, a partial block, a 
     ["fingerprint-mismatch", answer({ reason: "fingerprint-mismatch", signing: undefined })],
     ["shim-missing", answer({ reason: "shim-missing", signing: undefined })],
     ["human-identity-invalid", answer({ reason: "human-identity-invalid", signing: undefined })],
+    ["review-mode", answer({ reason: "review-mode", signing: undefined })], // CI-E: a review run never commits
     ["tier-required", answer({ reason: "tier-required", signing: undefined })],
     ["a reason wins over a block", answer({ reason: "shim-missing" })],
     ["t2 without a block", answer({ signing: undefined })],

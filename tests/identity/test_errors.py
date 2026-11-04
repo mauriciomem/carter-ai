@@ -30,6 +30,7 @@ RFC_APPENDIX = (
 CODE_RE = re.compile(r"^E-[A-Z0-9]+(?:-[A-Z0-9]+)*$")
 SLICE_1 = {E_CONFIG, E_ROLE_B_TIER, E_TIER_REQUIRED, E_COMMIT_T1}
 ADDED_BEYOND_APPENDIX_B = {
+    "E-CI-REVIEW",  # plan 008 C4
     "E-HUMAN-TERMINAL",
     "E-STATE-INVALID",
     "E-APLUS-ARGS",
@@ -193,14 +194,15 @@ class TestRenderErrorTable:
         codes = [re.match(r"\| `([^`]+)`", ln).group(1) for ln in rows]
         assert codes == [c for c in registry() if c in SLICE_1]
 
-    def test_the_current_slice_is_b_and_lists_every_agent_facing_code_up_to_it(self):
+    def test_the_current_slice_is_ci_e_and_lists_every_agent_facing_code_up_to_it(self):
         # plan 005 step 27: one constant (rules.CURRENT_SLICE), imported by errors.py
-        assert errors_mod.CURRENT_SLICE == "B"
+        assert errors_mod.CURRENT_SLICE == "CI-E"
         rows = [ln for ln in render_error_table().splitlines() if ln.startswith("| `E-")]
         codes = {re.match(r"\| `([^`]+)`", ln).group(1) for ln in rows}
         upto = {
             c for c, e in registry().items()
-            if e.slice in {"1", "1G", "2a", "2b", "2c", "B"} and c not in errors_mod.HUMAN_FACING
+            if e.slice in {"1", "1G", "2a", "2b", "2c", "B", "CI-E"}
+            and c not in errors_mod.HUMAN_FACING
         }  # fmt: skip
         assert codes == upto
         agent_2b = {

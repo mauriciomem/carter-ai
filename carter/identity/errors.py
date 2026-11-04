@@ -27,6 +27,7 @@ ERRORS_END = "<!-- errors:end -->"
 
 E_CONFIG = "E-CONFIG"
 E_ROLE_B_TIER = "E-ROLE-B-TIER"
+E_CI_REVIEW = "E-CI-REVIEW"  # slice CI-E (plan 008): context E, review only, no commits
 E_TIER_REQUIRED = "E-TIER-REQUIRED"
 E_COMMIT_T1 = "E-COMMIT-T1"
 # Slice 1G (plan 003). The last two are not in Appendix B; the architect added them (F10).
@@ -104,6 +105,7 @@ def registry() -> dict[str, ErrorEntry]:
 
 MSG_CONFIG = registry()[E_CONFIG].message
 MSG_ROLE_B_TIER = registry()[E_ROLE_B_TIER].message
+MSG_CI_REVIEW = registry()[E_CI_REVIEW].message
 
 
 class IdentityError(Exception):

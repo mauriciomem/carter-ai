@@ -260,6 +260,7 @@ def _handle_config_emit() -> int:
             "tier": cfg.tier,
             "role": cfg.role,
             "role_source": cfg.role_source,
+            "mode": cfg.mode,
             "author": cfg.author,
             "committer": cfg.committer,
             "signer_fpr": cfg.signer_fpr,

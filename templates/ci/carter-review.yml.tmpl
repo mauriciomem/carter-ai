@@ -1,0 +1,78 @@
+# Carter review-only workflow (CI context E): it reviews a pull request and makes NO commits.
+# Installed by `carter ci install review`. An unedited file is refreshed by the same command;
+# an edited one is never overwritten. The rules this file keeps (checked by `carter ci check`):
+#   - runs on `pull_request` only, never `pull_request_target`
+#   - `permissions: contents: read` at workflow and job level (no `write`)__COMMENT_RULE__
+#   - every action is pinned to a commit SHA; checkout does not persist credentials
+#   - the only secret is LLM_API_KEY, in the environment `carter-review`, read in step-level `env`
+#   - pull requests from forks are skipped (job `if`); a missing secret skips the review
+#   - the review goes to the job summary__COMMENT_OUT__
+name: carter-review
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: carter-review-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  review:
+    name: review
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: carter-review
+    permissions:
+      contents: read
+    outputs:
+      reviewed: ${{ steps.gate.outputs.run }}
+    steps:
+      - name: Check out the pull request (no persisted credentials)
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Is the provider key available?
+        id: gate
+        env:
+          LLM_API_KEY: ${{ secrets.LLM_API_KEY }}
+        run: |
+          if [ -z "$LLM_API_KEY" ]; then
+            echo "Review skipped: the secret LLM_API_KEY is not available to this run." >> "$GITHUB_STEP_SUMMARY"
+            echo "run=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Set up Node
+        if: steps.gate.outputs.run == 'true'
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "lts/*"
+
+      - name: Set up uv
+        if: steps.gate.outputs.run == 'true'
+        uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2
+
+      - name: Install OpenCode and Carter (pinned versions)
+        if: steps.gate.outputs.run == 'true'
+        run: |
+          npm install -g "@opencode/cli@__OPENCODE_VERSION__"
+          uv tool install "carter-ai==__CARTER_VERSION__"
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      - name: Review the pull request (read-only)
+        if: steps.gate.outputs.run == 'true'
+        env:
+          LLM_API_KEY: ${{ secrets.LLM_API_KEY }}
+          CARTER_IDENTITY_MODE: review
+          CARTER_CI_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          CARTER_CI_KEY_ENV: ${{ vars.CARTER_CI_KEY_ENV }}
+          CARTER_CI_MODEL: ${{ vars.CARTER_CI_MODEL }}__COMMENT_FILE_ENV__
+        run: carter ci review
+__COMMENT_UPLOAD____COMMENT_JOB__

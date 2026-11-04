@@ -25,7 +25,7 @@ from importlib import resources
 from typing import Any
 
 SLICES = ("1", "1G", "2a", "2b", "2c", "B", "CI-E")
-CURRENT_SLICE = "B"  # bumped by the slice that starts enforcing more classes
+CURRENT_SLICE = "CI-E"  # bumped by the slice that starts enforcing more classes
 BEGIN_MARK = "<!-- forbidden:begin -->"
 END_MARK = "<!-- forbidden:end -->"
 

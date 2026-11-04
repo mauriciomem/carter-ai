@@ -59,6 +59,17 @@ Find your symptom, then apply the fix. If nothing here helps, open an
 | `carter install` printed a "commit rule" note | Your global `AGENTS.md` has your edits, so Carter left it alone. Merge the rule from `~/.carter/upgrade-notes/<version>.md` |
 | A warning about `identity.git_account` or `identity.bot_name` | Both are deprecated and ignored. Delete them from `.carter/carter.yaml` |
 
+## Review-only CI
+
+| Symptom | Fix |
+|---------|-----|
+| Every commit by an agent or `carter commit` fails with `E-CI-REVIEW` on your own machine | `CI` or `GITHUB_ACTIONS` is set in your shell (or `CARTER_IDENTITY_MODE=review`, or `[identity] mode = "review"`). That marks a CI review run, which never commits. Unset it: `unset CI GITHUB_ACTIONS CARTER_IDENTITY_MODE` |
+| `Error: E-CONFIG` mentioning `CARTER_IDENTITY_MODE` or `[identity] mode` | The value is not `auto`, `interactive` or `review`, or it asks for a CI context that is not built (`commit`, `scheduled`), or it is `interactive` inside a CI. The message names the key, never the value |
+| `carter ci install review` says the file "was edited" | You or a tool changed `.github/workflows/carter-review.yml`; Carter keeps it. `--dry-run` shows what it would write; `--force` replaces yours |
+| The review job is "skipped" on a pull request | Expected for a fork, and when the secret `LLM_API_KEY` is missing from the environment `carter-review`. The job summary says which |
+| The review job fails with `CARTER_CI_BASE_SHA` or "could not diff" | The checkout must have history: keep `fetch-depth: 0` in the workflow |
+| `carter ci check` reports `CI001`...`CI013` | A rule of the review-only workflow is broken; the code names it. See [Review-only CI](guides/ci-review.md) |
+
 ## Guards
 
 | Symptom | Fix |

@@ -47,6 +47,9 @@ What that means in practice:
   A finished branch is handed over as a file. **One optional exception:** if you confirm it,
   DevOps alone gets two tools, `carter_push` and `carter_pr`, that *ask you to approve each use*
   in OpenCode; see [Push and PR tools](push-and-pr-tools.md).
+- **A CI review run commits nothing.** If you install the optional [review-only CI](ci-review.md)
+  workflow, the model there can only read the checkout, the workflow has `contents: read`, and the
+  resolver refuses commits in a detected CI (`E-CI-REVIEW`).
 - **Only DevOps can change infrastructure** and send Jira and Slack text.
 - **Read-only agents still can, but must ask.** Maestro, Architect and Learner get a
   prompt before they edit a file or run a shell command, including `git commit`.
