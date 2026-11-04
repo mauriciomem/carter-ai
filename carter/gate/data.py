@@ -83,6 +83,7 @@ def build(raw: dict[str, Any]) -> dict[str, Any]:
         "plumbing": set(cls["plumbing"]["items"]),
         "other_single": set(single),
         "opencode_verbs": {i.split()[1] for i in other["items"] if i.startswith("opencode ")},
+        "opencode_service": set(other["gate_opencode_service"]),
         "human_only": humans,
         "gh_allow": [tuple(e["verb"].split()) for e in raw["gh_read_allowlist"]],
         "credential": [p.strip("/").split("/") for p in raw["credential_paths"]],

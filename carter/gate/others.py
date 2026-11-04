@@ -54,6 +54,16 @@ def other_verb(eng: Judge, name: str, argv: list[Word]) -> None:
     group = r["item_groups"].get(name)
     if name in r["other_single"]:
         eng.deny("other-verbs", item_group=group)
+    if (
+        name == "opencode"
+        and [a.text for a in argv[1:2]] == ["service"]
+        and any(a.text in r["opencode_service"] for a in argv[2:3])
+    ):
+        eng.deny(
+            "other-verbs",
+            "starting, stopping or reconfiguring the OpenCode service from an agent shell is "
+            "refused: the server would inherit this shell's environment. Ask the human to do it.",
+        )
     if name == "opencode" and any(a.text in r["opencode_verbs"] for a in argv[1:2]):
         eng.deny("other-verbs", "starting OpenCode from an agent shell is refused (run or serve).")
     if name == "security" and len(argv) > 1 and f"security {argv[1].text}" in r["security_items"]:

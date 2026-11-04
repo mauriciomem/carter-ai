@@ -1,0 +1,33 @@
+# Commands the gate rightly refuses in the agents' workflow (plan 004 step 36), each with the habit
+# that replaces it. The gate must keep refusing them with exactly this rule; `habit` is what the
+# runbook and the docs tell people (and agents) to do instead.
+version: 1
+cases:
+- {id: wr-add-all, command: git add -A, rule: staging, habit: "stage explicit paths: git add <file> <file>"}
+- {id: wr-add-dot, command: git add ., rule: staging, habit: "stage explicit paths: git add <file> <file>"}
+- {id: wr-commit-all, command: git commit -a -m x, rule: staging, habit: "git add <paths>, then git commit"}
+- {id: wr-no-verify, command: git commit --no-verify -m x, rule: commit-flags, habit: "fix the failing hook instead of skipping it"}
+- {id: wr-push, command: git push origin main, rule: push-verbs, habit: "write the handoff file; the human runs carter push, then carter pr"}
+- {id: wr-push-dash-c, command: git -C . push, rule: push-verbs, habit: "same: pushing is human-only in every spelling"}
+- {id: wr-push-sh, command: "sh -c 'git push'", rule: push-verbs, habit: "same; a wrapper does not change the request"}
+- {id: wr-gh-create, command: gh pr create --title x, rule: other-verbs, habit: "write the handoff file; the human runs carter pr"}
+- {id: wr-gh-api, command: gh api repos/o/r, rule: other-verbs, habit: "use an allowlisted read: gh pr view 12 -R o/r, gh repo view o/r, gh search repos q"}
+- {id: wr-gh-leading-r, command: gh -R o/r pr view 1, rule: other-verbs, habit: "put -R after the subcommand: gh pr view 1 -R o/r"}
+- {id: wr-gh-version, command: gh --version, rule: other-verbs, habit: "command -v gh"}
+- {id: wr-gh-auth, command: gh auth status, rule: other-verbs, habit: "the human runs it; agents use the read-only token and never inspect the login"}
+- {id: wr-python-git, command: "python3 -c \"import subprocess; subprocess.run(['git', 'status'])\"", rule: interpreter-git, habit: "run git status directly"}
+- {id: wr-serve, command: opencode serve --port 4000, rule: other-verbs, habit: "e2e and spikes that start a server are run by the human (tests/e2e/run.sh) or CI"}
+- {id: wr-service-restart, command: opencode service restart, rule: other-verbs, habit: "ask the human: a service restarted from an agent shell inherits the isolated environment"}
+- {id: wr-run, command: opencode run hello, rule: other-verbs, habit: "same: the human or CI starts OpenCode"}
+- {id: wr-ssh-dir, command: ls ~/.ssh, rule: credential-paths, habit: "never needed; agents have no SSH keys"}
+- {id: wr-gh-hosts, command: cat ~/.config/gh/hosts.yml, rule: credential-paths, habit: "never needed; gh uses the read-only token"}
+- {id: wr-isolation, command: echo x > ~/.carter/isolation.json, rule: control-files, habit: "Carter's own files are edited by Carter commands run by the human"}
+- {id: wr-plugin-dir, command: cp x.ts ~/.config/opencode/plugins/carter/index.ts, rule: control-files, habit: "same; the plugin is installed by carter guard install"}
+- {id: wr-global-config, command: git config --global user.name x, rule: git-config-writes, habit: "the human changes global git config"}
+- {id: wr-author-env, command: GIT_AUTHOR_NAME=x git commit -m y, rule: env-overrides, habit: "never change the author; the trailer credits Carter"}
+- {id: wr-export-token, command: export GITHUB_TOKEN=x, rule: env-overrides, habit: "never export a token; the read-only token lives in a file"}
+- {id: wr-sudo, command: sudo ls, rule: other-verbs, habit: "the human runs it, or the consent group sudo-docker is declined"}
+- {id: wr-guard, command: carter guard install --yes, rule: human-only-carter, habit: "the human runs carter guard in their own terminal"}
+- {id: wr-guard-status, command: carter guard status, rule: human-only-carter, habit: "carter check --host (read-only, allowed)"}
+- {id: wr-dynamic, command: "eval \"$cmd\"", rule: dynamic-command, habit: "write the command out literally"}
+- {id: wr-carter-env, command: "CARTER_E2E=1 uv run pytest tests/e2e -q", rule: env-overrides, habit: "the human runs the opt-in suites (tests/e2e/run.sh); CARTER_* assignments are refused"}

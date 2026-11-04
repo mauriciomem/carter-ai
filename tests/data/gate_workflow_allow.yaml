@@ -1,6 +1,8 @@
 # Commands agents ran in plans 002-004 (their notes and step files): none may be refused.
 # NOT here: `CARTER_E2E=1 ...` / `CARTER_PERF=1 ...` prefixes: CARTER_* assignments are refused by design (C.4.1) - the human runs those.
-# Seed for step 36, which grows it to >= 40 from the rehearsal. Same fields as the corpus, expect: allow.
+# Grown in step 36 from plans 002-004 (their notes, step files and the commands the agents ran while
+# building Carter): every command here must be allowed. What the gate rightly refuses, with the habit
+# that replaces it, is in gate_workflow_rejected.yaml. Same fields as the corpus, expect: allow.
 version: 1
 cases:
 - {id: wf-pytest, command: uv run pytest -q, expect: allow, why: plan 003 baseline}
@@ -35,3 +37,86 @@ cases:
 - {id: wf-diff-hash, command: diff /tmp/opencode/2a/hash-before.txt /tmp/opencode/2a/hash-after.txt && echo same, expect: allow, why: host hash check}
 - {id: wf-npm-view, command: npm view @opencode/cli@2.1.2 version, expect: allow, why: plan 004 step 1}
 - {id: wf-uv-tool, command: uv tool install --from /tmp/opencode/2a/probe-proj carter-ai, expect: allow, why: plan 004 step 7}
+- {id: wf-cd-home-user-carter, command: 'cd /home/user/carter-ai && uv run pytest tests/guard -q -p no:cacheprovider 2>&1 | tail -3', expect: allow, why: plan 004 workflow}
+- {id: wf-uv-run-python-i, command: 'uv run python -I /tmp/opencode/2a/m7/harvest.py 2>&1 | head -80', expect: allow, why: plan 004 workflow}
+- {id: wf-uv-run-pytest-tests, command: 'uv run pytest tests/gate/test_budget.py -q -p no:cacheprovider -s -k p95 2>&1 | grep -E "gate (warm|cold)|passed|failed"', expect: allow, why: plan 004 workflow}
+- {id: wf-git-status-short-grep, command: 'git status --short | grep -v "^ M" | head -40', expect: allow, why: plan 004 workflow}
+- {id: wf-ls-git-hooks-grep, command: 'ls .git/hooks | grep -v sample', expect: allow, why: plan 004 workflow}
+- {id: wf-uv-run-ruff-format, command: 'uv run ruff format tests; uv run ruff check tests --fix | tail -3', expect: allow, why: plan 004 workflow}
+- {id: wf-uv-run-pytest-q, command: 'uv run pytest -q -p no:cacheprovider 2>&1 | grep -E "passed|failed" | tail -2', expect: allow, why: plan 004 workflow}
+- {id: wf-uv-tool-dir-tmp, command: UV_TOOL_DIR=/tmp/opencode/2a/m3/tools UV_TOOL_BIN_DIR=/tmp/opencode/2a/m3/bin uv tool install --force /tmp/opencode/2a/m3/wheel/carter_ai-0.0.1-py3-none-any.whl, expect: allow, why: plan 004 workflow}
+- {id: wf-bash-tmp-opencode-2a, command: bash /tmp/opencode/2a/m3/tool.sh, expect: allow, why: plan 004 workflow}
+- {id: wf-sed-n-1-60p, command: 'sed -n 1,60p carter/guard/engine.py', expect: allow, why: plan 004 workflow}
+- {id: wf-grep-n-def-test, command: 'grep -n "def test" tests/guard/test_probe.py | head', expect: allow, why: plan 004 workflow}
+- {id: wf-git-log-oneline-head, command: 'git log --oneline | head -2', expect: allow, why: plan 004 workflow}
+- {id: wf-git-add-carter-guard, command: git add carter/guard/plugin.py tests/guard/test_plugin_install.py, expect: allow, why: plan 004 workflow}
+- {id: wf-git-add-n-carter, command: git add -n carter/guard/, expect: allow, why: plan 004 workflow}
+- {id: wf-git-checkout-b-feat, command: git checkout -b feat/attribution-slice-2a, expect: allow, why: plan 004 workflow}
+- {id: wf-git-clone-tmp-opencode, command: git clone /tmp/opencode/2a/attribution-slice-2a.bundle /tmp/opencode/2a/clone, expect: allow, why: plan 004 workflow}
+- {id: wf-git-init-q-tmp, command: git init -q /tmp/opencode/2a/scratch, expect: allow, why: plan 004 workflow}
+- {id: wf-git-show-head-readme, command: 'git show HEAD:README.md | head -5', expect: allow, why: plan 004 workflow}
+- {id: wf-git-rev-parse-abbrev, command: git rev-parse --abbrev-ref HEAD, expect: allow, why: plan 004 workflow}
+- {id: wf-git-diff-head-1, command: git diff HEAD~1 --stat, expect: allow, why: plan 004 workflow}
+- {id: wf-git-stash-git-stash, command: 'git stash && git stash pop', expect: allow, why: plan 004 workflow}
+- {id: wf-git-worktree-add-tmp, command: git worktree add /tmp/opencode/2a/wt HEAD, expect: allow, why: plan 004 workflow}
+- {id: wf-git-branch-d-old, command: git branch -d old-branch, expect: allow, why: plan 004 workflow}
+- {id: wf-git-rebase-onto-main, command: git rebase --onto main old-base feature, expect: allow, why: plan 004 workflow}
+- {id: wf-git-fetch-origin, command: git fetch origin, expect: allow, why: plan 004 workflow}
+- {id: wf-git-pull-rebase, command: git pull --rebase, expect: allow, why: plan 004 workflow}
+- {id: wf-git-remote-v, command: git remote -v, expect: allow, why: plan 004 workflow}
+- {id: wf-git-tag-v0-1, command: git tag v0.1.0, expect: allow, why: plan 004 workflow}
+- {id: wf-git-blame-carter-gate, command: 'git blame carter/gate/rules.py | head -5', expect: allow, why: plan 004 workflow}
+- {id: wf-git-ls-files-wc, command: 'git ls-files | wc -l', expect: allow, why: plan 004 workflow}
+- {id: wf-git-commit-m-feat, command: 'git commit -m "feat(gate): add the tokenizer" -m "Why: heredocs need real parsing."', expect: allow, why: plan 004 workflow}
+- {id: wf-git-commit-amend-no, command: git commit --amend --no-edit, expect: allow, why: plan 004 workflow}
+- {id: wf-python3-tmp-opencode-2a, command: 'python3 /tmp/opencode/2a/hosthash.py > /tmp/opencode/2a/hash-after.txt 2>&1; diff /tmp/opencode/2a/hash-before.txt /tmp/opencode/2a/hash-after.txt && echo HOST-SAME', expect: allow, why: plan 004 workflow}
+- {id: wf-rg-n-current-slice, command: 'rg -n "CURRENT_SLICE" carter tests', expect: allow, why: plan 004 workflow}
+- {id: wf-find-name-py-newer, command: 'find . -name "*.py" -newer pyproject.toml | head', expect: allow, why: plan 004 workflow}
+- {id: wf-uv-build-wheel-o, command: uv build --wheel -o /tmp/opencode/2a/wheel, expect: allow, why: plan 004 workflow}
+- {id: wf-tar-tzf-tmp-opencode, command: 'tar tzf /tmp/opencode/2a/x.tar.gz | head', expect: allow, why: plan 004 workflow}
+- {id: wf-unzip-l-tmp-opencode, command: 'unzip -l /tmp/opencode/2a/wheel/carter_ai-0.0.1-py3-none-any.whl | tail -3', expect: allow, why: plan 004 workflow}
+- {id: wf-pkill-f-mock-llm, command: pkill -f mock_llm, expect: allow, why: plan 004 workflow}
+- {id: wf-cp-tmp-opencode-2a, command: cp /tmp/opencode/2a/a.txt /tmp/opencode/2a/b.txt, expect: allow, why: plan 004 workflow}
+- {id: wf-rm-rf-tmp-opencode, command: rm -rf /tmp/opencode/2a/m7/scratch, expect: allow, why: plan 004 workflow}
+- {id: wf-stat-c-a-tmp, command: 'stat -c %a /tmp/opencode/2a/hosthash.py', expect: allow, why: plan 004 workflow}
+- {id: wf-sha256sum-tests-data-gate, command: sha256sum tests/data/gate_corpus.yaml, expect: allow, why: plan 004 workflow}
+- {id: wf-curl-s-http-127, command: 'curl -s http://127.0.0.1:4096/health', expect: allow, why: plan 004 workflow}
+- {id: wf-node-test-tests-plugin, command: node --test tests/plugin/core.test.ts, expect: allow, why: plan 004 workflow}
+- {id: wf-opencode-debug-config, command: opencode debug config, expect: allow, why: plan 004 workflow}
+- {id: wf-opencode-models, command: opencode models, expect: allow, why: plan 004 workflow}
+- {id: wf-gh-pr-view-12, command: gh pr view 12 -R mauriciomem/carter-ai, expect: allow, why: plan 004 workflow}
+- {id: wf-gh-pr-list-json, command: 'gh pr list --json number,title', expect: allow, why: plan 004 workflow}
+- {id: wf-gh-run-list-limit, command: gh run list --limit 5, expect: allow, why: plan 004 workflow}
+- {id: wf-gh-repo-view-mauriciomem, command: gh repo view mauriciomem/carter-ai, expect: allow, why: plan 004 workflow}
+- {id: wf-gh-search-repos-carter, command: gh search repos carter, expect: allow, why: plan 004 workflow}
+- {id: wf-carter-ops-config-emit, command: carter ops config --emit, expect: allow, why: plan 004 workflow}
+- {id: wf-carter-check-no-harness, command: carter check --no-harness, expect: allow, why: plan 004 workflow}
+- {id: wf-carter-gate-check-ls, command: 'carter gate check ''ls -la''', expect: allow, why: plan 004 workflow}
+- {id: wf-carter-save-m-checkpoint, command: 'carter save -m "checkpoint"', expect: allow, why: plan 004 workflow}
+- {id: wf-printf-s-n-one, command: 'printf ''%s\n'' one two | wc -l', expect: allow, why: plan 004 workflow}
+- {id: wf-cd-tmp-opencode-2a, command: 'cd /tmp/opencode/2a/m7 && python3 harvest.py', expect: allow, why: plan 004 workflow}
+- {id: wf-timeout-120-uv-run, command: timeout 120 uv run pytest tests/e2e/test_harness_unit.py -q, expect: allow, why: plan 004 workflow}
+- {id: wf-uv-run-mypy-2, command: 'uv run mypy 2>&1 | tail -3', expect: allow, why: plan 004 workflow}
+- {id: wf-uv-run-pytest-tests-2, command: 'uv run pytest tests/guard/test_probe.py::TestCommand -q -p no:cacheprovider', expect: allow, why: plan 004 workflow}
+- {id: wf-uv-sync-locked-extra, command: uv sync --locked --extra dev, expect: allow, why: plan 004 workflow}
+- {id: wf-uv-lock-check, command: uv lock --check, expect: allow, why: plan 004 workflow}
+- {id: wf-ruff-check, command: ruff check ., expect: allow, why: plan 004 workflow}
+- {id: wf-tail-n-20-tmp, command: tail -n 20 /tmp/opencode/2a/server.log, expect: allow, why: plan 004 workflow}
+- {id: wf-head-c-300-tmp, command: head -c 300 /tmp/opencode/2a/requests.jsonl, expect: allow, why: plan 004 workflow}
+- {id: wf-env-cut-d-f1, command: 'env | cut -d= -f1 | sort | tr ''\n'' '' ''', expect: allow, why: plan 004 workflow}
+- {id: wf-echo-home-tmp-opencode, command: 'echo "$HOME" > /tmp/opencode/2a/home.txt', expect: allow, why: plan 004 workflow}
+- {id: wf-sh-n-tests-e2e, command: 'sh -n tests/e2e/run.sh && echo syntax-ok', expect: allow, why: plan 004 workflow}
+- {id: wf-dash-n-carter-guard, command: dash -n carter/guard/templates/carter-guard.sh, expect: allow, why: plan 004 workflow}
+- {id: wf-python3-m-json-tool, command: 'python3 -m json.tool carter/identity/g2_rules.json > /dev/null', expect: allow, why: plan 004 workflow}
+- {id: wf-git-bundle-create-tmp, command: git bundle create /tmp/opencode/2a/attribution-slice-2a.bundle --all, expect: allow, why: plan 004 workflow}
+- {id: wf-git-bundle-verify-tmp, command: git bundle verify /tmp/opencode/2a/attribution-slice-2a.bundle, expect: allow, why: plan 004 workflow}
+- {id: wf-git-commit-m-msg, command: 'git commit -m "$msg"', expect: allow, why: plan 004 workflow}
+- {id: wf-git-log-1-format, command: 'git log -1 --format=''%an|%cn|%G?''', expect: allow, why: plan 004 workflow}
+- {id: wf-git-c-tmp-opencode, command: 'git -C /tmp/opencode/2a/clone log -1 --format=%h', expect: allow, why: plan 004 workflow}
+- {id: wf-git-c-d-status, command: 'git -C "$d" status', expect: allow, why: plan 004 workflow}
+- {id: wf-git-config-get-user, command: git config --get user.email, expect: allow, why: plan 004 workflow}
+- {id: wf-git-config-list-show, command: git config --list --show-origin, expect: allow, why: plan 004 workflow}
+- {id: wf-git-hook-list-show, command: git hook list --show-scope pre-push, expect: allow, why: plan 004 workflow}
+- {id: wf-git-diff-staged, command: git diff --staged, expect: allow, why: plan 004 workflow}
+- {id: wf-git-restore-staged-carter, command: git restore --staged carter/gate/rules.py, expect: allow, why: plan 004 workflow}
+- {id: wf-git-switch-main, command: git switch main, expect: allow, why: plan 004 workflow}

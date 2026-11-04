@@ -221,17 +221,17 @@ class TestForbiddenCoversEveryClassOfC41:
         assert "commit-tree" in by_id["plumbing"].items
         assert "raw SHA" in by_id["plumbing"].note
 
-    def test_slice_1g_enforces_the_recipe_the_push_verbs_and_the_human_only_verbs(self):
+    def test_slice_2a_enforces_every_class_of_the_table(self):
         enforced = {e.id for e in forbidden_classes()}
-        assert CURRENT_SLICE == "1G"
+        assert CURRENT_SLICE == "2a"
         assert {"commit-flags", "staging", "env-overrides", "git-config-writes"} <= enforced
         assert {"push-verbs", "human-only-carter"} <= enforced  # plan 003 step 22
-        # the gate and the control-plane rules are slice 2a: data only until then
-        assert not {"other-verbs", "credential-paths", "control-files"} & enforced
+        # plan 004 step 34: the gate and control-plane rules are text now, no longer data only
+        assert {"other-verbs", "credential-paths", "control-files"} <= enforced
 
-    def test_a_later_slice_extends_without_a_schema_change(self):
-        later = {e.id for e in forbidden_classes(current="2a")}
-        assert {"push-verbs", "other-verbs", "credential-paths"} <= later
+    def test_an_earlier_slice_enforces_fewer_without_a_schema_change(self):
+        earlier = {e.id for e in forbidden_classes(current="1G")}
+        assert {"push-verbs"} <= earlier and not {"other-verbs", "credential-paths"} & earlier
 
 
 class TestLoader:

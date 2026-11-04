@@ -100,10 +100,11 @@ class TestInstallGuide:
             assert needle in guards, needle
 
     def test_the_interim_paragraph_is_honest(self) -> None:
+        # plan 004 step 35: the 1G interim paragraph became the plugin section; the speed-bump
+        # wording now lives in write-operations.md (the state before the plugin is confirmed)
         guards = " ".join(section(text("guides/install.md"), "Guards").split())
-        assert "speed bump" in guards and "not a boundary" in guards
-        assert "plugin and the shell isolation" in guards and "not installed yet" in guards
-        assert "agent commits still use your own git config" in guards
+        assert "speed bump, not a boundary" in guards and "The plugin" in guards
+        assert "never upgraded silently" in guards
 
     def test_the_restore_story_is_told(self) -> None:
         guards = " ".join(section(text("guides/install.md"), "Guards").split())
@@ -303,15 +304,12 @@ class TestWriteOperationsAPlusFlow:
         assert "no agent path for issues, comments, reviews or releases" in doc
 
     def test_the_interim_paragraph_is_here_and_in_install(self) -> None:
-        for page in ("guides/write-operations.md", "guides/install.md"):
-            doc = " ".join(text(page).split())
-            assert "speed bump" in doc, page
-            assert "plugin" in doc and "isolation" in doc, page
-            assert "stored but not injected into agent shells" in doc, page
-            assert "agent commits still use your own git config" in doc.replace(
-                "Agent commits still use your own git config",
-                "agent commits still use your own git config",
-            ), page
+        wo = " ".join(text("guides/write-operations.md").split())
+        assert "speed bump" in wo and "plugin" in wo and "isolation" in wo
+        assert "stored but not injected into agent shells" in wo
+        assert "Agent commits still use your own git config" in wo
+        install = " ".join(text("guides/install.md").split())
+        assert "speed bump" in install and "plugin" in install and "isolation" in install
 
 
 class TestMcpServersGithubToken:

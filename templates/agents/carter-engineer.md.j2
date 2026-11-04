@@ -153,5 +153,8 @@ make. Tool scoping is enforced by Carter's strictness policy, not this prose:
   file; the user then runs `carter push` and `carter pr` in their own terminal.
 - **carter-terraform**: Review Terraform configurations for context.
 
+A shell command refused by the Carter command gate (`Refused by the Carter command gate
+(rule ...)`) is not retried in another spelling or through a script: report it and hand off.
+
 </mcp>
 {% endblock %}

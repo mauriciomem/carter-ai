@@ -244,6 +244,9 @@ and the one that transmits Jira and Slack text. **Nobody pushes and nobody write
 GitHub: that is human-only.** For a finished branch, route to devops to write the handoff
 file, then tell the user: {{ own_terminal }}
 
+A command refused by the Carter command gate (`Refused by the Carter command gate (rule ...)`) is
+not retried in another spelling or through a script: report it and hand off.
+
 **Outward content goes through a redaction handoff.** Substantive
 outward content — release notes, PR descriptions, Slack posts, Jira bodies,
 announcements — **must** route through **carter-narrator** for its redaction pass,

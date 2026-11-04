@@ -243,7 +243,7 @@ class TestCarterOpsPushAndPr:
         text = _ops_text()
         for code in ("E-POLICY", "E-GH-READONLY", "E-HANDOFF", "E-SECRET-SCAN", "E-HUMAN-TERMINAL"):
             assert f"`{code}`" in text, code
-        assert "`E-PUSH-GUARD`" not in text  # the pre-push hook is slice 2a
+        assert "`E-PUSH-GUARD`" in text  # the pre-push hook is slice 2a (plan 004 step 34)
 
     def test_the_forbidden_block_now_lists_the_push_and_human_only_verbs(self) -> None:
         text = _ops_text()
@@ -362,3 +362,67 @@ class TestOwnTerminalWordingHasOneHome:
                 text = path.read_text(encoding="utf-8")
                 assert "!carter push" not in text and "! carter push" not in text, path.name
                 assert "!carter pr" not in text and "!git push" not in text, path.name
+
+
+# ─── Plan 004 step 34: what the agent meets once the gate and isolation are live ───
+
+
+class TestCarterOpsGate:
+    def gate(self) -> str:
+        text = _ops_text()
+        start = text.index("## When the gate or the isolation answers")
+        return " ".join(text[start : text.index("</guardrails>")].split())
+
+    def test_a_rejection_is_handed_off_not_rephrased(self) -> None:
+        gate = self.gate()
+        assert "A rejection names a rule" in gate and "Do not rephrase the command" in gate
+        assert "hand off" in gate and "Never write a script to get around a rejection" in gate
+
+    def test_pushes_and_prs_stay_human_only_with_the_shared_sentence(self) -> None:
+        from carter.aplus.handoff import OWN_TERMINAL
+
+        assert "Pushes and PRs stay human-only" in self.gate()
+        assert "`carter push` and `carter pr` in their own terminal" in self.gate()
+        assert OWN_TERMINAL in " ".join(_ops_text().split())
+
+    def test_the_practical_rules_are_stated(self) -> None:
+        gate = self.gate()
+        assert "Put `-R <owner>/<repo>` after the `gh` subcommand" in gate
+        assert "Stage explicit paths" in gate and "`git add -A`" in gate
+        assert "no SSH in your shell" in gate and "HTTPS with a read-only token" in gate
+        assert "unsigned at this tier" in gate
+        for code in ("E-ISOLATION-MISSING", "E-GATE-FAIL"):
+            assert f"`{code}`" in gate
+        assert "ask the user to run `carter check --host`" in gate
+        assert "`carter check --probe`" in gate and "only when the user asks" in gate
+
+    def test_nothing_teaches_a_bypass(self) -> None:
+        text = _ops_text()
+        for teaching in ("instead try", "another way to push:", "bypass by", "you can still"):
+            assert teaching not in text.replace("do not look for another way to push", ""), teaching
+        # the prohibitions name no concrete evasion command
+        gate = self.gate()
+        for evasion in ("sh -c", "bash -c", "eval ", "python3 -c", "xargs"):
+            assert evasion not in gate, evasion
+
+    def test_the_interim_paragraph_has_both_wordings(self) -> None:
+        text = " ".join(_ops_text().split())
+        assert "Once the user has confirmed group `g2` at revision 2, the Carter plugin is" in text
+        assert "literal command matches" in text and "not installed yet" in text
+
+    def test_the_error_table_carries_the_2a_codes(self) -> None:
+        text = _ops_text()
+        for code in (
+            "E-ISOLATION-MISSING", "E-GATE", "E-GATE-FAIL", "E-PUSH-GUARD", "E-GIT-OLD",
+            "E-OPENCODE-VERSION", "E-SIGN-UNAVAILABLE",
+        ):  # fmt: skip
+            assert f"| `{code}` |" in text, code
+
+    @pytest.mark.parametrize("name", ["engineer", "devops", "maestro"])
+    def test_each_agent_template_has_the_rejection_line_and_no_retry_advice(
+        self, name: str
+    ) -> None:
+        text = " ".join((REPO / f"templates/agents/carter-{name}.md.j2").read_text().split())
+        assert "refused by the Carter command gate" in text
+        assert "is not retried in another spelling or through a script" in text
+        assert "retry with" not in text.lower().replace("do not retry with", "")

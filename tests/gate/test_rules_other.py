@@ -258,3 +258,24 @@ class TestInterpreters:
 
     def test_a_script_path_is_not_inspected_an_accepted_residual(self) -> None:
         assert rule_of("python3 scripts/does_git_things.py") is None
+
+
+class TestOpencodeService:
+    """Plan 004 step 36 (security review): a service restarted from an agent shell would inherit
+    that shell's isolated environment (no SSH agent, agent signals) and degrade the human's
+    `!` shells. Reads of the service stay allowed."""
+
+    @pytest.mark.parametrize("sub", ["start", "restart", "stop", "set port 4000", "unset port"])
+    def test_mutating_the_service_is_refused(self, sub: str) -> None:
+        assert rule_of(f"opencode service {sub}") == "other-verbs"
+        assert rule_of(f"env opencode service {sub}") == "other-verbs"
+
+    @pytest.mark.parametrize("sub", ["status", "get", "get port"])
+    def test_reads_pass(self, sub: str) -> None:
+        assert rule_of(f"opencode service {sub}") is None
+
+    def test_the_message_says_why(self) -> None:
+        from carter import gate
+
+        message = gate.check("opencode service restart").message or ""
+        assert "inherit this shell's environment" in message and message.startswith("Refused by")

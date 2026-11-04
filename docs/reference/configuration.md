@@ -234,7 +234,9 @@ them too. A path that no longer exists or contains `*` or `?` is skipped with a 
 
 Tiers: T0 is nothing configured (commits carry `Assisted-by: Carter`), T1 is an LLM
 account without a key (`Co-authored-by: <login> <address>`), T2 adds a signing key. A
-workspace `max_tier` lowers the tier for that workspace, never raises it. Unset optional
+workspace `max_tier` lowers the tier for that workspace, never raises it. While agent signing
+does not exist, an effective T2 blocks agent commits (they would be unsigned); `max_tier = "t1"`
+for that workspace lets agents commit unsigned there. Unset optional
 keys are left out of the file. A file Carter cannot read or that is incomplete
 (for example, signing keys without an account) is `E-CONFIG`: agent commits are refused
 instead of falling back to defaults.

@@ -170,12 +170,23 @@ LLM identity, so you are at T0 and nothing else is needed. An older file is migr
 
 ## What this release does and does not do
 
-The guards are **a speed bump until the plugin and the gate arrive (slice 2a)**: policies
-are literal command matches, not a boundary, and there is no shell isolation yet. Agent
-shells still inherit your SSH agent and `gh` login. The read-only GitHub token
-(`carter github-token set`) is stored but not injected into agent shells yet: only the
-`carter-github` MCP server reads the file. Agent commits still use your own git config.
-`carter check --host` says "plugin not installed" for as long as that is true.
+Without the plugin (before you confirm `g2` revision 2) the guards are **a speed bump**:
+policies are literal command matches, not a boundary, and agent shells still inherit your SSH
+agent and `gh` login. The read-only GitHub token (`carter github-token set`) is stored but
+not injected into agent shells: only the `carter-github` MCP server reads the file. Agent
+commits still use your own git config. `carter check --host` says "plugin not installed" for
+as long as that is true.
+
+With the plugin (see [Install: the plugin](install.md#the-plugin-g2-revision-2)) the shell
+isolation applies: every agent shell is isolated and a command gate rejects what the literal matches cannot see. Pushing and
+pull requests are still yours: the agent writes the handoff file, you run `carter push` and
+`carter pr`. Agent commits are made with your name and email, **unsigned**, with the trailer
+below. If you have a signing key and no cap, your effective tier is T2 and agent commits are
+**blocked** until agent signing ships: set `max_tier = "t1"` for the workspace in
+`~/.carter/config.toml` to let agents commit unsigned there (see the
+[configuration reference](../reference/configuration.md#user-config-carterconfigtoml)). The
+limits of all this are listed in
+[Safety and permissions](safety-and-permissions.md#what-the-guards-cannot-do).
 
 To see the values the agents use:
 

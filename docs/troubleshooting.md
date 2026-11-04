@@ -65,7 +65,7 @@ Find your symptom, then apply the fix. If nothing here helps, open an
 | After a guard write OpenCode lost a provider | The write is rolled back automatically. If it ever isn't, restore `~/.carter/backups/<timestamp>/opencode.json[c]` over your config |
 | `carter guard status` or `check --host` says `MISSING` for a policy | Re-run `carter guard install`; if it keeps failing, `carter guard install --print-policies` and paste the block yourself |
 | `Error: E-STATE-INVALID` | `~/.carter/guard-state.json` is unreadable or from a newer Carter. Carter never rebuilds it: fix or move the file, then run `carter guard install` |
-| Every git command fails with "bad config line … gitconfig" | Carter's included git file is malformed. `carter guard remove` unsets the include line without needing git to work; this release writes no such file |
+| Every git command fails with "bad config line … gitconfig" | Carter's included git file (`~/.carter/gitconfig`) is malformed. Delete that file (`rm ~/.carter/gitconfig`): git works again at once. `carter guard remove` and `carter check --host` also work while git itself fails, because they read the file with your global git config switched off |
 | My `opencode.jsonc` comments disappeared after the guards | Carter rewrote the file as JSON. The original is `opencode.jsonc.carter-backup`; use `--print-policies` to paste by hand next time |
 | `Error: E-HANDOFF` from `carter pr` | There is no valid `.carter/state/handoff/<encoded-branch>.md` for the current branch (the error names the expected path and the bad key, never a value), or its `head_sha` is not part of the branch. Ask the agent to rewrite it, or check out the branch it was written for |
 | `Error: E-SECRET-SCAN` from `carter pr` | The title, branch or body matches a credential pattern (the error names the rule, not the text). Nothing was sent and the file is kept: edit it and run `carter pr` again |
@@ -76,6 +76,25 @@ Find your symptom, then apply the fix. If nothing here helps, open an
 | `Error: E-PAT-PERM` | The token file or its folder is not mode 0600/0700, not yours, a symlink, or inside a git repository. Fix it, or run `carter github-token set` again |
 | `carter github-token check` says the token is WRITABLE | GitHub accepted a write attempt: the token has a Write permission. Revoke it and create a read-only one |
 | `carter pr` fails with HTTP 403 | `gh` is using an exported `GH_TOKEN` or `GITHUB_TOKEN` (read-only) instead of your login. Unset it for that shell |
+
+## Plugin, gate and isolation
+
+| Symptom | Fix |
+|---------|-----|
+| An agent command is refused with `E-ISOLATION-MISSING` | `~/.carter/isolation.json` is missing, invalid or no longer matches the hash in the plugin, so agent shells are disabled (your terminal and `!` still work). Run `carter check --host` in your terminal, then `carter guard install` (or `carter guard remove --only plugin` to go back) |
+| An agent command is refused with "Refused by the Carter command gate (rule `…`)" (`E-GATE`) | Expected: the gate rejected the command, and the rule id says why. The agent should hand the step to you instead of rephrasing it. Common fixes: put `-R <owner>/<repo>` after the `gh` subcommand, stage explicit paths instead of `git add -A`, and run pushes yourself with `carter push` |
+| `E-GATE-FAIL`: "Command gate unavailable; command refused" | The gate could not answer, so the command was refused (fail closed). Run `carter check --host`; if the Python or `carter` path it names is gone (for example after `uv tool upgrade`), run `carter guard install` again in your terminal |
+| An agent push stops with `E-PUSH-GUARD` | The `pre-push` hook blocked a push made from an agent shell. Pushing is yours: run `carter push` and then `carter pr` in your own terminal |
+| `E-GIT-OLD`: global guards need git 2.54 or newer | Your git is older, so the `hooks` group is not installed and `repo_hooks` is offered instead (a hook file per repo). `carter check --host` lists repos that are `unguarded`; upgrade git (for example `brew upgrade git`) and run `carter guard install` to switch to the global hook |
+| `E-OPENCODE-VERSION`: G2 untested on OpenCode … | Your OpenCode is older or newer than the version Carter was tested with; the plugin relies on its self-test there. Nothing is blocked; check `carter check --host` |
+| `carter check --host` says the plugin is `unproven` after an OpenCode update | The self-test runs again in every new server process and passes at the first agent command. Run any command through an agent, then `carter check --host` again. If it says `failed`, restart OpenCode from a clean terminal |
+| `E-SELFTEST`: the self-test failed | Another OpenCode plugin may reject commands after Carter's. Every shell is then treated as an agent shell until the server restarts. Restart OpenCode from a clean terminal; if it repeats, disable the other plugin |
+| My agent cannot fetch over SSH | By design: agent shells have no SSH agent. Fetch and pull use HTTPS with the read-only token, which covers public repositories and the repositories that token was created for. Fetch yourself, or add the repository to the token (`carter github-token set`) |
+| My agent cannot run `python -c` | The gate refuses interpreter code that mentions `git` or `gh` (rule `interpreter-git`). Ask the agent to use the git command directly, or run it yourself |
+| My agent's commit is blocked and `carter ops config --emit` shows a tier of `t2` | At T2 agent commits are blocked until agent signing ships. Set `max_tier = "t1"` for the workspace in `~/.carter/config.toml` |
+| `carter check --host` says the `pre-push` hook is inactive | The include line is not in your global git config (it is a symlink or read-only, so Carter did not write it). Add the printed `git config --global --add include.path …` line to your dotfiles |
+| `carter check --host` says "git cannot parse … every git command fails" | Delete `~/.carter/gitconfig` and run `carter guard install` again |
+| `opencode serve`, `opencode run` or `opencode service start`/`restart`/`stop`/`set` from an agent shell is refused | By design (rule `other-verbs`): a server started from an agent shell would inherit its isolated environment. e2e and spikes that start a server are run by you (`tests/e2e/run.sh`) or CI; restart the service yourself, from a clean terminal. `opencode service status` and `get` are allowed |
 
 ## Uninstalling
 

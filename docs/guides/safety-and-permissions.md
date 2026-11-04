@@ -93,6 +93,40 @@ A missing or unknown level counts as `guarded`. The global agents from
 - **`deny` is a hard stop.** If an ask is not enough, use `strict` or a `deny`
   override (below).
 
+## What the guards cannot do
+
+Read this before you trust the guards with more than they promise. With the plugin
+installed, the isolation (no SSH agent, a read-only token, no `git push` in any spelling) does
+the real work; the command gate is a speed bump in front of it, not a sandbox.
+
+- **Same-user evasion.** Agents run as you. The gate parses the command line; it does not
+  read a script or program the agent writes and runs by path (`python3 tool.py`,
+  `bash run.sh`, a sourced file), and it cannot see through every way of building a command at
+  run time. What an evaded gate still cannot do is reach your SSH keys or write to GitHub.
+- **`git push --no-verify` skips the `pre-push` hook.** The hook is the backstop for pushes
+  the gate never saw; the gate itself rejects every `git push`.
+- **Shell writes outside Carter's own files are not gated** (the accepted D67 residual): the
+  global OpenCode config, `~/.gitconfig`, `~/.config/git/`, a repository's `.opencode/`,
+  `opencode.json[c]`, `.git/hooks/` and `.git/config`. The edit tool is denied there; a shell
+  command can still write them. A plugin planted in a project's `.opencode/` would load into
+  the OpenCode server, and a planted `.git/hooks/pre-commit` runs in your terminal with your
+  credentials. `carter check --host` lists project config that can run code and plugin files
+  Carter did not write; review them.
+- **The read-only token is visible to the model.** It is in the environment of the agent's
+  shell (`GH_TOKEN`), so it is only as safe as a read-only fine-grained token is: give it the
+  fewest repositories and no write permission.
+- **Agent commits are unsigned until signing ships.** The author and committer are you, the
+  trailer credits Carter, and a squash merge makes this moot for `main`. If your tier is T2
+  (a signing key and no cap), agent commits are **blocked** until agent signing ships; set
+  `max_tier = "t1"` in the workspace's table of `~/.carter/config.toml` to allow unsigned agent
+  commits there.
+- **A false self-test failure is conservative.** If another plugin rejects a command after
+  Carter's, the self-test can end `failed`; then every shell, yours in the `!` prompt
+  included, is treated as an agent shell until you restart OpenCode.
+- **Fail closed.** If the gate, the plugin or `isolation.json` breaks, agent shells are
+  refused; your terminal and the `!` prompt keep working, and
+  `carter guard remove --only plugin` is yours to run.
+
 ## Customize
 
 Both settings merge with Carter's defaults, so you only write what you change.

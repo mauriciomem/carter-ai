@@ -318,6 +318,25 @@ exits 1 on any `FAIL`. Nothing else is printed: no environment value, no token a
 outside `~/.carter`. Probes: `ssh_agent_absent`, `ssh_denied` (offline is `SKIP`),
 `gh_pat_only`, `push_refused`, `commit_unsigned`, `agent_tagged`.
 
+## carter gate
+
+### carter gate check
+
+```text
+carter gate check [--json] [--cwd DIR] [--skip-groups GROUPS] [COMMAND]
+```
+
+Asks the command gate what it would do with COMMAND (or the text on standard input), without
+running it. The same code the plugin calls for every agent shell command. Read-only, so it
+works anywhere, agent shells included. Exit 0 means allowed, 1 means refused (a message naming
+the rule is printed).
+
+| Option | Description |
+|--------|-------------|
+| `--json` | Print the gate's reply as JSON: `decision`, `rule`, `message` |
+| `--cwd DIR` | The directory the command would run in (relative paths and git aliases are resolved there) |
+| `--skip-groups GROUPS` | Comma-separated consent groups you declined, as `isolation.json` records them: their rules are skipped |
+
 ## carter save
 
 ```text

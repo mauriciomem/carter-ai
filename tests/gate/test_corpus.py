@@ -15,6 +15,7 @@ from gate import corpus
 
 CASES = corpus.load()
 WORKFLOW = corpus.load(corpus.WORKFLOW)
+REJECTED = corpus.load(corpus.DATA / "gate_workflow_rejected.yaml")
 
 
 def run(case: dict, tmp_path: Path):
@@ -50,7 +51,7 @@ def test_the_corpus_is_big_enough_and_each_case_says_why() -> None:
     assert len({c["id"] for c in CASES}) == len(CASES)
     assert all(c["why"].strip() and "\n" not in c["why"] for c in CASES)
     assert all(c["rule"] for c in deny) and not any("rule" in c for c in allow)
-    assert len(WORKFLOW) >= 15
+    assert len(WORKFLOW) >= 60
 
 
 def test_the_residual_choice_is_pinned_as_allowed() -> None:
@@ -61,3 +62,17 @@ def test_the_residual_choice_is_pinned_as_allowed() -> None:
         "res-git-config", "res-project-opencode-dir", "res-project-opencode-json",
     } <= residual  # fmt: skip
     assert all(c["expect"] == "allow" for c in CASES if c.get("residual"))
+
+
+@pytest.mark.parametrize("case", REJECTED, ids=lambda c: c["id"])
+def test_workflow_commands_the_gate_rightly_refuses_name_the_replacement_habit(
+    case: dict, tmp_path: Path
+) -> None:
+    decision = gate.check(case["command"], str(tmp_path))
+    assert (decision.decision, decision.rule) == ("deny", case["rule"]), decision
+    assert len(case["habit"].split()) >= 2 and case["habit"] != case["command"]
+
+
+def test_no_command_is_both_allowed_and_rejected_in_the_workflow_files() -> None:
+    assert not {c["command"] for c in WORKFLOW} & {c["command"] for c in REJECTED}
+    assert len({c["id"] for c in REJECTED}) == len(REJECTED) >= 20

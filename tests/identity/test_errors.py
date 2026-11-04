@@ -190,26 +190,24 @@ class TestRenderErrorTable:
         codes = [re.match(r"\| `([^`]+)`", ln).group(1) for ln in rows]
         assert codes == [c for c in registry() if c in SLICE_1]
 
-    def test_the_current_slice_is_1g_and_lists_its_codes_too(self):
-        # plan 003 step 22: one constant (rules.CURRENT_SLICE), imported by errors.py
-        assert errors_mod.CURRENT_SLICE == "1G"
+    def test_the_current_slice_is_2a_and_lists_every_code_up_to_it(self):
+        # plan 004 step 34: one constant (rules.CURRENT_SLICE), imported by errors.py
+        assert errors_mod.CURRENT_SLICE == "2a"
         rows = [ln for ln in render_error_table().splitlines() if ln.startswith("| `E-")]
         codes = {re.match(r"\| `([^`]+)`", ln).group(1) for ln in rows}
-        in_1g = {c for c, e in registry().items() if e.slice in {"1", "1G"}}
-        assert codes == in_1g
+        upto = {c for c, e in registry().items() if e.slice in {"1", "1G", "2a"}}
+        assert codes == upto
         assert {
-            "E-POLICY",
-            "E-GH-READONLY",
-            "E-HANDOFF",
-            "E-SECRET-SCAN",
-            "E-HUMAN-TERMINAL",
-        } <= codes
-        assert "E-PUSH-GUARD" not in codes  # the pre-push hook is 2a (freeze F10)
+            "E-POLICY", "E-GH-READONLY", "E-HANDOFF", "E-SECRET-SCAN", "E-HUMAN-TERMINAL",
+            "E-ISOLATION-MISSING", "E-GATE", "E-GATE-FAIL", "E-PUSH-GUARD", "E-GIT-OLD",
+            "E-OPENCODE-VERSION", "E-SIGN-UNAVAILABLE",
+        } <= codes  # fmt: skip
+        assert "E-GUARD-UNSIGNED" not in codes and "E-B-CALLER" not in codes  # 2b and B
 
-    def test_later_slices_extend_it(self):
+    def test_earlier_slices_are_a_prefix_and_later_ones_extend_it(self):
+        assert "E-GATE" not in render_error_table(current="1G")
         assert "E-GATE" in render_error_table(current="2a")
-        assert "E-GATE" not in render_error_table()
-        assert "E-PUSH-GUARD" in render_error_table(current="2a")
+        assert "E-GUARD-UNSIGNED" in render_error_table(current="2b")
 
     def test_cells_escape_pipes(self):
         assert "\\|" not in render_error_table() or all(
