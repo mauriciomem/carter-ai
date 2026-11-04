@@ -128,7 +128,7 @@ class TestDryRun:
         assert "per-agent denies for built-in agents: build, plan, general, explore" in out
         assert "carter-engineer" not in out
         assert "guard script:" in out and "(would be written)" in out
-        assert "plugin and isolation are not installed; literal denies only" in out
+        assert "would write" in out and "isolation.json" in out and "plugins/carter/index.ts" in out
         assert tree_hash(stack.home) == before
         for path in (guard_state_path(None), config_target(None), backups_dir(None)):
             assert not path.exists()
@@ -190,10 +190,11 @@ class TestInstall:
         assert len(state.owned_policies()) == len(stack.live) and len(state.agent_permissions) == 8
         assert state.opencode_config == str(config_target(None))
         assert state.gitconfig is not None and state.guard_version == hooks.GUARD_VERSION
-        assert [Path(f["path"]).name for f in state.files] == ["carter-guard", "gitconfig"]
+        assert sorted(Path(f["path"]).name for f in state.files) == [
+            "carter-guard", "core.ts", "gitconfig", "index.ts", "isolation.json",
+        ]  # fmt: skip
         assert stat.S_IMODE(guard_state_path(None).stat().st_mode) == 0o600
-        assert "plugin and isolation are not installed; literal denies only" in res.output
-        assert "restart" not in res.output.lower()
+        assert "plugin installed:" in res.output and "restart the OpenCode server" in res.output
         assert "git config: 2 key(s), mode include" in res.output
 
     def test_the_hooks_group_writes_the_script_the_gitconfig_and_one_include_line(
@@ -471,7 +472,7 @@ class TestStatus:
         before = tree_hash(stack.home)
         res = guard("status")
         assert res.exit_code == 0 and "absent (nothing installed)" in res.output
-        assert "Plugin: not installed (slice 2a)" in res.output
+        assert "Plugin: not installed" in res.output
         assert tree_hash(stack.home) == before
 
     def test_after_install_lists_consents_and_loaded_statements(self, stack) -> None:
@@ -635,7 +636,7 @@ class TestRemove:
     ) -> None:
         install_all(stack)
         kept = home / ".carter" / "isolation.json"
-        kept.write_text("{}")  # not recorded as ours
+        kept.write_text("{}")  # recorded, but changed since: kept
         ours = home / ".carter" / "opencode-headless.json"
         ours.write_text("{}")
         state = load(guard_state_path(None))
@@ -646,7 +647,7 @@ class TestRemove:
         stack.fake(before=debug_config(stack.live), after=debug_config())
         out = guard("remove", "--yes").output
         assert kept.exists() and not ours.exists()
-        assert f"kept {kept}: not recorded as Carter's" in out and f"removed {ours}" in out
+        assert f"kept {kept}: changed since Carter wrote it" in out and f"removed {ours}" in out
 
     def test_git_config_is_undone_in_teardown_order(self, stack, monkeypatch) -> None:
         monkeypatch.setattr(gc, "carter_git_entries", lambda *_a, **_k: [("carter.tier", "t1")])

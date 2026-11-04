@@ -19,7 +19,16 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from carter import harness
-from carter.guard import configwrite, consent, gitconfig, hooks, optout, policies, repohooks
+from carter.guard import (
+    configwrite,
+    consent,
+    gitconfig,
+    hooks,
+    optout,
+    plugin,
+    policies,
+    repohooks,
+)
 from carter.guard.state import GuardState, load_or_empty_readonly, quarantine_corrupt, save
 from carter.identity import ConfigError, load_identity
 from carter.identity.errors import E_GIT_OLD, E_STATE_INVALID, IdentityError, registry
@@ -32,14 +41,14 @@ Confirm = Callable[..., bool]
 
 INTERIM_NOTE = (
     "Interim: plugin and isolation are not installed; literal denies only. They are a speed "
-    "bump, not a boundary, until slice 2a (the gate and shell isolation) lands."
+    "bump, not a boundary, until the plugin is confirmed (`g2` revision 2)."
 )
 GIT_NOT_NEEDED = "include.path: not needed (no Carter git keys are enabled)"
 PAT_KEPT = (
     "`~/.carter/secrets/gh-read.token` kept; delete it and revoke the token on GitHub if unused"
 )
 # Files a later slice installs; removal deletes them only if recorded and unchanged.
-KNOWN_EXTRA_FILES = ("isolation.json", "opencode-headless.json", "run/plugin-status.json")
+KNOWN_EXTRA_FILES = ("opencode-headless.json",)
 
 
 class GuardAbort(Exception):
@@ -51,7 +60,13 @@ def format_error(exc: BaseException) -> str | None:
     if isinstance(exc, IdentityError):
         extra = f" ({exc.detail})" if exc.detail else ""
         return f"{exc.code}: {exc}{extra}"
-    expected = (policies.PolicyWriteError, GuardAbort, gitconfig.GitError, harness.DebugConfigError)
+    expected = (
+        policies.PolicyWriteError,
+        GuardAbort,
+        gitconfig.GitError,
+        harness.DebugConfigError,
+        plugin.PluginInstallError,
+    )
     return str(exc) if isinstance(exc, expected) else None
 
 
@@ -148,6 +163,8 @@ def _undo_git(base_dir: Path | None, before: GuardState, after: GuardState) -> N
     for rec in after.repo_hooks:
         if rec not in before.repo_hooks:
             Path(rec["path"]).unlink(missing_ok=True)
+    if not any(f["path"].endswith("isolation.json") for f in before.files):
+        plugin.cleanup_dirs(base_dir)
 
 
 def _availability(echo: Echo) -> tuple[gitconfig.Mode | None, dict[str, str]]:
@@ -345,6 +362,8 @@ def install(
         return _dry_run(base_dir, state, only, home, echo, today, *_availability(echo))
 
     def ask(group: ConsentGroup) -> bool:
+        for line in group.explain:
+            echo(line)
         question = f"{group.id}: {group.effect}\n  Install this group?"
         return confirm(question, default=True) if group.id == "repo_hooks" else confirm(question)
 
@@ -357,9 +376,20 @@ def install(
         echo(note)
     if plan.skipped:
         return 0
+    if assume_yes:  # a confirmed revision is explained even when nobody is asked (--yes --only g2)
+        for name in plan.asked:
+            if name in plan.accepted and groups[name].rev > 1:
+                for line in groups[name].explain:
+                    echo(line)
     consent.record(state, plan, today=today)
     for name in plan.declined:
         echo(f"Declined: {name} (listed as a residual by `carter guard status`).")
+    for name in plan.refused_offers:
+        echo(
+            f"Not confirmed: {name} revision 2 (denies stay; `carter guard install --only {name}`)"
+        )
+    if consent.plugin_wanted(state):
+        plugin.plan(base_dir, state)  # preflight: E-FALSE-MISSING, bad paths... before any write
     optouts = _active_optouts(
         state, assume_yes=assume_yes, interactive=interactive, confirm=confirm, echo=echo
     )
@@ -382,6 +412,9 @@ def install(
         _git_step(base_dir, state, echo, dry_run=False, mode=mode)
         if state != GuardState() or state_path.exists():
             save(state, state_path)
+        if consent.plugin_wanted(state):
+            plugin.install(base_dir, state, echo)
+            save(state, state_path)
     except BaseException:
         if res.tx is not None and res.target is not None:
             configwrite.restore(res.target, res.tx)
@@ -391,7 +424,8 @@ def install(
         else:
             atomic_write_bytes(state_path, previous)
         raise
-    echo(INTERIM_NOTE)
+    if not consent.plugin_wanted(state):
+        echo(INTERIM_NOTE)
     return 0
 
 
@@ -417,9 +451,16 @@ def _dry_run(
         if prior == "declined" and not (only and name in only):
             echo(f"  {name:<18} declined earlier (stays declined)")
             continue
+        rec_rev = int(state.consents.get(name, {}).get("rev", 1))
+        if prior == "accepted" and rec_rev < group.rev and not (only and name in only):
+            echo(f"  {name:<18} accepted (revision {rec_rev}): {group.effect}")
+            echo(
+                f"  {'':<18} needs your confirmation for revision {group.rev}: plugin not installed"
+            )
+            continue
         status = prior or "would ask"
         echo(f"  {name:<18} {status}: {group.effect}")
-        preview.consent(name, "accepted", today)
+        preview.consent(name, "accepted", today, group.rev)
     optouts = (
         optout.active_optouts(load_identity()).statements()
         if consent.CONFIG_EDIT in consent.accepted_groups(preview)
@@ -439,13 +480,35 @@ def _dry_run(
     if agents:
         echo(f"  per-agent denies for built-in agents: {', '.join(agents)}")
     _git_step(base_dir, preview, echo, dry_run=True, mode=mode)
+    if consent.plugin_wanted(preview):
+        try:
+            for item in plugin.plan(base_dir, preview):
+                echo(f"  would write {item.path}")
+            echo(f"  would create {plugin.run_dir(base_dir)}/gh-empty (0700)")
+        except (plugin.PluginInstallError, IdentityError) as exc:
+            echo(f"  ⚠ the plugin could not be planned: {exc}")
     verb = "updated" if state.consents else "created"
     echo(f"Guard state: {guard_state_path(base_dir)} (would be {verb})")
-    echo(INTERIM_NOTE)
+    if not consent.plugin_wanted(preview):
+        echo(INTERIM_NOTE)
     return 0
 
 
 # -- remove ---------------------------------------------------------------------------------
+
+
+def _only_plugin(base_dir: Path | None, state: GuardState, echo: Echo, *, dry_run: bool) -> None:
+    """``remove --only plugin``: plugin, ``isolation.json`` and ``run/`` go; the 1G denies, hooks
+    and the PAT stay. ``g2`` goes back to revision 1 so a bare ``--yes`` never brings it back."""
+    if dry_run:
+        for item in (plugin.isolation_path(base_dir), plugin.plugin_dir(base_dir)):
+            echo(f"  would remove {item}")
+        echo("  g2 would go back to revision 1 (the 1G denies stay)")
+        return
+    plugin.remove(base_dir, state, echo)
+    if state.consents.get("g2", {}).get("decision") == "accepted":
+        state.consent("g2", "accepted", datetime.now(UTC).date().isoformat(), 1)
+    echo("plugin removed; OpenCode unloads it within seconds (restart the server to be sure)")
 
 
 def _known_extra_files(base_dir: Path | None, state: GuardState, echo: Echo) -> None:
@@ -496,21 +559,27 @@ def remove(
     root = backups_dir(base_dir) / _stamp()
     if scoped:
         target = copy.deepcopy(state) if dry_run else state
-        for name in only or []:
+        names = [n for n in (only or []) if n != consent.PLUGIN]
+        for name in names:
             target.consents.pop(name, None)
-        wanted = consent.desired_statements(target, home=home)
-        agents = builtin_agents() if "g2" in consent.accepted_groups(target) else []
-        res = policies.apply(
-            base_dir,
-            target,
-            wanted,
-            agents=agents,
-            backup_root=root,
-            dry_run=dry_run,
-            reader=reader,
-        )
-        echo(f"OpenCode config: {res.target}")
-        _show_diff(res, wanted, echo)
+        if names:
+            wanted = consent.desired_statements(target, home=home)
+            agents = builtin_agents() if "g2" in consent.accepted_groups(target) else []
+            res = policies.apply(
+                base_dir,
+                target,
+                wanted,
+                agents=agents,
+                backup_root=root,
+                dry_run=dry_run,
+                reader=reader,
+            )
+            echo(f"OpenCode config: {res.target}")
+            _show_diff(res, wanted, echo)
+        if consent.PLUGIN in (only or []):
+            _only_plugin(base_dir, target, echo, dry_run=dry_run)
+        elif "g2" in names and not dry_run:
+            plugin.remove(base_dir, target, echo)  # the plugin belongs to g2
         hook_groups = [g for g in (only or []) if g in ("hooks", "repo_hooks")]
         if hook_groups and dry_run:
             echo(f"  (the hook files of {', '.join(hook_groups)} would be removed too)")
@@ -531,6 +600,7 @@ def remove(
     if dry_run:
         echo("  (git config, Carter's files and the guard state would be removed too)")
         return 0
+    plugin.remove(base_dir, state, echo)
     _remove_git(base_dir, state, echo)
     _remove_repo_hooks(state, echo)
     _known_extra_files(base_dir, state, echo)

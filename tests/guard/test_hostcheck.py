@@ -56,11 +56,23 @@ class TestHealthyInstall:
         assert "RED" not in found
         assert any("statement(s) loaded" in t for t in found["OK"])
         warns = " ".join(found["WARN"])
-        assert "plugin not installed (slice 2a)" in warns  # always, once g2 is consented
-        assert "gate, isolation and signing guards are inactive" in warns
-        assert "literal denies only" in warns
+        assert "not loaded yet: start OpenCode" in warns  # installed, no server has loaded it
         assert "not provisioned" in warns  # no token yet: a WARN, never a failure
+        assert "plugin and isolation.json match (hash)" in " ".join(found["OK"])
         assert res.output.rstrip().endswith("Host OK (2 WARN).")
+
+    def test_a_pre_2a_user_keeps_the_1g_wording_and_sees_rev_2_pending(self, stack) -> None:
+        installed(stack)
+        path = guard_state_path(None)
+        state = load(path)
+        state.consent("g2", "accepted", "2026-11-01", 1)  # what a 1G install left behind
+        save(state, path)
+        stack.fake(before=debug_config(stack.live))
+        found = levels(host().output)
+        warns = " ".join(found["WARN"])
+        assert "plugin not installed: gate, isolation and signing guards are inactive" in warns
+        assert "literal denies only" in warns
+        assert any("g2 rev 2 pending" in t for t in found["INFO"])
 
     def test_the_git_items_report_the_hook_and_say_keys_are_not_applicable(self, stack) -> None:
         installed(stack)
@@ -69,12 +81,12 @@ class TestHealthyInstall:
         assert "pre-push config hook installed" in out and "include.path for" in out
         assert "not applicable in this slice" in out
 
-    def test_the_env_item_is_honest_about_what_is_not_checked(self, stack) -> None:
+    def test_the_env_item_says_when_no_server_runs(self, stack) -> None:
         installed(stack)
         stack.fake(before=debug_config(stack.live))
         out = host().output
         assert "TOKEN_CHECK_PENDING" not in out and not hasattr(hostcheck, "TOKEN_CHECK_PENDING")
-        assert "pollution (agent signals, isolation markers) not checked: slice 2a" in out
+        assert "no running OpenCode server found" in out
 
     def test_it_is_allowed_in_an_agent_shell_because_it_is_read_only(
         self, stack, monkeypatch: pytest.MonkeyPatch
@@ -84,9 +96,9 @@ class TestHealthyInstall:
         monkeypatch.setenv("AGENT", "x")
         assert host().exit_code == 0
 
-    def test_check_probe_is_not_registered_in_1g(self) -> None:
+    def test_check_probe_is_registered_since_2a_and_refuses_outside_an_agent_shell(self) -> None:
         res = CliRunner().invoke(main, ["check", "--probe"])
-        assert res.exit_code == 2 and "No such option" in res.output
+        assert res.exit_code == 1 and "E-PROBE-SCOPE" in res.output
 
     def test_the_workspace_check_is_unchanged(self, tmp_path: Path) -> None:
         runner = CliRunner()

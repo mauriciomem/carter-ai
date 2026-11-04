@@ -65,16 +65,17 @@ class TestCliReference:
         assert "--host" in help_options("check")
         block = " ".join(section(text("reference/cli.md"), "carter check --host", "###").split())
         assert "never writes" in block and "never prints environment values" in block
-        assert "slice 2a" in block
+        assert "plugin not installed" in block and "g2 rev 2 pending" in block
 
     def test_uninstall_and_install_flags_equal_help(self) -> None:
         doc = text("reference/cli.md")
         assert documented(section(doc, "carter uninstall")) == help_options("uninstall")
         assert documented(section(doc, "carter install")) == help_options("install")
 
-    def test_check_probe_is_not_documented_because_it_is_not_registered(self) -> None:
-        assert "--probe" not in help_options("check")
-        assert "--probe" not in text("reference/cli.md")
+    def test_check_probe_is_registered_and_documented_since_2a(self) -> None:
+        assert "--probe" in help_options("check")
+        doc = text("reference/cli.md")
+        assert "### carter check --probe" in doc and "E-PROBE-SCOPE" in doc
 
 
 class TestInstallGuide:

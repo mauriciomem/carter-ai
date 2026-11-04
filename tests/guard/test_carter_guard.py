@@ -28,6 +28,7 @@ VECTORS = json.loads(
 SHELLS = [
     pytest.param(["dash"], id="dash"),
     pytest.param(["bash", "--posix"], id="bash-posix"),
+    pytest.param(["/bin/sh"], id="bin-sh"),  # macOS: the system sh is the one git hooks run under
 ]
 BASE_PATH = "/usr/bin:/bin"
 GIT_RUN = '%s "$@"'  # how git runs a configured hook command: the arguments are appended

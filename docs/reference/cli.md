@@ -122,12 +122,19 @@ carter guard install [--dry-run] [--yes] [--only GROUPS] [--print-policies]
 Writes consented policies and per-agent denies into your OpenCode config
 (`opencode.json` or `.jsonc`) in one atomic, verified write, and records what it owns in
 `~/.carter/guard-state.json`. Every group is shown with a one-line effect and needs your yes.
+The `g2` group at revision 2 also installs the Carter plugin
+(`~/.config/opencode/plugins/carter/`, found by OpenCode without any registration),
+`~/.carter/isolation.json` and `~/.carter/run/`. The plugin changes every agent shell, so a
+bare `--yes`, `carter install --yes` and a run without a terminal never upgrade an existing
+revision 1: they print "plugin and isolation need your confirmation". Only a yes in a
+terminal, or `--yes --only g2`, does. A refusal is remembered and not asked again. Restart
+the OpenCode server after the plugin is installed.
 
 | Option | Description |
 |--------|-------------|
 | `--dry-run` | Show the groups, the statements it would add and the per-agent denies; write nothing |
 | `-y`, `--yes` | Accept every group without asking. Without a terminal and without `--yes` nothing is installed (a notice says so, exit 0) |
-| `--only GROUPS` | Comma-separated: `g2`, `hooks`, `sudo-docker`, `read-edit-denies`, `config-edit`, `alias`, `repo_hooks`. `hooks`, `alias` and `repo_hooks` have nothing to install in this version and are never recorded |
+| `--only GROUPS` | Comma-separated: `g2`, `hooks`, `sudo-docker`, `read-edit-denies`, `config-edit`, `alias`, `repo_hooks`. `alias` has nothing to install yet and is never recorded; `hooks` needs git 2.54 and `repo_hooks` is for older git (the one that does not apply is skipped). `--only g2` with `--yes` confirms the plugin (revision 2); `plugin` is not accepted here |
 | `--print-policies` | Print the `policies` block to paste by hand and exit |
 
 If a provider or a statement is missing after the write, the config is restored from the
@@ -147,7 +154,7 @@ guard state and says so.
 ### carter guard remove
 
 ```text
-carter guard remove [--dry-run] [--yes] [--only GROUPS]
+carter guard remove [--dry-run] [--yes] [--only GROUPS|plugin]
 ```
 
 Removes the policies, per-agent denies and Carter's git files, each only where it is
@@ -159,7 +166,13 @@ unchanged since Carter wrote it (anything you edited is kept and reported). Keep
 |--------|-------------|
 | `--dry-run` | Show what would be removed; write nothing |
 | `-y`, `--yes` | Remove without asking. Without a terminal and without `--yes` the command is refused |
-| `--only GROUPS` | Remove only these groups' statements (and forget their consent) |
+| `--only GROUPS` | Remove only these groups' statements (and forget their consent). `plugin` removes just the plugin, `isolation.json` and `~/.carter/run/` and puts `g2` back to revision 1: the policies, per-agent denies, hooks and the token stay, and a bare `--yes` never brings the plugin back. It can be combined with group names |
+
+**Emergency rollback without Carter.** If `carter` itself is broken, delete the plugin
+directory from your own terminal: `rm -r ~/.config/opencode/plugins/carter`. A running
+OpenCode drops the plugin within seconds (restart the server to be sure). If git itself fails
+because of Carter's git config, delete `~/.carter/gitconfig`. The OpenCode config you had
+before the first install is in `~/.carter/backups/`.
 
 ## carter github-token
 
@@ -236,11 +249,12 @@ request exists. If the repository is a fork, the target is its parent. If the br
 ## carter check
 
 ```text
-carter check [--no-harness] [--host] [TARGET_DIR]
+carter check [--no-harness] [--host | --probe] [TARGET_DIR]
 ```
 
 With `--host`, check this machine instead of a workspace (read-only, names only; see
-[below](#carter-check---host)).
+[below](#carter-check---host)). With `--probe`, check that this very agent shell is isolated
+(see [below](#carter-check---probe)); `--probe` and `--host` exclude each other.
 
 Validate a workspace. Exits with status 1 and lists the problems if any check fails:
 Validate a workspace. Exits with status 1 and lists the problems if any check fails:
@@ -270,15 +284,39 @@ only if something is `RED`:
 - every policy Carter owns is loaded by OpenCode (`E-POLICIES-MISSING` names the missing
   one), your providers are still loaded, and the per-agent denies are still in the config;
 - the files recorded in `guard-state.json` match their hashes;
-- the git include line, when Carter has one, is present and valid (this release has no
-  Carter git key, so it says "not needed yet");
+- **first, before any git or OpenCode call:** Carter's included git config parses (a
+  malformed one makes every git command fail; the report still completes);
+- the git include line is present (or, for a dotfile-managed config, the line to add), and
+  git lists the `pre-push` hook as `global`; on git older than 2.54 each repo in scope
+  (current directory, workspaces) is `guarded` or `unguarded: <reason>`, a WARN that is a
+  FAIL while T2 is configured;
+- the plugin directory and `isolation.json` match their recorded hashes and each other (the
+  hash baked into the plugin); each OpenCode server's self-test state from
+  `~/.carter/run/plugin-status/<pid>.json` (`passed`, `unproven`, `failed`), a server on
+  another OpenCode version or older than the plugin file ("restart the server"), and plugin
+  files Carter did not write, listed by name;
+- the server environment, by name only: agent or human signals, Carter's isolation markers
+  and `GH_TOKEN`/`GITHUB_TOKEN` in the OpenCode server's environment;
+- every agent's effective `carter_push`/`carter_pr` rule from `opencode debug agents`
+  (`RED` names the agent; an agent whose config entry OpenCode dropped gets a hint);
+- OpenCode and git version bands (`E-OPENCODE-VERSION`, `E-GIT-OLD`);
+- the accepted residual (D67): shell writes outside Carter's own control paths are not gated;
 - the read-only GitHub token, if you stored one: its file, type, expiry and that it cannot
   write (the same checks as [`github-token check`](#carter-github-token-check)), and that the
   `carter-github` MCP entry reads the token file;
 - declined groups, active `allow_project_opencode_edit` opt-outs, project config that can run
   code, and `carter.yaml` policy that `carter update` has not pinned yet.
 
-Items that need the plugin (slice 2a) are reported as not installed, never as passing.
+Without the plugin the check says "plugin not installed" (never a pass), and shows
+"g2 rev 2 pending" when the plugin is waiting for your confirmation.
+
+### carter check --probe
+
+Run it **inside an agent shell** (ask your agent to run it); it refuses elsewhere with
+`E-PROBE-SCOPE`. It prints one line per probe, `PASS`, `FAIL` or `SKIP`, then the name, and
+exits 1 on any `FAIL`. Nothing else is printed: no environment value, no token and no path
+outside `~/.carter`. Probes: `ssh_agent_absent`, `ssh_denied` (offline is `SKIP`),
+`gh_pat_only`, `push_refused`, `commit_unsigned`, `agent_tagged`.
 
 ## carter save
 

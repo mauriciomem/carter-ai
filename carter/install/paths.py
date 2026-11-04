@@ -57,6 +57,21 @@ def carter_gitconfig_path(base_dir: Path | None) -> Path:
     return _carter_base(base_dir) / "gitconfig"
 
 
+def plugin_dir(base_dir: Path | None) -> Path:
+    """``~/.config/opencode/plugins/carter/``: OpenCode discovers plugins here, no registration."""
+    return _opencode_base(base_dir) / "plugins" / "carter"
+
+
+def isolation_path(base_dir: Path | None) -> Path:
+    """``~/.carter/isolation.json``: the rendered shell-isolation block (RFC App C.2)."""
+    return _carter_base(base_dir) / "isolation.json"
+
+
+def run_dir(base_dir: Path | None) -> Path:
+    """``~/.carter/run/``: plugin status files and the empty ``gh`` config dir (0700)."""
+    return _carter_base(base_dir) / "run"
+
+
 def guard_script_path(base_dir: Path | None) -> Path:
     """``~/.carter/hooks/carter-guard``: the one POSIX guard script every hook calls."""
     return _carter_base(base_dir) / "hooks" / "carter-guard"

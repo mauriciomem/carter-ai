@@ -91,12 +91,21 @@ config has comments, rewriting drops them: the original is kept as `<name>.carte
 or use `--print-policies` and paste the block yourself. **Restart the OpenCode server** (or
 OpenCode) after the policies change so it reloads its config.
 
-**What this is, in this release:** the policies are literal command matches, a speed bump
+**Until you confirm the plugin:** the policies are literal command matches, a speed bump
 and not a boundary. The plugin and the shell isolation that would make them one are not
 installed yet, agent shells still inherit your SSH agent and `gh` login, the read-only
 GitHub token (`carter github-token set`) is stored but not injected into agent shells, and
-agent commits still use your own git config. `carter check --host` says "plugin not installed" for as long
-as that is true.
+agent commits still use your own git config. `carter check --host` says "plugin not installed"
+for as long as that is true.
+
+**What the plugin adds (`g2`, revision 2).** With the plugin, every agent shell is isolated (no SSH agent,
+HTTPS with the read-only GitHub token, no push, unsigned commits) and a command gate rejects
+what the literal matches cannot see. Because that changes every agent shell, an existing
+install is never upgraded silently: `carter install --yes`, `carter guard install --yes` and
+any run without a terminal print "plugin and isolation need your confirmation"; a yes in
+your own terminal, or `carter guard install --yes --only g2`, confirms. Restart the OpenCode
+server afterwards. Undo only the plugin with `carter guard remove --only plugin`; if
+`carter` is broken, delete `~/.config/opencode/plugins/carter` by hand.
 
 Remove them with `carter guard remove` (or `carter uninstall`). Only what Carter wrote and
 you have not changed is removed; the read-only token file and `~/.carter/state/audit/` stay.

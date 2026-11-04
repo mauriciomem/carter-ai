@@ -12,6 +12,12 @@ saves the result. Rules, from the plan-003 freeze (F3):
 - No TTY and no ``--yes``: nothing is decided and nothing is written (``skipped``).
 - ``--yes`` accepts every live group in scope; a TTY asks per group with its one-line effect.
 - A recorded decision stands unless the group is named in ``--only``, which asks again.
+- **Revisions (D65, freeze G11).** A group whose content grew (``g2`` rev 2: the plugin) is
+  *stale* when accepted at a lower revision. A stale group is upgraded only by a TTY "yes" (the
+  prompt shows the group's ``explain`` text) or by ``--yes --only <group>``. A bare ``--yes``,
+  ``carter update`` and every non-TTY run leave it alone and print a notice. A TTY "no" keeps the
+  old consent (its denies stay) and records the refusal in ``consent_offers`` so nothing asks
+  again until ``--only`` names the group. A fresh install (no record) follows the normal flow.
 - A group that is not recorded yet gets no statements: a new group needs its own consent.
 """
 
@@ -25,23 +31,34 @@ from carter.guard.state import GuardState
 from carter.identity.policyset import ConsentGroup, Statement, consent_groups, policy_statements
 
 CONFIG_EDIT = "config-edit"
+PLUGIN = "plugin"  # a component, not a group: accepted only by `guard remove --only`
+PENDING_NOTICE = (
+    "plugin and isolation need your confirmation (`{group}` revision 2): run "
+    "`carter guard install` in your terminal, or `carter guard install --yes --only {group}`"
+)
 
 
 def group_names() -> tuple[str, ...]:
     return tuple(g.id for g in consent_groups())
 
 
-def parse_only(csv: str | None) -> list[str] | None:
+def parse_only(csv: str | None, *, allow_plugin: bool = False) -> list[str] | None:
     """``--only a,b`` → ``["a", "b"]``; ``None`` when not given. Unknown names raise
-    ``ValueError`` listing the valid ones."""
+    ``ValueError`` listing the valid ones. ``plugin`` is a component of ``g2``: ``remove`` takes
+    it, ``install`` points at ``--only g2`` (G15)."""
     if csv is None:
         return None
     names = [n.strip() for n in csv.split(",") if n.strip()]
-    unknown = [n for n in names if n not in group_names()]
+    if PLUGIN in names and not allow_plugin:
+        raise ValueError(
+            "`plugin` is not a group for install: use `--only g2` to confirm the plugin"
+        )
+    unknown = [n for n in names if n not in group_names() and not (allow_plugin and n == PLUGIN)]
     if unknown or not names:
+        extra = f", {PLUGIN}" if allow_plugin else ""
         raise ValueError(
             f"unknown group(s): {', '.join(unknown) or '(none given)'}; "
-            f"valid groups: {', '.join(group_names())}"
+            f"valid groups: {', '.join(group_names())}{extra}"
         )
     return list(dict.fromkeys(names))
 
@@ -53,11 +70,14 @@ class ConsentPlan:
     asked: list[str] = field(default_factory=list)  # decided in this run (to be recorded)
     reserved: list[str] = field(default_factory=list)  # named by --only, nothing to install
     unavailable: dict[str, str] = field(default_factory=dict)  # group -> why not on this machine
+    pending: list[str] = field(default_factory=list)  # stale groups left alone (needs a TTY yes)
+    refused_offers: list[str] = field(default_factory=list)  # stale groups the human said no to
     skipped: bool = False  # no TTY and no --yes: nothing decided, nothing to write
 
     def notices(self) -> list[str]:
         out = [f"nothing to install for `{g}` in this version" for g in self.reserved]
         out += [f"`{g}`: {why}" for g, why in self.unavailable.items()]
+        out += [PENDING_NOTICE.format(group=g) for g in self.pending]
         if self.skipped:
             out.append(
                 "no terminal and no --yes: policies, per-agent permissions and Carter's git "
@@ -87,8 +107,23 @@ def resolve_consents(
         plan.skipped = True
         return plan
     for name in live:
-        prior = state.consents.get(name, {}).get("decision")
-        explicit = only is not None
+        rec = state.consents.get(name, {})
+        prior = rec.get("decision")
+        explicit = only is not None and name in only
+        stale = prior == "accepted" and int(rec.get("rev", 1)) < groups[name].rev
+        if stale and not explicit:
+            declined = state.offer(name) or {}
+            if declined.get("rev", 0) >= groups[name].rev:
+                continue  # said no already: no nagging; INFO in check --host
+            if assume_yes or not interactive:
+                plan.pending.append(name)
+                continue
+            if ask is None:
+                raise ValueError("an interactive decision needs an `ask` callable")
+            (plan.asked if ask(groups[name]) else plan.refused_offers).append(name)
+            if name in plan.asked:
+                plan.accepted.append(name)
+            continue
         if prior and not explicit:
             decision = prior
         elif assume_yes:
@@ -106,8 +141,13 @@ def resolve_consents(
 def record(state: GuardState, plan: ConsentPlan, *, today: str | None = None) -> None:
     """Write the decisions made in this run into ``state`` (never reserved groups)."""
     day = today or datetime.now(UTC).date().isoformat()
+    revs = {g.id: g.rev for g in consent_groups()}
     for name in plan.asked:
-        state.consent(name, "accepted" if name in plan.accepted else "declined", day)
+        accepted = name in plan.accepted
+        state.consent(name, "accepted" if accepted else "declined", day, revs[name])
+        state.clear_offer(name)
+    for name in plan.refused_offers:
+        state.record_offer(name, revs[name], "declined", day)
 
 
 def accepted_groups(state: GuardState) -> list[str]:
@@ -134,3 +174,21 @@ def desired_statements(
     if CONFIG_EDIT in accepted:
         out += list(optouts)
     return out
+
+
+def reconsent_pending(state: GuardState) -> list[str]:
+    """Groups accepted at an older revision than this version offers (and not refused)."""
+    revs = {g.id: g.rev for g in consent_groups() if g.live}
+    return [
+        g
+        for g, rev in revs.items()
+        if state.consents.get(g, {}).get("decision") == "accepted"
+        and int(state.consents[g].get("rev", 1)) < rev
+    ]
+
+
+def plugin_wanted(state: GuardState) -> bool:
+    """The plugin, ``isolation.json`` and the ``run/`` files belong to ``g2`` at revision 2."""
+    rec = state.consents.get("g2", {})
+    needed = next(g.rev for g in consent_groups() if g.id == "g2")
+    return rec.get("decision") == "accepted" and int(rec.get("rev", 1)) >= needed

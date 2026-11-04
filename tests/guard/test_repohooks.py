@@ -24,6 +24,15 @@ from carter.install.paths import carter_gitconfig_path, guard_script_path, guard
 from guard.conftest import REAL_GIT
 from guard.helpers import debug_config, install_old_git
 
+pytestmark = pytest.mark.gitold  # CI: `pytest -m gitold` on Debian bookworm (git 2.39)
+
+
+def _new_git() -> bool:
+    out = subprocess.run(["git", "--version"], capture_output=True, text=True).stdout
+    major, minor = (int(n) for n in out.split()[2].split(".")[:2])
+    return (major, minor) >= (2, 54)
+
+
 CHAIN = '"$@" || exit 1'
 
 
@@ -376,6 +385,7 @@ class TestInstallOnOldGit:
         assert (repo / ".pre-commit-config.yaml").read_text() == "repos: []\n"
 
 
+@pytest.mark.skipif(not _new_git(), reason="the migration target is git >= 2.54")
 class TestMigration:
     def test_a_git_upgrade_replaces_the_owned_repo_hooks_with_the_config_hook(
         self, stack, old: Path, repo: Path, tmp_path: Path

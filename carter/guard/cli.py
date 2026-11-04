@@ -26,6 +26,15 @@ def _only(_ctx: click.Context, _param: click.Parameter, value: str | None) -> li
         raise click.BadParameter(str(exc), param_hint="--only") from exc
 
 
+def _only_remove(
+    _ctx: click.Context, _param: click.Parameter, value: str | None
+) -> list[str] | None:
+    try:
+        return consent.parse_only(value, allow_plugin=True)
+    except ValueError as exc:
+        raise click.BadParameter(str(exc), param_hint="--only") from exc
+
+
 def _guarded(fn: Callable[[], int]) -> None:
     """Run ``fn`` and turn the expected failures into ``Error: ...`` + exit 1."""
     try:
@@ -39,14 +48,16 @@ def _guarded(fn: Callable[[], int]) -> None:
         raise SystemExit(code)
 
 
-def _common(f: Callable[..., Any]) -> Callable[..., Any]:
+def _common(f: Callable[..., Any], *, remove: bool = False) -> Callable[..., Any]:
     f = click.option("--yes", "-y", "assume_yes", is_flag=True, help="Accept without asking.")(f)
     f = click.option("--dry-run", is_flag=True, help="Show what would change; write nothing.")(f)
     f = click.option(
         "--only",
-        callback=_only,
+        callback=_only_remove if remove else _only,
         default=None,
-        help="Comma-separated consent groups: " + ", ".join(consent.group_names()) + ".",
+        help="Comma-separated consent groups: "
+        + ", ".join(consent.group_names())
+        + (", plugin (the OpenCode plugin only; keeps the other guards)." if remove else "."),
     )(f)
     return click.option(
         "--base-dir",
@@ -96,7 +107,7 @@ def install_cmd(
 
 
 @guard.command("remove")
-@_common
+@lambda f: _common(f, remove=True)
 def remove_cmd(
     only: list[str] | None, dry_run: bool, assume_yes: bool, base_dir: Path | None
 ) -> None:

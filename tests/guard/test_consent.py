@@ -20,8 +20,9 @@ LIVE = ["g2", "hooks", "sudo-docker", "read-edit-denies", "config-edit", "repo_h
 
 def accepted(*groups: str) -> GuardState:
     st = GuardState()
+    revs = {g.id: g.rev for g in policyset.consent_groups()}
     for g in groups:
-        st.consent(g, "accepted", "2026-11-02")
+        st.consent(g, "accepted", "2026-11-02", revs[g])
     return st
 
 

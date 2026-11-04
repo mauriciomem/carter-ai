@@ -47,7 +47,7 @@ class TestInstallCallsGuard:
         state = load(guard_state_path(base_dir))
         assert len(state.owned_policies()) == len(stack.live)
         assert len(cfg(base_dir)["policies"]) == len(stack.live)
-        assert "plugin and isolation are not installed; literal denies only" in res.output
+        assert "plugin installed:" in res.output and "restart the OpenCode server" in res.output
 
     def test_without_a_terminal_and_without_yes_the_guards_are_skipped_with_a_notice(
         self, stack, base_dir: Path, human_tty

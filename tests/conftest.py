@@ -487,6 +487,15 @@ def human_tty(monkeypatch: pytest.MonkeyPatch) -> Callable[[bool], None]:
 
 
 @pytest.fixture(autouse=True)
+def _no_real_server_discovery(monkeypatch: pytest.MonkeyPatch) -> None:
+    """``carter check --host`` reads the OpenCode server's environment (by name). A test must
+    never look at the developer's real server: processes are found only through a fake."""
+    from carter import serverenv
+
+    monkeypatch.setattr(serverenv, "server_pids", lambda: [])
+
+
+@pytest.fixture(autouse=True)
 def _no_real_verify_waits(monkeypatch: pytest.MonkeyPatch) -> None:
     """The guard writer re-reads OpenCode's config with real pauses (a service that reloads
     asynchronously); tests that rely on it say so by patching ``_sleep`` themselves."""

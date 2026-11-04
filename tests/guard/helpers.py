@@ -34,8 +34,15 @@ def debug_config(statements: Iterable[Statement] = (), providers: dict | None = 
     return json.dumps({"providers": prov, "policies": items})
 
 
-def agents_json(*ids: str) -> str:
-    return json.dumps([{"id": i, "name": i} for i in ids])
+def denies() -> list[dict]:
+    return [{"action": a, "resource": "*", "effect": "deny"} for a in ("carter_push", "carter_pr")]
+
+
+def agents_json(*ids: str, denied: bool = True) -> str:
+    """What the fake ``opencode debug agents`` prints; by default every agent carries the denies."""
+    return json.dumps(
+        [{"id": i, "name": i, "permissions": denies() if denied else []} for i in ids]
+    )
 
 
 def all_live_statements(home: str) -> list[Statement]:

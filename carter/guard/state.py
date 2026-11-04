@@ -90,6 +90,24 @@ class GuardState:
         except OSError:  # missing, a directory, unreadable
             return False
 
+    # -- consent offers (D65): a declined re-ask is an additive top-level key ----------------
+    def offer(self, group: str) -> dict[str, Any] | None:
+        found = (self.extra.get("consent_offers") or {}).get(group)
+        return found if isinstance(found, dict) else None
+
+    def record_offer(self, group: str, rev: int, decision: str, on: str) -> None:
+        date.fromisoformat(on)
+        offers = dict(self.extra.get("consent_offers") or {})
+        offers[group] = {"rev": rev, "decision": decision, "date": on}
+        self.extra["consent_offers"] = offers
+
+    def clear_offer(self, group: str) -> None:
+        offers = {k: v for k, v in (self.extra.get("consent_offers") or {}).items() if k != group}
+        if offers:
+            self.extra["consent_offers"] = offers
+        else:
+            self.extra.pop("consent_offers", None)
+
     # -- per-repo hooks (git < 2.54) --------------------------------------------------
     def record_repo_hook(self, path: Path | str, data: bytes) -> None:
         _upsert(self.repo_hooks, {"path": str(path), "sha256": sha256_bytes(data)}, "path")

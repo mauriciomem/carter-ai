@@ -70,6 +70,7 @@ testpaths = ["tests"]
 markers = [
     "live: marks tests as requiring an API key for live model calls (deselect with '-m \"not live\"')",
     "e2e: starts a real OpenCode in an isolated HOME; opt-in with CARTER_E2E=1 (plan 004)",
+    "gitold: the per-repo pre-push fallback; the CI git-old job runs these on a real git < 2.54",
 ]
 
 [tool.ruff]

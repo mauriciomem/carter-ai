@@ -13,11 +13,13 @@ from __future__ import annotations
 
 from collections.abc import Callable, Mapping
 from pathlib import Path
+from typing import Any
 
-from carter import ghtoken, harness
+from carter import ghtoken, harness, serverenv
+from carter import hostcheck_g2 as g2
 from carter.checkitems import Item, exit_code
 from carter.checkitems import render as render_items
-from carter.guard import consent, gitconfig, optout, permissions
+from carter.guard import consent, gitconfig, optout, permissions, repohooks
 from carter.guard.configwrite import Reader, missing_statements, target_path
 from carter.guard.state import GuardState, load_or_empty_readonly
 from carter.identity import ConfigError, load_identity
@@ -42,7 +44,7 @@ HOOK_MODES = {
     "no-config-hooks": "no config-based hooks (git < 2.54): per-repo fallback (`repo_hooks`)",
 }
 PLUGIN_ABSENT = (
-    "plugin not installed (slice 2a): gate, isolation and signing guards are inactive; "
+    "plugin not installed: gate, isolation and signing guards are inactive; "
     "policies are literal denies only"
 )
 
@@ -111,14 +113,7 @@ def _files(state: GuardState) -> list[Item]:
 def _git(state: GuardState) -> list[Item]:
     items = []
     rec = state.gitconfig
-    if rec is None and "hooks" in consent.accepted_groups(state):
-        have = gitconfig.manual_include_state(None)
-        if have == "present":
-            items.append(Item("ok", "git", "include.path present (added by you, not by Carter)"))
-        else:
-            text = "include.path for Carter's gitconfig is missing: the pre-push hook is inactive"
-            items.append(Item("warn", "git", text, gitconfig.include_line(None)))
-    elif rec is None and not state.git_config:
+    if rec is None and not state.git_config and "hooks" not in consent.accepted_groups(state):
         items.append(
             Item("info", "git", "include.path: not needed (no Carter git keys are enabled)")
         )
@@ -273,8 +268,16 @@ def run_host_checks(
     reader: Reader | None = None,
     server_env: Mapping[str, str] | None = None,
     home: str | None = None,
+    agents_reader: Callable[[], list[dict]] | None = None,
+    servers: Callable[[], Mapping[int, Mapping[str, str] | None]] | None = None,
+    opencode_version: tuple[int, int, int] | None = None,
+    git_version: tuple[int, int] | None = None,
+    tier: str = "t0",
 ) -> list[Item]:
-    """All 1G host checks, in a stable order. Never raises for a failing check."""
+    """All host checks, in a stable order. Never raises for a failing check.
+
+    The slice-2a readers (``agents_reader``, ``servers``, versions) are passed by the CLI; a
+    library caller that omits them gets no check for that area (nothing is read behind its back)."""
     where = cwd or Path.cwd()
     items: list[Item] = []
     state_path = guard_state_path(base_dir)
@@ -286,6 +289,10 @@ def run_host_checks(
         except Exception as exc:  # one broken check must not hide the others
             items.append(Item("red", area, f"check could not run ({type(exc).__name__})"))
 
+    first, git_ok = g2.gitconfig_first(base_dir)  # before any plain git or OpenCode call
+    items += first
+    state = read.state if read.status == "ok" else GuardState()
+    loaded: dict | None = None
     if read.status in ("corrupt", "newer"):
         text = f"{E_STATE_INVALID}: {state_path} is {read.status} ({read.detail})"
         items.append(Item("red", "guard state", text, STATE_HINT))
@@ -294,25 +301,78 @@ def run_host_checks(
             Item("warn", "guard", "G2 off: no guards are installed", "Run `carter guard install`.")
         )
     else:
-        state = read.state
         guarded("policies", lambda: _policies(state, reader, home or str(Path.home())))
         guarded("guard files", lambda: _files(state))
         guarded("consent", lambda: _declined(state))
         if "g2" in consent.accepted_groups(state):
-            items.append(Item("warn", "plugin", PLUGIN_ABSENT))
+            if not consent.plugin_wanted(state):
+                items.append(Item("warn", "plugin", PLUGIN_ABSENT))
+            guarded("plugin", lambda: g2.file_items(state, base_dir))
+            guarded("plugin", lambda: g2.status_items(state, base_dir, opencode_version))
+            guarded("consent", lambda: g2.g2_items(state, base_dir))
         else:
             items.append(Item("warn", "guard", "G2 off: group g2 was not installed"))
-    guarded("git", lambda: _git(read.state if read.status == "ok" else GuardState()))
+        if agents_reader is not None:
+            loaded = _safe_loaded(reader)
+            guarded(
+                "per-agent denies",
+                lambda: g2.agent_items(state, agents_reader, loaded, str(target_path(None))),
+            )
+    guarded("git", lambda: _git(state))
+    if git_ok:
+        guarded("git", lambda: g2.include_items(state, base_dir))
+        guarded("git", lambda: g2.hook_scope_items(state, where))
+    mode = None
+    if git_ok:
+        try:
+            mode = gitconfig.probe_scope()
+        except gitconfig.GitError:
+            mode = None
+    guarded("git", lambda: g2.repo_items(state, base_dir, where, _workspace_paths(), tier, mode))
+    guarded("versions", lambda: g2.version_items(opencode_version, git_version))
+    guarded("plugin files", lambda: g2.foreign_plugin_items(base_dir, where))
     guarded("project", lambda: _project_scope(where))
     guarded("D52", _optouts)
     guarded("workspace", lambda: _pending_pins(where))
     guarded("token", lambda: _token(base_dir))
-    items.append(
-        Item(
-            "info",
-            "server env",
-            "pollution (agent signals, isolation markers) not checked: slice 2a",
-        )
-    )
+    if servers is not None:
+        guarded("server env", lambda: g2.pollution_items(servers, home or str(Path.home())))
+    else:
+        items.append(Item("info", "server env", "pollution not checked (no server reader given)"))
     items += _env(server_env or {})
+    items += g2.residual_items()
     return items
+
+
+def live_readers() -> dict[str, Any]:
+    """The readers ``carter check --host`` passes to ``run_host_checks`` (real processes)."""
+    from carter.identity.resolve import configured_tier
+    from carter.install import prereqs
+
+    try:
+        tier = configured_tier(load_identity())
+    except ConfigError:
+        tier = "t0"
+    return {
+        "agents_reader": harness.read_agents,
+        "servers": lambda: {p: serverenv.read_environ(p) for p in serverenv.server_pids()},
+        "opencode_version": prereqs.parse_opencode_version(
+            prereqs._cmd_version("opencode", "--version") or ""
+        ),
+        "git_version": repohooks.git_version("git"),
+        "tier": tier,
+    }
+
+
+def _safe_loaded(reader: Reader | None) -> dict | None:
+    try:
+        return (reader or harness.read_debug_config)()
+    except harness.DebugConfigError:
+        return None
+
+
+def _workspace_paths() -> list[str]:
+    try:
+        return list(load_identity().workspaces)
+    except ConfigError:
+        return []

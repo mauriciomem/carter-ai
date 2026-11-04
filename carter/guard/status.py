@@ -137,7 +137,17 @@ def report(base_dir: Path | None, echo: Echo, *, reader: Reader | None = None) -
         echo("Files:")
         _files(state, echo)
     _git(state, base_dir, echo)
-    echo("Plugin: not installed (slice 2a)")
-    echo("Isolation: not installed (slice 2a); agent shells still inherit your SSH agent and gh")
+    if consent.plugin_wanted(state):
+        echo("Plugin: installed (g2 revision 2); `carter check --host` says if OpenCode loaded it")
+        echo(
+            "Isolation: isolation.json is rendered; agent shells are isolated once the plugin loads"
+        )
+    else:
+        pending = "g2" in consent.reconsent_pending(state)
+        echo(
+            "Plugin: not installed"
+            + (" (needs your confirmation: `carter guard install`)" if pending else "")
+        )
+        echo("Isolation: not installed; agent shells still inherit your SSH agent and gh")
     accepted = ", ".join(consent.accepted_groups(state)) or "none"
     echo(f"Active groups: {accepted}")

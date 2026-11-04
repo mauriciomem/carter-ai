@@ -7,19 +7,18 @@ Opt-in (``CARTER_E2E=1``). Carter's real 1G installer runs inside the isolated H
 from __future__ import annotations
 
 import json
-import sys
 import time
 from pathlib import Path
 from typing import Any
 
 import pytest
 
+from e2e.g2 import CARTER
 from e2e.harness import Rig
 
 pytestmark = pytest.mark.e2e
 
 PROBE = (Path(__file__).parent / "probes" / "deny_probe.ts").read_text()
-CARTER = [sys.executable, "-c", "from carter.cli import main; main()"]
 ACTIONS = ("carter_push", "carter_pr")
 FORCE = 'FORCE carter_push {"ref": "x"}'
 DENY = {"carter_push": {"action": "carter_push", "resource": "*", "effect": "deny"}}

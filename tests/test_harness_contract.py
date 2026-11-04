@@ -219,14 +219,9 @@ class TestPerAgentDeniesInDebugAgents:
       (``debug-config-agent-dropped``), and OpenCode logs a ``configuration normalization
       diagnostic`` for ``$.agents.<name>`` with no rule detail.
 
-    The ``agent_deny_gaps`` function below is what step 30 (``check --host``) implements; these
-    tests are written first and are strict ``xfail`` until it exists (the strict marker fails the
-    run when it starts passing, so the marker cannot be forgotten).
+    ``harness.agent_deny_gaps`` is what ``check --host`` uses (plan 004 step 30); the strict
+    ``xfail`` markers written in step 5 were removed when it landed.
     """
-
-    pending = pytest.mark.xfail(
-        strict=True, raises=AttributeError, reason="plan 004 step 30 adds harness.agent_deny_gaps"
-    )
 
     @staticmethod
     def agents() -> list[dict]:
@@ -234,7 +229,7 @@ class TestPerAgentDeniesInDebugAgents:
 
     @staticmethod
     def gaps(agents: list[dict], **kw):
-        return harness.agent_deny_gaps(agents, **kw)  # type: ignore[attr-defined]
+        return harness.agent_deny_gaps(agents, **kw)
 
     def test_the_fixture_has_the_denies_everywhere_but_devops(self) -> None:
         deny = {"carter_push": False, "carter_pr": False}
@@ -247,18 +242,15 @@ class TestPerAgentDeniesInDebugAgents:
                 assert all(has.values()), agent["id"]
             assert agent["permissions"][-1]["action"] == "browser"
 
-    @pending
     def test_a_complete_install_has_no_gaps(self) -> None:
         assert self.gaps(self.agents(), exempt=("carter-devops",)) == []
 
-    @pending
     def test_a_missing_rule_names_the_agent_and_the_action(self) -> None:
         agents = self.agents()
         build = next(a for a in agents if a["id"] == "build")
         build["permissions"] = [r for r in build["permissions"] if r["action"] != "carter_push"]
         assert self.gaps(agents, exempt=("carter-devops",)) == [("build", "carter_push")]
 
-    @pending
     def test_the_last_matching_rule_wins_so_a_later_allow_is_a_gap(self) -> None:
         agents = self.agents()
         plan = next(a for a in agents if a["id"] == "plan")
@@ -268,7 +260,6 @@ class TestPerAgentDeniesInDebugAgents:
             ("plan", "carter_pr"),
         ]
 
-    @pending
     def test_devops_is_a_gap_unless_it_is_exempt(self) -> None:
         assert self.gaps(self.agents(), exempt=()) == [
             ("carter-devops", "carter_push"),

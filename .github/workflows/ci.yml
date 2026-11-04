@@ -4,6 +4,7 @@ on:
   push:
     branches: [main]
   pull_request:
+  workflow_dispatch: # the OpenCode e2e/contract suite runs only when a human starts it
 
 permissions:
   contents: read
@@ -61,8 +62,8 @@ jobs:
         run: uv run pytest evals/ -m "not live" -q
 
   plugin:
-    # Skeleton (plan 004 step 9; wired fully in step 33). The TypeScript plugin has no npm
-    # dependencies and no build: Node strips the types itself (>= 22.18; 24 is the target).
+    # The TypeScript plugin has no npm dependencies and no build: Node strips the types itself
+    # (>= 22.18; 24 is the target). The Python side checks the plugin's parity, hygiene and runner.
     name: plugin (node ${{ matrix.node }}, ${{ matrix.os }})
     runs-on: ${{ matrix.os }}
     permissions:
@@ -82,6 +83,154 @@ jobs:
 
       - name: node --test (no dependencies, no build)
         run: node --test "tests/plugin/*.test.ts"
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2
+        with:
+          python-version: "3.14"
+
+      - name: Install locked deps (with dev extra)
+        run: uv sync --locked --extra dev
+
+      - name: Plugin parity, hygiene and runner tests
+        run: uv run pytest tests/test_plugin_parity.py tests/test_plugin_hygiene.py tests/test_plugin_runner.py -q
+
+  gate-budget:
+    # RFC App C.4.2: p95 < 100 ms per gate call, interpreter start-up included, measured on the
+    # installed tool (`uv tool install .`) the plugin will really call. Required check. If it
+    # fails, apply the documented fallback (alias cache per repo mtime) before raising the budget.
+    name: gate-budget (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0 # hatch-vcs needs full history + tags to derive the version
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2
+        with:
+          python-version: "3.14"
+
+      - name: Install locked deps (with dev extra)
+        run: uv sync --locked --extra dev
+
+      - name: Install carter as a uv tool (what the plugin calls)
+        run: |
+          uv tool install .
+          echo "CARTER_GATE_PYTHON=$(uv tool dir)/carter-ai/bin/python" >> "$GITHUB_ENV"
+
+      - name: p95 of the gate over the whole corpus (warm and cold)
+        env:
+          CARTER_PERF: "1"
+        run: |
+          uv run pytest tests/gate/test_budget.py -s -q -k p95 | tee budget.txt
+          { echo '### Gate p95 (${{ matrix.os }})'; echo '```'; grep -E '^gate (warm|cold)' budget.txt || true; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+
+  e2e-contract:
+    # The compatibility contract against a real OpenCode (plan 004 step 32). Opt-in: it starts
+    # servers, so it runs only when a human dispatches the workflow. `tested` is the required
+    # version (TESTED_OPENCODE); `latest` is informational and allowed to fail.
+    name: e2e-contract (opencode ${{ matrix.label }})
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    continue-on-error: ${{ matrix.experimental }}
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        label: [tested, latest]
+        include:
+          - label: tested
+            version: "2.1.4"
+            experimental: false
+          - label: latest
+            version: latest
+            experimental: true
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+
+      - name: Set up Node
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "lts/*"
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2
+        with:
+          python-version: "3.14"
+
+      - name: Install locked deps (with dev extra)
+        run: uv sync --locked --extra dev
+
+      - name: Loopback-only network namespace works (else documented fallback)
+        run: |
+          if ! unshare -rn true; then
+            sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0 || true
+          fi
+          unshare -rn true || echo "::warning::no network namespace; the mock-provider-only guarantee still holds"
+
+      - name: OpenCode e2e/contract suite (mock model, isolated HOMEs)
+        run: tests/e2e/run.sh --version "${{ matrix.version }}"
+
+  git-old:
+    # The < 2.54 axis without Docker on any developer machine: Debian bookworm ships git 2.39.
+    name: git-old (debian bookworm, git 2.39)
+    runs-on: ubuntu-latest
+    container: debian:bookworm
+    permissions:
+      contents: read
+    steps:
+      - name: Install git and curl (before checkout, so it can use real git)
+        run: apt-get update && apt-get install -y --no-install-recommends git ca-certificates curl
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: git version is the old one
+        run: git --version
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2
+        with:
+          python-version: "3.14"
+
+      - name: Install locked deps (with dev extra)
+        run: uv sync --locked --extra dev
+
+      - name: Per-repo fallback tests on the real old git
+        run: uv run pytest -m gitold -q
+
+  macos-sh:
+    # The POSIX guard script under macOS /bin/sh and Apple's /usr/bin/git (Xcode git, < 2.54).
+    name: macos-sh (/bin/sh, apple git)
+    runs-on: macos-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2
+        with:
+          python-version: "3.14"
+
+      - name: Install locked deps (with dev extra)
+        run: uv sync --locked --extra dev
+
+      - name: Guard script, wrapper and pre-push tests under /bin/sh
+        env:
+          CARTER_SHELL_TESTS: /bin/sh
+        run: |
+          /usr/bin/git --version
+          PATH="/usr/bin:$PATH" uv run pytest tests/guard/test_carter_guard.py tests/guard/test_prepush_e2e.py tests/guard/test_repohooks.py -q
 
   install-smoke:
     # `floor` = minimum supported OpenCode (required). `latest` = newest 2.x
@@ -153,3 +302,6 @@ jobs:
           count=$(find "$RUNNER_TEMP/fake-home/opencode/agents" -maxdepth 1 -name '*.md' 2>/dev/null | wc -l)
           echo "opencode agents: $count"
           test "$count" -ge 8 || { echo "::error::expected >=8 opencode agent files"; exit 1; }
+
+      - name: carter guard install --dry-run runs (writes nothing)
+        run: carter guard install --dry-run

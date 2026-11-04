@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from datetime import UTC
 from pathlib import Path
 
@@ -416,14 +417,32 @@ def update(target_dir: str, dry_run: bool, assume_yes: bool) -> None:
 @click.option(
     "--host",
     is_flag=True,
-    help="Check this machine instead (policies, guard files, git include); read-only.",
+    help="Check this machine instead (policies, plugin, hooks, server environment); read-only.",
 )
-def check(target_dir: str, no_harness: bool, host: bool) -> None:
+@click.option(
+    "--probe",
+    is_flag=True,
+    help="Probe this agent shell's isolation (run it inside an agent shell: ask your agent).",
+)
+def check(target_dir: str, no_harness: bool, host: bool, probe: bool) -> None:
     """Validate workspace integrity and that OpenCode loads the Carter agents."""
-    if host:
-        from carter.hostcheck import exit_code, render, run_host_checks
+    if probe:
+        if host:
+            raise click.UsageError("--probe and --host cannot be used together.")
+        from carter import terminal
+        from carter.guard import probe as probes
+        from carter.identity.errors import E_PROBE_SCOPE, IdentityError
 
-        items = run_host_checks(cwd=Path(target_dir).resolve())
+        if not terminal.is_agent_shell():
+            err = IdentityError(E_PROBE_SCOPE)
+            raise click.ClickException(f"{err.code}: {err}")
+        results = probes.run_probes(os.environ)
+        click.echo("\n".join(r.line() for r in results))
+        raise SystemExit(probes.exit_code(results))
+    if host:
+        from carter.hostcheck import exit_code, live_readers, render, run_host_checks
+
+        items = run_host_checks(cwd=Path(target_dir).resolve(), **live_readers())
         click.echo("\n".join(render(items)))
         raise SystemExit(exit_code(items))
     target = Path(target_dir).resolve()
