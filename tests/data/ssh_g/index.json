@@ -1,0 +1,74 @@
+{
+ "openssh-10.2-include-proxy.txt": {
+  "config": "Include inc.conf\nHost github.com\n  User git\n",
+  "must_flag": []
+ },
+ "openssh-10.2-knownhostscommand.txt": {
+  "config": "Host github.com\n  KnownHostsCommand /usr/local/bin/khc %H\n",
+  "must_flag": [
+   "knownhostscommand"
+  ]
+ },
+ "openssh-10.2-localcommand-not-permitted.txt": {
+  "config": "Host github.com\n  LocalCommand echo hi\n",
+  "must_flag": [
+   "localcommand"
+  ]
+ },
+ "openssh-10.2-localcommand-permitted.txt": {
+  "config": "Host github.com\n  PermitLocalCommand yes\n  LocalCommand echo hi\n",
+  "must_flag": [
+   "localcommand",
+   "permitlocalcommand"
+  ]
+ },
+ "openssh-10.2-match-host-final.txt": {
+  "config": "Match host github.com\n  ProxyCommand nc %h %p\n",
+  "must_flag": [
+   "proxycommand"
+  ]
+ },
+ "openssh-10.2-permitlocalcommand-only.txt": {
+  "config": "Host github.com\n  PermitLocalCommand yes\n",
+  "must_flag": [
+   "permitlocalcommand"
+  ]
+ },
+ "openssh-10.2-plain.txt": {
+  "config": "Host github.com\n  User git\n",
+  "must_flag": []
+ },
+ "openssh-10.2-proxycommand.txt": {
+  "config": "Host github.com\n  ProxyCommand nc -X connect -x proxy.example:3128 %h %p\n",
+  "must_flag": [
+   "proxycommand"
+  ]
+ },
+ "openssh-10.2-proxyjump.txt": {
+  "config": "Host github.com\n  ProxyJump bastion.example\n",
+  "must_flag": []
+ },
+ "openssh-10.2-sendenv-forward.txt": {
+  "config": "Host github.com\n  ForwardAgent yes\n  SendEnv *\n",
+  "must_flag": []
+ },
+ "openssh-10.2-ssh-askpass.txt": {
+  "config": "Host github.com\n  BatchMode no\n  IdentityAgent /tmp/x.sock\n",
+  "must_flag": []
+ },
+ "openssh-10.2-star-host-proxy.txt": {
+  "config": "Host *\n  ProxyCommand none\nHost github.com\n  User git\n",
+  "must_flag": []
+ },
+ "synthetic-apple-localcommand.txt": {
+  "config": "(hand-made)",
+  "must_flag": [
+   "localcommand",
+   "permitlocalcommand"
+  ]
+ },
+ "synthetic-apple-plain.txt": {
+  "config": "(hand-made: Apple OpenSSH prints usekeychain/addkeystoagent; not captured on a Mac)",
+  "must_flag": []
+ }
+}
