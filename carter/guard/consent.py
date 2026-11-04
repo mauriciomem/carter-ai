@@ -3,10 +3,12 @@
 Pure decisions, no I/O and no prompting: the CLI passes ``ask`` (a ``click.confirm``) and
 saves the result. Rules, from the plan-003 freeze (F3):
 
-- A group is **live** (has content in this version) or **reserved** (``hooks``,
-  ``alias``, ``repo_hooks``). A reserved group is never prompted and never recorded,
-  even with ``--only``: a consent given for nothing must not later count as consent for
-  new content.
+- A group is **live** (has content in this version) or **reserved** (``alias``). A reserved
+  group is never prompted and never recorded, even with ``--only``: a consent given for
+  nothing must not later count as consent for new content.
+- A live group can be **unavailable on this machine** (``hooks`` on git < 2.54, ``repo_hooks``
+  on git >= 2.54: the other one does the job). The caller says so with ``unavailable``; it is
+  treated like a reserved group (no prompt, nothing recorded), with its own reason as notice.
 - No TTY and no ``--yes``: nothing is decided and nothing is written (``skipped``).
 - ``--yes`` accepts every live group in scope; a TTY asks per group with its one-line effect.
 - A recorded decision stands unless the group is named in ``--only``, which asks again.
@@ -15,7 +17,7 @@ saves the result. Rules, from the plan-003 freeze (F3):
 
 from __future__ import annotations
 
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 
@@ -50,10 +52,12 @@ class ConsentPlan:
     declined: list[str] = field(default_factory=list)
     asked: list[str] = field(default_factory=list)  # decided in this run (to be recorded)
     reserved: list[str] = field(default_factory=list)  # named by --only, nothing to install
+    unavailable: dict[str, str] = field(default_factory=dict)  # group -> why not on this machine
     skipped: bool = False  # no TTY and no --yes: nothing decided, nothing to write
 
     def notices(self) -> list[str]:
         out = [f"nothing to install for `{g}` in this version" for g in self.reserved]
+        out += [f"`{g}`: {why}" for g, why in self.unavailable.items()]
         if self.skipped:
             out.append(
                 "no terminal and no --yes: policies, per-agent permissions and Carter's git "
@@ -69,6 +73,7 @@ def resolve_consents(
     assume_yes: bool,
     interactive: bool,
     ask: Callable[[ConsentGroup], bool] | None = None,
+    unavailable: Mapping[str, str] | None = None,
 ) -> ConsentPlan:
     """Decide the live groups in scope. Does not touch ``state``; see ``record``."""
     plan = ConsentPlan()
@@ -76,6 +81,8 @@ def resolve_consents(
     scope = list(only) if only is not None else [g.id for g in groups.values() if g.live]
     plan.reserved = [g for g in scope if only is not None and not groups[g].live]
     live = [g for g in scope if groups[g].live]
+    plan.unavailable = {g: why for g, why in (unavailable or {}).items() if g in live}
+    live = [g for g in live if g not in plan.unavailable]
     if not assume_yes and not interactive:
         plan.skipped = True
         return plan

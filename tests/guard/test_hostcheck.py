@@ -62,12 +62,11 @@ class TestHealthyInstall:
         assert "not provisioned" in warns  # no token yet: a WARN, never a failure
         assert res.output.rstrip().endswith("Host OK (2 WARN).")
 
-    def test_the_git_items_say_not_applicable_in_this_slice(self, stack) -> None:
+    def test_the_git_items_report_the_hook_and_say_keys_are_not_applicable(self, stack) -> None:
         installed(stack)
         stack.fake(before=debug_config(stack.live))
         out = host().output
-        assert "include.path: not needed yet (no Carter git keys; slice 2a)" in out
-        assert "Carter installs no hooks in this slice" in out
+        assert "pre-push config hook installed" in out and "include.path for" in out
         assert "not applicable in this slice" in out
 
     def test_the_env_item_is_honest_about_what_is_not_checked(self, stack) -> None:
@@ -145,7 +144,7 @@ class TestRedItems:
         human_tty(True)
         stack.fake()
         res = CliRunner().invoke(
-            main, ["guard", "install"], input="y\nn\ny\ny\n", catch_exceptions=False
+            main, ["guard", "install"], input="y\ny\nn\ny\ny\n", catch_exceptions=False
         )
         assert res.exit_code == 0, res.output
         accepted = policy_statements(
@@ -204,7 +203,7 @@ class TestRedItems:
 class TestGitIncludeLine:
     @pytest.fixture
     def with_key(self, monkeypatch: pytest.MonkeyPatch):
-        monkeypatch.setattr(gc, "carter_git_entries", lambda: [("carter.tier", "t1")])
+        monkeypatch.setattr(gc, "carter_git_entries", lambda *_a, **_k: [("carter.tier", "t1")])
 
     def test_present_is_ok(self, stack, with_key) -> None:
         installed(stack)

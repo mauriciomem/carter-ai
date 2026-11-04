@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import shutil
+from collections.abc import Iterator
 from pathlib import Path
 
 import pytest
@@ -11,6 +12,20 @@ from guard.helpers import agents_json, all_live_statements, debug_config
 
 BUILTINS = ["build", "plan", "general", "explore"]
 REAL_GIT = shutil.which("git") or "/usr/bin/git"
+DEV_REPO_HOOK = Path(__file__).resolve().parents[2] / ".git" / "hooks" / "pre-push"
+
+
+@pytest.fixture(autouse=True)
+def _guard_tests_never_write_the_dev_repo(
+    home: Path, monkeypatch: pytest.MonkeyPatch
+) -> Iterator[None]:
+    """`carter guard install` offers a repo hook for the current directory's repository (git <
+    2.54 path), so a test must never run with this repository as its cwd. Found the hard way:
+    a simulated old git once wrote ``.git/hooks/pre-push`` here."""
+    existed = DEV_REPO_HOOK.exists()
+    monkeypatch.chdir(home)
+    yield
+    assert DEV_REPO_HOOK.exists() == existed, "a guard test wrote a hook into the dev repository"
 
 
 @pytest.fixture

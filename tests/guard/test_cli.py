@@ -17,11 +17,13 @@ from click.testing import CliRunner, Result
 
 from carter.cli import main
 from carter.guard import gitconfig as gc
+from carter.guard import hooks
 from carter.guard.state import load
 from carter.identity.errors import E_HUMAN_TERMINAL, E_POLICIES_MISSING, E_STATE_INVALID, registry
 from carter.identity.policyset import policy_statements
 from carter.install.mcp import config_target
 from carter.install.paths import backups_dir, carter_gitconfig_path, guard_state_path
+from guard.conftest import REAL_GIT
 from guard.helpers import agents_json, debug_config, tree_hash
 
 BUILTINS = ["build", "plan", "general", "explore"]
@@ -110,21 +112,22 @@ class TestDryRun:
         self, stack, human_tty, fake_opencode
     ) -> None:
         # `debug config` is left unconfigured: a dry run must never call it.
-        fake_opencode(agents_output=agents_json(*BUILTINS, "carter-engineer"))
+        bindir = fake_opencode(agents_output=agents_json(*BUILTINS, "carter-engineer"))
+        (bindir / "git").symlink_to(REAL_GIT)  # the dry run probes git for the hook groups
         before = tree_hash(stack.home)
         res = guard("install", "--dry-run")
         assert res.exit_code == 0, res.output
         out = res.output
         assert "dry run" in out
-        for group in ("g2", "sudo-docker", "read-edit-denies", "config-edit"):
+        for group in ("g2", "hooks", "sudo-docker", "read-edit-denies", "config-edit"):
             assert f"{group:<18} would ask" in out
-        for reserved in ("hooks", "alias", "repo_hooks"):
-            assert f"{reserved:<18} nothing to install in this version" in out
+        assert f"{'alias':<18} nothing to install in this version" in out
+        assert f"{'repo_hooks':<18} not on this machine: not needed" in out  # git >= 2.54 here
         assert "+ deny-git-push" in out and "shell:git push *" in out
         assert "+ allow-gh-pr-view" in out
         assert "per-agent denies for built-in agents: build, plan, general, explore" in out
         assert "carter-engineer" not in out
-        assert "include.path: not needed yet (no Carter git keys; slice 2a)" in out
+        assert "guard script:" in out and "(would be written)" in out
         assert "plugin and isolation are not installed; literal denies only" in out
         assert tree_hash(stack.home) == before
         for path in (guard_state_path(None), config_target(None), backups_dir(None)):
@@ -139,7 +142,7 @@ class TestDryRun:
     def test_a_declined_group_stays_declined_in_the_preview(self, stack, human_tty) -> None:
         human_tty(True)
         stack.fake()
-        guard("install", input="y\nn\ny\ny\n")
+        guard("install", input="y\ny\nn\ny\ny\n")
         out = guard("install", "--dry-run").output
         assert "sudo-docker" in out and "declined earlier" in out
 
@@ -182,21 +185,39 @@ class TestInstall:
             assert actions == ["carter_push", "carter_pr"]
         state = load(guard_state_path(None))
         assert sorted(g for g, c in state.consents.items() if c["decision"] == "accepted") == [
-            "config-edit", "g2", "read-edit-denies", "sudo-docker",
+            "config-edit", "g2", "hooks", "read-edit-denies", "sudo-docker",
         ]  # fmt: skip
         assert len(state.owned_policies()) == len(stack.live) and len(state.agent_permissions) == 8
         assert state.opencode_config == str(config_target(None))
-        assert state.gitconfig is None and state.files == [] and state.guard_version is None
+        assert state.gitconfig is not None and state.guard_version == hooks.GUARD_VERSION
+        assert [Path(f["path"]).name for f in state.files] == ["carter-guard", "gitconfig"]
         assert stat.S_IMODE(guard_state_path(None).stat().st_mode) == 0o600
         assert "plugin and isolation are not installed; literal denies only" in res.output
         assert "restart" not in res.output.lower()
-        assert "include.path: not needed yet" in res.output
+        assert "git config: 2 key(s), mode include" in res.output
 
-    def test_nothing_is_written_to_the_real_git_config_in_1g(self, stack, home: Path) -> None:
-        before = Path(os.environ["GIT_CONFIG_GLOBAL"]).read_bytes()
+    def test_the_hooks_group_writes_the_script_the_gitconfig_and_one_include_line(
+        self, stack, home: Path
+    ) -> None:
+        before = Path(os.environ["GIT_CONFIG_GLOBAL"]).read_text()
         install_all(stack)
-        assert Path(os.environ["GIT_CONFIG_GLOBAL"]).read_bytes() == before
-        assert not carter_gitconfig_path(None).exists()
+        script = hooks.script_path(None)
+        assert stat.S_IMODE(script.stat().st_mode) == 0o755
+        got = subprocess.run(
+            ["git", "config", "--file", str(carter_gitconfig_path(None)), "--get-all",
+             "hook.carter-guard-pre-push.command"],
+            capture_output=True, text=True, check=True,
+        ).stdout  # fmt: skip
+        assert got.rstrip("\n") == hooks.hook_command(script)  # `;` and `#` survive the file
+        assert Path(os.environ["GIT_CONFIG_GLOBAL"]).read_text() == (
+            before + f"[include]\n\tpath = {carter_gitconfig_path(None)}\n"
+        )
+        state = load(guard_state_path(None))
+        assert state.gitconfig == {
+            "file": os.environ["GIT_CONFIG_GLOBAL"],
+            "key": "include.path",
+            "value": str(carter_gitconfig_path(None)),
+        }
 
     def test_a_second_run_changes_nothing(self, stack) -> None:
         install_all(stack)
@@ -209,9 +230,11 @@ class TestInstall:
     def test_a_tty_asks_per_group_with_the_effect_line(self, stack, human_tty) -> None:
         human_tty(True)
         stack.fake()
-        res = guard("install", input="y\nn\ny\ny\n")
+        res = guard("install", input="y\ny\nn\ny\ny\n")
         assert res.exit_code == 0, res.output
         assert "g2: agents can't push or write to GitHub" in res.output
+        assert "hooks: pushes by agent shells are blocked in every repo" in res.output
+        assert "your own pushes are unaffected" in res.output
         assert (
             "sudo-docker: agents can't run sudo/docker; Packer docker builds must be typed"
             in res.output
@@ -235,11 +258,12 @@ class TestInstall:
         assert res.exit_code == 2
         assert "nope" in res.output and "valid groups: g2, hooks, sudo-docker" in res.output
 
-    def test_reserved_groups_are_noted_and_never_recorded(self, stack) -> None:
+    def test_reserved_and_unavailable_groups_are_noted_and_never_recorded(self, stack) -> None:
         stack.fake()
-        res = guard("install", "--yes", "--only", "hooks,alias,repo_hooks")
+        res = guard("install", "--yes", "--only", "alias,repo_hooks")
         assert res.exit_code == 0
-        assert res.output.count("nothing to install for") == 3
+        assert res.output.count("nothing to install for") == 1  # alias
+        assert "`repo_hooks`: not needed" in res.output  # git >= 2.54 on the test host
         assert not guard_state_path(None).exists() and not config_target(None).exists()
 
     def test_print_policies_equals_the_block_and_writes_nothing(self, stack) -> None:
@@ -351,7 +375,7 @@ class TestGitStepAtomicity:
 
     @pytest.fixture
     def with_entry(self, monkeypatch: pytest.MonkeyPatch):
-        monkeypatch.setattr(gc, "carter_git_entries", lambda: [("carter.tier", "t1")])
+        monkeypatch.setattr(gc, "carter_git_entries", lambda *_a, **_k: [("carter.tier", "t1")])
 
     def test_the_git_step_writes_file_and_include_and_records_them(self, stack, with_entry) -> None:
         res = install_all(stack)
@@ -392,7 +416,7 @@ class TestGitStepAtomicity:
     def test_a_failure_keeps_earlier_ownership_intact(self, stack, monkeypatch) -> None:
         install_all(stack)
         before = guard_state_path(None).read_bytes()
-        monkeypatch.setattr(gc, "carter_git_entries", lambda: [("carter.tier", "t1")])
+        monkeypatch.setattr(gc, "carter_git_entries", lambda *_a, **_k: [("carter.tier", "t1")])
         monkeypatch.setattr(gc, "add_include", _raises(gc.GitError("no")))
         stack.fake(before=debug_config(stack.live))
         assert guard("install", "--yes").exit_code == 1
@@ -433,7 +457,7 @@ class TestD52:
         ws.mkdir()
         self.write_toml(home, ws)
         stack.fake()
-        res = guard("install", input="y\ny\ny\ny\nn\n")
+        res = guard("install", input="y\ny\ny\ny\ny\nn\n")
         assert res.exit_code == 0, res.output
         assert "Active D52 opt-outs" in res.output and str(ws.resolve()) in res.output
         assert "Opt-outs not applied." in res.output
@@ -457,10 +481,10 @@ class TestStatus:
         res = guard("status")
         out = res.output
         assert res.exit_code == 0
-        assert "g2                 accepted" in out and "hooks, alias, repo_hooks: reserved" in out
+        assert "g2                 accepted" in out and "alias: reserved" in out
         assert "loaded   deny-git-push" in out and "MISSING" not in out
         assert "Per-agent denies recorded for: build, explore, general, plan" in out
-        assert "include.path: not needed yet" in out
+        assert "include.path: present in" in out and "ok      " in out
         assert tree_hash(stack.home) == before
 
     def test_a_missing_statement_is_reported_per_statement(self, stack) -> None:
@@ -474,7 +498,7 @@ class TestStatus:
     def test_declined_groups_are_residuals(self, stack, human_tty) -> None:
         human_tty(True)
         stack.fake()
-        guard("install", input="y\nn\ny\ny\n")
+        guard("install", input="y\ny\nn\ny\ny\n")
         out = guard("status").output
         assert "sudo-docker" in out and "declined" in out and "residual" in out
 
@@ -625,7 +649,7 @@ class TestRemove:
         assert f"kept {kept}: not recorded as Carter's" in out and f"removed {ours}" in out
 
     def test_git_config_is_undone_in_teardown_order(self, stack, monkeypatch) -> None:
-        monkeypatch.setattr(gc, "carter_git_entries", lambda: [("carter.tier", "t1")])
+        monkeypatch.setattr(gc, "carter_git_entries", lambda *_a, **_k: [("carter.tier", "t1")])
         install_all(stack)
         carter = carter_gitconfig_path(None)
         global_cfg = Path(os.environ["GIT_CONFIG_GLOBAL"])
@@ -636,7 +660,7 @@ class TestRemove:
         assert str(carter) not in global_cfg.read_text()
 
     def test_a_user_edited_carter_gitconfig_is_kept(self, stack, monkeypatch) -> None:
-        monkeypatch.setattr(gc, "carter_git_entries", lambda: [("carter.tier", "t1")])
+        monkeypatch.setattr(gc, "carter_git_entries", lambda *_a, **_k: [("carter.tier", "t1")])
         install_all(stack)
         carter = carter_gitconfig_path(None)
         carter.write_text(carter.read_text() + "[user]\n\tname = mine\n")

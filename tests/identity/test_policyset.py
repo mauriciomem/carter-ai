@@ -114,8 +114,10 @@ class TestStatementShape:
     def test_the_consent_group_map_is_total(self) -> None:
         groups = {g.id for g in policyset.consent_groups()}
         assert all(s.group in groups for s in policy_set())
-        # ... and each live group has at least one statement
-        assert {g.id for g in policyset.consent_groups() if g.live} <= {
+        # ... and each live group with policy content has at least one statement; the hook
+        # groups (2a) install files and git keys, not OpenCode statements
+        hook_groups = {"hooks", "repo_hooks"}
+        assert {g.id for g in policyset.consent_groups() if g.live} - hook_groups <= {
             s.group for s in policy_set()
         }
 

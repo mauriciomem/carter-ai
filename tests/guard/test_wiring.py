@@ -64,7 +64,7 @@ class TestInstallCallsGuard:
     def test_a_terminal_prompts_per_group(self, stack, base_dir: Path, human_tty) -> None:
         human_tty(True)
         stack.fake()
-        res = carter(base_dir, "install", input="y\nn\ny\ny\n")
+        res = carter(base_dir, "install", input="y\ny\nn\ny\ny\n")
         assert res.exit_code == 0, res.output
         state = load(guard_state_path(base_dir))
         assert state.consents["sudo-docker"]["decision"] == "declined"
@@ -178,7 +178,7 @@ class TestUninstallRemovesGuards:
     def test_edited_items_are_kept_and_reported_unedited_ones_removed(
         self, stack, base_dir: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        monkeypatch.setattr(gc, "carter_git_entries", lambda: [("carter.tier", "t1")])
+        monkeypatch.setattr(gc, "carter_git_entries", lambda *_a, **_k: [("carter.tier", "t1")])
         self.installed(stack, base_dir)
         data = cfg(base_dir)
         data["policies"][0]["resource"] = "shell:git push --edited *"  # a Carter policy tuple

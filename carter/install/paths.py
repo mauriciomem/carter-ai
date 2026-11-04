@@ -57,6 +57,11 @@ def carter_gitconfig_path(base_dir: Path | None) -> Path:
     return _carter_base(base_dir) / "gitconfig"
 
 
+def guard_script_path(base_dir: Path | None) -> Path:
+    """``~/.carter/hooks/carter-guard``: the one POSIX guard script every hook calls."""
+    return _carter_base(base_dir) / "hooks" / "carter-guard"
+
+
 def managed_roots(base_dir: Path | None) -> tuple[Path, ...]:
     """Directories whose files uninstall may delete (path-component containment, resolved).
 

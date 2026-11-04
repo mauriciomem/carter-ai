@@ -15,7 +15,7 @@ from carter.install.mcp import config_target
 from carter.install.paths import backups_dir
 
 HOME = "/home/fixture"
-LIVE = ["g2", "sudo-docker", "read-edit-denies", "config-edit"]
+LIVE = ["g2", "hooks", "sudo-docker", "read-edit-denies", "config-edit", "repo_hooks"]
 
 
 def accepted(*groups: str) -> GuardState:
@@ -35,9 +35,9 @@ class TestStatementsFollowConsent:
         assert groups_of(got) == {"sudo-docker"}
         assert [s.id for s in got] == ["deny-sudo", "deny-docker"]
 
-    def test_all_four_groups_give_denies_then_allows(self) -> None:
+    def test_all_live_groups_give_denies_then_allows(self) -> None:
         got = consent.desired_statements(accepted(*LIVE), home=HOME)
-        assert groups_of(got) == set(LIVE)
+        assert groups_of(got) == set(LIVE) - {"hooks", "repo_hooks"}  # files, not statements
         effects = [s.effect for s in got]
         assert effects == sorted(effects, key=lambda e: e == "allow")
 
@@ -68,7 +68,7 @@ class TestStatementsFollowConsent:
 
     def test_a_reserved_group_in_state_adds_nothing(self) -> None:
         st = accepted("g2")
-        st.consent("hooks", "accepted", "2026-11-02")  # cannot happen via resolve_consents
+        st.consent("alias", "accepted", "2026-11-02")  # cannot happen via resolve_consents
         assert consent.accepted_groups(st) == ["g2"]
 
     def test_optouts_ride_only_with_config_edit(self) -> None:
@@ -114,7 +114,7 @@ class TestResolve:
         assert asked == LIVE and plan.accepted == LIVE
 
     def test_a_no_declines_that_group_only(self) -> None:
-        answers = {"g2": True, "sudo-docker": False, "read-edit-denies": True, "config-edit": True}
+        answers = dict.fromkeys(LIVE, True) | {"sudo-docker": False}
         plan = consent.resolve_consents(
             GuardState(), only=None, assume_yes=False, interactive=True, ask=lambda g: answers[g.id]
         )
@@ -131,16 +131,34 @@ class TestResolve:
         ask, asked = self.ask_all(True)
         plan = consent.resolve_consents(
             GuardState(),
-            only=["hooks", "alias", "repo_hooks"],
+            only=["alias"],
             assume_yes=True,
             interactive=True,
             ask=ask,
         )
         assert asked == [] and plan.accepted == [] and plan.asked == []
-        assert plan.reserved == ["hooks", "alias", "repo_hooks"]
+        assert plan.reserved == ["alias"]
         assert all("nothing to install" in n for n in plan.notices())
         st = GuardState()
         consent.record(st, plan, today="2026-11-02")
+        assert st.consents == {}
+
+    def test_a_group_unavailable_on_this_machine_is_never_asked_or_recorded(self) -> None:
+        """G10: no consent for nothing: ``hooks`` on git < 2.54, ``repo_hooks`` on newer git."""
+        ask, asked = self.ask_all(True)
+        why = {"hooks": "E-GIT-OLD: old", "repo_hooks": "not needed"}
+        plan = consent.resolve_consents(
+            GuardState(), only=None, assume_yes=False, interactive=True, ask=ask, unavailable=why
+        )
+        assert asked == ["g2", "sudo-docker", "read-edit-denies", "config-edit"]
+        assert plan.unavailable == why and "hooks" not in plan.accepted + plan.declined
+        assert "`hooks`: E-GIT-OLD: old" in plan.notices()
+        explicit = consent.resolve_consents(
+            GuardState(), only=["hooks"], assume_yes=True, interactive=False, unavailable=why
+        )  # even a named group with --yes
+        assert explicit.accepted == [] and explicit.asked == []
+        st = GuardState()
+        consent.record(st, explicit, today="2026-11-02")
         assert st.consents == {}
 
     def test_recorded_decisions_stand_without_asking_again(self) -> None:
@@ -148,7 +166,7 @@ class TestResolve:
         st.consent("sudo-docker", "declined", "2026-11-01")
         ask, asked = self.ask_all(True)
         plan = consent.resolve_consents(st, only=None, assume_yes=False, interactive=True, ask=ask)
-        assert asked == ["read-edit-denies", "config-edit"]  # only the groups never decided
+        assert asked == ["hooks", "read-edit-denies", "config-edit", "repo_hooks"]  # never decided
         assert plan.declined == ["sudo-docker"] and "g2" in plan.accepted
 
     def test_naming_a_declined_group_asks_again(self) -> None:

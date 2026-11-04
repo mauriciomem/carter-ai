@@ -13,7 +13,7 @@ from carter.identity.rules import load_rules
 
 # F3: the seven consent groups, and which are live in 1G.
 GROUPS = ("g2", "hooks", "sudo-docker", "read-edit-denies", "config-edit", "alias", "repo_hooks")
-LIVE_GROUPS = ("g2", "sudo-docker", "read-edit-denies", "config-edit")
+LIVE_GROUPS = ("g2", "hooks", "sudo-docker", "read-edit-denies", "config-edit", "repo_hooks")
 
 # F5: statement ids per group. gh allows are generated from the allowlist (F4).
 IDS_BY_GROUP = {
@@ -71,7 +71,7 @@ def test_consent_groups_are_the_seven_c61_names() -> None:
     assert tuple(g.id for g in policyset.consent_groups()) == GROUPS
 
 
-def test_live_groups_are_the_four_with_content() -> None:
+def test_live_groups_are_all_but_alias() -> None:
     assert tuple(g.id for g in policyset.consent_groups() if g.live) == LIVE_GROUPS
 
 

@@ -1,7 +1,8 @@
 """``carter guard install`` / ``remove``: the single owner of G2 artifacts (RFC-0007 C.6.2).
 
-1G scope: policies, per-agent permissions, Carter's gitconfig + include line (machinery only,
-no entries yet) and guard state. No plugin, ``isolation.json`` or hooks (slice 2a).
+Scope so far: policies, per-agent permissions, guard state, and (2a step 24-25) the ``hooks``
+group: ``~/.carter/hooks/carter-guard``, the ``pre-push`` entries in ``~/.carter/gitconfig`` and
+the include line, or on git < 2.54 the ``repo_hooks`` fallback. No plugin yet (step 26).
 
 Order and atomicity. Consent is resolved in memory first. Policies and the per-agent denies
 go to the OpenCode config in ONE verified write (rolled back on any loss); the git part
@@ -18,22 +19,22 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from carter import harness
-from carter.guard import configwrite, consent, gitconfig, optout, policies
+from carter.guard import configwrite, consent, gitconfig, hooks, optout, policies, repohooks
 from carter.guard.state import GuardState, load_or_empty_readonly, quarantine_corrupt, save
 from carter.identity import ConfigError, load_identity
-from carter.identity.errors import E_STATE_INVALID, IdentityError
+from carter.identity.errors import E_GIT_OLD, E_STATE_INVALID, IdentityError, registry
 from carter.identity.policyset import ConsentGroup, Statement, consent_groups, policy_statements
 from carter.install.atomic import atomic_write_bytes
-from carter.install.paths import backups_dir, guard_state_path
+from carter.install.paths import backups_dir, carter_gitconfig_path, guard_state_path
 
 Echo = Callable[[str], None]
-Confirm = Callable[[str], bool]
+Confirm = Callable[..., bool]
 
 INTERIM_NOTE = (
     "Interim: plugin and isolation are not installed; literal denies only. They are a speed "
     "bump, not a boundary, until slice 2a (the gate and shell isolation) lands."
 )
-GIT_NOT_NEEDED = "include.path: not needed yet (no Carter git keys; slice 2a)"
+GIT_NOT_NEEDED = "include.path: not needed (no Carter git keys are enabled)"
 PAT_KEPT = (
     "`~/.carter/secrets/gh-read.token` kept; delete it and revoke the token on GitHub if unused"
 )
@@ -142,18 +143,166 @@ def _undo_git(base_dir: Path | None, before: GuardState, after: GuardState) -> N
     new.files = [f for f in after.files if f["path"] not in known]
     new.git_config = [r for r in after.git_config if r not in before.git_config]
     gitconfig.remove_all(base_dir, new)
+    for rec in new.files:  # the guard script and the template hook, written by this run
+        Path(rec["path"]).unlink(missing_ok=True)
+    for rec in after.repo_hooks:
+        if rec not in before.repo_hooks:
+            Path(rec["path"]).unlink(missing_ok=True)
 
 
-def _git_step(base_dir: Path | None, state: GuardState, echo: Echo, *, dry_run: bool) -> None:
-    entries = gitconfig.carter_git_entries()
+def _availability(echo: Echo) -> tuple[gitconfig.Mode | None, dict[str, str]]:
+    """What this git can do (D61 probe) and which hook groups therefore make no sense here.
+
+    ``hooks`` needs git >= 2.54 (E-GIT-OLD otherwise: ``repo_hooks`` is offered instead);
+    ``repo_hooks`` is for older git only. No consent is asked for nothing (G10)."""
+    try:
+        mode = gitconfig.probe_scope()
+    except gitconfig.GitError as exc:
+        why = f"git is not usable here ({exc}); no hook was installed"
+        return None, {"hooks": why, "repo_hooks": why}
+    if mode == "no-config-hooks":
+        entry = registry()[E_GIT_OLD]
+        return mode, {"hooks": f"{entry.code}: {entry.message}"}
+    return mode, {
+        "repo_hooks": "not needed: this git runs the config hook of `hooks` in every repo"
+    }
+
+
+def _remove_script(base_dir: Path | None, state: GuardState, echo: Echo) -> None:
+    path = hooks.script_path(base_dir)
+    if state.owned_unchanged(path):
+        path.unlink()
+        echo(f"  removed {path}")
+    elif path.exists():
+        echo(f"  kept {path}: edited since Carter wrote it, or not recorded as Carter's")
+    state.forget_file(path)
+
+
+def _remove_git(base_dir: Path | None, state: GuardState, echo: Echo) -> None:
+    """Take Carter's git config (include line, file, direct keys) away; a manual line is printed."""
+    # the human added (or must add) the include line themselves: tell them to take it out
+    ours = state.gitconfig is None and state.owned_unchanged(carter_gitconfig_path(base_dir))
+    if ours and gitconfig.manual_include_state(base_dir) == "present":
+        echo(
+            "⚠ your global git config still has Carter's include line; remove it yourself:\n"
+            f"    {gitconfig.unset_line(base_dir)}"
+        )
+    git = gitconfig.remove_all(base_dir, state)
+    if git.include is not None and git.include.status == "manual":
+        echo(f"⚠ {git.include.note}\n    {git.include.line}")
+    elif git.include is not None and git.include.status == "absent":
+        echo(f"  {git.include.note}")
+    for name in git.files.removed:
+        echo(f"  removed {name}")
+    for name in git.files.kept:
+        echo(f"  kept {name}: edited since Carter wrote it")
+
+
+def _remove_repo_hooks(state: GuardState, echo: Echo) -> None:
+    rem = repohooks.remove_owned(state)
+    for name in rem.removed:
+        echo(f"  removed repo hook {name}")
+    for name in rem.kept:
+        echo(f"  kept {name}: changed since Carter wrote it")
+
+
+def _workspaces() -> list[str]:
+    try:
+        return list(load_identity().workspaces)
+    except ConfigError:
+        return []
+
+
+def _repo_hooks_step(base_dir: Path | None, state: GuardState, echo: Echo, *, dry: bool) -> None:
+    """Install (or, in a dry run, only inspect) the owned hook in the cwd repo and workspaces."""
+    for repo in repohooks.repos_in_scope(Path.cwd(), _workspaces()):
+        found = repohooks.inspect(repo, state, base_dir)
+        if found.state == "installable" and not dry:
+            found = repohooks.install(repo, state, base_dir)
+            echo(f"  repo hook installed: {found.hook}")
+        elif found.state == "installable":
+            echo(f"  would install a repo hook: {found.hook}")
+        elif found.state == "guarded":
+            echo(f"  repo hook present: {found.hook}")
+        else:
+            echo(f"⚠ {found.line()}")
+            if found.snippet:
+                echo(f"    {found.snippet}")
+
+
+def _git_step(
+    base_dir: Path | None,
+    state: GuardState,
+    echo: Echo,
+    *,
+    dry_run: bool,
+    mode: gitconfig.Mode | None,
+) -> None:
+    accepted = consent.accepted_groups(state)
+    on_new_git = mode in ("include", "direct")
+    want_hooks = "hooks" in accepted and on_new_git
+    want_repo = "repo_hooks" in accepted and mode == "no-config-hooks"
+    template: Path | None = None
+    if want_repo:
+        plan = repohooks.plan_template(gitconfig.global_config_path(), base_dir)
+        if plan.status == "kept-user-value":
+            echo(f"⚠ unguarded: templateDir. {plan.snippet}")
+        else:
+            template = plan.directory
+    entries = gitconfig.carter_git_entries(
+        [g for g, on in (("hooks", want_hooks), ("repo_hooks", want_repo)) if on],
+        base_dir=base_dir,
+        template_dir=template,
+    )
+    if want_hooks or want_repo:
+        script = hooks.script_path(base_dir)
+        echo(f"guard script: {script}" + (" (would be written)" if dry_run else ""))
+        if not dry_run and hooks.install_script(base_dir, state) == "edited-kept":
+            echo(
+                f"⚠ kept your edited {script}; delete it and run `carter guard install` to restore"
+            )
+    if entries and not dry_run and template is not None:
+        repohooks.install_template(base_dir, state)
     if not entries:
         echo(GIT_NOT_NEEDED)
-        return
-    mode = gitconfig.probe_scope()
-    echo(f"git config: {len(entries)} key(s), mode {mode}")
-    if dry_run:
-        return
+        withdrawn = not {"hooks", "repo_hooks"} & set(accepted)  # declined, or never accepted
+        if not dry_run and state.gitconfig is not None and withdrawn:
+            _remove_git(base_dir, state, echo)  # a group was declined or withdrawn: reconcile
+    else:
+        echo(f"git config: {len(entries)} key(s), mode {mode}")
+        target = gitconfig.global_config_path()
+        if dry_run:
+            if mode != "direct" and (why := gitconfig.manual_reason(target)) is not None:
+                line = gitconfig.include_line(base_dir)
+                echo(f"⚠ {why}; Carter would not write it. Add the line yourself:\n    {line}")
+        else:
+            _apply_entries(entries, base_dir, state, echo, mode=mode or "include")
+    if want_repo:
+        _repo_hooks_step(base_dir, state, echo, dry=dry_run)
+    if on_new_git and "hooks" in accepted and state.repo_hooks and not dry_run:
+        echo(
+            "git >= 2.54 is available: the config hook now covers every repo; removing the "
+            "per-repo hooks Carter wrote earlier"
+        )
+        _remove_repo_hooks(state, echo)
+        for old, version in repohooks.other_old_gits():
+            echo(
+                f"⚠ an older git is also installed ({old}, {version}): repos reached through it "
+                "have no guard; `carter guard install --only repo_hooks` there"
+            )
+
+
+def _apply_entries(
+    entries: list[gitconfig.Entry],
+    base_dir: Path | None,
+    state: GuardState,
+    echo: Echo,
+    *,
+    mode: gitconfig.Mode,
+) -> None:
     res = gitconfig.apply_keys(entries, mode=mode, base_dir=base_dir, state=state)
+    if res.file == "edited-kept":
+        echo(f"⚠ kept your edited {carter_gitconfig_path(base_dir)}; it is not rewritten")
     if res.include and res.include.status == "manual":
         echo(f"⚠ {res.include.note}\n    {res.include.line}")
     if res.direct:
@@ -162,7 +311,7 @@ def _git_step(base_dir: Path | None, state: GuardState, echo: Echo, *, dry_run: 
         for key in res.direct.conflicts:
             echo(f"⚠ kept your value for {key}")
     for key in res.needs_repo_hooks:
-        echo(f"⚠ {key}: git < 2.54 needs the per-repo fallback (slice 2a)")
+        echo(f"⚠ {key}: git < 2.54 needs the per-repo fallback (`repo_hooks`)")
 
 
 def install(
@@ -193,14 +342,17 @@ def install(
     )
     today = datetime.now(UTC).date().isoformat()
     if dry_run:
-        return _dry_run(base_dir, state, only, home, echo, today)
+        return _dry_run(base_dir, state, only, home, echo, today, *_availability(echo))
 
     def ask(group: ConsentGroup) -> bool:
-        return confirm(f"{group.id}: {group.effect}\n  Install this group?")
+        question = f"{group.id}: {group.effect}\n  Install this group?"
+        return confirm(question, default=True) if group.id == "repo_hooks" else confirm(question)
 
+    mode, unavailable = _availability(echo)
     plan = consent.resolve_consents(
-        state, only=only, assume_yes=assume_yes, interactive=interactive, ask=ask
-    )
+        state, only=only, assume_yes=assume_yes, interactive=interactive, ask=ask,
+        unavailable=unavailable,
+    )  # fmt: skip
     for note in plan.notices():
         echo(note)
     if plan.skipped:
@@ -227,7 +379,7 @@ def install(
         # killed during the git step leaves a consistent pair, never orphaned policies.
         if state != GuardState() or state_path.exists():
             save(state, state_path)
-        _git_step(base_dir, state, echo, dry_run=False)
+        _git_step(base_dir, state, echo, dry_run=False, mode=mode)
         if state != GuardState() or state_path.exists():
             save(state, state_path)
     except BaseException:
@@ -245,7 +397,7 @@ def install(
 
 def _dry_run(
     base_dir: Path | None, state: GuardState, only: list[str] | None, home: str, echo: Echo,
-    today: str,
+    today: str, mode: gitconfig.Mode | None, unavailable: dict[str, str],
 ) -> int:  # fmt: skip
     """Show what a real install would do if every undecided group in scope were accepted."""
     echo("carter guard install (dry run: nothing is written)")
@@ -258,6 +410,9 @@ def _dry_run(
         prior = state.consents.get(name, {}).get("decision")
         if not group.live:
             echo(f"  {name:<18} nothing to install in this version")
+            continue
+        if name in unavailable:
+            echo(f"  {name:<18} not on this machine: {unavailable[name]}")
             continue
         if prior == "declined" and not (only and name in only):
             echo(f"  {name:<18} declined earlier (stays declined)")
@@ -283,7 +438,7 @@ def _dry_run(
     _show_diff(res, wanted, echo)
     if agents:
         echo(f"  per-agent denies for built-in agents: {', '.join(agents)}")
-    _git_step(base_dir, preview, echo, dry_run=True)
+    _git_step(base_dir, preview, echo, dry_run=True, mode=mode)
     verb = "updated" if state.consents else "created"
     echo(f"Guard state: {guard_state_path(base_dir)} (would be {verb})")
     echo(INTERIM_NOTE)
@@ -356,6 +511,15 @@ def remove(
         )
         echo(f"OpenCode config: {res.target}")
         _show_diff(res, wanted, echo)
+        hook_groups = [g for g in (only or []) if g in ("hooks", "repo_hooks")]
+        if hook_groups and dry_run:
+            echo(f"  (the hook files of {', '.join(hook_groups)} would be removed too)")
+        elif hook_groups:
+            _remove_git(base_dir, target, echo)  # 2a: the hook groups own every Carter git key
+            if "repo_hooks" in hook_groups:
+                _remove_repo_hooks(target, echo)
+            if not {"hooks", "repo_hooks"} & set(consent.accepted_groups(target)):
+                _remove_script(base_dir, target, echo)
         if not dry_run:
             save(target, path)
         return 0
@@ -367,16 +531,8 @@ def remove(
     if dry_run:
         echo("  (git config, Carter's files and the guard state would be removed too)")
         return 0
-    git = gitconfig.remove_all(base_dir, state)
-    for result in [git.include] if git.include else []:
-        if result.status == "manual":
-            echo(f"⚠ {result.note}\n    {result.line}")
-        elif result.status == "absent":
-            echo(f"  {result.note}")
-    for name in git.files.removed:
-        echo(f"  removed {name}")
-    for name in git.files.kept:
-        echo(f"  kept {name}: edited since Carter wrote it")
+    _remove_git(base_dir, state, echo)
+    _remove_repo_hooks(state, echo)
     _known_extra_files(base_dir, state, echo)
     if (path.parent / "secrets" / "gh-read.token").exists():
         echo(PAT_KEPT)

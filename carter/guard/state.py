@@ -90,6 +90,21 @@ class GuardState:
         except OSError:  # missing, a directory, unreadable
             return False
 
+    # -- per-repo hooks (git < 2.54) --------------------------------------------------
+    def record_repo_hook(self, path: Path | str, data: bytes) -> None:
+        _upsert(self.repo_hooks, {"path": str(path), "sha256": sha256_bytes(data)}, "path")
+
+    def forget_repo_hook(self, path: Path | str) -> None:
+        self.repo_hooks = [h for h in self.repo_hooks if h["path"] != str(path)]
+
+    def repo_hook_unchanged(self, path: Path | str) -> bool:
+        """True only if ``path`` is a recorded repo hook with its recorded hash."""
+        recorded = next((h["sha256"] for h in self.repo_hooks if h["path"] == str(path)), None)
+        try:
+            return recorded is not None and sha256_bytes(Path(path).read_bytes()) == recorded
+        except OSError:
+            return False
+
     # -- OpenCode config -----------------------------------------------------------
     def record_policy(
         self, id: str, action: str, resource: str, effect: str, *, preexisting: bool

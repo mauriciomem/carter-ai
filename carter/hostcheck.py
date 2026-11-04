@@ -39,7 +39,7 @@ CARTER_KEYS_NA = (
 HOOK_MODES = {
     "include": "hooks from an included file are reported `global` here",
     "direct": "hooks work but not via include: the direct-write fallback would be used",
-    "no-config-hooks": "no config-based hooks (git < 2.54): per-repo fallback (slice 2a)",
+    "no-config-hooks": "no config-based hooks (git < 2.54): per-repo fallback (`repo_hooks`)",
 }
 PLUGIN_ABSENT = (
     "plugin not installed (slice 2a): gate, isolation and signing guards are inactive; "
@@ -111,9 +111,16 @@ def _files(state: GuardState) -> list[Item]:
 def _git(state: GuardState) -> list[Item]:
     items = []
     rec = state.gitconfig
-    if rec is None and not state.git_config:
+    if rec is None and "hooks" in consent.accepted_groups(state):
+        have = gitconfig.manual_include_state(None)
+        if have == "present":
+            items.append(Item("ok", "git", "include.path present (added by you, not by Carter)"))
+        else:
+            text = "include.path for Carter's gitconfig is missing: the pre-push hook is inactive"
+            items.append(Item("warn", "git", text, gitconfig.include_line(None)))
+    elif rec is None and not state.git_config:
         items.append(
-            Item("info", "git", "include.path: not needed yet (no Carter git keys; slice 2a)")
+            Item("info", "git", "include.path: not needed (no Carter git keys are enabled)")
         )
     if rec is not None:
         cfg, value = Path(rec["file"]), rec["value"]
@@ -137,7 +144,18 @@ def _git(state: GuardState) -> list[Item]:
         items.append(Item("red", "git", str(exc)))
     else:
         text = HOOK_MODES[mode]
-        items.append(Item("info", "git", f"Carter installs no hooks in this slice; {text}"))
+        hooked = "hooks" in consent.accepted_groups(state)
+        lead = "pre-push config hook installed" if hooked else "no pre-push hook installed"
+        items.append(Item("info", "git", f"{lead}; {text}"))
+        for hook in state.repo_hooks:
+            path = Path(hook["path"])
+            if state.repo_hook_unchanged(path):
+                items.append(Item("ok", "git", f"repo hook {path} matches guard-state.json"))
+            else:
+                what = "was changed since Carter wrote it" if path.exists() else "is missing"
+                items.append(
+                    Item("red", "git", f"repo hook {path} {what}", "Run `carter guard install`.")
+                )
     items.append(Item("info", "git", CARTER_KEYS_NA))
     return items
 

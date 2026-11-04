@@ -67,7 +67,7 @@ def human_commit_and_push(work: Path, name: str) -> None:
 @pytest.fixture
 def installed_with_git_key(stack, monkeypatch: pytest.MonkeyPatch):
     """A full guard install that also writes a Carter git key (so the include line exists)."""
-    monkeypatch.setattr(gc, "carter_git_entries", lambda: [("carter.tier", "t1")])
+    monkeypatch.setattr(gc, "carter_git_entries", lambda *_a, **_k: [("carter.tier", "t1")])
     stack.fake()
     assert guard("install", "--yes").exit_code == 0
     assert carter_gitconfig_path(None).exists()
@@ -141,7 +141,7 @@ class TestKilledInstall:
         script = (
             "import os, signal\n"
             "from carter.guard import gitconfig as gc\n"
-            "gc.carter_git_entries = lambda: [('carter.tier', 't1')]\n"
+            "gc.carter_git_entries = lambda *_a, **_k: [('carter.tier', 't1')]\n"
             "def die(*a, **k):\n"
             "    os.kill(os.getpid(), signal.SIGKILL)\n"
             "gc.apply_keys = die\n"
@@ -177,13 +177,19 @@ class TestNoCarterOnTheHumansPath:
         assert shutil.which("carter") is None  # PATH holds only fake opencode and git
         human_commit_and_push(repo, "f")
 
-    def test_1g_installs_no_git_hook_at_all(self, stack, repo: Path) -> None:
+    def test_2a_installs_one_config_hook_and_no_repo_hook_on_a_new_git(
+        self, stack, repo: Path
+    ) -> None:
         stack.fake()
         assert guard("install", "--yes").exit_code == 0
         hooks = git("config", "--global", "--includes", "--get-regexp", r"^hook\.")
-        assert hooks.returncode == 1 and hooks.stdout == ""
+        assert hooks.returncode == 0
+        assert {ln.split()[0] for ln in hooks.stdout.splitlines()} == {
+            "hook.carter-guard-pre-push.event",
+            "hook.carter-guard-pre-push.command",
+        }
         assert not (repo / ".git" / "hooks" / "pre-push").exists()
-        human_commit_and_push(repo, "g")
+        human_commit_and_push(repo, "g")  # the hook runs and passes: this is a human env
 
     def test_a_full_install_then_uninstall_leaves_the_users_git_config_as_it_was(
         self, stack, repo: Path

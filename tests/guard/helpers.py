@@ -40,3 +40,24 @@ def agents_json(*ids: str) -> str:
 
 def all_live_statements(home: str) -> list[Statement]:
     return list(policy_statements(home=home))
+
+
+OLD_GIT = """#!/bin/sh
+# A git that predates config-based hooks: `git hook ...` is unknown (usage error 129).
+for arg in "$@"; do
+  case "$arg" in
+    -*) ;;
+    hook) echo "usage: git hook run <hook-name> [-- <hook-args>]" >&2; exit 129 ;;
+    *) break ;;
+  esac
+done
+exec {real} "$@"
+"""
+
+
+def install_old_git(bindir: Path, real_git: str) -> None:
+    """Put a ``git`` into ``bindir`` that behaves like git < 2.54 for the D61 probe (spike E 6)."""
+    wrapper = bindir / "git"
+    wrapper.unlink(missing_ok=True)
+    wrapper.write_text(OLD_GIT.replace("{real}", real_git))
+    wrapper.chmod(0o755)

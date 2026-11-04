@@ -12,7 +12,7 @@ from collections.abc import Callable
 from pathlib import Path
 
 from carter import harness
-from carter.guard import consent, gitconfig
+from carter.guard import consent, gitconfig, hooks
 from carter.guard.configwrite import Reader, missing_statements, target_path
 from carter.guard.state import GuardState, load_or_empty_readonly
 from carter.identity.policyset import Statement, consent_groups
@@ -20,7 +20,7 @@ from carter.install.jsonc import _load_jsonc
 from carter.install.paths import guard_state_path
 
 Echo = Callable[[str], None]
-GIT_NOT_NEEDED = "include.path: not needed yet (no Carter git keys; slice 2a)"
+GIT_NOT_NEEDED = "include.path: not needed (no Carter git keys are enabled)"
 
 
 def _consents(state: GuardState, echo: Echo) -> None:
@@ -78,9 +78,22 @@ def _files(state: GuardState, echo: Echo) -> None:
         echo(f"  {'ok     ' if ok else 'CHANGED' if path.exists() else 'MISSING'} {path}")
 
 
-def _git(state: GuardState, echo: Echo) -> None:
+def _git(state: GuardState, base_dir: Path | None, echo: Echo) -> None:
     rec = state.gitconfig
-    if rec is None and not state.git_config:
+    if (
+        rec is None
+        and "hooks" in consent.accepted_groups(state)
+        and Path(hooks.script_path(base_dir)).exists()
+    ):
+        have = gitconfig.manual_include_state(base_dir)
+        if have == "present":
+            echo("include.path: present (you added it; Carter did not write your global config)")
+        else:
+            echo(
+                "include.path: NOT in your global git config: the pre-push hook is inactive "
+                f"until you run\n    {gitconfig.include_line(base_dir)}"
+            )
+    elif rec is None and not state.git_config:
         echo(GIT_NOT_NEEDED)
         return
     if rec is not None:
@@ -96,6 +109,16 @@ def _git(state: GuardState, echo: Echo) -> None:
             )
     for r in state.git_config:
         echo(f"git key {r['key']} recorded in {r['file']}")
+    for hook in state.repo_hooks:
+        path = Path(hook["path"])
+        mark = (
+            "ok     "
+            if state.repo_hook_unchanged(path)
+            else "CHANGED"
+            if path.exists()
+            else "MISSING"
+        )
+        echo(f"repo hook {mark} {path}")
 
 
 def report(base_dir: Path | None, echo: Echo, *, reader: Reader | None = None) -> None:
@@ -113,7 +136,7 @@ def report(base_dir: Path | None, echo: Echo, *, reader: Reader | None = None) -
     if state.files:
         echo("Files:")
         _files(state, echo)
-    _git(state, echo)
+    _git(state, base_dir, echo)
     echo("Plugin: not installed (slice 2a)")
     echo("Isolation: not installed (slice 2a); agent shells still inherit your SSH agent and gh")
     accepted = ", ".join(consent.accepted_groups(state)) or "none"

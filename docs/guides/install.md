@@ -73,9 +73,11 @@ effect:
 | Group | What it does |
 |-------|--------------|
 | `g2` | Agents can't push or write to GitHub from their shell; `gh` is read-only; per-agent denies for the push and PR tools. |
+| `hooks` | Pushes by agent shells are blocked in every repo on this machine (a git `pre-push` hook, `~/.carter/hooks/carter-guard`, pulled in by one `include.path` line); your own pushes are unaffected. Needs git 2.54 or newer. If your global git config is a symlink or read-only, Carter prints the line for you to add instead of writing it. |
 | `sudo-docker` | Agents can't run `sudo` or `docker`; Packer docker builds must be typed in your terminal. |
 | `read-edit-denies` | Agents can't read SSH keys, `gh`/git credentials or the read-only token, and can't edit `~/.ssh`. |
 | `config-edit` | Agents can't edit OpenCode config, git hooks and config, or Carter's own config and control files. |
+| `repo_hooks` | Git older than 2.54 only: the same push guard as a `pre-push` hook file in your repos (the current one and your workspaces), and in `init.templateDir` if you have none. A hook or `core.hooksPath` you or your tools own (husky, pre-commit) is never edited: Carter reports the repo as unguarded and prints a line to chain. Asked with Enter = yes. |
 
 Nothing is written without your yes. With no terminal (CI, a script) and without `--yes`,
 the agents and skills are installed as before and the guards are skipped with a notice;
