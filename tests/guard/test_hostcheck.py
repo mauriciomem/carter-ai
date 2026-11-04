@@ -20,7 +20,7 @@ from carter.guard.state import load, save
 from carter.identity.errors import E_POLICIES_MISSING, E_STATE_INVALID
 from carter.install.mcp import config_target
 from carter.install.paths import carter_gitconfig_path, guard_state_path
-from guard.helpers import debug_config, tree_hash
+from guard.helpers import STAND_IN, debug_config, tree_hash
 from sentinels import fine_grained, prefixed
 
 
@@ -156,7 +156,7 @@ class TestRedItems:
         human_tty(True)
         stack.fake()
         res = CliRunner().invoke(
-            main, ["guard", "install"], input="y\ny\nn\ny\ny\n", catch_exceptions=False
+            main, ["guard", "install"], input="y\ny\nn\ny\ny\nn\n", catch_exceptions=False
         )
         assert res.exit_code == 0, res.output
         accepted = policy_statements(
@@ -215,7 +215,7 @@ class TestRedItems:
 class TestGitIncludeLine:
     @pytest.fixture
     def with_key(self, monkeypatch: pytest.MonkeyPatch):
-        monkeypatch.setattr(gc, "carter_git_entries", lambda *_a, **_k: [("carter.tier", "t1")])
+        monkeypatch.setattr(gc, "carter_git_entries", STAND_IN)
 
     def test_present_is_ok(self, stack, with_key) -> None:
         installed(stack)

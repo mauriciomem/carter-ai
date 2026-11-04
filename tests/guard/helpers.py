@@ -68,3 +68,9 @@ def install_old_git(bindir: Path, real_git: str) -> None:
     wrapper.unlink(missing_ok=True)
     wrapper.write_text(OLD_GIT.replace("{real}", real_git))
     wrapper.chmod(0o755)
+
+
+def STAND_IN(*_a: object, **_k: object) -> list[tuple[str, str]]:  # noqa: N802
+    """A stand-in for ``carter_git_entries``: one Carter-owned git key that is not a ``carter.*``
+    mirror key (those belong to the tier mirror and survive ``guard remove``)."""
+    return [("alias.ai-commit", "!true")]

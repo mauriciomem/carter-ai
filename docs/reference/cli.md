@@ -14,7 +14,8 @@ carter [--version] [--help] COMMAND [ARGS]
 | [`init`](#carter-init) | Create a workspace in a project directory |
 | [`update`](#carter-update) | Regenerate a workspace's agents from `carter.yaml` |
 | [`check`](#carter-check) | Validate a workspace and confirm OpenCode loads it |
-| [`identity`](#carter-identity) | Unlock and lock the LLM signing key (more subcommands arrive with slice 2b) |
+| [`identity`](#carter-identity) | Set up, check, unlock and lock the LLM identity and its signing key |
+| [`commit`](#carter-commit) | `git commit` as the LLM identity: signed at T2, with the trailer |
 | [`github-token`](#carter-github-token) | Store and check the read-only GitHub token |
 | [`push`](#carter-push) | Push the current branch to `origin` after showing and checking it |
 | [`pr`](#carter-pr) | Open a pull request from the agent's handoff file |
@@ -177,10 +178,107 @@ before the first install is in `~/.carter/backups/`.
 
 ## carter identity
 
-The LLM's signing identity. `unlock` and `lock` manage the key Carter's dedicated `ssh-agent`
-holds; the other subcommands (`add`, `show`, `verify`, `remove`, `env`) arrive with the rest of
-slice 2b. Both commands read `~/.carter/config.toml` (`[identity.signing]`), write nothing to it,
-and take the three OpenSSH tools from `[identity.signing] ssh_bin_dir` (default `/usr/bin`).
+The LLM's signing identity. `add` sets it up, `show` and `verify` look at it, `unlock` and `lock`
+manage the key Carter's dedicated `ssh-agent` holds. `unlock` and `lock` read
+`~/.carter/config.toml` (`[identity.signing]`), write nothing to it, and take the three OpenSSH
+tools from `[identity.signing] ssh_bin_dir` (default `/usr/bin`).
+
+### carter identity add
+
+```text
+carter identity add --login LOGIN [--ssh-public-key PATH|key::...] [--private-key PATH] [--agent-socket PATH] [--signing-program PATH] [--dry-run]
+```
+
+Sets up the LLM identity from a GitHub account **you** created and a signing key **you** registered:
+Carter never creates an account, never registers a key and never reads a private key. With only
+`--login` you get tier T1 (a `Co-authored-by` trailer, unsigned); with `--ssh-public-key` and
+either `--private-key`, `--agent-socket` or `--signing-program` you get T2 (signed commits).
+
+It checks first, with unauthenticated reads of GitHub (no token is sent): the account is a `User`,
+its id is the configured one, the key is registered as an **SSH signing key** on the account and is
+**not** an authentication key (`https://github.com/<login>.keys`), and it is not your own
+`user.signingkey`. It needs git 2.40 or newer and OpenSSH 8.9 or newer. A public key is a `.pub`
+file or a `key::` literal; a private key is refused as a public key without echoing a byte of it,
+and `--private-key` is only stored as a path. Any failed check writes **nothing**
+(`E-IDENTITY-CHECK`, or `E-GITHUB-UNREACHABLE` for a network, rate-limit or server problem).
+
+On success it shows the plan and asks once, then writes `config.toml` (the previous file is kept in
+`~/.carter/backups/`), the signing shim `~/.carter/bin/carter-ssh-sign`, `allowed_signers`, and the
+tier mirror in `~/.carter/gitconfig`; every file is recorded with its hash and a failure puts them
+all back. Running `add` again with another key is a **rotation**: the old public key moves to
+`previous_public_keys`, so old commits still verify. It never writes your global git config and
+the role is not an option of `add`: it is set by `carter.yaml` or `CARTER_IDENTITY_ROLE`.
+
+| Option | Meaning |
+|--------|---------|
+| `--login LOGIN` | The LLM's GitHub login (a User account). Required. |
+| `--ssh-public-key PATH\|key::...` | Its signing key: a `.pub` file or a `key::` literal (T2). |
+| `--private-key PATH` | Path to its private key; stored, never read. |
+| `--agent-socket PATH` | A password manager's agent socket, instead of Carter's agent. |
+| `--signing-program PATH` | A signing program such as `op-ssh-sign`, kept behind the shim. |
+| `--dry-run` | Run every check, show the plan, write nothing. Works anywhere, an agent shell too. |
+
+Writing needs your own terminal (`E-HUMAN-TERMINAL` elsewhere).
+
+### carter identity show
+
+```text
+carter identity show
+```
+
+Read-only and allowed anywhere. Prints the identity, the role and where it came from, the
+configured and effective tier with the workspace cap, the commit shape that follows, and, at T2, the
+key's fingerprint, the agent state (`ok`, locked, `wrong-key`, stale), whether the shim is Carter's
+and names the configured socket, whether the tier mirror the guard reads agrees with `config.toml`,
+and the guard and policy coverage for the current directory. It prints names, ids and fingerprints,
+never a key or a token. A defect in `config.toml` is `E-CONFIG`, never a silent default. The exit
+code is 1 if a line is `RED`.
+
+### carter identity verify
+
+```text
+carter identity verify [--remote OWNER/REPO] [--sha SHA]
+```
+
+Without options it signs one commit in a temporary repository with the real shim and the loaded
+key, checks it against a temporary `allowed_signers` (the current key and the previous ones) and
+checks the shape: the author is not the LLM, the committer is, the signer is the stored
+fingerprint, the trailer is in the message. No network. A locked key (`E-SIGN-LOCKED`) is
+reported, never prompted for, and exits 1; so do the wrong key loaded, a shim naming another socket
+and a changed fingerprint, each with its own message. With `--remote OWNER/REPO --sha SHA` it asks
+GitHub (unauthenticated) whether that commit shows as Verified; an unreachable GitHub is
+`E-GITHUB-UNREACHABLE`, never a pass.
+
+| Option | Meaning |
+|--------|---------|
+| `--remote OWNER/REPO` | Ask GitHub about one commit (with `--sha`). |
+| `--sha SHA` | The commit to ask about (with `--remote`). |
+
+### carter identity remove
+
+```text
+carter identity remove [--yes] [--dry-run]
+```
+
+Takes back what `add` wrote, and only what is still unchanged (each file is recorded with its hash;
+an edited one is kept and listed). In this order: the key leaves Carter's agent and the agent
+stops (never `ssh-agent -k`), the `[identity]` and `[identity.signing]` parts of
+`~/.carter/config.toml` (a copy goes to `~/.carter/backups/`; workspace pins and the footer stay;
+a file that held only the identity is removed), the shim, `allowed_signers`, the socket directory,
+and the tier mirror with its cap fragments. It then prints **what stays**: the guards, hooks,
+policies and the `git ai-commit` alias (`carter guard remove` takes those), the read-only GitHub
+token, the account and the registered key on GitHub, and your private key file.
+`carter guard remove` and `carter identity remove` are independent: either order works, and each
+leaves the other's files. `carter uninstall` runs both. It refuses in an agent shell
+(`E-HUMAN-TERMINAL`) and needs a terminal or `--yes`.
+
+| Option | Meaning |
+|--------|---------|
+| `--yes`, `-y` | Do not ask for confirmation. |
+| `--dry-run` | Show what would be removed; change nothing. Works anywhere. |
+
+If `carter` itself is broken: deleting `~/.carter/gitconfig` restores plain git, and deleting
+`~/.carter/bin/carter-ssh-sign` makes agent commits fail (they are never made unsigned).
 
 ### carter identity unlock
 
@@ -219,6 +317,41 @@ when it is empty. `--all` also stops Carter's agent when other keys are loaded a
 agent that names the same socket directory. Agent commits fail with `E-SIGN-LOCKED` until the next
 `unlock`. It refuses in agent shells like `unlock` but needs no terminal, so a logout script can
 call it.
+
+## carter commit
+
+```text
+carter commit [GIT COMMIT ARGUMENTS...]
+```
+
+`git commit` with the LLM identity, for your own terminal (agents commit through the plugin's
+environment, which does the same). It has no options of its own: every argument goes to
+`git commit` as typed (`-m`, `--`, quotes, empty strings), and `git ai-commit` is the same command
+as an alias. The exit code is git's.
+
+- **T2, key loaded:** you stay the author (your git identity), the committer and signer are the LLM
+  (`%G?` is `G`, `git verify-commit` is good), and `Co-authored-by: <login> <noreply address>` is
+  added once. `--amend` keeps the author and date and signs again as the LLM.
+- **T2, key locked:** at your terminal you are asked **once** whether to unlock now. On no (or a
+  failed unlock) the commit is made **unsigned** with the trailer and `E-SIGN-HUMAN-FALLBACK` says it
+  shows Unverified. In an agent shell it is refused (`E-SIGN-AGENT-REFUSE`) and your changes stay
+  staged.
+- **T1:** unsigned, you as author and committer, with the trailer (`E-COMMIT-T1`). **T0:**
+  unsigned, with `Assisted-by: Carter`. A workspace `max_tier` lowers the tier for commits made
+  there. An unmet `require_tier` is `E-TIER-REQUIRED`; a broken `config.toml` is `E-CONFIG`; role `author`
+  is refused until it is built (`E-ROLE-B-TIER`).
+- **Your own key is never used.** `GIT_AUTHOR_*`, `GIT_COMMITTER_*`, `GIT_CONFIG_*` and your
+  `SSH_AUTH_SOCK` are not passed on, unsigned commits are made with signing switched off and every
+  `gpg.*.program` set to `false`, and a bare `-S` or `--gpg-sign` is dropped with a note.
+- **Refused**, never skipped or passed on (use plain `git commit` for these): `--no-verify`, `-n`, `--no-gpg-sign`, `-S<key>`,
+  `--gpg-sign=<key>`, `-s`, `--signoff` and `--author` (exit 2). `-a` and `--reset-author` pass.
+
+### git ai-commit
+
+The optional `alias` group of `carter guard install` (never part of a bare `--yes`; ask for it with
+`carter guard install --only alias`) adds `alias.ai-commit = !cd "${GIT_PREFIX:-.}" && carter commit`
+to `~/.carter/gitconfig`, unless you already have an `alias.ai-commit`. Git appends the arguments
+itself, so they arrive once and the command runs from the directory you typed it in.
 
 ## carter github-token
 

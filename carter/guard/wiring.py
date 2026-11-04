@@ -79,3 +79,26 @@ def uninstall_guards(base_dir: Path | None, *, assume_yes: bool) -> int:
         ),
         "removal",
     )
+
+
+def uninstall_identity(base_dir: Path | None, *, assume_yes: bool) -> int:
+    """The identity step of ``carter uninstall``: ``carter identity remove``, same rules as the
+    guards (an agent shell and a run with no terminal and no ``--yes`` keep everything)."""
+    from carter import identity_remove
+
+    click.echo("\n→ Removing the LLM identity (carter identity remove)")
+    if terminal.is_agent_shell():
+        click.echo("  kept: agent shell. Run `carter identity remove` in your own terminal.")
+        return 0
+    if not assume_yes and not terminal.stdin_is_tty():
+        click.echo("  kept: no terminal and no --yes. Run `carter identity remove` to remove it.")
+        return 0
+    if not assume_yes and not click.confirm("Remove the LLM identity files?"):
+        click.echo("  kept: not confirmed.")
+        return 0
+    report = identity_remove.remove_identity(base_dir)
+    for line in report.removed:
+        click.echo(f"  removed {line}")
+    for line in report.kept:
+        click.echo(f"  kept {line}")
+    return 0

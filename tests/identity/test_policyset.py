@@ -116,7 +116,7 @@ class TestStatementShape:
         assert all(s.group in groups for s in policy_set())
         # ... and each live group with policy content has at least one statement; the hook
         # groups (2a) install files and git keys, not OpenCode statements
-        hook_groups = {"hooks", "repo_hooks"}
+        hook_groups = {"hooks", "repo_hooks", "alias"}
         assert {g.id for g in policyset.consent_groups() if g.live} - hook_groups <= {
             s.group for s in policy_set()
         }

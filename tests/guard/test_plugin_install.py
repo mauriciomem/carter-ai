@@ -65,7 +65,7 @@ class TestRender:
     def test_declined_groups_follow_the_state(self, stack, human_tty) -> None:
         human_tty(True)
         stack.fake()
-        guard("install", input="y\ny\nn\ny\ny\n")  # g2, hooks, sudo-docker=no, ...
+        guard("install", input="y\ny\nn\ny\ny\nn\n")  # g2, hooks, sudo-docker=no, ...
         doc = json.loads(isolation_path(None).read_bytes())
         assert doc["plugin"]["declined_groups"] == ["sudo-docker"]
 

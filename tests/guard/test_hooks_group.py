@@ -52,7 +52,7 @@ class TestEntries:
     def test_only_when_hooks_is_accepted(self) -> None:
         assert gc.carter_git_entries() == []
         assert gc.carter_git_entries(["g2", "sudo-docker"]) == []
-        entries = dict(gc.carter_git_entries(["hooks"]))
+        entries = dict(gc.carter_git_entries(["hooks"], hooks_rev=1))  # what revision 1 wrote
         assert set(entries) == {
             "hook.carter-guard-pre-push.event",
             "hook.carter-guard-pre-push.command",
@@ -117,7 +117,9 @@ class TestInstall:
     def test_declined_hooks_write_nothing_and_are_listed(self, stack, human_tty) -> None:
         human_tty(True)
         stack.fake()
-        res = guard("install", input="y\nn\ny\ny\ny\n")  # g2, hooks, sudo, read-edit, config-edit
+        res = guard(
+            "install", input="y\nn\ny\ny\ny\nn\n"
+        )  # g2, hooks, sudo, read-edit, config-edit
         assert res.exit_code == 0, res.output
         assert "Declined: hooks" in res.output
         assert not guard_script_path(None).exists() and not carter_gitconfig_path(None).exists()
@@ -128,9 +130,9 @@ class TestInstall:
     def test_the_consent_prompt_shows_the_effect_line(self, stack, human_tty) -> None:
         human_tty(True)
         stack.fake()
-        res = guard("install", input="y\ny\ny\ny\ny\n")
-        assert "pushes by agent shells are blocked in every repo on this machine" in res.output
-        assert "your own pushes are unaffected" in res.output
+        res = guard("install", input="y\ny\ny\ny\ny\nn\n")
+        assert "agent pushes are blocked and agent commits are checked" in res.output
+        assert "your own commits and pushes are unaffected" in res.output
 
     def test_remove_takes_back_the_script_the_file_and_the_line(self, stack) -> None:
         before = global_cfg().read_bytes()

@@ -237,7 +237,7 @@ class TestG2States:
         human_tty(True)
         stack.fake()
         guard_in = CliRunner().invoke(
-            main, ["guard", "install"], input="y\ny\nn\ny\ny\n", catch_exceptions=False
+            main, ["guard", "install"], input="y\ny\nn\ny\ny\nn\n", catch_exceptions=False
         )
         assert guard_in.exit_code == 0, guard_in.output
         stack.fake(before=debug_config(stack.live))

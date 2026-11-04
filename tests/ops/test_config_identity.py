@@ -79,8 +79,13 @@ class TestNoHumanKey:
         }
         # 2b (plan 005): the *LLM's* signing block names the git key it sets; it never reads one.
         block = offenders.pop("carter/identity/payload.py", [])
+        # ... and `identity add` compares the LLM key with the human's `user.signingkey` so it can
+        # refuse it (step 15): it reads only a `key::` literal or a `.pub` file, never a private key
+        compare = offenders.pop("carter/identity_add.py", [])
         assert offenders == {}
-        assert set(block) == {"user.signingkey"}
+        assert set(block) == {"user.signingkey"} and set(compare) == {"user.signingkey"}
+        add = (REPO / "carter/identity_add.py").read_text(encoding="utf-8")
+        assert "a private key file is never opened" in add
         text = (REPO / "carter/identity/payload.py").read_text(encoding="utf-8")
         assert "subprocess" not in text and "git config" not in text
 
@@ -135,12 +140,16 @@ class TestIdentityFromTheResolver:
         assert hashlib.sha256(cfg_file.read_bytes()).hexdigest() == before
         assert [p.name for p in cfg_file.parent.iterdir()] == ["config.toml"]
 
-    def test_emit_keys_are_exactly_the_slice_1_set(self, capsys):
+    def test_emit_keys_are_exactly_the_slice_2b_set(self, capsys):
         assert set(emit(capsys)) == {
             "tier",
             "role",
             "role_source",
+            "author",
+            "committer",
+            "signer_fpr",
             "coauthor_trailer",
+            "coauthor_linked",
             "commits",
             "refusal_reason",
             "footer",
@@ -265,3 +274,41 @@ class TestReadsNeverWrite:
         Config.load(cfg_file)
         emit(capsys)
         assert sorted(p.name for p in cfg_file.parent.iterdir()) == before
+
+
+class TestRuntimeFields2b:
+    """Plan 005 step 22 (App A C6): who the author, the committer and the signer are right here."""
+
+    def test_t0_everything_is_the_human(self, capsys):
+        data = emit(capsys)
+        assert (data["author"], data["committer"], data["signer_fpr"]) == ("human", "human", "")
+        assert data["coauthor_linked"] is False  # `Assisted-by: Carter` carries no address
+
+    def test_t1_is_human_author_and_committer_with_a_linked_co_author(self, cfg_file, capsys):
+        cfg_file.write_text(T1)
+        data = emit(capsys)
+        assert (data["author"], data["committer"], data["signer_fpr"]) == ("human", "human", "")
+        assert data["coauthor_linked"] is True
+
+    def test_t2_has_the_llm_as_committer_and_the_public_fingerprint(self, cfg_file, capsys):
+        cfg_file.write_text(T2 + 'private_key_path = "/home/u/.ssh/llm_secret_key"\n')
+        data = emit(capsys)
+        assert (data["author"], data["committer"], data["signer_fpr"]) == (
+            "human",
+            "llm",
+            "SHA256:abc",
+        )
+        assert data["commits"] == "allowed"
+        assert "llm_secret_key" not in json.dumps(data) and "private" not in json.dumps(data)
+
+    def test_a_cap_below_t2_drops_the_signer(self, cfg_file, capsys, tmp_path, monkeypatch):
+        cfg_file.write_text(T2 + f'[workspaces."{tmp_path.resolve()}"]\nmax_tier = "t1"\n')
+        monkeypatch.chdir(tmp_path)
+        data = emit(capsys)
+        assert (data["tier"], data["committer"], data["signer_fpr"]) == ("t1", "human", "")
+
+    def test_a_refusal_keeps_the_reason_and_allows_nothing(self, cfg_file, capsys):
+        cfg_file.write_text("schema = 2\n[identity\nbroken")
+        data = emit(capsys)
+        assert data["commits"] == "refused" and data["refusal_reason"] == "E-CONFIG"
+        assert (data["committer"], data["signer_fpr"], data["coauthor_trailer"]) == ("", "", "")

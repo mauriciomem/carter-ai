@@ -14,16 +14,18 @@ click: callers pass ``confirm`` and ``echo`` so this module is testable and clic
 from __future__ import annotations
 
 import copy
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from datetime import UTC, datetime
 from pathlib import Path
 
 from carter import harness
 from carter.guard import (
+    alias,
     configwrite,
     consent,
     gitconfig,
     hooks,
+    mirror_io,
     optout,
     plugin,
     policies,
@@ -230,21 +232,29 @@ def _workspaces() -> list[str]:
         return []
 
 
-def _repo_hooks_step(base_dir: Path | None, state: GuardState, echo: Echo, *, dry: bool) -> None:
-    """Install (or, in a dry run, only inspect) the owned hook in the cwd repo and workspaces."""
+def _repo_hooks_step(
+    base_dir: Path | None, state: GuardState, echo: Echo, *, dry: bool, events: Sequence[str]
+) -> None:
+    """Install (or, in a dry run, only inspect) the owned hooks in the cwd repo and workspaces."""
     for repo in repohooks.repos_in_scope(Path.cwd(), _workspaces()):
-        found = repohooks.inspect(repo, state, base_dir)
-        if found.state == "installable" and not dry:
-            found = repohooks.install(repo, state, base_dir)
-            echo(f"  repo hook installed: {found.hook}")
-        elif found.state == "installable":
-            echo(f"  would install a repo hook: {found.hook}")
-        elif found.state == "guarded":
-            echo(f"  repo hook present: {found.hook}")
-        else:
-            echo(f"⚠ {found.line()}")
-            if found.snippet:
-                echo(f"    {found.snippet}")
+        for event in events:
+            found = repohooks.inspect(repo, state, base_dir, event)
+            if found.state == "installable" and not dry:
+                found = repohooks.install(repo, state, base_dir, event)
+                echo(f"  repo hook installed: {found.hook}")
+            elif found.state == "installable":
+                echo(f"  would install a repo hook: {found.hook}")
+            elif found.state == "guarded":
+                echo(f"  repo hook present: {found.hook}")
+            else:
+                echo(f"⚠ {found.line()} ({event})")
+                if found.snippet:
+                    echo(f"    {found.snippet}")
+
+
+def _accepted_rev(state: GuardState, group: str) -> int:
+    """The revision the human accepted (1 when the record has none): decides the hook events."""
+    return int(state.consents.get(group, {}).get("rev", 1))
 
 
 def _git_step(
@@ -259,6 +269,9 @@ def _git_step(
     on_new_git = mode in ("include", "direct")
     want_hooks = "hooks" in accepted and on_new_git
     want_repo = "repo_hooks" in accepted and mode == "no-config-hooks"
+    want_alias = "alias" in accepted and mode is not None
+    hooks_rev = _accepted_rev(state, "hooks")
+    repo_events = hooks.events_for_rev(_accepted_rev(state, "repo_hooks"))
     template: Path | None = None
     if want_repo:
         plan = repohooks.plan_template(gitconfig.global_config_path(), base_dir)
@@ -266,10 +279,22 @@ def _git_step(
             echo(f"⚠ unguarded: templateDir. {plan.snippet}")
         else:
             template = plan.directory
+    alias_set = False
+    if want_alias:
+        alias_plan = alias.plan_alias(gitconfig.global_config_path())
+        alias_set = alias_plan.status != "kept-user-value"
+        if not alias_set:
+            echo(f"⚠ {alias_plan.snippet}")
     entries = gitconfig.carter_git_entries(
-        [g for g, on in (("hooks", want_hooks), ("repo_hooks", want_repo)) if on],
+        [
+            g
+            for g, on in (("hooks", want_hooks), ("repo_hooks", want_repo), ("alias", want_alias))
+            if on
+        ],
         base_dir=base_dir,
         template_dir=template,
+        hooks_rev=hooks_rev,
+        alias=alias_set,
     )
     if want_hooks or want_repo:
         script = hooks.script_path(base_dir)
@@ -279,10 +304,12 @@ def _git_step(
                 f"⚠ kept your edited {script}; delete it and run `carter guard install` to restore"
             )
     if entries and not dry_run and template is not None:
-        repohooks.install_template(base_dir, state)
+        repohooks.install_template(base_dir, state, repo_events)
     if not entries:
         echo(GIT_NOT_NEEDED)
-        withdrawn = not {"hooks", "repo_hooks"} & set(accepted)  # declined, or never accepted
+        withdrawn = not {"hooks", "repo_hooks", "alias"} & set(
+            accepted
+        )  # declined or never accepted
         if not dry_run and state.gitconfig is not None and withdrawn:
             _remove_git(base_dir, state, echo)  # a group was declined or withdrawn: reconcile
     else:
@@ -295,7 +322,7 @@ def _git_step(
         else:
             _apply_entries(entries, base_dir, state, echo, mode=mode or "include")
     if want_repo:
-        _repo_hooks_step(base_dir, state, echo, dry=dry_run)
+        _repo_hooks_step(base_dir, state, echo, dry=dry_run, events=repo_events)
     if on_new_git and "hooks" in accepted and state.repo_hooks and not dry_run:
         echo(
             "git >= 2.54 is available: the config hook now covers every repo; removing the "
@@ -383,7 +410,12 @@ def install(
                     echo(line)
     consent.record(state, plan, today=today)
     for name in plan.declined:
-        echo(f"Declined: {name} (listed as a residual by `carter guard status`).")
+        if groups[name].optional:
+            echo(
+                f"Declined: {name} (optional; `carter guard install --only {name}` adds it later)."
+            )
+        else:
+            echo(f"Declined: {name} (listed as a residual by `carter guard status`).")
     for name in plan.refused_offers:
         echo(
             f"Not confirmed: {name} revision 2 (denies stay; `carter guard install --only {name}`)"
@@ -451,6 +483,9 @@ def _dry_run(
         if prior == "declined" and not (only and name in only):
             echo(f"  {name:<18} declined earlier (stays declined)")
             continue
+        if group.optional and prior is None and not (only and name in only):
+            echo(f"  {name:<18} optional, not part of --yes: `--only {name}` or a terminal yes")
+            continue
         rec_rev = int(state.consents.get(name, {}).get("rev", 1))
         if prior == "accepted" and rec_rev < group.rev and not (only and name in only):
             echo(f"  {name:<18} accepted (revision {rec_rev}): {group.effect}")
@@ -511,8 +546,12 @@ def _only_plugin(base_dir: Path | None, state: GuardState, echo: Echo, *, dry_ru
     echo("plugin removed; OpenCode unloads it within seconds (restart the server to be sure)")
 
 
-def _known_extra_files(base_dir: Path | None, state: GuardState, echo: Echo) -> None:
-    """Delete recorded, unchanged files Carter installed; keep and report the rest."""
+def _known_extra_files(
+    base_dir: Path | None, state: GuardState, echo: Echo, keep: Sequence[str] = ()
+) -> None:
+    """Delete recorded, unchanged files Carter installed; keep and report the rest.
+
+    ``keep`` names the identity files (shim, mirror...): not the guards' to remove."""
     root = guard_state_path(base_dir).parent
     for rel in KNOWN_EXTRA_FILES:
         path = root / rel
@@ -520,6 +559,8 @@ def _known_extra_files(base_dir: Path | None, state: GuardState, echo: Echo) -> 
             echo(f"  kept {path}: not recorded as Carter's, or changed since")
     for rec in list(state.files):
         path = Path(rec["path"])
+        if rec["path"] in keep:
+            continue
         if state.owned_unchanged(path):
             path.unlink()
             echo(f"  removed {path}")
@@ -580,11 +621,13 @@ def remove(
             _only_plugin(base_dir, target, echo, dry_run=dry_run)
         elif "g2" in names and not dry_run:
             plugin.remove(base_dir, target, echo)  # the plugin belongs to g2
-        hook_groups = [g for g in (only or []) if g in ("hooks", "repo_hooks")]
+        hook_groups = [g for g in (only or []) if g in ("hooks", "repo_hooks", "alias")]
         if hook_groups and dry_run:
-            echo(f"  (the hook files of {', '.join(hook_groups)} would be removed too)")
+            echo(f"  (the git keys and files of {', '.join(hook_groups)} would be removed too)")
         elif hook_groups:
-            _remove_git(base_dir, target, echo)  # 2a: the hook groups own every Carter git key
+            # what stays accepted keeps its keys: only the withdrawn group's entries go
+            mode, _ = _availability(echo)
+            _git_step(base_dir, target, echo, dry_run=False, mode=mode)
             if "repo_hooks" in hook_groups:
                 _remove_repo_hooks(target, echo)
             if not {"hooks", "repo_hooks"} & set(consent.accepted_groups(target)):
@@ -603,9 +646,16 @@ def remove(
     plugin.remove(base_dir, state, echo)
     _remove_git(base_dir, state, echo)
     _remove_repo_hooks(state, echo)
-    _known_extra_files(base_dir, state, echo)
+    identity = mirror_io.identity_files(base_dir, state)
+    _known_extra_files(base_dir, state, echo, identity)
     if (path.parent / "secrets" / "gh-read.token").exists():
         echo(PAT_KEPT)
+    if identity:  # the shim's and the mirror's hash records stay: the guards are not theirs
+        left = GuardState()
+        left.files = [f for f in state.files if f["path"] in identity]
+        save(left, path)
+        echo("Kept the identity files and their records (`carter identity remove` takes them).")
+        return 0
     path.unlink(missing_ok=True)
     echo("Removed guard state. (state/audit/ is kept.)")
     return 0

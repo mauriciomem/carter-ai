@@ -276,8 +276,8 @@ class TestInstallOnOldGit:
     def test_the_tty_offer_defaults_to_yes(self, old: Path, repo: Path, human_tty) -> None:
         human_tty(True)
         res = guard(
-            "install", input="y\ny\ny\ny\n\n"
-        )  # g2, sudo, read-edit, config-edit, repo_hooks=Enter
+            "install", input="y\ny\ny\ny\nn\n\n"
+        )  # g2, sudo, read-edit, config-edit, alias=no, repo_hooks=Enter
         assert res.exit_code == 0, res.output
         assert "repo_hooks: git older than 2.54 only" in res.output
         assert load(guard_state_path(None)).consents["repo_hooks"]["decision"] == "accepted"
@@ -285,7 +285,7 @@ class TestInstallOnOldGit:
 
     def test_a_no_installs_nothing_for_the_group(self, old: Path, repo: Path, human_tty) -> None:
         human_tty(True)
-        guard("install", input="y\ny\ny\ny\nn\n")
+        guard("install", input="y\ny\ny\ny\nn\nn\n")
         assert not (repo / ".git" / "hooks" / "pre-push").exists()
         assert not guard_script_path(None).exists()
 
@@ -318,7 +318,11 @@ class TestInstallOnOldGit:
         assert f"{repo}: unguarded: foreign hook" in res.output
         assert f"{husky}: unguarded: hooksPath" in res.output
         assert hook.read_text() == "#!/bin/sh\nexit 0\n"
-        assert load(guard_state_path(None)).repo_hooks == []
+        mine = [h["path"] for h in load(guard_state_path(None)).repo_hooks]
+        recorded = {Path(p).name for p in mine if p.startswith(str(repo))}
+        # each event is judged alone: the foreign pre-push stays, the free commit events are ours
+        assert recorded == {"prepare-commit-msg", "commit-msg", "post-commit"}
+        assert not any(p.startswith(str(husky)) for p in mine)
 
     def test_a_user_template_dir_is_kept_and_new_clones_are_reported_unguarded(
         self, old: Path, repo: Path

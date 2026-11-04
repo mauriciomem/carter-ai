@@ -19,6 +19,7 @@ from carter.checkitems import Item, Level
 from carter.guard import consent, gitconfig, hooks, plugin, repohooks
 from carter.guard.state import GuardState
 from carter.identity.errors import E_GIT_OLD, E_OPENCODE_VERSION, registry
+from carter.identity.policyset import consent_groups
 from carter.identity.rules import pollution_hits
 from carter.install import prereqs
 from carter.install.paths import carter_gitconfig_path, isolation_path, plugin_dir, run_dir
@@ -70,12 +71,17 @@ def include_items(state: GuardState, base_dir: Path | None) -> list[Item]:
 def hook_scope_items(state: GuardState, cwd: Path) -> list[Item]:
     if "hooks" not in consent.accepted_groups(state):
         return []
-    scopes = gitconfig.hook_scopes(cwd, hooks.EVENT)
-    scope = scopes.get(hooks.HOOK_NAME)
-    if scope == "global":
-        return [Item("ok", "git", "pre-push hook carter-guard-pre-push is active (scope global)")]
-    text = "pre-push hook carter-guard-pre-push is not listed by `git hook list` as global"
-    return [Item("warn", "git", text + (f" (it is {scope})" if scope else ""))]
+    rev = int(state.consents.get("hooks", {}).get("rev", 1))
+    out: list[Item] = []
+    for event in hooks.events_for_rev(rev):
+        name = hooks.hook_name(event)
+        scope = gitconfig.hook_scopes(cwd, event).get(name)
+        if scope == "global":
+            out.append(Item("ok", "git", f"{event} hook {name} is active (scope global)"))
+            continue
+        text = f"{event} hook {name} is not listed by `git hook list` as global"
+        out.append(Item("warn", "git", text + (f" (it is {scope})" if scope else "")))
+    return out
 
 
 def file_items(state: GuardState, base_dir: Path | None) -> list[Item]:
@@ -104,15 +110,20 @@ def file_items(state: GuardState, base_dir: Path | None) -> list[Item]:
 
 def g2_items(state: GuardState, base_dir: Path | None) -> list[Item]:
     out: list[Item] = []
-    if consent.reconsent_pending(state):
-        offer = state.offer("g2") or {}
+    revs = {g.id: g.rev for g in consent_groups()}
+    for group in consent.reconsent_pending(state):
+        offer = state.offer(group) or {}
+        rev = revs[group]
         if offer.get("decision") == "declined":
             when = offer.get("date", "?")
-            text = f"g2 rev 2 declined on {when}; `carter guard install --only g2` to reconsider"
+            text = f"{group} rev {rev} declined on {when}; `carter guard install --only {group}` to reconsider"  # noqa: E501
             out.append(Item("info", "consent", text))
         else:
+            what = {"g2": "the plugin"}.get(group, "the new content")
             out.append(
-                Item("info", "consent", "g2 rev 2 pending: the plugin needs your confirmation")
+                Item(
+                    "info", "consent", f"{group} rev {rev} pending: {what} needs your confirmation"
+                )
             )
     iso = isolation_path(base_dir)
     if iso.exists():
@@ -212,7 +223,8 @@ def repo_items(
     """Per-repo coverage on git < 2.54: WARN, FAIL only when T2 is configured."""
     if mode != "no-config-hooks":
         return []
-    found = repohooks.scan(repohooks.repos_in_scope(cwd, workspaces), state, base_dir)
+    events = hooks.events_for_rev(int(state.consents.get("repo_hooks", {}).get("rev", 1)))
+    found = repohooks.scan(repohooks.repos_in_scope(cwd, workspaces), state, base_dir, events)
     bad: Level = "red" if repohooks.verdict(found, tier) == "fail" else "warn"
     entry = registry()[E_GIT_OLD]
     out = [Item("info", "git", f"{E_GIT_OLD}: {entry.message}")]

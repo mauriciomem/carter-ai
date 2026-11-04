@@ -45,6 +45,7 @@ class ConsentGroup:
     effect: str
     rev: int = 1  # bumped when a group gains content that needs a fresh yes (D65)
     explain: tuple[str, ...] = ()  # printed before the question when this revision is offered
+    optional: bool = False  # never accepted by a bare --yes, only by --only <id> or a TTY yes
 
 
 @dataclass(frozen=True)
@@ -67,7 +68,14 @@ def _data() -> dict[str, Any]:
 def consent_groups() -> tuple[ConsentGroup, ...]:
     """The seven consent groups of C.6.1, in order; ``live`` ones have content in 1G."""
     return tuple(
-        ConsentGroup(g["id"], g["live"], g["effect"], g.get("rev", 1), tuple(g.get("explain", ())))
+        ConsentGroup(
+            g["id"],
+            g["live"],
+            g["effect"],
+            g.get("rev", 1),
+            tuple(g.get("explain", ())),
+            g.get("optional", False),
+        )  # fmt: skip
         for g in _data()["consent_groups"]
     )
 

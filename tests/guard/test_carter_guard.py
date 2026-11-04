@@ -131,8 +131,8 @@ class TestPrePush:
         env = {"AGENT": "1", "CARTER_HUMAN_SHELL": "1"}
         assert run([*sh, str(script), "pre-push"], env, tmp_path).returncode == 0
 
-    @pytest.mark.parametrize("event", ["commit-msg", "prepare-commit-msg", "post-commit", "", "x"])
-    def test_other_events_exit_0_until_slice_2b(
+    @pytest.mark.parametrize("event", ["", "x", "pre-rebase", "post-merge"])
+    def test_unknown_events_exit_0(
         self, event: str, sh: list[str], script: Path, tmp_path: Path
     ) -> None:
         done = run([*sh, str(script), event], {"CARTER_AGENT_SHELL": "1"}, tmp_path)
@@ -247,8 +247,11 @@ class TestPortability:
             for pattern in bad:
                 assert not re.search(pattern, line), (pattern, line)
 
-    def test_no_external_commands_and_no_git(self) -> None:
-        code = re.sub(r"'[^']*'", "''", "\n".join(self.code_lines()))  # message text is data
+    def test_the_human_path_has_no_external_command_and_no_git(self) -> None:
+        # the part of the script that runs before an agent is known: up to Carter's git file
+        lines = self.code_lines()
+        human = lines[: next(i for i, ln in enumerate(lines) if ln.startswith("cfg="))]
+        code = re.sub(r"'[^']*'", "''", "\n".join(human))  # message text is data
         words = set(re.findall(r"(?<![\w$-])([a-z][a-z-]+)(?=\s|$|;)", code))
         for cmd in (
             "git",

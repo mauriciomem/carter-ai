@@ -12,7 +12,7 @@ from test_docs_slice1g import documented, help_options, section, text
 
 
 class TestIdentityReference:
-    @pytest.mark.parametrize("sub", ["unlock", "lock"])
+    @pytest.mark.parametrize("sub", ["unlock", "lock", "add", "show", "verify", "remove"])
     def test_documented_options_equal_help(self, sub: str) -> None:
         block = section(text("reference/cli.md"), f"carter identity {sub}", "###")
         assert documented(block) == help_options("identity", sub)
@@ -29,3 +29,25 @@ class TestIdentityReference:
         block = " ".join(section(text("reference/cli.md"), "carter identity unlock", "###").split())
         for needle in ("OPENCODE_TERMINAL", "E-UNLOCK-OPENCODE", "E-UNLOCK-TTY", "E-UNLOCK-NOPASS"):
             assert needle in block
+
+
+class TestCommitReference:
+    def test_the_refused_flags_documented_are_the_frozen_list(self) -> None:
+        from carter.identity.commit import REFUSED_FLAGS
+
+        block = " ".join(section(text("reference/cli.md"), "carter commit", "##").split())
+        for flag in REFUSED_FLAGS:
+            assert flag.replace("<arg>", "<key>") in block, flag
+
+    def test_every_error_code_the_section_names_is_registered(self) -> None:
+        for code in set(
+            re.findall(
+                r"E-[A-Z0-9]+(?:-[A-Z0-9]+)+",
+                section(text("reference/cli.md"), "carter commit", "##"),
+            )
+        ):
+            assert code in registry(), code
+
+    def test_the_help_names_the_same_refused_long_flags(self) -> None:
+        refused = {"--no-verify", "--no-gpg-sign", "--gpg-sign", "--signoff", "--author"}
+        assert refused <= help_options("commit") <= refused | {"--reset-author"}

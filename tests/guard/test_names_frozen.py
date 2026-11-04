@@ -13,7 +13,6 @@ from carter.identity.rules import load_rules
 
 # F3: the seven consent groups, and which are live in 1G.
 GROUPS = ("g2", "hooks", "sudo-docker", "read-edit-denies", "config-edit", "alias", "repo_hooks")
-LIVE_GROUPS = ("g2", "hooks", "sudo-docker", "read-edit-denies", "config-edit", "repo_hooks")
 
 # F5: statement ids per group. gh allows are generated from the allowlist (F4).
 IDS_BY_GROUP = {
@@ -71,8 +70,12 @@ def test_consent_groups_are_the_seven_c61_names() -> None:
     assert tuple(g.id for g in policyset.consent_groups()) == GROUPS
 
 
-def test_live_groups_are_all_but_alias() -> None:
-    assert tuple(g.id for g in policyset.consent_groups() if g.live) == LIVE_GROUPS
+def test_every_group_is_live_and_only_alias_is_optional() -> None:
+    """2b (H15): `alias` went live at revision 1, optional; the 2a revisions are superseded by
+    CONSENT_REVS_2B below."""
+    groups = policyset.consent_groups()
+    assert all(g.live for g in groups)
+    assert [g.id for g in groups if g.optional] == ["alias"]
 
 
 def test_every_group_has_a_one_line_effect() -> None:
@@ -207,17 +210,6 @@ GROUP_OF_VERB = {
     "pkexec": "sudo-docker",
 }
 
-# G10: consent group revisions at 2a (g2 moves to 2 with the plugin).
-CONSENT_REVS = {
-    "g2": 2,
-    "hooks": 1,
-    "sudo-docker": 1,
-    "read-edit-denies": 1,
-    "config-edit": 1,
-    "alias": 1,
-    "repo_hooks": 1,
-}
-
 # G4: isolation.json schema v1. Unknown or missing keys mean the file is invalid.
 ISOLATION_TOP_LEVEL = (
     "schema_version",
@@ -328,10 +320,6 @@ def test_every_forbidden_class_has_a_group_and_a_hint() -> None:
         assert "`!" not in f.hint, f.id  # commands are shown without a leading `!`
     other = next(f for f in load_rules().forbidden if f.id == "other-verbs")
     assert dict(other.item_groups) == GROUP_OF_VERB
-
-
-def test_consent_groups_carry_their_revision() -> None:
-    assert {g.id: g.rev for g in policyset.consent_groups()} == CONSENT_REVS
 
 
 def test_the_plugin_defaults_of_the_data_file() -> None:
@@ -627,7 +615,6 @@ def test_h14_the_refused_commit_flags() -> None:
     assert tuple(commit.REFUSED_FLAGS) == COMMIT_REFUSED_FLAGS
 
 
-@pytest.mark.xfail(strict=True, reason="step 19 moves hooks and repo_hooks to rev 2, alias live")
 def test_h15_consent_revisions_and_live_groups_after_2b() -> None:
     assert {g.id: g.rev for g in policyset.consent_groups()} == CONSENT_REVS_2B
     assert tuple(g.id for g in policyset.consent_groups() if g.live) == LIVE_GROUPS_2B
@@ -637,7 +624,6 @@ def test_h15_the_alias_value_has_no_duplicated_arguments() -> None:
     assert ALIAS_VALUE.count('"$@"') == 0  # git appends "$@" itself (spike B 8, erratum R1)
 
 
-@pytest.mark.xfail(strict=True, reason="step 18 moves the reject checks to prepare-commit-msg")
 def test_h7_the_guard_codes_name_the_hook_that_raises_them() -> None:
     reg = registry()
     for code, hook in GUARD_CODE_WHERE_2B.items():

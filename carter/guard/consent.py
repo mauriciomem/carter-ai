@@ -32,9 +32,18 @@ from carter.identity.policyset import ConsentGroup, Statement, consent_groups, p
 
 CONFIG_EDIT = "config-edit"
 PLUGIN = "plugin"  # a component, not a group: accepted only by `guard remove --only`
+PENDING_TEXT = {
+    "g2": "plugin and isolation need your confirmation",
+    "hooks": "the commit checks need your confirmation",
+    "repo_hooks": "the commit hooks need your confirmation",
+}
 PENDING_NOTICE = (
-    "plugin and isolation need your confirmation (`{group}` revision 2): run "
-    "`carter guard install` in your terminal, or `carter guard install --yes --only {group}`"
+    "{what} (`{group}` revision {rev}): run `carter guard install` in your terminal, "
+    "or `carter guard install --yes --only {group}`"
+)
+OPTIONAL_NOTICE = (
+    "`{group}` is optional and was not installed: `carter guard install --only {group}` "
+    "(or answer yes in a terminal)"
 )
 
 
@@ -71,13 +80,23 @@ class ConsentPlan:
     reserved: list[str] = field(default_factory=list)  # named by --only, nothing to install
     unavailable: dict[str, str] = field(default_factory=dict)  # group -> why not on this machine
     pending: list[str] = field(default_factory=list)  # stale groups left alone (needs a TTY yes)
+    optional_skipped: list[str] = field(default_factory=list)  # optional groups a bare --yes skips
     refused_offers: list[str] = field(default_factory=list)  # stale groups the human said no to
     skipped: bool = False  # no TTY and no --yes: nothing decided, nothing to write
 
     def notices(self) -> list[str]:
         out = [f"nothing to install for `{g}` in this version" for g in self.reserved]
         out += [f"`{g}`: {why}" for g, why in self.unavailable.items()]
-        out += [PENDING_NOTICE.format(group=g) for g in self.pending]
+        revs = {g.id: g.rev for g in consent_groups()}
+        out += [
+            PENDING_NOTICE.format(
+                what=PENDING_TEXT.get(g, f"`{g}` has new content that needs your confirmation"),
+                group=g,
+                rev=revs[g],
+            )
+            for g in self.pending
+        ]
+        out += [OPTIONAL_NOTICE.format(group=g) for g in self.optional_skipped]
         if self.skipped:
             out.append(
                 "no terminal and no --yes: policies, per-agent permissions and Carter's git "
@@ -126,6 +145,9 @@ def resolve_consents(
             continue
         if prior and not explicit:
             decision = prior
+        elif assume_yes and groups[name].optional and not explicit:
+            plan.optional_skipped.append(name)  # optional: a bare --yes never says yes for you
+            continue
         elif assume_yes:
             decision = "accepted"
         else:
@@ -161,7 +183,14 @@ def accepted_groups(state: GuardState) -> list[str]:
 
 
 def declined_groups(state: GuardState) -> list[str]:
-    return [g for g in group_names() if state.consents.get(g, {}).get("decision") == "declined"]
+    """Groups the human declined and that protect something (an optional group, such as the
+    ``alias``, is a convenience: declining it leaves no residual)."""
+    optional = {g.id for g in consent_groups() if g.optional}
+    return [
+        g
+        for g in group_names()
+        if g not in optional and state.consents.get(g, {}).get("decision") == "declined"
+    ]
 
 
 def desired_statements(

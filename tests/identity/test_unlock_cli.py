@@ -126,7 +126,7 @@ def invoke(*args: str, env: dict[str, str] | None = None):  # type: ignore[no-un
 class TestRegistration:
     def test_the_group_and_the_two_commands_exist_with_the_frozen_options(self) -> None:
         group = identity_cli.identity
-        assert set(group.commands) == {"unlock", "lock"}
+        assert {"unlock", "lock"} <= set(group.commands)
         unlock = {o.opts[0] for o in group.commands["unlock"].params} - {"--help"}
         assert unlock == {"--ttl", "--extend", "--allow-no-passphrase"}
         assert {o.opts[0] for o in group.commands["lock"].params} == {"--all"}

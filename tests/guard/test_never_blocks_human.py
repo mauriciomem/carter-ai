@@ -67,7 +67,7 @@ def human_commit_and_push(work: Path, name: str) -> None:
 @pytest.fixture
 def installed_with_git_key(stack, monkeypatch: pytest.MonkeyPatch):
     """A full guard install that also writes a Carter git key (so the include line exists)."""
-    monkeypatch.setattr(gc, "carter_git_entries", lambda *_a, **_k: [("carter.tier", "t1")])
+    monkeypatch.setattr(gc, "carter_git_entries", lambda *_a, **_k: [("alias.ai-commit", "!true")])
     stack.fake()
     assert guard("install", "--yes").exit_code == 0
     assert carter_gitconfig_path(None).exists()
@@ -141,7 +141,7 @@ class TestKilledInstall:
         script = (
             "import os, signal\n"
             "from carter.guard import gitconfig as gc\n"
-            "gc.carter_git_entries = lambda *_a, **_k: [('carter.tier', 't1')]\n"
+            "gc.carter_git_entries = lambda *_a, **_k: [('alias.ai-commit', '!true')]\n"
             "def die(*a, **k):\n"
             "    os.kill(os.getpid(), signal.SIGKILL)\n"
             "gc.apply_keys = die\n"
@@ -177,7 +177,7 @@ class TestNoCarterOnTheHumansPath:
         assert shutil.which("carter") is None  # PATH holds only fake opencode and git
         human_commit_and_push(repo, "f")
 
-    def test_2a_installs_one_config_hook_and_no_repo_hook_on_a_new_git(
+    def test_it_installs_the_four_config_hooks_and_no_repo_hook_on_a_new_git(
         self, stack, repo: Path
     ) -> None:
         stack.fake()
@@ -185,8 +185,9 @@ class TestNoCarterOnTheHumansPath:
         hooks = git("config", "--global", "--includes", "--get-regexp", r"^hook\.")
         assert hooks.returncode == 0
         assert {ln.split()[0] for ln in hooks.stdout.splitlines()} == {
-            "hook.carter-guard-pre-push.event",
-            "hook.carter-guard-pre-push.command",
+            f"hook.carter-guard-{event}.{part}"
+            for event in ("pre-push", "prepare-commit-msg", "commit-msg", "post-commit")
+            for part in ("event", "command")
         }
         assert not (repo / ".git" / "hooks" / "pre-push").exists()
         human_commit_and_push(repo, "g")  # the hook runs and passes: this is a human env

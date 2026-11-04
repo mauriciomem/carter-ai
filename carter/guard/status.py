@@ -32,12 +32,16 @@ def _consents(state: GuardState, echo: Echo) -> None:
             continue
         rec = state.consents.get(group.id)
         if rec is None:
-            echo(f"  {group.id:<18} not decided yet")
+            how = "optional, not installed" if group.optional else "not decided yet"
+            echo(f"  {group.id:<18} {how}")
         elif rec["decision"] == "accepted":
             echo(f"  {group.id:<18} accepted {rec['date']}")
+        elif group.optional:
+            echo(f"  {group.id:<18} declined {rec['date']}  (optional: no residual)")
         else:
             echo(f"  {group.id:<18} declined {rec['date']}  (residual: not installed)")
-    echo(f"  {', '.join(reserved)}: reserved, nothing to install in this version")
+    if reserved:
+        echo(f"  {', '.join(reserved)}: reserved, nothing to install in this version")
 
 
 def _policies(state: GuardState, reader: Reader | None, echo: Echo) -> None:

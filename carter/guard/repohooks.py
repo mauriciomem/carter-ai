@@ -78,22 +78,27 @@ def hooks_path_setting(repo: Path) -> str:
     return done.stdout.strip() if done.returncode == 0 else ""
 
 
-def chain_snippet(script: Path) -> str:
+def chain_snippet(script: Path, event: str = HOOK) -> str:
     """Lines for the human to add to a hook Carter does not own."""
     quoted = shlex.quote(str(script))
-    return f'[ -x {quoted} ] && {{ {quoted} {HOOK} "$@" || exit 1; }}   # Carter: agent-push guard'
+    env = ""
+    if event != HOOK:  # the commit events read the tier mirror from Carter's own git file
+        env = f"CARTER_GUARD_CONFIG={shlex.quote(str(script.parent.parent / 'gitconfig'))} "
+    what = "agent-push guard" if event == HOOK else "agent-commit guard"
+    return f'[ -x {quoted} ] && {{ {env}{quoted} {event} "$@" || exit 1; }}   # Carter: {what}'
 
 
-def inspect(repo: Path, state: GuardState, base_dir: Path | None) -> RepoStatus:
-    """Where ``repo`` stands. Read-only."""
+def inspect(repo: Path, state: GuardState, base_dir: Path | None, event: str = HOOK) -> RepoStatus:
+    """Where ``repo`` stands for one hook event. Read-only."""
     script = hooks.script_path(base_dir)
     directory = hooks_dir(repo)
     if directory is None:
         return RepoStatus(repo, "unguarded", "not a repository")
-    hook = directory / HOOK
+    hook = directory / event
     if setting := hooks_path_setting(repo):
         snippet = (
-            f"core.hooksPath is {setting}: add this to its {HOOK} hook:\n  {chain_snippet(script)}"
+            f"core.hooksPath is {setting}: add this to its {event} hook:\n"
+            f"  {chain_snippet(script, event)}"
         )
         return RepoStatus(repo, "unguarded", "hooksPath", hook, snippet)
     if not hook.exists() and not hook.is_symlink():
@@ -103,24 +108,29 @@ def inspect(repo: Path, state: GuardState, base_dir: Path | None) -> RepoStatus:
     owned = any(h["path"] == str(hook) for h in state.repo_hooks)
     reason = "edited hook" if owned else "foreign hook"
     return RepoStatus(
-        repo, "unguarded", reason, hook, f"add this to {hook}:\n  {chain_snippet(script)}"
+        repo, "unguarded", reason, hook, f"add this to {hook}:\n  {chain_snippet(script, event)}"
     )
 
 
-def install(repo: Path, state: GuardState, base_dir: Path | None) -> RepoStatus:
+def install(repo: Path, state: GuardState, base_dir: Path | None, event: str = HOOK) -> RepoStatus:
     """Write the owned hook if (and only if) ``inspect`` says ``installable``."""
-    found = inspect(repo, state, base_dir)
+    found = inspect(repo, state, base_dir, event)
     if found.state != "installable" or found.hook is None:
         return found
-    data = hooks.repo_hook_text(hooks.script_path(base_dir)).encode()
+    data = hooks.repo_hook_text(hooks.script_path(base_dir), event).encode()
     atomic_write_bytes(found.hook, data, mode=0o755, dir_mode=0o755)
     state.record_repo_hook(found.hook, data)
     return RepoStatus(repo, "guarded", "", found.hook)
 
 
-def scan(repos: Iterable[Path], state: GuardState, base_dir: Path | None) -> list[RepoStatus]:
-    """Status of each repo for ``check --host``: an uninstalled repo is unguarded too."""
-    return [inspect(r, state, base_dir) for r in repos]
+def scan(
+    repos: Iterable[Path],
+    state: GuardState,
+    base_dir: Path | None,
+    events: Sequence[str] = (HOOK,),
+) -> list[RepoStatus]:
+    """Status of each repo and event for ``check --host``: an uninstalled repo is unguarded too."""
+    return [inspect(r, state, base_dir, event) for r in repos for event in events]
 
 
 def verdict(statuses: Sequence[RepoStatus], tier: str) -> Literal["ok", "warn", "fail"]:
@@ -171,11 +181,23 @@ def plan_template(global_config: Path, base_dir: Path | None) -> TemplatePlan:
     return TemplatePlan("set", directory)
 
 
-def install_template(base_dir: Path | None, state: GuardState) -> str:
-    """Write ``<template>/hooks/pre-push`` (0755, hash-tracked like the other Carter files)."""
-    text = hooks.repo_hook_text(hooks.script_path(base_dir))
-    path = template_dir(base_dir) / "hooks" / HOOK
-    return gitconfig.install_file(path, text, state, mode=0o755)
+def install_template(
+    base_dir: Path | None, state: GuardState, events: Sequence[str] = (HOOK,)
+) -> str:
+    """Write ``<template>/hooks/<event>`` (0755, hash-tracked like the other Carter files).
+
+    Returns the status of the first event (they are written together)."""
+    script = hooks.script_path(base_dir)
+    statuses = [
+        gitconfig.install_file(
+            template_dir(base_dir) / "hooks" / event,
+            hooks.repo_hook_text(script, event),
+            state,
+            mode=0o755,
+        )
+        for event in events
+    ]
+    return statuses[0]
 
 
 # -- removal and migration -----------------------------------------------------------------

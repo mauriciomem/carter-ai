@@ -306,6 +306,56 @@ def _pin_identity_policy(target: Path, config: dict, *, dry_run: bool, assume_ye
     click.echo("Pinned into ~/.carter/config.toml.")
 
 
+def _sync_mirror(*, dry_run: bool, assume_yes: bool) -> None:
+    """D64: regenerate ``carter.tier`` and the cap fragments in ``~/.carter/gitconfig``.
+
+    Shows the diff first and writes only after a human confirms (``--yes`` or a TTY prompt).
+    Never fails ``update`` for a config problem; a cap below ``require_tier`` is refused."""
+    from carter.guard import update_mirror
+    from carter.identity import ConfigError, load_identity
+    from carter.terminal import is_agent_shell
+
+    try:
+        cfg = load_identity()
+    except ConfigError:
+        click.echo("ℹ  config.toml is invalid; the tier mirror was not refreshed.")
+        return
+    if cfg.needs_migration:
+        return
+    plan = update_mirror.plan(None, cfg)
+    if plan.refusal:
+        raise click.ClickException(f"Tier mirror not written: {plan.refusal}.")
+    if not plan.changes:
+        return
+    click.echo("Tier mirror (~/.carter/gitconfig, D64):")
+    for line in plan.lines():
+        click.echo(line)
+    if dry_run:
+        click.echo("Would write the tier mirror (dry run: nothing written).")
+        return
+    if is_agent_shell():
+        click.echo("Not written: agent shells never change the tier mirror. Run `carter update`.")
+        return
+    if not assume_yes:
+        if not _stdin_is_tty():
+            click.echo("Mirror not written: run `carter update` in a terminal, or pass --yes.")
+            return
+        if not click.confirm("Write the tier mirror?"):
+            click.echo("Mirror not written.")
+            return
+    try:
+        update_mirror.apply(None, cfg)
+    except Exception as exc:  # GitError, MirrorError, IdentityError (E-STATE-INVALID)
+        from carter.guard.engine import format_error
+
+        text = format_error(exc) or str(exc)
+        raise click.ClickException(f"Tier mirror not written: {text}") from exc
+    click.echo("Wrote the tier mirror.")
+    hint = update_mirror.include_hint(None)
+    if hint:
+        click.echo(f"Add Carter's include line to your git config yourself:\n    {hint}")
+
+
 def _refresh_policies(*, dry_run: bool, assume_yes: bool) -> None:
     """D52 (RFC-0007 C.6.2): turn ``allow_project_opencode_edit`` into policy statements.
 
@@ -386,6 +436,7 @@ def update(target_dir: str, dry_run: bool, assume_yes: bool) -> None:
     for warning in identity_warnings(config):
         click.echo(f"⚠  {warning}")
     _pin_identity_policy(target, config, dry_run=dry_run, assume_yes=assume_yes)
+    _sync_mirror(dry_run=dry_run, assume_yes=assume_yes)
     _refresh_policies(dry_run=dry_run, assume_yes=assume_yes)
 
     env = create_env()
@@ -664,6 +715,12 @@ def _register_gate() -> None:
     main.add_command(gate)
 
 
+def _register_commit() -> None:
+    from carter.commit_cli import commit_cmd
+
+    main.add_command(commit_cmd)
+
+
 def _register_identity() -> None:
     from carter.identity_cli import identity
 
@@ -672,6 +729,7 @@ def _register_identity() -> None:
 
 _register_guard()
 _register_identity()
+_register_commit()
 _register_github_token()
 _register_aplus()
 _register_gate()

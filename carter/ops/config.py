@@ -33,6 +33,10 @@ class Config:
     commits: str = "refused"
     refusal_reason: str = ""
     coauthor_trailer: str = ""
+    author: str = ""  # "human" or "llm": who git records as the author
+    committer: str = ""  # "human" below T2, "llm" at T2
+    signer_fpr: str = ""  # the LLM key's fingerprint at T2 (public), else ""
+    coauthor_linked: bool = False  # a Co-authored-by with a noreply address GitHub credits
     warnings: tuple[str, ...] = ()
 
     @classmethod
@@ -64,13 +68,18 @@ class Config:
             workspace=workspace if workspace is not None else workspace_key(),
             env=os.environ if env is None else env,
         )
+        trailer = coauthor_trailer(parsed, res)
         return cls(
             **common,
+            author="llm" if res.role == "author" and res.tier == "t2" else "human",
+            committer="llm" if res.tier == "t2" and res.commits == "allowed" else "human",
+            signer_fpr=parsed.signing.fingerprint if res.tier == "t2" else "",
+            coauthor_linked=trailer.startswith("Co-authored-by:"),
             tier=res.tier,
             role=res.role,
             role_source=res.role_source,
             commits=res.commits,
             refusal_reason=res.refusal_reason,
-            coauthor_trailer=coauthor_trailer(parsed, res),
+            coauthor_trailer=trailer,
             warnings=res.warnings,
         )

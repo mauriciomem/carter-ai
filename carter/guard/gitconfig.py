@@ -322,10 +322,20 @@ class FileRemoval:
 
 
 def remove_files(base_dir: Path | None, state: GuardState) -> FileRemoval:
-    """Delete Carter's file and its ``gitconfig.d`` fragments, each only if still unchanged."""
+    """Delete Carter's file and its ``gitconfig.d`` fragments, each only if still unchanged.
+
+    While the file holds the ``carter.*`` tier mirror it is rewritten with the mirror alone
+    (fragments stay): removing the guards must not blind the guard's own tier source."""
     out = FileRemoval()
     main = carter_gitconfig_path(base_dir)
     frags = main.with_name(main.name + ".d")
+    if mirror := carried_mirror(base_dir):  # `identity remove` owns the mirror, not `guard remove`
+        if state.owned_unchanged(main):
+            install_file(main, render_gitconfig(mirror), state)
+            out.removed.append(f"{main} (hook and alias entries; the tier mirror stays)")
+        else:
+            out.kept.append(str(main))
+        return out
     candidates = [main] + (sorted(frags.iterdir()) if frags.is_dir() else [])
     for path in candidates:
         if not path.exists():
@@ -423,21 +433,39 @@ def set_single_valued(path: Path, key: str, value: str) -> SingleResult:
 
 
 def carter_git_entries(
-    accepted: Sequence[str] = (), *, base_dir: Path | None = None, template_dir: Path | None = None
+    accepted: Sequence[str] = (),
+    *,
+    base_dir: Path | None = None,
+    template_dir: Path | None = None,
+    hooks_rev: int = 2,
+    alias: bool = False,
 ) -> list[Entry]:
     """The global git keys Carter owns for the accepted consent groups.
 
-    ``hooks`` gives the ``pre-push`` hook entries (a self-contained command, see ``hooks``);
-    ``template_dir`` (decided by ``repohooks``: only when the user has none) gives
-    ``init.templateDir``. Nothing accepted, nothing returned."""
-    from carter.guard import hooks  # noqa: PLC0415 - hooks imports this module
+    ``hooks`` gives the hook entries for the accepted revision (1: ``pre-push``; 2: all four
+    events; each a self-contained command, see ``hooks``); ``template_dir`` (decided by
+    ``repohooks``: only when the user has none) gives ``init.templateDir``; ``alias`` (decided by
+    ``guard.alias``: only when the user has none) gives ``alias.ai-commit``. Nothing accepted,
+    nothing returned."""
+    from carter.guard import alias as alias_mod  # noqa: PLC0415 - these import this module
+    from carter.guard import hooks  # noqa: PLC0415
 
     out: list[Entry] = []
     if "hooks" in accepted:
-        out += hooks.hook_entries(hooks.script_path(base_dir))
+        out += hooks.hook_entries(hooks.script_path(base_dir), hooks.events_for_rev(hooks_rev))
     if template_dir is not None and "repo_hooks" in accepted:
         out.append(("init.templateDir", str(template_dir)))
+    if alias and "alias" in accepted:
+        out.append((alias_mod.ALIAS_KEY, alias_mod.ALIAS_VALUE))
     return out
+
+
+def carried_mirror(base_dir: Path | None) -> list[Entry]:
+    """The ``carter.*`` mirror entries of Carter's file, kept when hook entries are rewritten."""
+    from carter.guard import mirror_io  # noqa: PLC0415 - mirror_io imports this module
+
+    mine, _ = mirror_io.split(mirror_io.read_entries(carter_gitconfig_path(base_dir)))
+    return mine
 
 
 @dataclass
@@ -472,7 +500,9 @@ def apply_keys(
     if not plain:
         return out
     carter_file = carter_gitconfig_path(base_dir)
-    content = render_gitconfig(plain)
+    named = {k for k, _ in plain}
+    carried = [e for e in carried_mirror(base_dir) if e[0] not in named]
+    content = render_gitconfig([*carried, *plain])
     validate_content(content)
     out.file = install_file(carter_file, content, state, overwrite_edited=overwrite_edited)
     out.include = add_include(target, str(carter_file))

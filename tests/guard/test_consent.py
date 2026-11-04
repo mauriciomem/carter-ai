@@ -15,7 +15,8 @@ from carter.install.mcp import config_target
 from carter.install.paths import backups_dir
 
 HOME = "/home/fixture"
-LIVE = ["g2", "hooks", "sudo-docker", "read-edit-denies", "config-edit", "repo_hooks"]
+LIVE = ["g2", "hooks", "sudo-docker", "read-edit-denies", "config-edit", "alias", "repo_hooks"]
+BARE_YES = [g for g in LIVE if g != "alias"]  # `alias` is optional: a bare --yes skips it
 
 
 def accepted(*groups: str) -> GuardState:
@@ -38,7 +39,7 @@ class TestStatementsFollowConsent:
 
     def test_all_live_groups_give_denies_then_allows(self) -> None:
         got = consent.desired_statements(accepted(*LIVE), home=HOME)
-        assert groups_of(got) == set(LIVE) - {"hooks", "repo_hooks"}  # files, not statements
+        assert groups_of(got) == set(LIVE) - {"hooks", "repo_hooks", "alias"}  # files and git keys
         effects = [s.effect for s in got]
         assert effects == sorted(effects, key=lambda e: e == "allow")
 
@@ -69,7 +70,7 @@ class TestStatementsFollowConsent:
 
     def test_a_reserved_group_in_state_adds_nothing(self) -> None:
         st = accepted("g2")
-        st.consent("alias", "accepted", "2026-11-02")  # cannot happen via resolve_consents
+        st.consent("nonesuch", "accepted", "2026-11-02")  # cannot happen via resolve_consents
         assert consent.accepted_groups(st) == ["g2"]
 
     def test_optouts_ride_only_with_config_edit(self) -> None:
@@ -105,7 +106,9 @@ class TestResolve:
 
     def test_yes_accepts_every_live_group(self) -> None:
         plan = consent.resolve_consents(GuardState(), only=None, assume_yes=True, interactive=False)
-        assert plan.accepted == LIVE and plan.declined == [] and plan.asked == LIVE
+        assert plan.accepted == BARE_YES and plan.declined == [] and plan.asked == BARE_YES
+        assert plan.optional_skipped == ["alias"]
+        assert any("`alias` is optional" in n for n in plan.notices())
 
     def test_tty_prompts_per_group_with_its_effect(self) -> None:
         ask, asked = self.ask_all(True)
@@ -128,21 +131,43 @@ class TestResolve:
         )
         assert asked == ["g2", "sudo-docker"] and plan.accepted == ["g2", "sudo-docker"]
 
-    def test_reserved_groups_are_never_prompted_or_recorded_even_with_only(self) -> None:
+    def test_reserved_groups_are_never_prompted_or_recorded_even_with_only(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        data = json.loads(json.dumps(policyset._data()))
+        data["consent_groups"].append({"id": "later", "live": False, "effect": "not yet"})
+        monkeypatch.setattr(policyset, "_data", lambda: data)
         ask, asked = self.ask_all(True)
         plan = consent.resolve_consents(
-            GuardState(),
-            only=["alias"],
-            assume_yes=True,
-            interactive=True,
-            ask=ask,
+            GuardState(), only=["later"], assume_yes=True, interactive=True, ask=ask
         )
         assert asked == [] and plan.accepted == [] and plan.asked == []
-        assert plan.reserved == ["alias"]
+        assert plan.reserved == ["later"]
         assert all("nothing to install" in n for n in plan.notices())
         st = GuardState()
         consent.record(st, plan, today="2026-11-02")
         assert st.consents == {}
+
+    def test_an_optional_group_is_accepted_only_by_name_or_a_terminal_yes(self) -> None:
+        ask, asked = self.ask_all(False)  # the terminal default for an optional group is No
+        named = consent.resolve_consents(
+            GuardState(), only=["alias"], assume_yes=True, interactive=False
+        )
+        assert named.accepted == ["alias"] and named.optional_skipped == []
+        bare = consent.resolve_consents(
+            GuardState(), only=["g2", "alias"], assume_yes=True, interactive=False
+        )
+        assert bare.accepted == ["g2", "alias"]  # naming it IS the explicit yes
+        tty = consent.resolve_consents(
+            GuardState(), only=None, assume_yes=False, interactive=True, ask=ask
+        )
+        assert "alias" in asked and tty.declined.count("alias") == 1
+
+    def test_a_bare_yes_leaves_an_optional_group_undecided(self) -> None:
+        st = GuardState()
+        plan = consent.resolve_consents(st, only=None, assume_yes=True, interactive=False)
+        consent.record(st, plan, today="2026-11-02")
+        assert "alias" not in st.consents  # not accepted, not declined: asked again next time
 
     def test_a_group_unavailable_on_this_machine_is_never_asked_or_recorded(self) -> None:
         """G10: no consent for nothing: ``hooks`` on git < 2.54, ``repo_hooks`` on newer git."""
@@ -151,7 +176,7 @@ class TestResolve:
         plan = consent.resolve_consents(
             GuardState(), only=None, assume_yes=False, interactive=True, ask=ask, unavailable=why
         )
-        assert asked == ["g2", "sudo-docker", "read-edit-denies", "config-edit"]
+        assert asked == ["g2", "sudo-docker", "read-edit-denies", "config-edit", "alias"]
         assert plan.unavailable == why and "hooks" not in plan.accepted + plan.declined
         assert "`hooks`: E-GIT-OLD: old" in plan.notices()
         explicit = consent.resolve_consents(
@@ -167,7 +192,7 @@ class TestResolve:
         st.consent("sudo-docker", "declined", "2026-11-01")
         ask, asked = self.ask_all(True)
         plan = consent.resolve_consents(st, only=None, assume_yes=False, interactive=True, ask=ask)
-        assert asked == ["hooks", "read-edit-denies", "config-edit", "repo_hooks"]  # never decided
+        assert asked == ["hooks", "read-edit-denies", "config-edit", "alias", "repo_hooks"]
         assert plan.declined == ["sudo-docker"] and "g2" in plan.accepted
 
     def test_naming_a_declined_group_asks_again(self) -> None:
@@ -253,10 +278,6 @@ class TestUpgrade:
         assert "deny-new" not in [s.id for s in consent.desired_statements(st, home=HOME)]
         plan = consent.resolve_consents(st, only=None, assume_yes=False, interactive=False)
         assert plan.skipped  # a plain non-interactive install does not pick it up either
-
-    def test_no_init_templatedir_or_alias_is_written_in_1g(self) -> None:
-        text = json.dumps(policyset._data())
-        assert "templateDir" not in text and "alias.ai-commit" not in text
 
 
 def _dbg(statements) -> str:

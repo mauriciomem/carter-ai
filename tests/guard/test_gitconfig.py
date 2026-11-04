@@ -542,7 +542,7 @@ class TestDirectFallback:
 
 
 class TestApplyKeys:
-    ENTRIES = [("carter.tier", "t1")]
+    ENTRIES = [("alias.ai-commit", "!true")]  # not a `carter.*` key: those are the tier mirror
 
     def apply(self, tmp_path: Path, mode: str, entries=None, **kw):
         state = GuardState()
@@ -560,12 +560,14 @@ class TestApplyKeys:
     ) -> None:
         state, res = self.apply(tmp_path, "include")
         carter = carter_gitconfig_path(tmp_path)
-        assert git("config", "--file", str(carter), "--get", "carter.tier").stdout.strip() == "t1"
+        assert (
+            git("config", "--file", str(carter), "--get", "alias.ai-commit").stdout.strip()
+            == "!true"
+        )
         assert includes(global_cfg) == [str(carter)]
         assert state.gitconfig["value"] == str(carter) and state.owned_unchanged(carter)
-        assert (
-            git("config", "--global", "--includes", "--get", "carter.tier").stdout.strip() == "t1"
-        )
+        glob = git("config", "--global", "--includes", "--get", "alias.ai-commit")
+        assert glob.stdout.strip() == "!true"
 
     def test_no_entries_means_no_file_and_no_include_line(
         self, tmp_path: Path, global_cfg: Path

@@ -72,10 +72,11 @@ After the agents are installed, `carter install` offers the guards (the same as 
 | Group | What it does |
 |-------|--------------|
 | `g2` | Agents can't push or write to GitHub from their shell; `gh` is read-only; per-agent denies for the push and PR tools. At revision 2 it also installs the Carter **plugin**: every agent shell is isolated and a command **gate** screens each command (see below). |
-| `hooks` | Pushes by agent shells are blocked in every repo on this machine (a git `pre-push` hook, `~/.carter/hooks/carter-guard`, pulled in by one `include.path` line); your own pushes are unaffected. Needs git 2.54 or newer. |
+| `hooks` | Pushes by agent shells are blocked, and at revision 2 agent commits are checked (committer, signing settings, `Co-authored-by`/`Assisted-by` trailer) in every repo on this machine: git `pre-push`, `prepare-commit-msg`, `commit-msg` and `post-commit` hooks calling `~/.carter/hooks/carter-guard`, pulled in by one `include.path` line. Your own commits and pushes are unaffected and run no extra command. Needs git 2.54 or newer. A revision-1 install keeps only `pre-push` until you confirm revision 2 (`carter guard install` in a terminal). |
 | `sudo-docker` | Agents can't run `sudo` or `docker`; Packer docker builds must be typed in your terminal. |
 | `read-edit-denies` | Agents can't read SSH keys, `gh`/git credentials or the read-only token, and can't edit `~/.ssh`. |
 | `config-edit` | Agents can't edit OpenCode config, git hooks and config, or Carter's own config and control files. |
+| `alias` | **Optional.** Adds the git alias `git ai-commit` (`carter commit`) to Carter's git config, unless you already have an `alias.ai-commit`. A bare `--yes` never installs it: use `carter guard install --only alias` or answer yes in a terminal. |
 | `repo_hooks` | Git older than 2.54 only: the same push guard as a `pre-push` hook file in your repos (the current one and your workspaces), and in `init.templateDir` if you have none. A hook or `core.hooksPath` you or your tools own (husky, pre-commit) is never edited: Carter reports the repo as unguarded and prints a line to chain. Asked with Enter = yes. |
 
 Nothing is written without your yes. With no terminal (CI, a script) and without `--yes`,
@@ -211,7 +212,11 @@ uv tool uninstall carter-ai   # removes the carter command itself
 - **Removed:** the `carter-*` agents and skills, the global `AGENTS.md` Carter wrote,
   untouched knowledge files, the `carter-*` MCP servers in `opencode.json` and
   `opencode.jsonc`, and `~/.carter/manifest.json`.
-- **Kept:** `~/.carter/memories/`, `config.toml`, `audit.log`, backups, and any file
+- **Also removed, in your terminal (or with `--yes`):** the guards (`carter guard remove`) and the
+  LLM identity files (the signing shim, `allowed_signers`, the tier
+  mirror and the identity part of `config.toml`, with a backup). Each only if unchanged. The two
+  are independent; without a terminal and without `--yes` both are kept.
+- **Kept:** `~/.carter/memories/`, the rest of `config.toml`, `audit.log`, backups, and any file
   you edited. Files edited since the last install are reported:
 
 ```text

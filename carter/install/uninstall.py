@@ -65,9 +65,10 @@ def uninstall(base_dir: Path | None, *, keep_guards: bool = False, assume_yes: b
     log_step("Uninstalling Carter...")
     guard_code = 0
     if not keep_guards:
-        from carter.guard.wiring import uninstall_guards
+        from carter.guard.wiring import uninstall_guards, uninstall_identity
 
         guard_code = uninstall_guards(base_dir, assume_yes=assume_yes)
+        uninstall_identity(base_dir, assume_yes=assume_yes)  # independent of the guards
     manifest = read_manifest(base_dir)
     opencode_base = _opencode_base(base_dir)
     managed_roots = _managed_roots(base_dir)
