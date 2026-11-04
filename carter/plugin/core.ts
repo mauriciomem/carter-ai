@@ -38,6 +38,17 @@ export interface Iso {
     status_dir: string
   }
 }
+export interface Signing {
+  env: Record<string, string>
+  git_config: Pair[]
+  fingerprint: string
+}
+export interface Decision {
+  block: boolean
+  flags: string[]
+  signing: Signing | null
+  reason: string | null // a name from the entry (never a value), for the warning text
+}
 export type RunResult = { kind: "exit"; code: number | null; stdout: string } | { kind: "timeout" } | { kind: "error" }
 export type Run = (argv: string[], opts: { cwd: string; input: string; timeoutMs: number; env: Env }) => Promise<RunResult>
 export interface Clock {
@@ -263,6 +274,21 @@ export function readPat(fs: Deps["fs"], iso: Iso, euid: number | undefined): str
   }
 }
 
+// Write entries as GIT_CONFIG_KEY_i/VALUE_i from `start` and set the count. Shared by the isolation
+// block and the signing block (Python: isolation_apply.append_git_config), so they cannot drift.
+function appendEntries(out: Env, start: number, entries: Pair[]): void {
+  let n = start
+  for (const [key, value] of entries) {
+    out[`GIT_CONFIG_KEY_${n}`] = key
+    out[`GIT_CONFIG_VALUE_${n}`] = value
+    n++
+  }
+  out.GIT_CONFIG_COUNT = String(n)
+}
+function dropEntries(out: Env): void {
+  for (const name of Object.keys(out)) if (/^GIT_CONFIG_(KEY|VALUE)_/.test(name)) delete out[name]
+}
+
 // Reference port of carter.identity.isolation_apply.apply_isolation (same golden vectors).
 export function applyIsolation(env: Env, iso: Iso, pat: string | undefined, blockCommits: boolean) {
   const out: Env = { ...env }
@@ -273,34 +299,70 @@ export function applyIsolation(env: Env, iso: Iso, pat: string | undefined, bloc
   out.GH_TOKEN = pat ?? iso.plugin.gh_token_dummy
   if (!pat) flags.push("pat-dummy")
   if (counted.state === "polluted") {
-    for (const name of Object.keys(out)) if (/^GIT_CONFIG_(KEY|VALUE)_/.test(name)) delete out[name]
+    dropEntries(out)
     flags.push("count-malformed")
   }
   const entries = [...iso.git_config]
   if (counted.state === "polluted" || blockCommits) entries.push(...iso.blocking_git_config)
-  let n = counted.n
-  for (const [key, value] of entries) {
-    out[`GIT_CONFIG_KEY_${n}`] = key
-    out[`GIT_CONFIG_VALUE_${n}`] = value
-    n++
-  }
-  out.GIT_CONFIG_COUNT = String(n)
+  appendEntries(out, counted.n, entries)
   return { env: out, flags }
+}
+
+// Port of carter.identity.payload.to_git_env: the signing block (identity entry, H3) goes on top of
+// the isolation entries, so Carter's later entries win. It adds the committer variables and the
+// git entries and deletes an inherited GIT_CONFIG_PARAMETERS; it decides nothing.
+export function applySigning(env: Env, signing: Signing) {
+  const out: Env = { ...env }
+  const flags: string[] = []
+  const counted = countState(env)
+  if (counted.state === "polluted") {
+    dropEntries(out)
+    flags.push("count-malformed")
+  }
+  delete out.GIT_CONFIG_PARAMETERS
+  Object.assign(out, signing.env)
+  appendEntries(out, counted.n, signing.git_config)
+  return { env: out, flags }
+}
+
+// The `signing` object must be exactly what the entry sends: three keys, plain strings. Names the
+// isolation block manages (its `set` and `delete` lists) and the shell tags cannot be set through it.
+// What the values mean (which keys, which program) is Python's business, not the plugin's.
+const SIGNING_TOP = ["env", "git_config", "fingerprint"]
+const plain = (v: unknown, max = 1024) => typeof v === "string" && v.length > 0 && v.length <= max && !/[\n\r\0]/.test(v)
+export function validateSigning(v: unknown, iso: Iso): Signing | null {
+  if (!isObj(v) || !sameKeys(v, SIGNING_TOP) || !plain(v.fingerprint)) return null
+  const { env, git_config: cfg } = v
+  const taken = new Set([...Object.keys(iso.env.set), ...iso.env.delete, "CARTER_AGENT_SHELL", "CARTER_HUMAN_SHELL"])
+  if (!isObj(env) || Object.keys(env).length < 1 || Object.keys(env).length > 8) return null
+  for (const [name, value] of Object.entries(env)) {
+    if (!/^[A-Z][A-Z0-9_]*$/.test(name) || name === "GIT_CONFIG_COUNT" || name.startsWith("GIT_CONFIG_KEY_") || name.startsWith("GIT_CONFIG_VALUE_") || taken.has(name) || !plain(value)) return null
+  }
+  if (!Array.isArray(cfg) || cfg.length < 1 || cfg.length > 16) return null
+  for (const pair of cfg) {
+    if (!Array.isArray(pair) || pair.length !== 2 || !plain(pair[0], 256) || !/^[A-Za-z0-9.-]+$/.test(pair[0]) || !pair[0].includes(".")) return null
+    if (typeof pair[1] !== "string" || pair[1].includes("\0")) return null
+  }
+  return { env: env as Record<string, string>, git_config: cfg as Pair[], fingerprint: v.fingerprint as string }
 }
 
 // ---- identity entry (G13): decide whether agent commits must be blocked ---------------------
 const TIERS = ["t0", "t1", "t2"]
-const REASONS = [null, "config-error", "signing-not-built", "tier-required"]
-export function tierDecision(res: RunResult): { block: boolean; flags: string[] } {
-  const failed = { block: true, flags: ["sign-unavailable"] }
+export function tierDecision(res: RunResult, iso: Iso): Decision {
+  const failed: Decision = { block: true, flags: ["sign-unavailable"], signing: null, reason: null }
   if (res.kind !== "exit" || res.code !== 0) return failed
   try {
     const v = JSON.parse(res.stdout)
     const shape = isObj(v) && v.schema_version === 1 && TIERS.includes(v.tier as string)
-    if (!shape || !TIERS.includes(v.effective as string) || !REASONS.includes(v.reason as string | null)) return failed
-    if (!("cap" in v) || !("require_tier" in v)) return failed
-    if (v.reason === "config-error") return { block: true, flags: ["config-error"] }
-    return v.effective === "t2" || v.reason !== null ? failed : { block: false, flags: [] }
+    if (!shape || !TIERS.includes(v.effective as string) || !("cap" in v) || !("require_tier" in v)) return failed
+    if (v.reason === "config-error") return { ...failed, flags: ["config-error"], reason: "config-error" }
+    if (v.reason !== null) {
+      // any other reason (and any value that is not a name) blocks: nothing from the answer is applied
+      return { ...failed, reason: typeof v.reason === "string" && /^[a-z-]{1,40}$/.test(v.reason) ? v.reason : null }
+    }
+    if (v.effective !== "t2") return "signing" in v ? failed : { block: false, flags: [], signing: null, reason: null }
+    const signing = "signing" in v ? validateSigning(v.signing, iso) : null
+    return signing ? { block: false, flags: [], signing, reason: null } : failed
   } catch {
     return failed
   }
@@ -358,7 +420,7 @@ export function createCarter(deps: Deps) {
   const flags = new Set<string>()
   const warned = new Set<string>()
   const sessions = new Map<string, string>()
-  const tierCache = new Map<string, { block: boolean; flags: string[] }>()
+  const tierCache = new Map<string, Decision>()
   let since = new Date(clock.now()).toISOString()
   let disposed = false
   let statusDir = join(deps.home, ".carter", "run", "plugin-status")
@@ -449,7 +511,7 @@ export function createCarter(deps: Deps) {
     throw new CarterError("E-GATE-FAIL")
   }
 
-  async function tier(iso: Iso, cwd: string): Promise<{ block: boolean; flags: string[] }> {
+  async function tier(iso: Iso, cwd: string): Promise<Decision> {
     const stamp = (name: string) => {
       try {
         return String(fs.statSync(join(deps.home, ".carter", name)).mtimeMs)
@@ -463,7 +525,7 @@ export function createCarter(deps: Deps) {
     const res = await deps.run([iso.plugin.python_path, ...iso.plugin.env_args], {
       cwd, input: "", timeoutMs: iso.plugin.env_timeout_ms, env: deps.env,
     }) // prettier-ignore
-    const decision = tierDecision(res)
+    const decision = tierDecision(res, iso)
     tierCache.set(key, decision)
     return decision
   }
@@ -508,8 +570,10 @@ export function createCarter(deps: Deps) {
       const decision = await tier(iso, e.cwd)
       const pat = readPat(fs, iso, deps.euid)
       const applied = applyIsolation(e.env, iso, pat, decision.block)
-      for (const name of Object.keys(e.env)) if (!(name in applied.env)) delete e.env[name]
-      Object.assign(e.env, applied.env)
+      // The signing block goes on top, but never over a malformed inherited count: that stays blocked.
+      const final = decision.signing && !applied.flags.includes("count-malformed") ? applySigning(applied.env, decision.signing).env : applied.env
+      for (const name of Object.keys(e.env)) if (!(name in final)) delete e.env[name]
+      Object.assign(e.env, final)
       setFlag("pat-dummy", applied.flags.includes("pat-dummy"))
       if (applied.flags.includes("count-malformed")) {
         setFlag("count-malformed", true)
@@ -517,8 +581,7 @@ export function createCarter(deps: Deps) {
       }
       for (const name of ["sign-unavailable", "config-error"]) setFlag(name, decision.flags.includes(name))
       if (decision.block) {
-        const reason = decision.flags[0] === "config-error" ? "config-error" : "signing unavailable"
-        warn("sign", MESSAGES["E-SIGN-UNAVAILABLE"].replace("<reason>", reason))
+        warn("sign", MESSAGES["E-SIGN-UNAVAILABLE"].replace("<reason>", decision.reason ?? "signing unavailable"))
       }
     },
 

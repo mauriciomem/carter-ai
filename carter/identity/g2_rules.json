@@ -85,6 +85,7 @@
     {"id": "gate-input", "rfc": "G6", "hint": "The command cannot be parsed safely (over 1 MiB, NUL bytes, invalid UTF-8, an unterminated quote, nesting that is too deep, or a brace or glob that expands to too many names)."}
   ],
   "plugin": {"gate_args": ["-I", "-m", "carter.gate", "--json"], "env_args": ["-I", "-m", "carter.identity.env", "--json"], "pat_prefix": "github_pat_", "gh_token_dummy": "carter-no-read-token", "self_test_ms": 2000, "gate_timeout_ms": 1000, "env_timeout_ms": 2000, "status_dir": "run/plugin-status"},
+  "shim": {"y_ops": ["verify", "find-principals", "check-novalidate"], "namespace": "git", "sign_options": ["-n", "-f", "-U"], "min_git": [2, 40], "min_openssh": [8, 4]},
   "credential_paths": ["/.ssh/", "/.config/gh/", "opencode/service.json", "/.git-credentials", "/proc/*/environ", "/Library/Keychains/", "/.carter/secrets/"],
   "control_paths": ["~/.carter/bin/", "~/.carter/hooks/", "~/.carter/run/", "~/.carter/isolation.json", "~/.carter/gitconfig", "~/.carter/gitconfig.d/", "~/.carter/config.toml", "~/.carter/guard-state.json", "~/.config/opencode/plugin/", "~/.config/opencode/plugins/"]
 }

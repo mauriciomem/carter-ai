@@ -77,7 +77,12 @@ class TestNoHumanKey:
             for p in (REPO / "carter").rglob("*.py")
             if "_data" not in p.parts and pattern.search(p.read_text(encoding="utf-8"))
         }
+        # 2b (plan 005): the *LLM's* signing block names the git key it sets; it never reads one.
+        block = offenders.pop("carter/identity/payload.py", [])
         assert offenders == {}
+        assert set(block) == {"user.signingkey"}
+        text = (REPO / "carter/identity/payload.py").read_text(encoding="utf-8")
+        assert "subprocess" not in text and "git config" not in text
 
     def test_the_carter_bot_default_email_no_longer_exists(self):
         allowed: set[str] = set()  # the global AGENTS.md text no longer quotes it (step 17)

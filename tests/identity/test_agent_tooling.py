@@ -4,12 +4,10 @@ Observed on OpenSSH 10.2p1 / Linux (the macOS repeat is step 33). These tests ar
 regression record for RFC-0007 section 4.4 and report 22: they pin the exit codes and the
 few stable phrases Carter's agent code (step 10) is allowed to depend on.
 
-Opt-in: they start real ``ssh-agent`` processes. Set ``CARTER_REAL_SSH_AGENT=1`` to run them
-(``-m real_ssh_agent``). Every agent and key lives under the test's temp tree, with
-``SSH_AUTH_SOCK`` unset and a scrubbed environment; the fixture kills what it started and
-fails the test if an agent with its socket prefix is left. The developer's agent and
-``~/.ssh`` are never named. Step 7 replaces the local ``rig`` fixture by the shared
-``real_ssh_agent`` fixture; the assertions stay.
+They start real ``ssh-agent`` processes (``-m real_ssh_agent``; skipped when OpenSSH is missing)
+through the shared fixtures of ``tests/ssh_rig.py`` (step 7): a short ``/tmp/c2b-<pid>-*`` base, a
+scrubbed environment, a reaper that fails the run if an agent is left. The developer's agent and
+``~/.ssh`` are never named.
 """
 
 from __future__ import annotations

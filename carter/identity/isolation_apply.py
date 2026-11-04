@@ -26,6 +26,27 @@ class Applied:
     flags: list[str] = field(default_factory=list)
 
 
+def append_git_config(out: dict[str, str], start: int, entries: list[list[str]]) -> int:
+    """Write ``entries`` as ``GIT_CONFIG_KEY_i/VALUE_i`` from index ``start`` and set the count.
+
+    One implementation for the isolation block and the signing block (``payload.to_git_env``):
+    Carter's entries come after the inherited ones, so a collision resolves in Carter's favour.
+    Returns the new count."""
+    n = start
+    for key, value in entries:
+        out[f"GIT_CONFIG_KEY_{n}"] = key
+        out[f"GIT_CONFIG_VALUE_{n}"] = value
+        n += 1
+    out["GIT_CONFIG_COUNT"] = str(n)
+    return n
+
+
+def drop_git_config_entries(out: dict[str, str]) -> None:
+    """Remove every inherited ``GIT_CONFIG_KEY_*``/``VALUE_*`` (a malformed count starts afresh)."""
+    for name in [n for n in out if n.startswith(_ENTRY_PREFIXES)]:
+        del out[name]
+
+
 def apply_isolation(
     env: Mapping[str, str],
     iso: Mapping[str, Any],
@@ -50,16 +71,10 @@ def apply_isolation(
         out["GH_TOKEN"] = iso["plugin"]["gh_token_dummy"]
         flags.append("pat-dummy")
     if polluted:
-        for name in [n for n in out if n.startswith(_ENTRY_PREFIXES)]:
-            del out[name]
+        drop_git_config_entries(out)
         flags.append("count-malformed")
     entries = [list(p) for p in iso["git_config"]]
     if polluted or block_commits:
         entries += [list(p) for p in iso["blocking_git_config"]]
-    n = counted.n
-    for key, value in entries:  # appended after the inherited ones, so Carter's win a collision
-        out[f"GIT_CONFIG_KEY_{n}"] = key
-        out[f"GIT_CONFIG_VALUE_{n}"] = value
-        n += 1
-    out["GIT_CONFIG_COUNT"] = str(n)
+    append_git_config(out, counted.n, entries)
     return Applied(out, flags)

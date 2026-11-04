@@ -1621,8 +1621,11 @@
   "reasons": [
    null,
    "config-error",
-   "signing-not-built",
-   "tier-required"
+   "tier-required",
+   "key-missing",
+   "fingerprint-mismatch",
+   "shim-missing",
+   "role-b-not-built"
   ],
   "cases": [
    {
@@ -1632,7 +1635,9 @@
      "stdout": "{\"schema_version\": 1, \"tier\": \"t0\", \"cap\": null, \"effective\": \"t0\", \"require_tier\": null, \"reason\": null}"
     },
     "block": false,
-    "flags": []
+    "flags": [],
+    "signing": null,
+    "reason": null
    },
    {
     "name": "t1",
@@ -1641,7 +1646,9 @@
      "stdout": "{\"schema_version\": 1, \"tier\": \"t1\", \"cap\": null, \"effective\": \"t1\", \"require_tier\": null, \"reason\": null}"
     },
     "block": false,
-    "flags": []
+    "flags": [],
+    "signing": null,
+    "reason": null
    },
    {
     "name": "t2 capped to t1 by max_tier",
@@ -1650,18 +1657,9 @@
      "stdout": "{\"schema_version\": 1, \"tier\": \"t2\", \"cap\": \"t1\", \"effective\": \"t1\", \"require_tier\": null, \"reason\": null}"
     },
     "block": false,
-    "flags": []
-   },
-   {
-    "name": "effective t2 (no signing block until 2b)",
-    "outcome": {
-     "kind": "ok",
-     "stdout": "{\"schema_version\": 1, \"tier\": \"t2\", \"cap\": null, \"effective\": \"t2\", \"require_tier\": null, \"reason\": \"signing-not-built\"}"
-    },
-    "block": true,
-    "flags": [
-     "sign-unavailable"
-    ]
+    "flags": [],
+    "signing": null,
+    "reason": null
    },
    {
     "name": "config error",
@@ -1672,7 +1670,9 @@
     "block": true,
     "flags": [
      "config-error"
-    ]
+    ],
+    "signing": null,
+    "reason": "config-error"
    },
    {
     "name": "tier required but not met",
@@ -1683,18 +1683,9 @@
     "block": true,
     "flags": [
      "sign-unavailable"
-    ]
-   },
-   {
-    "name": "effective t2 without a reason still blocks",
-    "outcome": {
-     "kind": "ok",
-     "stdout": "{\"schema_version\": 1, \"tier\": \"t2\", \"cap\": null, \"effective\": \"t2\", \"require_tier\": null, \"reason\": null}"
-    },
-    "block": true,
-    "flags": [
-     "sign-unavailable"
-    ]
+    ],
+    "signing": null,
+    "reason": "tier-required"
    },
    {
     "name": "the call exits non-zero",
@@ -1706,7 +1697,9 @@
     "block": true,
     "flags": [
      "sign-unavailable"
-    ]
+    ],
+    "signing": null,
+    "reason": null
    },
    {
     "name": "the call times out",
@@ -1716,7 +1709,9 @@
     "block": true,
     "flags": [
      "sign-unavailable"
-    ]
+    ],
+    "signing": null,
+    "reason": null
    },
    {
     "name": "invalid JSON",
@@ -1727,7 +1722,9 @@
     "block": true,
     "flags": [
      "sign-unavailable"
-    ]
+    ],
+    "signing": null,
+    "reason": null
    },
    {
     "name": "wrong schema version",
@@ -1738,7 +1735,9 @@
     "block": true,
     "flags": [
      "sign-unavailable"
-    ]
+    ],
+    "signing": null,
+    "reason": null
    },
    {
     "name": "missing key",
@@ -1749,7 +1748,9 @@
     "block": true,
     "flags": [
      "sign-unavailable"
-    ]
+    ],
+    "signing": null,
+    "reason": null
    },
    {
     "name": "unknown reason",
@@ -1760,7 +1761,9 @@
     "block": true,
     "flags": [
      "sign-unavailable"
-    ]
+    ],
+    "signing": null,
+    "reason": "mystery"
    },
    {
     "name": "unknown effective tier",
@@ -1771,7 +1774,9 @@
     "block": true,
     "flags": [
      "sign-unavailable"
-    ]
+    ],
+    "signing": null,
+    "reason": null
    },
    {
     "name": "empty output",
@@ -1782,9 +1787,490 @@
     "block": true,
     "flags": [
      "sign-unavailable"
-    ]
+    ],
+    "signing": null,
+    "reason": null
+   },
+   {
+    "name": "effective t2 with a valid signing block",
+    "outcome": {
+     "kind": "ok",
+     "stdout": "{\"schema_version\": 1, \"tier\": \"t2\", \"cap\": null, \"effective\": \"t2\", \"require_tier\": null, \"reason\": null, \"signing\": {\"env\": {\"GIT_COMMITTER_NAME\": \"LLM Bot\", \"GIT_COMMITTER_EMAIL\": \"12345+llm-bot@users.noreply.github.com\", \"CARTER_IDENTITY\": \"llm-bot\"}, \"git_config\": [[\"gpg.format\", \"ssh\"], [\"user.signingkey\", \"key::ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIBQUck5VvSpXHhZ5JFCGxR3zhC07GvQUN5j6rv6VJbaY\"], [\"gpg.ssh.program\", \"/home/test/.carter/bin/carter-ssh-sign\"], [\"commit.gpgsign\", \"true\"]], \"fingerprint\": \"SHA256:2uXQrkCgLxqvXxMrbBJwmanqsboZn/lN5PAQyHhQDtQ\"}}"
+    },
+    "block": false,
+    "flags": [],
+    "signing": {
+     "env": {
+      "GIT_COMMITTER_NAME": "LLM Bot",
+      "GIT_COMMITTER_EMAIL": "12345+llm-bot@users.noreply.github.com",
+      "CARTER_IDENTITY": "llm-bot"
+     },
+     "git_config": [
+      [
+       "gpg.format",
+       "ssh"
+      ],
+      [
+       "user.signingkey",
+       "key::ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIBQUck5VvSpXHhZ5JFCGxR3zhC07GvQUN5j6rv6VJbaY"
+      ],
+      [
+       "gpg.ssh.program",
+       "/home/test/.carter/bin/carter-ssh-sign"
+      ],
+      [
+       "commit.gpgsign",
+       "true"
+      ]
+     ],
+     "fingerprint": "SHA256:2uXQrkCgLxqvXxMrbBJwmanqsboZn/lN5PAQyHhQDtQ"
+    },
+    "reason": null
+   },
+   {
+    "name": "effective t2 without a reason and without a block still blocks",
+    "outcome": {
+     "kind": "ok",
+     "stdout": "{\"schema_version\": 1, \"tier\": \"t2\", \"cap\": null, \"effective\": \"t2\", \"require_tier\": null, \"reason\": null}"
+    },
+    "block": true,
+    "flags": [
+     "sign-unavailable"
+    ],
+    "signing": null,
+    "reason": null
+   },
+   {
+    "name": "effective t2, reason key-missing",
+    "outcome": {
+     "kind": "ok",
+     "stdout": "{\"schema_version\": 1, \"tier\": \"t2\", \"cap\": null, \"effective\": \"t2\", \"require_tier\": null, \"reason\": \"key-missing\"}"
+    },
+    "block": true,
+    "flags": [
+     "sign-unavailable"
+    ],
+    "signing": null,
+    "reason": "key-missing"
+   },
+   {
+    "name": "effective t2, reason fingerprint-mismatch",
+    "outcome": {
+     "kind": "ok",
+     "stdout": "{\"schema_version\": 1, \"tier\": \"t2\", \"cap\": null, \"effective\": \"t2\", \"require_tier\": null, \"reason\": \"fingerprint-mismatch\"}"
+    },
+    "block": true,
+    "flags": [
+     "sign-unavailable"
+    ],
+    "signing": null,
+    "reason": "fingerprint-mismatch"
+   },
+   {
+    "name": "effective t2, reason shim-missing",
+    "outcome": {
+     "kind": "ok",
+     "stdout": "{\"schema_version\": 1, \"tier\": \"t2\", \"cap\": null, \"effective\": \"t2\", \"require_tier\": null, \"reason\": \"shim-missing\"}"
+    },
+    "block": true,
+    "flags": [
+     "sign-unavailable"
+    ],
+    "signing": null,
+    "reason": "shim-missing"
+   },
+   {
+    "name": "effective t2, reason role-b-not-built",
+    "outcome": {
+     "kind": "ok",
+     "stdout": "{\"schema_version\": 1, \"tier\": \"t2\", \"cap\": null, \"effective\": \"t2\", \"require_tier\": null, \"reason\": \"role-b-not-built\"}"
+    },
+    "block": true,
+    "flags": [
+     "sign-unavailable"
+    ],
+    "signing": null,
+    "reason": "role-b-not-built"
+   },
+   {
+    "name": "effective t2, reason tier-required",
+    "outcome": {
+     "kind": "ok",
+     "stdout": "{\"schema_version\": 1, \"tier\": \"t2\", \"cap\": null, \"effective\": \"t2\", \"require_tier\": null, \"reason\": \"tier-required\"}"
+    },
+    "block": true,
+    "flags": [
+     "sign-unavailable"
+    ],
+    "signing": null,
+    "reason": "tier-required"
+   },
+   {
+    "name": "a reason wins over a block that came with it (nothing is applied)",
+    "outcome": {
+     "kind": "ok",
+     "stdout": "{\"schema_version\": 1, \"tier\": \"t2\", \"cap\": null, \"effective\": \"t2\", \"require_tier\": null, \"reason\": \"shim-missing\", \"signing\": {\"env\": {\"GIT_COMMITTER_NAME\": \"LLM Bot\", \"GIT_COMMITTER_EMAIL\": \"12345+llm-bot@users.noreply.github.com\", \"CARTER_IDENTITY\": \"llm-bot\"}, \"git_config\": [[\"gpg.format\", \"ssh\"], [\"user.signingkey\", \"key::ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIBQUck5VvSpXHhZ5JFCGxR3zhC07GvQUN5j6rv6VJbaY\"], [\"gpg.ssh.program\", \"/home/test/.carter/bin/carter-ssh-sign\"], [\"commit.gpgsign\", \"true\"]], \"fingerprint\": \"SHA256:2uXQrkCgLxqvXxMrbBJwmanqsboZn/lN5PAQyHhQDtQ\"}}"
+    },
+    "block": true,
+    "flags": [
+     "sign-unavailable"
+    ],
+    "signing": null,
+    "reason": "shim-missing"
+   },
+   {
+    "name": "a signing block at t1 is a protocol violation",
+    "outcome": {
+     "kind": "ok",
+     "stdout": "{\"schema_version\": 1, \"tier\": \"t1\", \"cap\": null, \"effective\": \"t1\", \"require_tier\": null, \"reason\": null, \"signing\": {\"env\": {\"GIT_COMMITTER_NAME\": \"LLM Bot\", \"GIT_COMMITTER_EMAIL\": \"12345+llm-bot@users.noreply.github.com\", \"CARTER_IDENTITY\": \"llm-bot\"}, \"git_config\": [[\"gpg.format\", \"ssh\"], [\"user.signingkey\", \"key::ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIBQUck5VvSpXHhZ5JFCGxR3zhC07GvQUN5j6rv6VJbaY\"], [\"gpg.ssh.program\", \"/home/test/.carter/bin/carter-ssh-sign\"], [\"commit.gpgsign\", \"true\"]], \"fingerprint\": \"SHA256:2uXQrkCgLxqvXxMrbBJwmanqsboZn/lN5PAQyHhQDtQ\"}}"
+    },
+    "block": true,
+    "flags": [
+     "sign-unavailable"
+    ],
+    "signing": null,
+    "reason": null
+   },
+   {
+    "name": "a signing block with a cap is a protocol violation",
+    "outcome": {
+     "kind": "ok",
+     "stdout": "{\"schema_version\": 1, \"tier\": \"t2\", \"cap\": \"t1\", \"effective\": \"t1\", \"require_tier\": null, \"reason\": null, \"signing\": {\"env\": {\"GIT_COMMITTER_NAME\": \"LLM Bot\", \"GIT_COMMITTER_EMAIL\": \"12345+llm-bot@users.noreply.github.com\", \"CARTER_IDENTITY\": \"llm-bot\"}, \"git_config\": [[\"gpg.format\", \"ssh\"], [\"user.signingkey\", \"key::ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIBQUck5VvSpXHhZ5JFCGxR3zhC07GvQUN5j6rv6VJbaY\"], [\"gpg.ssh.program\", \"/home/test/.carter/bin/carter-ssh-sign\"], [\"commit.gpgsign\", \"true\"]], \"fingerprint\": \"SHA256:2uXQrkCgLxqvXxMrbBJwmanqsboZn/lN5PAQyHhQDtQ\"}}"
+    },
+    "block": true,
+    "flags": [
+     "sign-unavailable"
+    ],
+    "signing": null,
+    "reason": null
+   },
+   {
+    "name": "a retired reason name still blocks",
+    "outcome": {
+     "kind": "ok",
+     "stdout": "{\"schema_version\": 1, \"tier\": \"t2\", \"cap\": null, \"effective\": \"t2\", \"require_tier\": null, \"reason\": \"signing-not-built\"}"
+    },
+    "block": true,
+    "flags": [
+     "sign-unavailable"
+    ],
+    "signing": null,
+    "reason": "signing-not-built"
+   },
+   {
+    "name": "a reason that is not a plain name blocks without being quoted",
+    "outcome": {
+     "kind": "ok",
+     "stdout": "{\"schema_version\": 1, \"tier\": \"t2\", \"cap\": null, \"effective\": \"t2\", \"require_tier\": null, \"reason\": \"Not A Name!\"}"
+    },
+    "block": true,
+    "flags": [
+     "sign-unavailable"
+    ],
+    "signing": null,
+    "reason": null
+   },
+   {
+    "name": "invalid signing object: partial: no fingerprint",
+    "outcome": {
+     "kind": "ok",
+     "stdout": "{\"schema_version\": 1, \"tier\": \"t2\", \"cap\": null, \"effective\": \"t2\", \"require_tier\": null, \"reason\": null, \"signing\": {\"env\": {\"GIT_COMMITTER_NAME\": \"LLM Bot\", \"GIT_COMMITTER_EMAIL\": \"12345+llm-bot@users.noreply.github.com\", \"CARTER_IDENTITY\": \"llm-bot\"}, \"git_config\": [[\"gpg.format\", \"ssh\"], [\"user.signingkey\", \"key::ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIBQUck5VvSpXHhZ5JFCGxR3zhC07GvQUN5j6rv6VJbaY\"], [\"gpg.ssh.program\", \"/home/test/.carter/bin/carter-ssh-sign\"], [\"commit.gpgsign\", \"true\"]]}}"
+    },
+    "block": true,
+    "flags": [
+     "sign-unavailable"
+    ],
+    "signing": null,
+    "reason": null
+   },
+   {
+    "name": "invalid signing object: partial: no git_config",
+    "outcome": {
+     "kind": "ok",
+     "stdout": "{\"schema_version\": 1, \"tier\": \"t2\", \"cap\": null, \"effective\": \"t2\", \"require_tier\": null, \"reason\": null, \"signing\": {\"env\": {\"GIT_COMMITTER_NAME\": \"LLM Bot\", \"GIT_COMMITTER_EMAIL\": \"12345+llm-bot@users.noreply.github.com\", \"CARTER_IDENTITY\": \"llm-bot\"}, \"fingerprint\": \"SHA256:2uXQrkCgLxqvXxMrbBJwmanqsboZn/lN5PAQyHhQDtQ\"}}"
+    },
+    "block": true,
+    "flags": [
+     "sign-unavailable"
+    ],
+    "signing": null,
+    "reason": null
+   },
+   {
+    "name": "invalid signing object: partial: no env",
+    "outcome": {
+     "kind": "ok",
+     "stdout": "{\"schema_version\": 1, \"tier\": \"t2\", \"cap\": null, \"effective\": \"t2\", \"require_tier\": null, \"reason\": null, \"signing\": {\"git_config\": [[\"gpg.format\", \"ssh\"], [\"user.signingkey\", \"key::ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIBQUck5VvSpXHhZ5JFCGxR3zhC07GvQUN5j6rv6VJbaY\"], [\"gpg.ssh.program\", \"/home/test/.carter/bin/carter-ssh-sign\"], [\"commit.gpgsign\", \"true\"]], \"fingerprint\": \"SHA256:2uXQrkCgLxqvXxMrbBJwmanqsboZn/lN5PAQyHhQDtQ\"}}"
+    },
+    "block": true,
+    "flags": [
+     "sign-unavailable"
+    ],
+    "signing": null,
+    "reason": null
+   },
+   {
+    "name": "invalid signing object: unknown top-level key",
+    "outcome": {
+     "kind": "ok",
+     "stdout": "{\"schema_version\": 1, \"tier\": \"t2\", \"cap\": null, \"effective\": \"t2\", \"require_tier\": null, \"reason\": null, \"signing\": {\"env\": {\"GIT_COMMITTER_NAME\": \"LLM Bot\", \"GIT_COMMITTER_EMAIL\": \"12345+llm-bot@users.noreply.github.com\", \"CARTER_IDENTITY\": \"llm-bot\"}, \"git_config\": [[\"gpg.format\", \"ssh\"], [\"user.signingkey\", \"key::ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIBQUck5VvSpXHhZ5JFCGxR3zhC07GvQUN5j6rv6VJbaY\"], [\"gpg.ssh.program\", \"/home/test/.carter/bin/carter-ssh-sign\"], [\"commit.gpgsign\", \"true\"]], \"fingerprint\": \"SHA256:2uXQrkCgLxqvXxMrbBJwmanqsboZn/lN5PAQyHhQDtQ\", \"socket\": \"/x\"}}"
+    },
+    "block": true,
+    "flags": [
+     "sign-unavailable"
+    ],
+    "signing": null,
+    "reason": null
+   },
+   {
+    "name": "invalid signing object: env is empty",
+    "outcome": {
+     "kind": "ok",
+     "stdout": "{\"schema_version\": 1, \"tier\": \"t2\", \"cap\": null, \"effective\": \"t2\", \"require_tier\": null, \"reason\": null, \"signing\": {\"env\": {}, \"git_config\": [[\"gpg.format\", \"ssh\"], [\"user.signingkey\", \"key::ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIBQUck5VvSpXHhZ5JFCGxR3zhC07GvQUN5j6rv6VJbaY\"], [\"gpg.ssh.program\", \"/home/test/.carter/bin/carter-ssh-sign\"], [\"commit.gpgsign\", \"true\"]], \"fingerprint\": \"SHA256:2uXQrkCgLxqvXxMrbBJwmanqsboZn/lN5PAQyHhQDtQ\"}}"
+    },
+    "block": true,
+    "flags": [
+     "sign-unavailable"
+    ],
+    "signing": null,
+    "reason": null
+   },
+   {
+    "name": "invalid signing object: env is not an object",
+    "outcome": {
+     "kind": "ok",
+     "stdout": "{\"schema_version\": 1, \"tier\": \"t2\", \"cap\": null, \"effective\": \"t2\", \"require_tier\": null, \"reason\": null, \"signing\": {\"env\": [\"GIT_COMMITTER_NAME\"], \"git_config\": [[\"gpg.format\", \"ssh\"], [\"user.signingkey\", \"key::ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIBQUck5VvSpXHhZ5JFCGxR3zhC07GvQUN5j6rv6VJbaY\"], [\"gpg.ssh.program\", \"/home/test/.carter/bin/carter-ssh-sign\"], [\"commit.gpgsign\", \"true\"]], \"fingerprint\": \"SHA256:2uXQrkCgLxqvXxMrbBJwmanqsboZn/lN5PAQyHhQDtQ\"}}"
+    },
+    "block": true,
+    "flags": [
+     "sign-unavailable"
+    ],
+    "signing": null,
+    "reason": null
+   },
+   {
+    "name": "invalid signing object: an env value is not a string",
+    "outcome": {
+     "kind": "ok",
+     "stdout": "{\"schema_version\": 1, \"tier\": \"t2\", \"cap\": null, \"effective\": \"t2\", \"require_tier\": null, \"reason\": null, \"signing\": {\"env\": {\"GIT_COMMITTER_NAME\": 7, \"GIT_COMMITTER_EMAIL\": \"12345+llm-bot@users.noreply.github.com\", \"CARTER_IDENTITY\": \"llm-bot\"}, \"git_config\": [[\"gpg.format\", \"ssh\"], [\"user.signingkey\", \"key::ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIBQUck5VvSpXHhZ5JFCGxR3zhC07GvQUN5j6rv6VJbaY\"], [\"gpg.ssh.program\", \"/home/test/.carter/bin/carter-ssh-sign\"], [\"commit.gpgsign\", \"true\"]], \"fingerprint\": \"SHA256:2uXQrkCgLxqvXxMrbBJwmanqsboZn/lN5PAQyHhQDtQ\"}}"
+    },
+    "block": true,
+    "flags": [
+     "sign-unavailable"
+    ],
+    "signing": null,
+    "reason": null
+   },
+   {
+    "name": "invalid signing object: an env value is empty",
+    "outcome": {
+     "kind": "ok",
+     "stdout": "{\"schema_version\": 1, \"tier\": \"t2\", \"cap\": null, \"effective\": \"t2\", \"require_tier\": null, \"reason\": null, \"signing\": {\"env\": {\"GIT_COMMITTER_NAME\": \"LLM Bot\", \"GIT_COMMITTER_EMAIL\": \"\", \"CARTER_IDENTITY\": \"llm-bot\"}, \"git_config\": [[\"gpg.format\", \"ssh\"], [\"user.signingkey\", \"key::ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIBQUck5VvSpXHhZ5JFCGxR3zhC07GvQUN5j6rv6VJbaY\"], [\"gpg.ssh.program\", \"/home/test/.carter/bin/carter-ssh-sign\"], [\"commit.gpgsign\", \"true\"]], \"fingerprint\": \"SHA256:2uXQrkCgLxqvXxMrbBJwmanqsboZn/lN5PAQyHhQDtQ\"}}"
+    },
+    "block": true,
+    "flags": [
+     "sign-unavailable"
+    ],
+    "signing": null,
+    "reason": null
+   },
+   {
+    "name": "invalid signing object: an env value has a newline",
+    "outcome": {
+     "kind": "ok",
+     "stdout": "{\"schema_version\": 1, \"tier\": \"t2\", \"cap\": null, \"effective\": \"t2\", \"require_tier\": null, \"reason\": null, \"signing\": {\"env\": {\"GIT_COMMITTER_NAME\": \"a\\nb\", \"GIT_COMMITTER_EMAIL\": \"12345+llm-bot@users.noreply.github.com\", \"CARTER_IDENTITY\": \"llm-bot\"}, \"git_config\": [[\"gpg.format\", \"ssh\"], [\"user.signingkey\", \"key::ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIBQUck5VvSpXHhZ5JFCGxR3zhC07GvQUN5j6rv6VJbaY\"], [\"gpg.ssh.program\", \"/home/test/.carter/bin/carter-ssh-sign\"], [\"commit.gpgsign\", \"true\"]], \"fingerprint\": \"SHA256:2uXQrkCgLxqvXxMrbBJwmanqsboZn/lN5PAQyHhQDtQ\"}}"
+    },
+    "block": true,
+    "flags": [
+     "sign-unavailable"
+    ],
+    "signing": null,
+    "reason": null
+   },
+   {
+    "name": "invalid signing object: an env name is not an upper-case variable name",
+    "outcome": {
+     "kind": "ok",
+     "stdout": "{\"schema_version\": 1, \"tier\": \"t2\", \"cap\": null, \"effective\": \"t2\", \"require_tier\": null, \"reason\": null, \"signing\": {\"env\": {\"GIT_COMMITTER_NAME\": \"LLM Bot\", \"GIT_COMMITTER_EMAIL\": \"12345+llm-bot@users.noreply.github.com\", \"CARTER_IDENTITY\": \"llm-bot\", \"path\": \"/x\"}, \"git_config\": [[\"gpg.format\", \"ssh\"], [\"user.signingkey\", \"key::ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIBQUck5VvSpXHhZ5JFCGxR3zhC07GvQUN5j6rv6VJbaY\"], [\"gpg.ssh.program\", \"/home/test/.carter/bin/carter-ssh-sign\"], [\"commit.gpgsign\", \"true\"]], \"fingerprint\": \"SHA256:2uXQrkCgLxqvXxMrbBJwmanqsboZn/lN5PAQyHhQDtQ\"}}"
+    },
+    "block": true,
+    "flags": [
+     "sign-unavailable"
+    ],
+    "signing": null,
+    "reason": null
+   },
+   {
+    "name": "invalid signing object: an env name touches the git config count",
+    "outcome": {
+     "kind": "ok",
+     "stdout": "{\"schema_version\": 1, \"tier\": \"t2\", \"cap\": null, \"effective\": \"t2\", \"require_tier\": null, \"reason\": null, \"signing\": {\"env\": {\"GIT_COMMITTER_NAME\": \"LLM Bot\", \"GIT_COMMITTER_EMAIL\": \"12345+llm-bot@users.noreply.github.com\", \"CARTER_IDENTITY\": \"llm-bot\", \"GIT_CONFIG_COUNT\": \"0\"}, \"git_config\": [[\"gpg.format\", \"ssh\"], [\"user.signingkey\", \"key::ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIBQUck5VvSpXHhZ5JFCGxR3zhC07GvQUN5j6rv6VJbaY\"], [\"gpg.ssh.program\", \"/home/test/.carter/bin/carter-ssh-sign\"], [\"commit.gpgsign\", \"true\"]], \"fingerprint\": \"SHA256:2uXQrkCgLxqvXxMrbBJwmanqsboZn/lN5PAQyHhQDtQ\"}}"
+    },
+    "block": true,
+    "flags": [
+     "sign-unavailable"
+    ],
+    "signing": null,
+    "reason": null
+   },
+   {
+    "name": "invalid signing object: an env name is a shell tag",
+    "outcome": {
+     "kind": "ok",
+     "stdout": "{\"schema_version\": 1, \"tier\": \"t2\", \"cap\": null, \"effective\": \"t2\", \"require_tier\": null, \"reason\": null, \"signing\": {\"env\": {\"GIT_COMMITTER_NAME\": \"LLM Bot\", \"GIT_COMMITTER_EMAIL\": \"12345+llm-bot@users.noreply.github.com\", \"CARTER_IDENTITY\": \"llm-bot\", \"CARTER_HUMAN_SHELL\": \"1\"}, \"git_config\": [[\"gpg.format\", \"ssh\"], [\"user.signingkey\", \"key::ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIBQUck5VvSpXHhZ5JFCGxR3zhC07GvQUN5j6rv6VJbaY\"], [\"gpg.ssh.program\", \"/home/test/.carter/bin/carter-ssh-sign\"], [\"commit.gpgsign\", \"true\"]], \"fingerprint\": \"SHA256:2uXQrkCgLxqvXxMrbBJwmanqsboZn/lN5PAQyHhQDtQ\"}}"
+    },
+    "block": true,
+    "flags": [
+     "sign-unavailable"
+    ],
+    "signing": null,
+    "reason": null
+   },
+   {
+    "name": "invalid signing object: an env name is managed by the isolation block",
+    "outcome": {
+     "kind": "ok",
+     "stdout": "{\"schema_version\": 1, \"tier\": \"t2\", \"cap\": null, \"effective\": \"t2\", \"require_tier\": null, \"reason\": null, \"signing\": {\"env\": {\"GIT_COMMITTER_NAME\": \"LLM Bot\", \"GIT_COMMITTER_EMAIL\": \"12345+llm-bot@users.noreply.github.com\", \"CARTER_IDENTITY\": \"llm-bot\", \"SSH_AUTH_SOCK\": \"/s\"}, \"git_config\": [[\"gpg.format\", \"ssh\"], [\"user.signingkey\", \"key::ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIBQUck5VvSpXHhZ5JFCGxR3zhC07GvQUN5j6rv6VJbaY\"], [\"gpg.ssh.program\", \"/home/test/.carter/bin/carter-ssh-sign\"], [\"commit.gpgsign\", \"true\"]], \"fingerprint\": \"SHA256:2uXQrkCgLxqvXxMrbBJwmanqsboZn/lN5PAQyHhQDtQ\"}}"
+    },
+    "block": true,
+    "flags": [
+     "sign-unavailable"
+    ],
+    "signing": null,
+    "reason": null
+   },
+   {
+    "name": "invalid signing object: git_config is empty",
+    "outcome": {
+     "kind": "ok",
+     "stdout": "{\"schema_version\": 1, \"tier\": \"t2\", \"cap\": null, \"effective\": \"t2\", \"require_tier\": null, \"reason\": null, \"signing\": {\"env\": {\"GIT_COMMITTER_NAME\": \"LLM Bot\", \"GIT_COMMITTER_EMAIL\": \"12345+llm-bot@users.noreply.github.com\", \"CARTER_IDENTITY\": \"llm-bot\"}, \"git_config\": [], \"fingerprint\": \"SHA256:2uXQrkCgLxqvXxMrbBJwmanqsboZn/lN5PAQyHhQDtQ\"}}"
+    },
+    "block": true,
+    "flags": [
+     "sign-unavailable"
+    ],
+    "signing": null,
+    "reason": null
+   },
+   {
+    "name": "invalid signing object: git_config is not a list",
+    "outcome": {
+     "kind": "ok",
+     "stdout": "{\"schema_version\": 1, \"tier\": \"t2\", \"cap\": null, \"effective\": \"t2\", \"require_tier\": null, \"reason\": null, \"signing\": {\"env\": {\"GIT_COMMITTER_NAME\": \"LLM Bot\", \"GIT_COMMITTER_EMAIL\": \"12345+llm-bot@users.noreply.github.com\", \"CARTER_IDENTITY\": \"llm-bot\"}, \"git_config\": \"gpg.format=ssh\", \"fingerprint\": \"SHA256:2uXQrkCgLxqvXxMrbBJwmanqsboZn/lN5PAQyHhQDtQ\"}}"
+    },
+    "block": true,
+    "flags": [
+     "sign-unavailable"
+    ],
+    "signing": null,
+    "reason": null
+   },
+   {
+    "name": "invalid signing object: a git_config pair has three items",
+    "outcome": {
+     "kind": "ok",
+     "stdout": "{\"schema_version\": 1, \"tier\": \"t2\", \"cap\": null, \"effective\": \"t2\", \"require_tier\": null, \"reason\": null, \"signing\": {\"env\": {\"GIT_COMMITTER_NAME\": \"LLM Bot\", \"GIT_COMMITTER_EMAIL\": \"12345+llm-bot@users.noreply.github.com\", \"CARTER_IDENTITY\": \"llm-bot\"}, \"git_config\": [[\"gpg.format\", \"ssh\", \"x\"]], \"fingerprint\": \"SHA256:2uXQrkCgLxqvXxMrbBJwmanqsboZn/lN5PAQyHhQDtQ\"}}"
+    },
+    "block": true,
+    "flags": [
+     "sign-unavailable"
+    ],
+    "signing": null,
+    "reason": null
+   },
+   {
+    "name": "invalid signing object: a git_config key has no dot",
+    "outcome": {
+     "kind": "ok",
+     "stdout": "{\"schema_version\": 1, \"tier\": \"t2\", \"cap\": null, \"effective\": \"t2\", \"require_tier\": null, \"reason\": null, \"signing\": {\"env\": {\"GIT_COMMITTER_NAME\": \"LLM Bot\", \"GIT_COMMITTER_EMAIL\": \"12345+llm-bot@users.noreply.github.com\", \"CARTER_IDENTITY\": \"llm-bot\"}, \"git_config\": [[\"gpgformat\", \"ssh\"]], \"fingerprint\": \"SHA256:2uXQrkCgLxqvXxMrbBJwmanqsboZn/lN5PAQyHhQDtQ\"}}"
+    },
+    "block": true,
+    "flags": [
+     "sign-unavailable"
+    ],
+    "signing": null,
+    "reason": null
+   },
+   {
+    "name": "invalid signing object: a git_config key has a space",
+    "outcome": {
+     "kind": "ok",
+     "stdout": "{\"schema_version\": 1, \"tier\": \"t2\", \"cap\": null, \"effective\": \"t2\", \"require_tier\": null, \"reason\": null, \"signing\": {\"env\": {\"GIT_COMMITTER_NAME\": \"LLM Bot\", \"GIT_COMMITTER_EMAIL\": \"12345+llm-bot@users.noreply.github.com\", \"CARTER_IDENTITY\": \"llm-bot\"}, \"git_config\": [[\"gpg.format x\", \"ssh\"]], \"fingerprint\": \"SHA256:2uXQrkCgLxqvXxMrbBJwmanqsboZn/lN5PAQyHhQDtQ\"}}"
+    },
+    "block": true,
+    "flags": [
+     "sign-unavailable"
+    ],
+    "signing": null,
+    "reason": null
+   },
+   {
+    "name": "invalid signing object: a git_config value is not a string",
+    "outcome": {
+     "kind": "ok",
+     "stdout": "{\"schema_version\": 1, \"tier\": \"t2\", \"cap\": null, \"effective\": \"t2\", \"require_tier\": null, \"reason\": null, \"signing\": {\"env\": {\"GIT_COMMITTER_NAME\": \"LLM Bot\", \"GIT_COMMITTER_EMAIL\": \"12345+llm-bot@users.noreply.github.com\", \"CARTER_IDENTITY\": \"llm-bot\"}, \"git_config\": [[\"gpg.format\", 1]], \"fingerprint\": \"SHA256:2uXQrkCgLxqvXxMrbBJwmanqsboZn/lN5PAQyHhQDtQ\"}}"
+    },
+    "block": true,
+    "flags": [
+     "sign-unavailable"
+    ],
+    "signing": null,
+    "reason": null
+   },
+   {
+    "name": "invalid signing object: the fingerprint is empty",
+    "outcome": {
+     "kind": "ok",
+     "stdout": "{\"schema_version\": 1, \"tier\": \"t2\", \"cap\": null, \"effective\": \"t2\", \"require_tier\": null, \"reason\": null, \"signing\": {\"env\": {\"GIT_COMMITTER_NAME\": \"LLM Bot\", \"GIT_COMMITTER_EMAIL\": \"12345+llm-bot@users.noreply.github.com\", \"CARTER_IDENTITY\": \"llm-bot\"}, \"git_config\": [[\"gpg.format\", \"ssh\"], [\"user.signingkey\", \"key::ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIBQUck5VvSpXHhZ5JFCGxR3zhC07GvQUN5j6rv6VJbaY\"], [\"gpg.ssh.program\", \"/home/test/.carter/bin/carter-ssh-sign\"], [\"commit.gpgsign\", \"true\"]], \"fingerprint\": \"\"}}"
+    },
+    "block": true,
+    "flags": [
+     "sign-unavailable"
+    ],
+    "signing": null,
+    "reason": null
+   },
+   {
+    "name": "invalid signing object: the fingerprint is not a string",
+    "outcome": {
+     "kind": "ok",
+     "stdout": "{\"schema_version\": 1, \"tier\": \"t2\", \"cap\": null, \"effective\": \"t2\", \"require_tier\": null, \"reason\": null, \"signing\": {\"env\": {\"GIT_COMMITTER_NAME\": \"LLM Bot\", \"GIT_COMMITTER_EMAIL\": \"12345+llm-bot@users.noreply.github.com\", \"CARTER_IDENTITY\": \"llm-bot\"}, \"git_config\": [[\"gpg.format\", \"ssh\"], [\"user.signingkey\", \"key::ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIBQUck5VvSpXHhZ5JFCGxR3zhC07GvQUN5j6rv6VJbaY\"], [\"gpg.ssh.program\", \"/home/test/.carter/bin/carter-ssh-sign\"], [\"commit.gpgsign\", \"true\"]], \"fingerprint\": 5}}"
+    },
+    "block": true,
+    "flags": [
+     "sign-unavailable"
+    ],
+    "signing": null,
+    "reason": null
+   },
+   {
+    "name": "invalid signing object: not an object",
+    "outcome": {
+     "kind": "ok",
+     "stdout": "{\"schema_version\": 1, \"tier\": \"t2\", \"cap\": null, \"effective\": \"t2\", \"require_tier\": null, \"reason\": null, \"signing\": [{\"env\": {\"GIT_COMMITTER_NAME\": \"LLM Bot\", \"GIT_COMMITTER_EMAIL\": \"12345+llm-bot@users.noreply.github.com\", \"CARTER_IDENTITY\": \"llm-bot\"}, \"git_config\": [[\"gpg.format\", \"ssh\"], [\"user.signingkey\", \"key::ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIBQUck5VvSpXHhZ5JFCGxR3zhC07GvQUN5j6rv6VJbaY\"], [\"gpg.ssh.program\", \"/home/test/.carter/bin/carter-ssh-sign\"], [\"commit.gpgsign\", \"true\"]], \"fingerprint\": \"SHA256:2uXQrkCgLxqvXxMrbBJwmanqsboZn/lN5PAQyHhQDtQ\"}]}"
+    },
+    "block": true,
+    "flags": [
+     "sign-unavailable"
+    ],
+    "signing": null,
+    "reason": null
+   },
+   {
+    "name": "invalid signing object: null",
+    "outcome": {
+     "kind": "ok",
+     "stdout": "{\"schema_version\": 1, \"tier\": \"t2\", \"cap\": null, \"effective\": \"t2\", \"require_tier\": null, \"reason\": null, \"signing\": null}"
+    },
+    "block": true,
+    "flags": [
+     "sign-unavailable"
+    ],
+    "signing": null,
+    "reason": null
    }
-  ]
+  ],
+  "signing_key": "signing"
  },
  "status": {
   "keys": [
@@ -1811,6 +2297,1000 @@
    "count-malformed",
    "sign-unavailable",
    "config-error"
+  ]
+ },
+ "signing": {
+  "note": "H3 (plan 005): the signing object of `identity env`, and applying it to an environment. Both runtimes pass `apply`. `invalid` objects are the ones the plugin can judge without git knowledge (shape, plain strings, names the isolation block manages); what the keys and values mean is checked by the Python payload tests.",
+  "keys": [
+   "env",
+   "git_config",
+   "fingerprint"
+  ],
+  "env_keys": [
+   "GIT_COMMITTER_NAME",
+   "GIT_COMMITTER_EMAIL",
+   "CARTER_IDENTITY"
+  ],
+  "git_config_keys": [
+   "gpg.format",
+   "user.signingkey",
+   "gpg.ssh.program",
+   "commit.gpgsign"
+  ],
+  "block": {
+   "env": {
+    "GIT_COMMITTER_NAME": "LLM Bot",
+    "GIT_COMMITTER_EMAIL": "12345+llm-bot@users.noreply.github.com",
+    "CARTER_IDENTITY": "llm-bot"
+   },
+   "git_config": [
+    [
+     "gpg.format",
+     "ssh"
+    ],
+    [
+     "user.signingkey",
+     "key::ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIBQUck5VvSpXHhZ5JFCGxR3zhC07GvQUN5j6rv6VJbaY"
+    ],
+    [
+     "gpg.ssh.program",
+     "/home/test/.carter/bin/carter-ssh-sign"
+    ],
+    [
+     "commit.gpgsign",
+     "true"
+    ]
+   ],
+   "fingerprint": "SHA256:2uXQrkCgLxqvXxMrbBJwmanqsboZn/lN5PAQyHhQDtQ"
+  },
+  "apply": [
+   {
+    "name": "empty environment",
+    "env": {},
+    "expected": {
+     "env": {
+      "GIT_COMMITTER_NAME": "LLM Bot",
+      "GIT_COMMITTER_EMAIL": "12345+llm-bot@users.noreply.github.com",
+      "CARTER_IDENTITY": "llm-bot",
+      "GIT_CONFIG_KEY_0": "gpg.format",
+      "GIT_CONFIG_VALUE_0": "ssh",
+      "GIT_CONFIG_KEY_1": "user.signingkey",
+      "GIT_CONFIG_VALUE_1": "key::ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIBQUck5VvSpXHhZ5JFCGxR3zhC07GvQUN5j6rv6VJbaY",
+      "GIT_CONFIG_KEY_2": "gpg.ssh.program",
+      "GIT_CONFIG_VALUE_2": "/home/test/.carter/bin/carter-ssh-sign",
+      "GIT_CONFIG_KEY_3": "commit.gpgsign",
+      "GIT_CONFIG_VALUE_3": "true",
+      "GIT_CONFIG_COUNT": "4"
+     },
+     "flags": []
+    }
+   },
+   {
+    "name": "an unrelated environment",
+    "env": {
+     "PATH": "/usr/bin",
+     "HOME": "/home/test"
+    },
+    "expected": {
+     "env": {
+      "PATH": "/usr/bin",
+      "HOME": "/home/test",
+      "GIT_COMMITTER_NAME": "LLM Bot",
+      "GIT_COMMITTER_EMAIL": "12345+llm-bot@users.noreply.github.com",
+      "CARTER_IDENTITY": "llm-bot",
+      "GIT_CONFIG_KEY_0": "gpg.format",
+      "GIT_CONFIG_VALUE_0": "ssh",
+      "GIT_CONFIG_KEY_1": "user.signingkey",
+      "GIT_CONFIG_VALUE_1": "key::ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIBQUck5VvSpXHhZ5JFCGxR3zhC07GvQUN5j6rv6VJbaY",
+      "GIT_CONFIG_KEY_2": "gpg.ssh.program",
+      "GIT_CONFIG_VALUE_2": "/home/test/.carter/bin/carter-ssh-sign",
+      "GIT_CONFIG_KEY_3": "commit.gpgsign",
+      "GIT_CONFIG_VALUE_3": "true",
+      "GIT_CONFIG_COUNT": "4"
+     },
+     "flags": []
+    }
+   },
+   {
+    "name": "appends after a valid inherited count",
+    "env": {
+     "GIT_CONFIG_COUNT": "2",
+     "GIT_CONFIG_KEY_0": "user.name",
+     "GIT_CONFIG_VALUE_0": "x",
+     "GIT_CONFIG_KEY_1": "core.pager",
+     "GIT_CONFIG_VALUE_1": "cat"
+    },
+    "expected": {
+     "env": {
+      "GIT_CONFIG_COUNT": "6",
+      "GIT_CONFIG_KEY_0": "user.name",
+      "GIT_CONFIG_VALUE_0": "x",
+      "GIT_CONFIG_KEY_1": "core.pager",
+      "GIT_CONFIG_VALUE_1": "cat",
+      "GIT_COMMITTER_NAME": "LLM Bot",
+      "GIT_COMMITTER_EMAIL": "12345+llm-bot@users.noreply.github.com",
+      "CARTER_IDENTITY": "llm-bot",
+      "GIT_CONFIG_KEY_2": "gpg.format",
+      "GIT_CONFIG_VALUE_2": "ssh",
+      "GIT_CONFIG_KEY_3": "user.signingkey",
+      "GIT_CONFIG_VALUE_3": "key::ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIBQUck5VvSpXHhZ5JFCGxR3zhC07GvQUN5j6rv6VJbaY",
+      "GIT_CONFIG_KEY_4": "gpg.ssh.program",
+      "GIT_CONFIG_VALUE_4": "/home/test/.carter/bin/carter-ssh-sign",
+      "GIT_CONFIG_KEY_5": "commit.gpgsign",
+      "GIT_CONFIG_VALUE_5": "true"
+     },
+     "flags": []
+    }
+   },
+   {
+    "name": "count 0 with no keys",
+    "env": {
+     "GIT_CONFIG_COUNT": "0"
+    },
+    "expected": {
+     "env": {
+      "GIT_CONFIG_COUNT": "4",
+      "GIT_COMMITTER_NAME": "LLM Bot",
+      "GIT_COMMITTER_EMAIL": "12345+llm-bot@users.noreply.github.com",
+      "CARTER_IDENTITY": "llm-bot",
+      "GIT_CONFIG_KEY_0": "gpg.format",
+      "GIT_CONFIG_VALUE_0": "ssh",
+      "GIT_CONFIG_KEY_1": "user.signingkey",
+      "GIT_CONFIG_VALUE_1": "key::ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIBQUck5VvSpXHhZ5JFCGxR3zhC07GvQUN5j6rv6VJbaY",
+      "GIT_CONFIG_KEY_2": "gpg.ssh.program",
+      "GIT_CONFIG_VALUE_2": "/home/test/.carter/bin/carter-ssh-sign",
+      "GIT_CONFIG_KEY_3": "commit.gpgsign",
+      "GIT_CONFIG_VALUE_3": "true"
+     },
+     "flags": []
+    }
+   },
+   {
+    "name": "stray keys without a count are ignored by git and kept",
+    "env": {
+     "GIT_CONFIG_KEY_0": "a.b",
+     "GIT_CONFIG_VALUE_0": "c"
+    },
+    "expected": {
+     "env": {
+      "GIT_CONFIG_KEY_0": "gpg.format",
+      "GIT_CONFIG_VALUE_0": "ssh",
+      "GIT_COMMITTER_NAME": "LLM Bot",
+      "GIT_COMMITTER_EMAIL": "12345+llm-bot@users.noreply.github.com",
+      "CARTER_IDENTITY": "llm-bot",
+      "GIT_CONFIG_KEY_1": "user.signingkey",
+      "GIT_CONFIG_VALUE_1": "key::ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIBQUck5VvSpXHhZ5JFCGxR3zhC07GvQUN5j6rv6VJbaY",
+      "GIT_CONFIG_KEY_2": "gpg.ssh.program",
+      "GIT_CONFIG_VALUE_2": "/home/test/.carter/bin/carter-ssh-sign",
+      "GIT_CONFIG_KEY_3": "commit.gpgsign",
+      "GIT_CONFIG_VALUE_3": "true",
+      "GIT_CONFIG_COUNT": "4"
+     },
+     "flags": []
+    }
+   },
+   {
+    "name": "a collision: Carter's entry comes last",
+    "env": {
+     "GIT_CONFIG_COUNT": "1",
+     "GIT_CONFIG_KEY_0": "commit.gpgsign",
+     "GIT_CONFIG_VALUE_0": "false"
+    },
+    "expected": {
+     "env": {
+      "GIT_CONFIG_COUNT": "5",
+      "GIT_CONFIG_KEY_0": "commit.gpgsign",
+      "GIT_CONFIG_VALUE_0": "false",
+      "GIT_COMMITTER_NAME": "LLM Bot",
+      "GIT_COMMITTER_EMAIL": "12345+llm-bot@users.noreply.github.com",
+      "CARTER_IDENTITY": "llm-bot",
+      "GIT_CONFIG_KEY_1": "gpg.format",
+      "GIT_CONFIG_VALUE_1": "ssh",
+      "GIT_CONFIG_KEY_2": "user.signingkey",
+      "GIT_CONFIG_VALUE_2": "key::ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIBQUck5VvSpXHhZ5JFCGxR3zhC07GvQUN5j6rv6VJbaY",
+      "GIT_CONFIG_KEY_3": "gpg.ssh.program",
+      "GIT_CONFIG_VALUE_3": "/home/test/.carter/bin/carter-ssh-sign",
+      "GIT_CONFIG_KEY_4": "commit.gpgsign",
+      "GIT_CONFIG_VALUE_4": "true"
+     },
+     "flags": []
+    }
+   },
+   {
+    "name": "GIT_CONFIG_PARAMETERS is deleted",
+    "env": {
+     "GIT_CONFIG_PARAMETERS": "'commit.gpgsign=false'"
+    },
+    "expected": {
+     "env": {
+      "GIT_COMMITTER_NAME": "LLM Bot",
+      "GIT_COMMITTER_EMAIL": "12345+llm-bot@users.noreply.github.com",
+      "CARTER_IDENTITY": "llm-bot",
+      "GIT_CONFIG_KEY_0": "gpg.format",
+      "GIT_CONFIG_VALUE_0": "ssh",
+      "GIT_CONFIG_KEY_1": "user.signingkey",
+      "GIT_CONFIG_VALUE_1": "key::ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIBQUck5VvSpXHhZ5JFCGxR3zhC07GvQUN5j6rv6VJbaY",
+      "GIT_CONFIG_KEY_2": "gpg.ssh.program",
+      "GIT_CONFIG_VALUE_2": "/home/test/.carter/bin/carter-ssh-sign",
+      "GIT_CONFIG_KEY_3": "commit.gpgsign",
+      "GIT_CONFIG_VALUE_3": "true",
+      "GIT_CONFIG_COUNT": "4"
+     },
+     "flags": []
+    }
+   },
+   {
+    "name": "a committer in the environment is replaced",
+    "env": {
+     "GIT_COMMITTER_NAME": "Someone",
+     "GIT_COMMITTER_EMAIL": "s@example.invalid",
+     "CARTER_IDENTITY": "other"
+    },
+    "expected": {
+     "env": {
+      "GIT_COMMITTER_NAME": "LLM Bot",
+      "GIT_COMMITTER_EMAIL": "12345+llm-bot@users.noreply.github.com",
+      "CARTER_IDENTITY": "llm-bot",
+      "GIT_CONFIG_KEY_0": "gpg.format",
+      "GIT_CONFIG_VALUE_0": "ssh",
+      "GIT_CONFIG_KEY_1": "user.signingkey",
+      "GIT_CONFIG_VALUE_1": "key::ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIBQUck5VvSpXHhZ5JFCGxR3zhC07GvQUN5j6rv6VJbaY",
+      "GIT_CONFIG_KEY_2": "gpg.ssh.program",
+      "GIT_CONFIG_VALUE_2": "/home/test/.carter/bin/carter-ssh-sign",
+      "GIT_CONFIG_KEY_3": "commit.gpgsign",
+      "GIT_CONFIG_VALUE_3": "true",
+      "GIT_CONFIG_COUNT": "4"
+     },
+     "flags": []
+    }
+   },
+   {
+    "name": "a malformed count starts again at 0",
+    "env": {
+     "GIT_CONFIG_COUNT": "abc",
+     "GIT_CONFIG_KEY_0": "a.b",
+     "GIT_CONFIG_VALUE_0": "c"
+    },
+    "expected": {
+     "env": {
+      "GIT_CONFIG_COUNT": "4",
+      "GIT_COMMITTER_NAME": "LLM Bot",
+      "GIT_COMMITTER_EMAIL": "12345+llm-bot@users.noreply.github.com",
+      "CARTER_IDENTITY": "llm-bot",
+      "GIT_CONFIG_KEY_0": "gpg.format",
+      "GIT_CONFIG_VALUE_0": "ssh",
+      "GIT_CONFIG_KEY_1": "user.signingkey",
+      "GIT_CONFIG_VALUE_1": "key::ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIBQUck5VvSpXHhZ5JFCGxR3zhC07GvQUN5j6rv6VJbaY",
+      "GIT_CONFIG_KEY_2": "gpg.ssh.program",
+      "GIT_CONFIG_VALUE_2": "/home/test/.carter/bin/carter-ssh-sign",
+      "GIT_CONFIG_KEY_3": "commit.gpgsign",
+      "GIT_CONFIG_VALUE_3": "true"
+     },
+     "flags": [
+      "count-malformed"
+     ]
+    }
+   },
+   {
+    "name": "a count with a missing entry starts again",
+    "env": {
+     "GIT_CONFIG_COUNT": "2",
+     "GIT_CONFIG_KEY_0": "a.b",
+     "GIT_CONFIG_VALUE_0": "c"
+    },
+    "expected": {
+     "env": {
+      "GIT_CONFIG_COUNT": "4",
+      "GIT_COMMITTER_NAME": "LLM Bot",
+      "GIT_COMMITTER_EMAIL": "12345+llm-bot@users.noreply.github.com",
+      "CARTER_IDENTITY": "llm-bot",
+      "GIT_CONFIG_KEY_0": "gpg.format",
+      "GIT_CONFIG_VALUE_0": "ssh",
+      "GIT_CONFIG_KEY_1": "user.signingkey",
+      "GIT_CONFIG_VALUE_1": "key::ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIBQUck5VvSpXHhZ5JFCGxR3zhC07GvQUN5j6rv6VJbaY",
+      "GIT_CONFIG_KEY_2": "gpg.ssh.program",
+      "GIT_CONFIG_VALUE_2": "/home/test/.carter/bin/carter-ssh-sign",
+      "GIT_CONFIG_KEY_3": "commit.gpgsign",
+      "GIT_CONFIG_VALUE_3": "true"
+     },
+     "flags": [
+      "count-malformed"
+     ]
+    }
+   },
+   {
+    "name": "a count over the cap starts again",
+    "env": {
+     "GIT_CONFIG_COUNT": "1001"
+    },
+    "expected": {
+     "env": {
+      "GIT_CONFIG_COUNT": "4",
+      "GIT_COMMITTER_NAME": "LLM Bot",
+      "GIT_COMMITTER_EMAIL": "12345+llm-bot@users.noreply.github.com",
+      "CARTER_IDENTITY": "llm-bot",
+      "GIT_CONFIG_KEY_0": "gpg.format",
+      "GIT_CONFIG_VALUE_0": "ssh",
+      "GIT_CONFIG_KEY_1": "user.signingkey",
+      "GIT_CONFIG_VALUE_1": "key::ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIBQUck5VvSpXHhZ5JFCGxR3zhC07GvQUN5j6rv6VJbaY",
+      "GIT_CONFIG_KEY_2": "gpg.ssh.program",
+      "GIT_CONFIG_VALUE_2": "/home/test/.carter/bin/carter-ssh-sign",
+      "GIT_CONFIG_KEY_3": "commit.gpgsign",
+      "GIT_CONFIG_VALUE_3": "true"
+     },
+     "flags": [
+      "count-malformed"
+     ]
+    }
+   },
+   {
+    "name": "a long valid count",
+    "env": {
+     "GIT_CONFIG_COUNT": "50",
+     "$expand": {
+      "entries": 50,
+      "key": "x.y",
+      "value": "z"
+     }
+    },
+    "expected": {
+     "env": {
+      "GIT_CONFIG_COUNT": "54",
+      "GIT_CONFIG_KEY_0": "x.y",
+      "GIT_CONFIG_VALUE_0": "z",
+      "GIT_CONFIG_KEY_1": "x.y",
+      "GIT_CONFIG_VALUE_1": "z",
+      "GIT_CONFIG_KEY_2": "x.y",
+      "GIT_CONFIG_VALUE_2": "z",
+      "GIT_CONFIG_KEY_3": "x.y",
+      "GIT_CONFIG_VALUE_3": "z",
+      "GIT_CONFIG_KEY_4": "x.y",
+      "GIT_CONFIG_VALUE_4": "z",
+      "GIT_CONFIG_KEY_5": "x.y",
+      "GIT_CONFIG_VALUE_5": "z",
+      "GIT_CONFIG_KEY_6": "x.y",
+      "GIT_CONFIG_VALUE_6": "z",
+      "GIT_CONFIG_KEY_7": "x.y",
+      "GIT_CONFIG_VALUE_7": "z",
+      "GIT_CONFIG_KEY_8": "x.y",
+      "GIT_CONFIG_VALUE_8": "z",
+      "GIT_CONFIG_KEY_9": "x.y",
+      "GIT_CONFIG_VALUE_9": "z",
+      "GIT_CONFIG_KEY_10": "x.y",
+      "GIT_CONFIG_VALUE_10": "z",
+      "GIT_CONFIG_KEY_11": "x.y",
+      "GIT_CONFIG_VALUE_11": "z",
+      "GIT_CONFIG_KEY_12": "x.y",
+      "GIT_CONFIG_VALUE_12": "z",
+      "GIT_CONFIG_KEY_13": "x.y",
+      "GIT_CONFIG_VALUE_13": "z",
+      "GIT_CONFIG_KEY_14": "x.y",
+      "GIT_CONFIG_VALUE_14": "z",
+      "GIT_CONFIG_KEY_15": "x.y",
+      "GIT_CONFIG_VALUE_15": "z",
+      "GIT_CONFIG_KEY_16": "x.y",
+      "GIT_CONFIG_VALUE_16": "z",
+      "GIT_CONFIG_KEY_17": "x.y",
+      "GIT_CONFIG_VALUE_17": "z",
+      "GIT_CONFIG_KEY_18": "x.y",
+      "GIT_CONFIG_VALUE_18": "z",
+      "GIT_CONFIG_KEY_19": "x.y",
+      "GIT_CONFIG_VALUE_19": "z",
+      "GIT_CONFIG_KEY_20": "x.y",
+      "GIT_CONFIG_VALUE_20": "z",
+      "GIT_CONFIG_KEY_21": "x.y",
+      "GIT_CONFIG_VALUE_21": "z",
+      "GIT_CONFIG_KEY_22": "x.y",
+      "GIT_CONFIG_VALUE_22": "z",
+      "GIT_CONFIG_KEY_23": "x.y",
+      "GIT_CONFIG_VALUE_23": "z",
+      "GIT_CONFIG_KEY_24": "x.y",
+      "GIT_CONFIG_VALUE_24": "z",
+      "GIT_CONFIG_KEY_25": "x.y",
+      "GIT_CONFIG_VALUE_25": "z",
+      "GIT_CONFIG_KEY_26": "x.y",
+      "GIT_CONFIG_VALUE_26": "z",
+      "GIT_CONFIG_KEY_27": "x.y",
+      "GIT_CONFIG_VALUE_27": "z",
+      "GIT_CONFIG_KEY_28": "x.y",
+      "GIT_CONFIG_VALUE_28": "z",
+      "GIT_CONFIG_KEY_29": "x.y",
+      "GIT_CONFIG_VALUE_29": "z",
+      "GIT_CONFIG_KEY_30": "x.y",
+      "GIT_CONFIG_VALUE_30": "z",
+      "GIT_CONFIG_KEY_31": "x.y",
+      "GIT_CONFIG_VALUE_31": "z",
+      "GIT_CONFIG_KEY_32": "x.y",
+      "GIT_CONFIG_VALUE_32": "z",
+      "GIT_CONFIG_KEY_33": "x.y",
+      "GIT_CONFIG_VALUE_33": "z",
+      "GIT_CONFIG_KEY_34": "x.y",
+      "GIT_CONFIG_VALUE_34": "z",
+      "GIT_CONFIG_KEY_35": "x.y",
+      "GIT_CONFIG_VALUE_35": "z",
+      "GIT_CONFIG_KEY_36": "x.y",
+      "GIT_CONFIG_VALUE_36": "z",
+      "GIT_CONFIG_KEY_37": "x.y",
+      "GIT_CONFIG_VALUE_37": "z",
+      "GIT_CONFIG_KEY_38": "x.y",
+      "GIT_CONFIG_VALUE_38": "z",
+      "GIT_CONFIG_KEY_39": "x.y",
+      "GIT_CONFIG_VALUE_39": "z",
+      "GIT_CONFIG_KEY_40": "x.y",
+      "GIT_CONFIG_VALUE_40": "z",
+      "GIT_CONFIG_KEY_41": "x.y",
+      "GIT_CONFIG_VALUE_41": "z",
+      "GIT_CONFIG_KEY_42": "x.y",
+      "GIT_CONFIG_VALUE_42": "z",
+      "GIT_CONFIG_KEY_43": "x.y",
+      "GIT_CONFIG_VALUE_43": "z",
+      "GIT_CONFIG_KEY_44": "x.y",
+      "GIT_CONFIG_VALUE_44": "z",
+      "GIT_CONFIG_KEY_45": "x.y",
+      "GIT_CONFIG_VALUE_45": "z",
+      "GIT_CONFIG_KEY_46": "x.y",
+      "GIT_CONFIG_VALUE_46": "z",
+      "GIT_CONFIG_KEY_47": "x.y",
+      "GIT_CONFIG_VALUE_47": "z",
+      "GIT_CONFIG_KEY_48": "x.y",
+      "GIT_CONFIG_VALUE_48": "z",
+      "GIT_CONFIG_KEY_49": "x.y",
+      "GIT_CONFIG_VALUE_49": "z",
+      "GIT_COMMITTER_NAME": "LLM Bot",
+      "GIT_COMMITTER_EMAIL": "12345+llm-bot@users.noreply.github.com",
+      "CARTER_IDENTITY": "llm-bot",
+      "GIT_CONFIG_KEY_50": "gpg.format",
+      "GIT_CONFIG_VALUE_50": "ssh",
+      "GIT_CONFIG_KEY_51": "user.signingkey",
+      "GIT_CONFIG_VALUE_51": "key::ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIBQUck5VvSpXHhZ5JFCGxR3zhC07GvQUN5j6rv6VJbaY",
+      "GIT_CONFIG_KEY_52": "gpg.ssh.program",
+      "GIT_CONFIG_VALUE_52": "/home/test/.carter/bin/carter-ssh-sign",
+      "GIT_CONFIG_KEY_53": "commit.gpgsign",
+      "GIT_CONFIG_VALUE_53": "true"
+     },
+     "flags": []
+    }
+   }
+  ],
+  "invalid": [
+   {
+    "name": "partial: no fingerprint",
+    "signing": {
+     "env": {
+      "GIT_COMMITTER_NAME": "LLM Bot",
+      "GIT_COMMITTER_EMAIL": "12345+llm-bot@users.noreply.github.com",
+      "CARTER_IDENTITY": "llm-bot"
+     },
+     "git_config": [
+      [
+       "gpg.format",
+       "ssh"
+      ],
+      [
+       "user.signingkey",
+       "key::ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIBQUck5VvSpXHhZ5JFCGxR3zhC07GvQUN5j6rv6VJbaY"
+      ],
+      [
+       "gpg.ssh.program",
+       "/home/test/.carter/bin/carter-ssh-sign"
+      ],
+      [
+       "commit.gpgsign",
+       "true"
+      ]
+     ]
+    }
+   },
+   {
+    "name": "partial: no git_config",
+    "signing": {
+     "env": {
+      "GIT_COMMITTER_NAME": "LLM Bot",
+      "GIT_COMMITTER_EMAIL": "12345+llm-bot@users.noreply.github.com",
+      "CARTER_IDENTITY": "llm-bot"
+     },
+     "fingerprint": "SHA256:2uXQrkCgLxqvXxMrbBJwmanqsboZn/lN5PAQyHhQDtQ"
+    }
+   },
+   {
+    "name": "partial: no env",
+    "signing": {
+     "git_config": [
+      [
+       "gpg.format",
+       "ssh"
+      ],
+      [
+       "user.signingkey",
+       "key::ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIBQUck5VvSpXHhZ5JFCGxR3zhC07GvQUN5j6rv6VJbaY"
+      ],
+      [
+       "gpg.ssh.program",
+       "/home/test/.carter/bin/carter-ssh-sign"
+      ],
+      [
+       "commit.gpgsign",
+       "true"
+      ]
+     ],
+     "fingerprint": "SHA256:2uXQrkCgLxqvXxMrbBJwmanqsboZn/lN5PAQyHhQDtQ"
+    }
+   },
+   {
+    "name": "unknown top-level key",
+    "signing": {
+     "env": {
+      "GIT_COMMITTER_NAME": "LLM Bot",
+      "GIT_COMMITTER_EMAIL": "12345+llm-bot@users.noreply.github.com",
+      "CARTER_IDENTITY": "llm-bot"
+     },
+     "git_config": [
+      [
+       "gpg.format",
+       "ssh"
+      ],
+      [
+       "user.signingkey",
+       "key::ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIBQUck5VvSpXHhZ5JFCGxR3zhC07GvQUN5j6rv6VJbaY"
+      ],
+      [
+       "gpg.ssh.program",
+       "/home/test/.carter/bin/carter-ssh-sign"
+      ],
+      [
+       "commit.gpgsign",
+       "true"
+      ]
+     ],
+     "fingerprint": "SHA256:2uXQrkCgLxqvXxMrbBJwmanqsboZn/lN5PAQyHhQDtQ",
+     "socket": "/x"
+    }
+   },
+   {
+    "name": "env is empty",
+    "signing": {
+     "env": {},
+     "git_config": [
+      [
+       "gpg.format",
+       "ssh"
+      ],
+      [
+       "user.signingkey",
+       "key::ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIBQUck5VvSpXHhZ5JFCGxR3zhC07GvQUN5j6rv6VJbaY"
+      ],
+      [
+       "gpg.ssh.program",
+       "/home/test/.carter/bin/carter-ssh-sign"
+      ],
+      [
+       "commit.gpgsign",
+       "true"
+      ]
+     ],
+     "fingerprint": "SHA256:2uXQrkCgLxqvXxMrbBJwmanqsboZn/lN5PAQyHhQDtQ"
+    }
+   },
+   {
+    "name": "env is not an object",
+    "signing": {
+     "env": [
+      "GIT_COMMITTER_NAME"
+     ],
+     "git_config": [
+      [
+       "gpg.format",
+       "ssh"
+      ],
+      [
+       "user.signingkey",
+       "key::ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIBQUck5VvSpXHhZ5JFCGxR3zhC07GvQUN5j6rv6VJbaY"
+      ],
+      [
+       "gpg.ssh.program",
+       "/home/test/.carter/bin/carter-ssh-sign"
+      ],
+      [
+       "commit.gpgsign",
+       "true"
+      ]
+     ],
+     "fingerprint": "SHA256:2uXQrkCgLxqvXxMrbBJwmanqsboZn/lN5PAQyHhQDtQ"
+    }
+   },
+   {
+    "name": "an env value is not a string",
+    "signing": {
+     "env": {
+      "GIT_COMMITTER_NAME": 7,
+      "GIT_COMMITTER_EMAIL": "12345+llm-bot@users.noreply.github.com",
+      "CARTER_IDENTITY": "llm-bot"
+     },
+     "git_config": [
+      [
+       "gpg.format",
+       "ssh"
+      ],
+      [
+       "user.signingkey",
+       "key::ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIBQUck5VvSpXHhZ5JFCGxR3zhC07GvQUN5j6rv6VJbaY"
+      ],
+      [
+       "gpg.ssh.program",
+       "/home/test/.carter/bin/carter-ssh-sign"
+      ],
+      [
+       "commit.gpgsign",
+       "true"
+      ]
+     ],
+     "fingerprint": "SHA256:2uXQrkCgLxqvXxMrbBJwmanqsboZn/lN5PAQyHhQDtQ"
+    }
+   },
+   {
+    "name": "an env value is empty",
+    "signing": {
+     "env": {
+      "GIT_COMMITTER_NAME": "LLM Bot",
+      "GIT_COMMITTER_EMAIL": "",
+      "CARTER_IDENTITY": "llm-bot"
+     },
+     "git_config": [
+      [
+       "gpg.format",
+       "ssh"
+      ],
+      [
+       "user.signingkey",
+       "key::ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIBQUck5VvSpXHhZ5JFCGxR3zhC07GvQUN5j6rv6VJbaY"
+      ],
+      [
+       "gpg.ssh.program",
+       "/home/test/.carter/bin/carter-ssh-sign"
+      ],
+      [
+       "commit.gpgsign",
+       "true"
+      ]
+     ],
+     "fingerprint": "SHA256:2uXQrkCgLxqvXxMrbBJwmanqsboZn/lN5PAQyHhQDtQ"
+    }
+   },
+   {
+    "name": "an env value has a newline",
+    "signing": {
+     "env": {
+      "GIT_COMMITTER_NAME": "a\nb",
+      "GIT_COMMITTER_EMAIL": "12345+llm-bot@users.noreply.github.com",
+      "CARTER_IDENTITY": "llm-bot"
+     },
+     "git_config": [
+      [
+       "gpg.format",
+       "ssh"
+      ],
+      [
+       "user.signingkey",
+       "key::ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIBQUck5VvSpXHhZ5JFCGxR3zhC07GvQUN5j6rv6VJbaY"
+      ],
+      [
+       "gpg.ssh.program",
+       "/home/test/.carter/bin/carter-ssh-sign"
+      ],
+      [
+       "commit.gpgsign",
+       "true"
+      ]
+     ],
+     "fingerprint": "SHA256:2uXQrkCgLxqvXxMrbBJwmanqsboZn/lN5PAQyHhQDtQ"
+    }
+   },
+   {
+    "name": "an env name is not an upper-case variable name",
+    "signing": {
+     "env": {
+      "GIT_COMMITTER_NAME": "LLM Bot",
+      "GIT_COMMITTER_EMAIL": "12345+llm-bot@users.noreply.github.com",
+      "CARTER_IDENTITY": "llm-bot",
+      "path": "/x"
+     },
+     "git_config": [
+      [
+       "gpg.format",
+       "ssh"
+      ],
+      [
+       "user.signingkey",
+       "key::ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIBQUck5VvSpXHhZ5JFCGxR3zhC07GvQUN5j6rv6VJbaY"
+      ],
+      [
+       "gpg.ssh.program",
+       "/home/test/.carter/bin/carter-ssh-sign"
+      ],
+      [
+       "commit.gpgsign",
+       "true"
+      ]
+     ],
+     "fingerprint": "SHA256:2uXQrkCgLxqvXxMrbBJwmanqsboZn/lN5PAQyHhQDtQ"
+    }
+   },
+   {
+    "name": "an env name touches the git config count",
+    "signing": {
+     "env": {
+      "GIT_COMMITTER_NAME": "LLM Bot",
+      "GIT_COMMITTER_EMAIL": "12345+llm-bot@users.noreply.github.com",
+      "CARTER_IDENTITY": "llm-bot",
+      "GIT_CONFIG_COUNT": "0"
+     },
+     "git_config": [
+      [
+       "gpg.format",
+       "ssh"
+      ],
+      [
+       "user.signingkey",
+       "key::ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIBQUck5VvSpXHhZ5JFCGxR3zhC07GvQUN5j6rv6VJbaY"
+      ],
+      [
+       "gpg.ssh.program",
+       "/home/test/.carter/bin/carter-ssh-sign"
+      ],
+      [
+       "commit.gpgsign",
+       "true"
+      ]
+     ],
+     "fingerprint": "SHA256:2uXQrkCgLxqvXxMrbBJwmanqsboZn/lN5PAQyHhQDtQ"
+    }
+   },
+   {
+    "name": "an env name is a shell tag",
+    "signing": {
+     "env": {
+      "GIT_COMMITTER_NAME": "LLM Bot",
+      "GIT_COMMITTER_EMAIL": "12345+llm-bot@users.noreply.github.com",
+      "CARTER_IDENTITY": "llm-bot",
+      "CARTER_HUMAN_SHELL": "1"
+     },
+     "git_config": [
+      [
+       "gpg.format",
+       "ssh"
+      ],
+      [
+       "user.signingkey",
+       "key::ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIBQUck5VvSpXHhZ5JFCGxR3zhC07GvQUN5j6rv6VJbaY"
+      ],
+      [
+       "gpg.ssh.program",
+       "/home/test/.carter/bin/carter-ssh-sign"
+      ],
+      [
+       "commit.gpgsign",
+       "true"
+      ]
+     ],
+     "fingerprint": "SHA256:2uXQrkCgLxqvXxMrbBJwmanqsboZn/lN5PAQyHhQDtQ"
+    }
+   },
+   {
+    "name": "an env name is managed by the isolation block",
+    "signing": {
+     "env": {
+      "GIT_COMMITTER_NAME": "LLM Bot",
+      "GIT_COMMITTER_EMAIL": "12345+llm-bot@users.noreply.github.com",
+      "CARTER_IDENTITY": "llm-bot",
+      "SSH_AUTH_SOCK": "/s"
+     },
+     "git_config": [
+      [
+       "gpg.format",
+       "ssh"
+      ],
+      [
+       "user.signingkey",
+       "key::ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIBQUck5VvSpXHhZ5JFCGxR3zhC07GvQUN5j6rv6VJbaY"
+      ],
+      [
+       "gpg.ssh.program",
+       "/home/test/.carter/bin/carter-ssh-sign"
+      ],
+      [
+       "commit.gpgsign",
+       "true"
+      ]
+     ],
+     "fingerprint": "SHA256:2uXQrkCgLxqvXxMrbBJwmanqsboZn/lN5PAQyHhQDtQ"
+    }
+   },
+   {
+    "name": "git_config is empty",
+    "signing": {
+     "env": {
+      "GIT_COMMITTER_NAME": "LLM Bot",
+      "GIT_COMMITTER_EMAIL": "12345+llm-bot@users.noreply.github.com",
+      "CARTER_IDENTITY": "llm-bot"
+     },
+     "git_config": [],
+     "fingerprint": "SHA256:2uXQrkCgLxqvXxMrbBJwmanqsboZn/lN5PAQyHhQDtQ"
+    }
+   },
+   {
+    "name": "git_config is not a list",
+    "signing": {
+     "env": {
+      "GIT_COMMITTER_NAME": "LLM Bot",
+      "GIT_COMMITTER_EMAIL": "12345+llm-bot@users.noreply.github.com",
+      "CARTER_IDENTITY": "llm-bot"
+     },
+     "git_config": "gpg.format=ssh",
+     "fingerprint": "SHA256:2uXQrkCgLxqvXxMrbBJwmanqsboZn/lN5PAQyHhQDtQ"
+    }
+   },
+   {
+    "name": "a git_config pair has three items",
+    "signing": {
+     "env": {
+      "GIT_COMMITTER_NAME": "LLM Bot",
+      "GIT_COMMITTER_EMAIL": "12345+llm-bot@users.noreply.github.com",
+      "CARTER_IDENTITY": "llm-bot"
+     },
+     "git_config": [
+      [
+       "gpg.format",
+       "ssh",
+       "x"
+      ]
+     ],
+     "fingerprint": "SHA256:2uXQrkCgLxqvXxMrbBJwmanqsboZn/lN5PAQyHhQDtQ"
+    }
+   },
+   {
+    "name": "a git_config key has no dot",
+    "signing": {
+     "env": {
+      "GIT_COMMITTER_NAME": "LLM Bot",
+      "GIT_COMMITTER_EMAIL": "12345+llm-bot@users.noreply.github.com",
+      "CARTER_IDENTITY": "llm-bot"
+     },
+     "git_config": [
+      [
+       "gpgformat",
+       "ssh"
+      ]
+     ],
+     "fingerprint": "SHA256:2uXQrkCgLxqvXxMrbBJwmanqsboZn/lN5PAQyHhQDtQ"
+    }
+   },
+   {
+    "name": "a git_config key has a space",
+    "signing": {
+     "env": {
+      "GIT_COMMITTER_NAME": "LLM Bot",
+      "GIT_COMMITTER_EMAIL": "12345+llm-bot@users.noreply.github.com",
+      "CARTER_IDENTITY": "llm-bot"
+     },
+     "git_config": [
+      [
+       "gpg.format x",
+       "ssh"
+      ]
+     ],
+     "fingerprint": "SHA256:2uXQrkCgLxqvXxMrbBJwmanqsboZn/lN5PAQyHhQDtQ"
+    }
+   },
+   {
+    "name": "a git_config value is not a string",
+    "signing": {
+     "env": {
+      "GIT_COMMITTER_NAME": "LLM Bot",
+      "GIT_COMMITTER_EMAIL": "12345+llm-bot@users.noreply.github.com",
+      "CARTER_IDENTITY": "llm-bot"
+     },
+     "git_config": [
+      [
+       "gpg.format",
+       1
+      ]
+     ],
+     "fingerprint": "SHA256:2uXQrkCgLxqvXxMrbBJwmanqsboZn/lN5PAQyHhQDtQ"
+    }
+   },
+   {
+    "name": "the fingerprint is empty",
+    "signing": {
+     "env": {
+      "GIT_COMMITTER_NAME": "LLM Bot",
+      "GIT_COMMITTER_EMAIL": "12345+llm-bot@users.noreply.github.com",
+      "CARTER_IDENTITY": "llm-bot"
+     },
+     "git_config": [
+      [
+       "gpg.format",
+       "ssh"
+      ],
+      [
+       "user.signingkey",
+       "key::ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIBQUck5VvSpXHhZ5JFCGxR3zhC07GvQUN5j6rv6VJbaY"
+      ],
+      [
+       "gpg.ssh.program",
+       "/home/test/.carter/bin/carter-ssh-sign"
+      ],
+      [
+       "commit.gpgsign",
+       "true"
+      ]
+     ],
+     "fingerprint": ""
+    }
+   },
+   {
+    "name": "the fingerprint is not a string",
+    "signing": {
+     "env": {
+      "GIT_COMMITTER_NAME": "LLM Bot",
+      "GIT_COMMITTER_EMAIL": "12345+llm-bot@users.noreply.github.com",
+      "CARTER_IDENTITY": "llm-bot"
+     },
+     "git_config": [
+      [
+       "gpg.format",
+       "ssh"
+      ],
+      [
+       "user.signingkey",
+       "key::ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIBQUck5VvSpXHhZ5JFCGxR3zhC07GvQUN5j6rv6VJbaY"
+      ],
+      [
+       "gpg.ssh.program",
+       "/home/test/.carter/bin/carter-ssh-sign"
+      ],
+      [
+       "commit.gpgsign",
+       "true"
+      ]
+     ],
+     "fingerprint": 5
+    }
+   },
+   {
+    "name": "not an object",
+    "signing": [
+     {
+      "env": {
+       "GIT_COMMITTER_NAME": "LLM Bot",
+       "GIT_COMMITTER_EMAIL": "12345+llm-bot@users.noreply.github.com",
+       "CARTER_IDENTITY": "llm-bot"
+      },
+      "git_config": [
+       [
+        "gpg.format",
+        "ssh"
+       ],
+       [
+        "user.signingkey",
+        "key::ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIBQUck5VvSpXHhZ5JFCGxR3zhC07GvQUN5j6rv6VJbaY"
+       ],
+       [
+        "gpg.ssh.program",
+        "/home/test/.carter/bin/carter-ssh-sign"
+       ],
+       [
+        "commit.gpgsign",
+        "true"
+       ]
+      ],
+      "fingerprint": "SHA256:2uXQrkCgLxqvXxMrbBJwmanqsboZn/lN5PAQyHhQDtQ"
+     }
+    ]
+   },
+   {
+    "name": "null",
+    "signing": null
+   }
   ]
  }
 }

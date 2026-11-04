@@ -19,6 +19,9 @@ REQUIRED = (
     "carter/plugin/index.ts",
     "carter/guard/templates/carter-guard.sh",
     "carter/identity/g2_rules.json",
+    "carter/identity/templates/carter-ssh-sign.sh",  # plan 005 step 9: no force-include needed
+    "carter/identity/shim.py",
+    "carter/identity/payload.py",
     "carter/identity/errors.json",
     "carter/gate/__init__.py",
     "carter/gate/__main__.py",

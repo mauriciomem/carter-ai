@@ -48,6 +48,13 @@ E_PROBE_SCOPE = "E-PROBE-SCOPE"
 E_PUSH_GUARD = "E-PUSH-GUARD"
 E_GIT_OLD = "E-GIT-OLD"
 E_OPENCODE_VERSION = "E-OPENCODE-VERSION"
+# Slice 2b (plan 005); the other 2b codes get a constant when the step that raises them lands.
+E_SHIM_REFUSED = "E-SHIM-REFUSED"
+E_SSH_OLD = "E-SSH-OLD"
+E_UNLOCK_TTY = "E-UNLOCK-TTY"
+E_UNLOCK_OPENCODE = "E-UNLOCK-OPENCODE"
+E_UNLOCK_NOPASS = "E-UNLOCK-NOPASS"
+E_UNLOCK_PATH = "E-UNLOCK-PATH"
 
 
 @dataclass(frozen=True)

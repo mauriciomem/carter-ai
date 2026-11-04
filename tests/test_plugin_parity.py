@@ -114,3 +114,43 @@ def test_pollution_of_a_rendered_document_agrees_between_the_runtimes(tmp_path: 
     console.log(JSON.stringify({json.dumps(envs)}.map((e) => isPolluted(e, pol))))
     """
     assert json.loads(node(script)) == [bool(pollution(e, home)) for e in envs]
+
+
+def test_a_block_built_by_python_is_accepted_by_the_ts_and_applied_the_same_way() -> None:
+    """Python and TS agree on a real ``build_payload`` result and on applying it (plan 005 step 12),
+    on an environment that already carries the isolation entries."""
+    from carter.identity.isolation_apply import apply_isolation
+    from carter.identity.payload import ShimState, build_payload, fingerprint_of, to_git_env
+    from carter.identity.resolve import resolve
+    from carter.identity.schema import Identity, IdentityConfig, Signing
+
+    blob = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIBQUck5VvSpXHhZ5JFCGxR3zhC07GvQUN5j6rv6VJbaY"
+    cfg = IdentityConfig(
+        identity=Identity(login="llm-bot", id=7, email="7+llm-bot@users.noreply.github.com"),
+        signing=Signing(public_key=blob + " comment", fingerprint=fingerprint_of(blob)),
+        state="current",
+    )
+    built = build_payload(
+        cfg,
+        resolve(cfg, workspace=None, env={}),
+        ShimState("/home/example/.carter/bin/carter-ssh-sign", True),
+    )
+    assert built.block is not None
+    doc = isolation.render(
+        home="/home/example",
+        python_path="/p/python",
+        carter_path="/p/carter",
+        false_path="/usr/bin/false",
+    )
+    start = apply_isolation({"PATH": "/usr/bin", "GIT_CONFIG_PARAMETERS": "'x.y=z'"}, doc, None).env
+    expected = to_git_env(start, built.block)
+    script = f"""
+    import {{ validateSigning, applySigning }} from '{CORE.as_uri()}'
+    const block = {json.dumps(built.block)}
+    const accepted = validateSigning(block, {json.dumps(doc)}) !== null
+    const out = applySigning({json.dumps(start)}, block)
+    console.log(JSON.stringify({{ accepted, env: out.env, flags: out.flags }}))
+    """
+    got = json.loads(node(script))
+    assert got["accepted"] is True
+    assert got["env"] == expected.env and got["flags"] == expected.flags

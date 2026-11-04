@@ -11,9 +11,9 @@ function outcome(o: { kind: string; stdout?: string; code?: number }): RunResult
   return { kind: "exit", code: 0, stdout: o.stdout ?? "" }
 }
 
-test("tier vectors: block on effective T2, any reason, a crash, a timeout or invalid output", () => {
+test("tier vectors: block unless T2 comes with a valid signing block; any reason, crash, timeout or invalid output blocks", () => {
   for (const c of vectors.tier.cases) {
-    assert.deepEqual(tierDecision(outcome(c.outcome)), { block: c.block, flags: c.flags }, c.name)
+    assert.deepEqual(tierDecision(outcome(c.outcome), isoDoc), { block: c.block, flags: c.flags, signing: c.signing, reason: c.reason }, c.name)
   }
 })
 
@@ -40,9 +40,10 @@ test("effective t0 or t1 appends nothing beyond the isolation entries", async ()
   }
 })
 
-test("effective T2, a crash, a timeout or invalid JSON append the commit-blocking entries and warn once", async () => {
+test("effective T2 with a reason, without a block, a crash, a timeout or invalid JSON append the commit-blocking entries and warn once", async () => {
   const cases: [string, RunResult][] = [
-    ["t2", { kind: "exit", code: 0, stdout: tierJson("t2", "signing-not-built") }],
+    ["t2 with a reason", { kind: "exit", code: 0, stdout: tierJson("t2", "shim-missing") }],
+    ["t2 without a block", { kind: "exit", code: 0, stdout: tierJson("t2", null) }],
     ["crash", { kind: "exit", code: 1, stdout: "" }],
     ["timeout", { kind: "timeout" }],
     ["invalid", { kind: "exit", code: 0, stdout: "nope" }],

@@ -1,20 +1,21 @@
-"""``python -I -m carter.identity.env --json``: the 2a identity entry the plugin calls.
+"""``python -I -m carter.identity.env --json``: the identity entry the plugin calls per agent shell.
 
-RFC-0007 App C.2 "T2 fail-closed", freeze G13. Stdlib-only (no ``carter.cli``, click or yaml).
-It answers one question per agent shell: *must agent commits be blocked here?* The signing
-block itself (keys, shim, ``GIT_COMMITTER_*``) arrives in slice 2b; until then an effective
-tier of T2 means "blocked", never "unsigned".
+RFC-0007 App C.2 "T2 fail-closed", freezes G13 (2a) and H3 (2b). Stdlib-only (no ``carter.cli``,
+click or yaml). It answers one question per agent shell: *must agent commits be blocked here, and
+if not, with which signing block?* The block itself is built by ``payload.build_payload``.
 
 Output (one JSON object, schema 1)::
 
     {"schema_version": 1, "tier": "t0|t1|t2", "cap": null|"t0"|"t1",
-     "effective": "t0|t1|t2", "require_tier": null|"t0"|"t1"|"t2", "reason": ...}
+     "effective": "t0|t1|t2", "require_tier": null|"t0"|"t1"|"t2", "reason": ...,
+     "signing": {...}}                      <- only at effective t2 with reason null
 
-``reason`` is ``null`` (nothing to do), ``config-error`` (config.toml unreadable, unknown
-schema or an incomplete signing setup: E-CONFIG, commits are disabled until it is fixed),
-``tier-required`` (a pinned ``require_tier`` or role ``author`` is not met) or
-``signing-not-built`` (effective T2 before 2b). Only an *absent* file is T0 with no reason; a
-schema-1 file is recognised and is T0 too. No value from the config is ever printed.
+``reason`` is ``null`` (nothing to do or a block follows), ``config-error`` (config.toml
+unreadable, unknown schema or an incomplete signing setup: E-CONFIG), ``tier-required`` (a pinned
+``require_tier`` or role ``author`` below T2 is not met), ``key-missing``, ``fingerprint-mismatch``,
+``shim-missing`` or ``role-b-not-built`` (see ``payload``). Only an *absent* file is T0 with no
+reason; a schema-1 file is recognised and is T0 too. The entry never probes the agent and never
+prints a value from the config beyond the block itself (no key comment, no private-key path).
 """
 
 from __future__ import annotations
@@ -27,9 +28,9 @@ from pathlib import Path
 from typing import Any
 
 from carter.identity.config import ConfigError, default_path, load_identity
-from carter.identity.errors import E_CONFIG, E_ROLE_B_TIER
+from carter.identity.payload import ShimState, build_payload, shim_state
 from carter.identity.resolve import resolve
-from carter.identity.schema import TIERS, IdentityConfig
+from carter.identity.schema import IdentityConfig
 
 SCHEMA_VERSION = 1
 
@@ -47,7 +48,10 @@ def workspace_for(cfg: IdentityConfig, cwd: str) -> str | None:
 
 
 def answer(
-    cwd: str, env: Mapping[str, str] | None = None, config_path: str | None = None
+    cwd: str,
+    env: Mapping[str, str] | None = None,
+    config_path: str | None = None,
+    home: Path | None = None,
 ) -> dict[str, Any]:
     out: dict[str, Any] = {
         "schema_version": SCHEMA_VERSION,
@@ -65,13 +69,12 @@ def answer(
         return out
     out.update(tier=res.configured_tier, cap=res.cap or None, effective=res.tier)
     out["require_tier"] = res.require_tier or None
-    unmet = bool(res.require_tier) and TIERS.index(res.tier) < TIERS.index(res.require_tier)
-    if res.refusal_reason == E_CONFIG:
-        out["reason"] = "config-error"
-    elif res.refusal_reason == E_ROLE_B_TIER or unmet:
-        out["reason"] = "tier-required"
-    elif res.tier == "t2":
-        out["reason"] = "signing-not-built"
+    # Only a T2 setup needs the shim checked; below that no file is touched.
+    shim = shim_state(home) if res.tier == "t2" else ShimState("", False)
+    built = build_payload(cfg, res, shim)
+    out["reason"] = built.reason
+    if built.block is not None:
+        out["signing"] = built.block
     return out
 
 

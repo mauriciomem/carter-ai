@@ -76,6 +76,7 @@ class Rules:
     control_paths: tuple[str, ...]
     forbidden: tuple[ForbiddenClass, ...]
     isolation_vars: tuple[str, ...] = ()
+    shim_y_ops: tuple[str, ...] = ()  # `ssh-keygen -Y` operations the shim passes through (H8)
 
 
 @cache
@@ -94,6 +95,12 @@ def plugin_defaults() -> dict[str, Any]:
     return dict(_data()["plugin"])
 
 
+def shim_data() -> dict[str, Any]:
+    """The shim contract (H8/H9): allowed ``-Y`` operations, the signing namespace and options,
+    and the minimum git and OpenSSH versions. One copy; the shim generator and the tests read it."""
+    return dict(_data()["shim"])
+
+
 @cache
 def load_rules() -> Rules:
     data = _data()
@@ -109,6 +116,7 @@ def load_rules() -> Rules:
         credential_paths=tuple(data["credential_paths"]),
         control_paths=tuple(data["control_paths"]),
         isolation_vars=tuple(data["isolation_vars"]),
+        shim_y_ops=tuple(data["shim"]["y_ops"]),
         forbidden=tuple(
             ForbiddenClass(
                 id=e["id"],

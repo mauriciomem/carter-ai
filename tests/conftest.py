@@ -23,8 +23,16 @@ from host_guard import (
     digest_host,
     is_allowed_connect,
     is_local_host,
+    ssh_surface,
 )
-from ssh_rig import rig  # noqa: F401  (opt-in real_ssh_agent fixture)
+from ssh_rig import (  # noqa: F401  (fixtures: the real_ssh_agent family, plan 005 step 7)
+    _ssh_reaper,
+    pty_driver,
+    real_ssh_agent,
+    rig,
+    ssh_base,
+    throwaway_key,
+)
 
 # Resolved once at import, before any fixture can redirect HOME. The hermetic fixture
 # compares against it, so it must not be recomputed lazily.
@@ -33,6 +41,10 @@ _REAL_HOME = Path(pwd.getpwuid(os.getuid()).pw_dir).resolve()
 # Fingerprint of the real host files (git config, OpenCode config, ~/.carter state) taken
 # before any test runs; the session-end check fails the run if a test changed them.
 _REAL_HOST_BEFORE = digest_host(_REAL_HOME)
+# The user's agent socket and ~/.ssh are only ever looked at with lstat (mode and owner), here at
+# import (before any fixture clears SSH_AUTH_SOCK) and again at session end.
+_REAL_SSH_AUTH_SOCK = os.environ.get("SSH_AUTH_SOCK")
+_REAL_SSH_BEFORE = ssh_surface(_REAL_HOME, _REAL_SSH_AUTH_SOCK)
 
 # Ambient variables that change who git (or Carter) thinks the author is.
 _IDENTITY_ENV_VARS = (
@@ -69,6 +81,7 @@ _HOST_LEAK_VARS = (
     "OPENCODE_CONFIG",
     "OPENCODE_CONFIG_DIR",
     "OPENCODE_CONFIG_CONTENT",
+    "OPENCODE_TERMINAL",  # set in every OpenCode-spawned shell, this suite's included (D58)
 )
 
 # Tools a test must never run for real: name -> the fixture that provides a safe stand-in.
@@ -157,6 +170,28 @@ def _real_host_untouched() -> Iterator[None]:
     yield
     touched = changed(_REAL_HOST_BEFORE, digest_host(_REAL_HOME))
     assert not touched, f"tests modified the real host files: {', '.join(touched)}"
+
+
+@pytest.fixture(scope="session", autouse=True)
+def _real_ssh_untouched() -> Iterator[None]:
+    """Fail the run if the real ``~/.ssh`` or agent socket changed mode, owner or presence."""
+    yield
+    after = ssh_surface(_REAL_HOME, _REAL_SSH_AUTH_SOCK)
+    assert after == _REAL_SSH_BEFORE, (
+        f"tests changed the real ssh surface: {_REAL_SSH_BEFORE} -> {after}"
+    )
+
+
+@pytest.fixture(scope="session")
+def real_ssh_surface() -> dict[str, str]:
+    """``lstat``-only summary of the real ``~/.ssh`` and agent socket before the session."""
+    return dict(_REAL_SSH_BEFORE)
+
+
+@pytest.fixture(scope="session")
+def real_ssh_auth_sock() -> str | None:
+    """The developer's real ``$SSH_AUTH_SOCK`` as it was at import (for guard-proof tests only)."""
+    return _REAL_SSH_AUTH_SOCK
 
 
 @pytest.fixture

@@ -386,5 +386,275 @@ def test_status_and_tier_names_are_in_the_shared_vector_file() -> None:
     assert tuple(vectors["status"]["states"]) == STATUS_STATES
     assert tuple(vectors["status"]["flags"]) == STATUS_FLAGS
     assert tuple(vectors["tier"]["env_keys"]) == TIER_ENV_KEYS
-    assert tuple(vectors["tier"]["reasons"]) == TIER_REASONS
+    # the reasons were extended by 2b (H3, see test_h3 below); the 2a ones are still a subset
+    assert set(TIER_REASONS) - {"signing-not-built"} <= set(vectors["tier"]["reasons"])
     assert set(vectors) >= {"ad1", "pollution", "count", "marker", "isolation", "tier", "status"}
+
+
+# ---------------------------------------------------------------------------------------------
+# Slice 2b (plan 005 step 6, H1-H16), frozen at the start of step 7 and extended by the step that
+# creates each item. Items created by a later step are skipped (with the step) until they exist
+# (CARTER_NAMES_STRICT=1 turns a missing one into a failure); items whose *value* changes in a
+# later step are strict xfails that flip when the step lands. A rename here goes through the
+# architect: it changes what is written to the user's machine or what the model reads.
+# ---------------------------------------------------------------------------------------------
+
+# H1: module and file paths.
+MODULES_2B = {
+    "carter/identity/payload.py": "step 8",
+    "carter/identity/shim.py": "step 9",
+    "carter/identity/templates/carter-ssh-sign.sh": "step 9",
+    "carter/identity/agent.py": "step 10",
+    "carter/identity_cli.py": "step 11",
+    "carter/identity/mirror.py": "step 13",
+    "carter/identity/github.py": "step 14",
+    "carter/identity/commit.py": "step 21",
+    "carter/commit_cli.py": "step 22",
+}
+STDLIB_ONLY_2B = (
+    "carter/identity/payload.py",
+    "carter/identity/mirror.py",
+)  # run in the plugin path
+
+# H2: host files, relative to the home directory.
+H2_PATHS = {
+    "shim": ".carter/bin/carter-ssh-sign",
+    "allowed_signers": ".carter/hooks/allowed_signers",
+    "pidfile": ".carter/run/agent.pid",
+    "lock": ".carter/run/unlock.lock",
+    "guard_log": ".carter/run/guard.log",
+}
+H2_SIGNING_DEFAULTS = {"ttl": "8h", "ssh_bin_dir": "/usr/bin"}
+H2_SOCKET_LIMITS = {"darwin": 104, "linux": 108}
+
+# H3: `identity env`, additive `signing` object (present only at effective t2 with reason null).
+SIGNING_KEYS = ("env", "git_config", "fingerprint")
+SIGNING_ENV_KEYS = ("GIT_COMMITTER_NAME", "GIT_COMMITTER_EMAIL", "CARTER_IDENTITY")
+SIGNING_GIT_CONFIG_KEYS = ("gpg.format", "user.signingkey", "gpg.ssh.program", "commit.gpgsign")
+TIER_REASONS_2B = (
+    None,
+    "config-error",
+    "tier-required",
+    "key-missing",
+    "fingerprint-mismatch",
+    "shim-missing",
+    "role-b-not-built",
+)
+
+# H5: the keys of Carter's gitconfig, and the fragment name rule (step 13).
+CARTER_GIT_KEYS = ("carter.tier", "carter.llmEmail", "carter.llmFingerprint")
+
+# H8/H9: the shim's allow-list and the minimum versions. The data lives in g2_rules.json.
+SHIM_Y_OPS = ("verify", "find-principals", "check-novalidate")
+MIN_GIT_SIGNING = (2, 40)
+MIN_OPENSSH = (8, 4)
+
+# H10/H12: the unlock and lock commands (the rest of the identity group arrives in 13-17).
+IDENTITY_SUBCOMMANDS = ("add", "show", "verify", "unlock", "lock", "remove", "env")
+UNLOCK_OPTIONS = ("--allow-no-passphrase", "--extend", "--ttl")
+LOCK_OPTIONS = ("--all",)
+
+# H14: the flags `carter commit` refuses (step 21).
+COMMIT_REFUSED_FLAGS = (
+    "--no-verify",
+    "-n",
+    "--no-gpg-sign",
+    "-S<arg>",
+    "--gpg-sign=<arg>",
+    "-s",
+    "--signoff",
+    "--author",
+)
+
+# H15: consent revisions after 2b (step 19). `g2` stays 2: isolation.json is unchanged.
+CONSENT_REVS_2B = {
+    "g2": 2,
+    "hooks": 2,
+    "sudo-docker": 1,
+    "read-edit-denies": 1,
+    "config-edit": 1,
+    "alias": 1,
+    "repo_hooks": 2,
+}
+LIVE_GROUPS_2B = (
+    "g2",
+    "hooks",
+    "sudo-docker",
+    "read-edit-denies",
+    "config-edit",
+    "alias",
+    "repo_hooks",
+)
+ALIAS_VALUE = '!cd "${GIT_PREFIX:-.}" && carter commit'
+
+# H7/H16: the hook that raises each guard code (prepare-commit-msg holds every reject check).
+GUARD_CODE_WHERE_2B = {
+    "E-GUARD-NOIDENT": "prepare-commit-msg",
+    "E-GUARD-COMMITTER": "prepare-commit-msg",
+    "E-GUARD-SIGNCFG": "prepare-commit-msg",
+    "E-GUARD-T01SIGN": "prepare-commit-msg",
+    "E-GUARD-TRAILER": "commit-msg",
+    "E-GUARD-UNSIGNED": "post-commit",
+}
+
+# H16: raised live in 2b, and the two new codes.
+ERRORS_LIVE_2B = (
+    "E-SIGN-LOCKED",
+    "E-SIGN-NOAGENT",
+    "E-SIGN-HUMAN-FALLBACK",
+    "E-SIGN-AGENT-REFUSE",
+    "E-SHIM-REFUSED",
+    "E-SSH-OLD",
+    "E-UNLOCK-TTY",
+    "E-UNLOCK-OPENCODE",
+    "E-UNLOCK-NOPASS",
+    "E-UNLOCK-PATH",
+    "E-UNLOCK-BADPASS",
+    "E-IDENTITY-CHECK",
+    "E-GITHUB-UNREACHABLE",
+)
+ERRORS_NEW_2B = ("E-IDENTITY-CHECK", "E-GITHUB-UNREACHABLE")
+AGENT_FACING = (
+    "E-SIGN-LOCKED",
+    "E-SIGN-NOAGENT",
+    "E-SIGN-UNAVAILABLE",
+    "E-SIGN-AGENT-REFUSE",
+    "E-SHIM-REFUSED",
+    "E-GUARD-NOIDENT",
+    "E-GUARD-COMMITTER",
+    "E-GUARD-SIGNCFG",
+    "E-GUARD-TRAILER",
+    "E-GUARD-UNSIGNED",
+    "E-GUARD-T01SIGN",
+    "E-TIER-CAPPED",
+    "E-TIER-REQUIRED",
+)
+
+
+@pytest.mark.parametrize("path", sorted(MODULES_2B), ids=str)
+def test_2b_module_paths_exist_once_their_step_has_run(path: str) -> None:
+    if (REPO / path).exists():
+        return
+    if os.environ.get("CARTER_NAMES_STRICT") == "1":
+        pytest.fail(f"{path} ({MODULES_2B[path]}) is frozen but missing")
+    pytest.skip(f"{path} arrives in {MODULES_2B[path]}")
+
+
+@pytest.mark.parametrize("path", STDLIB_ONLY_2B)
+def test_the_runtime_modules_import_only_the_standard_library(path: str) -> None:
+    import ast
+    import sys
+
+    file = REPO / path
+    if not file.exists():
+        pytest.skip(f"{path} arrives later")
+    tree = ast.parse(file.read_text())
+    for node in ast.walk(tree):
+        names = (
+            [a.name for a in node.names]
+            if isinstance(node, ast.Import)
+            else [node.module or ""]
+            if isinstance(node, ast.ImportFrom) and node.level == 0
+            else []
+        )
+        for name in names:
+            top = name.split(".")[0]
+            assert top in sys.stdlib_module_names or top == "carter", f"{path} imports {name}"
+            assert not name.startswith(("carter.cli", "carter.guard", "click")), name
+
+
+def test_h2_the_signing_defaults_of_the_config_schema() -> None:
+    from carter.identity.schema import Signing
+
+    s = Signing()
+    assert (s.ttl, s.ssh_bin_dir) == (
+        H2_SIGNING_DEFAULTS["ttl"],
+        H2_SIGNING_DEFAULTS["ssh_bin_dir"],
+    )
+
+
+def test_h2_the_host_file_paths(tmp_path: Path) -> None:
+    mod = pytest.importorskip("carter.identity.agent")
+    shim = pytest.importorskip("carter.identity.shim")
+    assert shim.shim_path(tmp_path) == tmp_path / H2_PATHS["shim"]
+    assert shim.allowed_signers_path(tmp_path) == tmp_path / H2_PATHS["allowed_signers"]
+    assert mod.pidfile_path(tmp_path) == tmp_path / H2_PATHS["pidfile"]
+    assert mod.lock_path(tmp_path) == tmp_path / H2_PATHS["lock"]
+    assert mod.SOCKET_LIMITS == H2_SOCKET_LIMITS
+
+
+def test_h3_the_signing_reasons_and_shape_are_in_the_shared_vector_file() -> None:
+    vectors = json.loads((REPO / "tests/data/plugin_vectors.json").read_text())
+    assert tuple(vectors["tier"]["reasons"]) == TIER_REASONS_2B
+    assert tuple(vectors["tier"]["env_keys"]) == TIER_ENV_KEYS  # schema stays 1, key set unchanged
+    assert tuple(vectors["signing"]["keys"]) == SIGNING_KEYS
+    assert tuple(vectors["signing"]["env_keys"]) == SIGNING_ENV_KEYS
+    assert tuple(vectors["signing"]["git_config_keys"]) == SIGNING_GIT_CONFIG_KEYS
+
+
+def test_h3_the_payload_block_has_the_frozen_shape(tmp_path: Path) -> None:
+    payload = pytest.importorskip("carter.identity.payload")
+    assert payload.SIGNING_KEYS == SIGNING_KEYS
+    assert payload.SIGNING_ENV_KEYS == SIGNING_ENV_KEYS
+    assert payload.SIGNING_GIT_CONFIG_KEYS == SIGNING_GIT_CONFIG_KEYS
+    assert tuple(r for r in TIER_REASONS_2B if r) == payload.REASONS
+
+
+def test_h5_the_carter_git_keys() -> None:
+    mirror = pytest.importorskip("carter.identity.mirror")
+    assert mirror.CARTER_KEYS == CARTER_GIT_KEYS
+
+
+def test_h8_h9_the_shim_allow_list_and_the_minimum_versions() -> None:
+    shim = pytest.importorskip("carter.identity.shim")
+    assert tuple(load_rules().shim_y_ops) == SHIM_Y_OPS
+    assert shim.MIN_GIT_SIGNING == MIN_GIT_SIGNING
+    assert shim.MIN_OPENSSH == MIN_OPENSSH
+
+
+def test_h10_h12_the_unlock_and_lock_commands() -> None:
+    cli = pytest.importorskip("carter.identity_cli")
+    group = cli.identity
+    assert set(group.commands) <= set(IDENTITY_SUBCOMMANDS)
+    unlock = {o.opts[0] for o in group.commands["unlock"].params if o.opts[0].startswith("--")}
+    lock = {o.opts[0] for o in group.commands["lock"].params if o.opts[0].startswith("--")}
+    assert unlock - {"--help"} == set(UNLOCK_OPTIONS)
+    assert lock - {"--help"} == set(LOCK_OPTIONS)
+
+
+def test_h14_the_refused_commit_flags() -> None:
+    commit = pytest.importorskip("carter.identity.commit")
+    assert tuple(commit.REFUSED_FLAGS) == COMMIT_REFUSED_FLAGS
+
+
+@pytest.mark.xfail(strict=True, reason="step 19 moves hooks and repo_hooks to rev 2, alias live")
+def test_h15_consent_revisions_and_live_groups_after_2b() -> None:
+    assert {g.id: g.rev for g in policyset.consent_groups()} == CONSENT_REVS_2B
+    assert tuple(g.id for g in policyset.consent_groups() if g.live) == LIVE_GROUPS_2B
+
+
+def test_h15_the_alias_value_has_no_duplicated_arguments() -> None:
+    assert ALIAS_VALUE.count('"$@"') == 0  # git appends "$@" itself (spike B 8, erratum R1)
+
+
+@pytest.mark.xfail(strict=True, reason="step 18 moves the reject checks to prepare-commit-msg")
+def test_h7_the_guard_codes_name_the_hook_that_raises_them() -> None:
+    reg = registry()
+    for code, hook in GUARD_CODE_WHERE_2B.items():
+        assert reg[code].where.startswith(hook), code
+
+
+def test_h16_the_2b_error_codes_exist_with_the_2b_tag() -> None:
+    reg = registry()
+    for code in ERRORS_LIVE_2B:
+        assert reg[code].slice == "2b", code
+    for code in ERRORS_NEW_2B:
+        assert reg[code].message and "\n" not in reg[code].message, code
+    assert "2.40" in reg["E-GIT-OLD"].message and "2.54" in reg["E-GIT-OLD"].message
+    assert "E-SIGN-UNAVAILABLE" in AGENT_FACING and reg["E-SIGN-UNAVAILABLE"].slice == "2a"
+
+
+def test_h16_the_current_slice_moves_only_in_step_27() -> None:
+    from carter.identity.rules import CURRENT_SLICE
+
+    assert CURRENT_SLICE == "2a"

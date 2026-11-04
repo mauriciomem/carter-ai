@@ -664,7 +664,14 @@ def _register_gate() -> None:
     main.add_command(gate)
 
 
+def _register_identity() -> None:
+    from carter.identity_cli import identity
+
+    main.add_command(identity)
+
+
 _register_guard()
+_register_identity()
 _register_github_token()
 _register_aplus()
 _register_gate()

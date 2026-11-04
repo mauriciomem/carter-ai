@@ -14,6 +14,7 @@ carter [--version] [--help] COMMAND [ARGS]
 | [`init`](#carter-init) | Create a workspace in a project directory |
 | [`update`](#carter-update) | Regenerate a workspace's agents from `carter.yaml` |
 | [`check`](#carter-check) | Validate a workspace and confirm OpenCode loads it |
+| [`identity`](#carter-identity) | Unlock and lock the LLM signing key (more subcommands arrive with slice 2b) |
 | [`github-token`](#carter-github-token) | Store and check the read-only GitHub token |
 | [`push`](#carter-push) | Push the current branch to `origin` after showing and checking it |
 | [`pr`](#carter-pr) | Open a pull request from the agent's handoff file |
@@ -173,6 +174,51 @@ directory from your own terminal: `rm -r ~/.config/opencode/plugins/carter`. A r
 OpenCode drops the plugin within seconds (restart the server to be sure). If git itself fails
 because of Carter's git config, delete `~/.carter/gitconfig`. The OpenCode config you had
 before the first install is in `~/.carter/backups/`.
+
+## carter identity
+
+The LLM's signing identity. `unlock` and `lock` manage the key Carter's dedicated `ssh-agent`
+holds; the other subcommands (`add`, `show`, `verify`, `remove`, `env`) arrive with the rest of
+slice 2b. Both commands read `~/.carter/config.toml` (`[identity.signing]`), write nothing to it,
+and take the three OpenSSH tools from `[identity.signing] ssh_bin_dir` (default `/usr/bin`).
+
+### carter identity unlock
+
+```text
+carter identity unlock [--ttl DURATION] [--extend] [--allow-no-passphrase]
+```
+
+Starts Carter's own `ssh-agent` if it is not running (socket `$XDG_RUNTIME_DIR/carter/agent.sock`,
+else `~/.carter/run/agent.sock`; on macOS `$TMPDIR/carter-<uid>/agent.sock`; directory 0700,
+socket 0600) and loads the LLM key into it with `ssh-add -t`. `ssh-add` asks for the key's
+passphrase on your terminal; Carter never sees it. Run it in your own terminal, **not** in
+OpenCode's: it refuses in any agent shell and anywhere `OPENCODE_TERMINAL` is set (the integrated
+terminal included, `E-UNLOCK-OPENCODE`), and without a terminal on stdin and stderr
+(`E-UNLOCK-TTY`).
+
+| Option | Meaning |
+|--------|---------|
+| `--ttl DURATION` | How long the key stays loaded, e.g. `8h` or `30m` (default `[identity.signing] ttl`, `8h`). |
+| `--extend` | Ask again and replace the lifetime of a key that is already loaded. |
+| `--allow-no-passphrase` | Accept a key without a passphrase. Without the flag such a key is refused (`E-UNLOCK-NOPASS`): any process of yours could sign as the LLM without unlocking. |
+
+A key that is already loaded is not asked for again ("already unlocked"). A wrong passphrase is
+`ssh-add`'s own retry; an empty line ends it. If a stale socket or an orphaned agent is left from
+a crash, `unlock` replaces it; a path that is not an agent socket is never touched
+(`E-UNLOCK-PATH`). With a password manager (`agent_socket` or `program`) it prints that the key is
+managed there and does nothing.
+
+### carter identity lock
+
+```text
+carter identity lock [--all]
+```
+
+Removes only the LLM key from Carter's agent (already absent is a success) and stops the agent
+when it is empty. `--all` also stops Carter's agent when other keys are loaded and any leftover
+agent that names the same socket directory. Agent commits fail with `E-SIGN-LOCKED` until the next
+`unlock`. It refuses in agent shells like `unlock` but needs no terminal, so a logout script can
+call it.
 
 ## carter github-token
 

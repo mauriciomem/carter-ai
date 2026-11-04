@@ -151,6 +151,8 @@ class TestInterimShapeIsStatedPlainly:
         for path in DOCS.rglob("*.md"):
             if any(part in {"adr", "rfcs"} for part in path.parts):
                 continue
+            if path == DOCS / "reference" / "cli.md":
+                continue  # the reference lists the commands that exist (2b: unlock, lock; plan 005)
             body = path.read_text(encoding="utf-8")
             assert "carter identity" not in body, path
 

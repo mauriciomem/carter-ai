@@ -7,9 +7,9 @@ of Carter's hooks fire, and which new commits carrying the LLM as committer no h
 
 * The matrix test replays every scenario **unsigned** and compares hooks, ref updates and
   which new commits ``post-commit`` saw. It runs wherever git has config hooks.
-* The signed replay (``real_ssh_agent``, ``CARTER_REAL_SSH_AGENT=1``) adds the signature flag
+* The signed replay (``real_ssh_agent``, ``CARTER_SSH_MATRIX=1``) adds the signature flag
   through a real dedicated ``ssh-agent`` and a shim; regenerate the file with
-  ``CARTER_REGEN_MATRIX=1 CARTER_REAL_SSH_AGENT=1 pytest tests/guard/test_git_behaviour_2b.py``.
+  ``CARTER_REGEN_MATRIX=1 CARTER_SSH_MATRIX=1 pytest tests/guard/test_git_behaviour_2b.py``.
 
 The remaining classes pin the signing contract (the exact argv git hands to ``gpg.ssh.program``),
 precedence, trailers, the guard's config inputs, ``includeIf`` fragments, amend and the alias.
@@ -28,7 +28,7 @@ from typing import Any
 
 import pytest
 
-from ssh_rig import Rig, real_ssh
+from ssh_rig import Rig, real_ssh, signed_matrix
 
 MATRIX = Path(__file__).resolve().parent.parent / "data" / "hook_matrix.json"
 EVENTS = (
@@ -517,7 +517,7 @@ class TestHookMatrix:
 
 
 @needs_config_hooks
-@real_ssh
+@signed_matrix
 class TestSignedMatrix:
     """The same scenarios with the signing block of the isolation env and a real agent."""
 
