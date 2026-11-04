@@ -265,3 +265,11 @@ def test_mock_server_lists_exactly_one_model(mock_server) -> None:
     base, _ = mock_server
     with urllib.request.urlopen(f"{base}/v1/models", timeout=5) as resp:
         assert [m["id"] for m in json.loads(resp.read())["data"]] == ["mock-1"]
+
+
+def test_taskas_names_the_subagent() -> None:
+    (call,) = mock_llm.parse_directive(
+        "TASKAS carter-devops FORCE carter_push {}", ["subagent", "shell"]
+    )
+    assert call.name == "subagent" and call.arguments["agent"] == "carter-devops"
+    assert call.arguments["prompt"] == "FORCE carter_push {}"

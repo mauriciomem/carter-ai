@@ -57,6 +57,7 @@ def test_the_ts_error_texts_are_the_registry_texts() -> None:
     ts = json.loads(out)
     assert set(ts) == {
         "E-ISOLATION-MISSING", "E-GATE-FAIL", "E-SELFTEST", "E-SIGN-UNAVAILABLE", "E-CONFIG",
+        "E-B-CALLER",
     }  # fmt: skip
     for code, text in ts.items():
         assert text == registry()[code].message, code
@@ -210,7 +211,8 @@ def test_the_ts_has_no_role_logic_and_isolation_json_is_unchanged() -> None:
             text.replace("human-identity-invalid", ""),
         ), name
     vectors = json.loads((CORE.parents[2] / "tests" / "data" / "plugin_vectors.json").read_text())
-    assert (
-        vectors["isolation"]["sha256"]
-        == "d5456e7d8b82dd91b901cc3ade43fb8dbeecd0bfcbe32556f754797782a40a6e"
+    # slice B (schema 2) moved the golden hash once, away from the 2a/2b/2c value d5456e7d...
+    assert vectors["isolation"]["sha256"] != (
+        "d5456e7d8b82dd91b901cc3ade43fb8dbeecd0bfcbe32556f754797782a40a6e"
     )
+    assert vectors["isolation"]["doc"]["schema_version"] == 2

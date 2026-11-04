@@ -26,15 +26,18 @@ import json
 import re
 import sys
 from datetime import UTC, datetime
+from pathlib import Path
 from typing import Any
 
 from carter.aplus.handoff import OWN_TERMINAL
+from carter.broker import audit as audit_store
 from carter.config import _BASH_COMMANDS, RISK_TAXONOMY
-from carter.home import carter_home
 from carter.identity.rules import forbidden_classes
 from carter.ops.config import Config
 
-AUDIT_LOG = carter_home() / "audit.log"
+# The ops log lives in ~/.carter/state/audit/ next to b.jsonl (plan 007, C20). It is resolved when
+# used, not at import; a test may still point AUDIT_LOG at a file of its own.
+AUDIT_LOG: Path | None = None
 
 USAGE = "Usage: carter ops {audit|policy-override|config --emit} [--key value ...]"
 
@@ -54,10 +57,13 @@ def emit_error(message: str) -> None:
 def _audit(entry: dict[str, Any]) -> None:
     """Append an entry to the audit log (JSONL)."""
     try:
-        AUDIT_LOG.parent.mkdir(parents=True, exist_ok=True)
-        with open(AUDIT_LOG, "a") as f:
-            f.write(json.dumps(entry) + "\n")
-    except OSError:
+        if AUDIT_LOG is not None:
+            AUDIT_LOG.parent.mkdir(parents=True, exist_ok=True)
+            with open(AUDIT_LOG, "a") as f:
+                f.write(json.dumps(entry) + "\n")
+        else:
+            audit_store.append_ops(entry)
+    except (OSError, audit_store.AuditError):
         pass  # Audit is best-effort
 
 

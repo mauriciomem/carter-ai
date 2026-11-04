@@ -19,6 +19,7 @@ in a temporary directory is refused (an install must not point the gate at a van
 from __future__ import annotations
 
 import contextlib
+import json
 import os
 import shutil
 import sys
@@ -28,15 +29,25 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 import carter
+from carter.broker import DEVOPS_AGENT
 from carter.guard import consent, gitconfig
 from carter.guard.state import GuardState
 from carter.identity import isolation
-from carter.install.paths import isolation_path, plugin_dir, run_dir, token_path
+from carter.install.paths import (
+    headless_profile_path,
+    isolation_path,
+    plugin_dir,
+    run_dir,
+    token_path,
+)
 
 __all__ = [
     "PluginInstallError",
+    "broker_tools",
     "cleanup_dirs",
+    "headless_profile_path",
     "install",
+    "render_headless",
     "isolation_path",
     "plan",
     "plugin_dir",
@@ -47,9 +58,12 @@ __all__ = [
 
 Echo = Callable[[str], None]
 SOURCE = Path(__file__).resolve().parents[1] / "plugin"
+PLUGIN_FILES = ("core.ts", "broker.ts")  # installed byte-identical next to the rendered index.ts
+TOOL_DIRS = ("/usr/bin", "/bin", "/usr/local/bin", "/opt/homebrew/bin")  # never PATH at runtime
 PLACEHOLDERS = ("__CARTER_ISOLATION_SHA256__", "__CARTER_VERSION__")
 TEMP_ROOTS = ("/tmp", "/var/tmp", "/private/tmp", "/private/var/folders", "/var/folders")
 RESTART = "restart the OpenCode server so it loads the plugin"
+BROKER_AGENT = DEVOPS_AGENT  # freeze B10: the only agent that can use B
 
 
 class PluginInstallError(Exception):
@@ -87,10 +101,44 @@ def render_index(iso_sha256: str, version: str) -> str:
     return text
 
 
+def find_tool(name: str, dirs: tuple[str, ...] = TOOL_DIRS) -> str:
+    """Absolute path of ``name`` in the fixed directories (empty when absent). B resolves ``git``
+    and ``gh`` here, once, in the human-run install: the runtime never searches ``PATH``."""
+    for directory in dirs:
+        candidate = os.path.join(directory, name)
+        if os.path.isfile(candidate) and os.access(candidate, os.X_OK):
+            return candidate
+    return ""
+
+
+def broker_tools() -> tuple[str, str]:
+    """``(git, gh)`` absolute paths for ``plugin.b_git`` / ``plugin.b_gh`` (``gh`` may be empty)."""
+    return find_tool("git"), find_tool("gh")
+
+
+def broker_enabled(state: GuardState) -> bool:
+    """B is registered only with ``g2`` accepted at revision 3 and a git that was found."""
+    return consent.broker_wanted(state) and bool(broker_tools()[0])
+
+
+def render_headless() -> str:
+    """The static headless profile (freeze B8): denies B for devops, the only agent that has it.
+
+    Per-agent permissions, not ``policies`` (a global ``tool.use`` policy never matches a plugin
+    tool, spike A6). It applies to the process that starts the server: ``opencode run
+    --standalone`` or the run that starts the service; a running service ignores it."""
+    deny = [
+        {"action": name, "resource": "*", "effect": "deny"} for name in ("carter_push", "carter_pr")
+    ]
+    doc = {"agents": {BROKER_AGENT: {"permissions": deny}}}
+    return json.dumps(doc, indent=2, sort_keys=True) + "\n"
+
+
 def isolation_document(
     base_dir: Path | None, state: GuardState, python: str, carter_bin: str
 ) -> bytes:
     """The canonical bytes of ``isolation.json`` (raises E-FALSE-MISSING before any write)."""
+    git, gh = broker_tools()
     doc = isolation.render(
         home=str(Path.home()),
         python_path=python,
@@ -98,6 +146,9 @@ def isolation_document(
         false_path=isolation.resolve_false(),
         pat_file=str(token_path(base_dir)),
         declined_groups=tuple(consent.declined_groups(state)),
+        b_enabled=broker_enabled(state),
+        b_git=git if broker_enabled(state) else "",
+        b_gh=gh if broker_enabled(state) else "",
     )
     return isolation.canonical_bytes(doc)
 
@@ -125,11 +176,14 @@ def plan(base_dir: Path | None, state: GuardState, *, allow_temp: bool = False) 
     iso_bytes = isolation_document(base_dir, state, python, carter_bin)
     index = render_index(isolation.sha256_hex(iso_bytes), carter.__version__)
     folder = plugin_dir(base_dir)
-    return [
-        Planned(isolation_path(base_dir), iso_bytes.decode(), 0o600),
-        Planned(folder / "core.ts", (SOURCE / "core.ts").read_text("utf-8"), 0o644),
-        Planned(folder / "index.ts", index, 0o644),
+    files = [Planned(isolation_path(base_dir), iso_bytes.decode(), 0o600)]
+    files += [
+        Planned(folder / name, (SOURCE / name).read_text("utf-8"), 0o644) for name in PLUGIN_FILES
     ]
+    files.append(Planned(folder / "index.ts", index, 0o644))
+    if broker_enabled(state):
+        files.append(Planned(headless_profile_path(base_dir), render_headless(), 0o644))
+    return files
 
 
 def install(
@@ -156,13 +210,24 @@ def install(
         echo(f"plugin installed: {plugin_dir(base_dir)} ({RESTART})")
     else:
         echo(f"plugin up to date: {plugin_dir(base_dir)}")
+    if broker_enabled(state):
+        echo("B tools: carter_push and carter_pr are enabled for devops (every use asks you).")
+    elif consent.broker_wanted(state):
+        echo(
+            "⚠ B tools not enabled: no git found in /usr/bin, /bin, /usr/local/bin or "
+            "/opt/homebrew/bin"
+        )
     return out
 
 
 def remove(base_dir: Path | None, state: GuardState, echo: Echo) -> None:
     """Remove the plugin, ``isolation.json`` and the ``run/`` files, only where unchanged."""
     folder = plugin_dir(base_dir)
-    for path in (folder / "index.ts", folder / "core.ts", isolation_path(base_dir)):
+    ours = (
+        folder / "index.ts", *(folder / n for n in PLUGIN_FILES), isolation_path(base_dir),
+        headless_profile_path(base_dir),
+    )  # fmt: skip
+    for path in ours:
         if state.owned_unchanged(path):
             path.unlink()
             echo(f"  removed {path}")
@@ -192,7 +257,7 @@ def cleanup_dirs(base_dir: Path | None) -> None:
 
 def unexpected_files(base_dir: Path | None) -> list[str]:
     """Plugin code Carter did not write, by name (D66): ``plugin/`` and ``plugins/`` minus ours."""
-    ours = {plugin_dir(base_dir) / "index.ts", plugin_dir(base_dir) / "core.ts"}
+    ours = {plugin_dir(base_dir) / name for name in ("index.ts", *PLUGIN_FILES)}
     root = plugin_dir(base_dir).parent.parent
     found: list[str] = []
     for sub in ("plugin", "plugins"):

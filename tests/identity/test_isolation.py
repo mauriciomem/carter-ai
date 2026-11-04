@@ -199,7 +199,12 @@ class TestSchema:
         [
             lambda d: d.pop("env"),
             lambda d: d.update(extra=1),
-            lambda d: d.update(schema_version=2),
+            lambda d: d.update(schema_version=1),  # a 2a file: plugin and file refuse each other
+            lambda d: d.update(schema_version=3),
+            lambda d: d["plugin"].update(b_enabled="yes"),
+            lambda d: d["plugin"].update(b_git="git"),
+            lambda d: d["plugin"].update(b_enabled=True, b_git=""),
+            lambda d: d["plugin"].pop("b_caller"),
             lambda d: d.update(schema_version=True),
             lambda d: d["env"].pop("delete"),
             lambda d: d["env"]["set"].update(X=1),
@@ -281,12 +286,19 @@ class TestHash:
         assert rendered == golden["doc"]
         assert isolation.sha256_hex(isolation.canonical_bytes(rendered)) == golden["sha256"]
 
-    def test_the_2a_hash_is_unchanged_by_slice_2b(self) -> None:
-        """Plan 005 step 23: signing adds nothing to isolation.json, so no g2 re-consent."""
-        assert (
-            V["isolation"]["sha256"]
-            == "d5456e7d8b82dd91b901cc3ade43fb8dbeecd0bfcbe32556f754797782a40a6e"
+    def test_the_golden_hash_changed_once_for_slice_b_schema_2(self) -> None:
+        """Plan 007 B9: schema 2 adds the plugin keys of the broker tools, so the hash moved from
+        the 2a value (d5456e7d...) exactly once; it is re-rendered with the plugin at install."""
+        assert V["isolation"]["doc"]["schema_version"] == 2
+        assert V["isolation"]["sha256"] != (
+            "d5456e7d8b82dd91b901cc3ade43fb8dbeecd0bfcbe32556f754797782a40a6e"
         )
+
+    def test_the_broker_keys_default_to_off(self) -> None:
+        plugin = V["isolation"]["doc"]["plugin"]
+        assert (plugin["b_enabled"], plugin["b_git"], plugin["b_gh"]) == (False, "", "")
+        assert plugin["b_caller"] == "carter-devops"
+        assert plugin["broker_args"] == ["-I", "-m", "carter.broker_cli"]
 
 
 class TestApplyOracle:

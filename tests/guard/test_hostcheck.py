@@ -72,7 +72,7 @@ class TestHealthyInstall:
         warns = " ".join(found["WARN"])
         assert "plugin not installed: gate, isolation and signing guards are inactive" in warns
         assert "literal denies only" in warns
-        assert any("g2 rev 2 pending" in t for t in found["INFO"])
+        assert any("g2 rev 3 pending" in t for t in found["INFO"])
 
     def test_the_git_items_report_the_hook_and_say_keys_are_not_applicable(self, stack) -> None:
         installed(stack)

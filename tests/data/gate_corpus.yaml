@@ -1814,3 +1814,36 @@ cases:
   command: dd if=/dev/zero of=/tmp/x bs=1 count=1
   expect: allow
   why: dd outside control paths
+- id: b-broker-module
+  command: python -I -m carter.broker_cli push --plan --cwd . --agent a --session s --root r --git /usr/bin/git
+  expect: deny
+  rule: human-only-carter
+  why: slice B (plan 007 B2/T6) - the broker's Python core is spawned by the plugin, never by an agent shell
+- id: b-broker-module-attached
+  command: python3 -mcarter.broker_cli record --outcome rejected --agent a --session s --root r
+  expect: deny
+  rule: human-only-carter
+  why: slice B - the attached -m form
+- id: b-broker-import
+  command: python -c "import carter.broker.counter as c; c.reset()"
+  expect: deny
+  rule: human-only-carter
+  why: slice B - an interpreter program that imports the broker (it could reset the counter)
+- id: b-broker-subcommand
+  command: carter broker push --plan
+  expect: deny
+  rule: human-only-carter
+  why: slice B - `carter broker *` is human-only (App C.4.1 row 9)
+- id: ok-python-m-other-module
+  command: python -m json.tool data.json
+  expect: allow
+  why: slice B - only carter.broker modules are special
+- id: b-audit-redirect
+  command: echo '{"decision":"approved"}' >> ~/.carter/state/audit/b.jsonl
+  expect: deny
+  rule: control-files
+  why: slice B security review - the B audit store is a control path (a shell may not forge a line)
+- id: ok-read-audit
+  command: cat ~/.carter/state/audit/b.jsonl
+  expect: allow
+  why: slice B - reading the audit is fine (it holds no secret by construction)

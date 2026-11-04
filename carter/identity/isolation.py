@@ -87,6 +87,9 @@ def render(
     false_path: str,
     pat_file: str = "",
     declined_groups: tuple[str, ...] = (),
+    b_enabled: bool = False,
+    b_git: str = "",
+    b_gh: str = "",
 ) -> dict[str, Any]:
     """The ``isolation.json`` document (keys sorted at every level; lists keep their order)."""
     rules = load_rules()
@@ -126,6 +129,9 @@ def render(
             "pat_file": pat_file,
             "declined_groups": sorted(declined_groups),
             "status_dir": f"{home}/.carter/{plugin_defaults()['status_dir']}",
+            "b_enabled": b_enabled,
+            "b_git": b_git,
+            "b_gh": b_gh,
         },
     }
     validate(doc)

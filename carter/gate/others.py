@@ -119,6 +119,18 @@ def interpreter(eng: Judge, name: str, argv: list[Word], cmd: Cmd) -> None:
     kind = interpreter_kind(name)
     if kind is None:
         return
+    # python -m carter.broker_cli ... (also `-mcarter.broker_cli`): B's Python core, human-only
+    # like `carter broker *`; the plugin spawns it, an agent shell never may (plan 007, freeze B2)
+    for i, w in enumerate(argv[1:], start=1):
+        module = (
+            argv[i + 1].text
+            if w.text == "-m" and i + 1 < len(argv)
+            else w.text[2:]
+            if w.text.startswith("-m") and not w.text.startswith("--")
+            else ""
+        )
+        if module == "carter.broker" or module.startswith(("carter.broker.", "carter.broker_cli")):
+            eng.deny("human-only-carter")
     # python -m carter ...: the carter command in disguise
     for i, w in enumerate(argv[1:-1], start=1):
         if w.text == "-m" and argv[i + 1].text == "carter":
@@ -128,7 +140,12 @@ def interpreter(eng: Judge, name: str, argv: list[Word], cmd: Cmd) -> None:
         scan_code(eng, text)
 
 
+BROKER_WORD = re.compile(r"\bcarter\.broker")
+
+
 def scan_code(eng: Judge, text: str) -> None:
+    if BROKER_WORD.search(text):  # `python -c "import carter.broker.execute ..."`
+        eng.deny("human-only-carter")
     if GIT_WORD.search(text):
         eng.deny("interpreter-git")
     if SUDO_WORD.search(text):

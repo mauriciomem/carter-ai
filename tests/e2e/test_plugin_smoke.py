@@ -77,6 +77,7 @@ def make(rig_factory, opencode_bin, *, tamper: bool = False) -> Rig:
         extra_files={
             ".config/opencode/plugins/carter/index.ts": index_ts,
             ".config/opencode/plugins/carter/core.ts": (PLUGIN_SRC / "core.ts").read_text(),
+            ".config/opencode/plugins/carter/broker.ts": (PLUGIN_SRC / "broker.ts").read_text(),
             ".carter/isolation.json": iso_json,
             "fakepy": lambda home: FAKE_PYTHON % {"home": home},
         },

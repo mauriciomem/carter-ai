@@ -1,3 +1,4 @@
+# ruff: noqa: E501
 """Test doubles for B (plan 007 step 4): a fake ``ssh`` that runs receive-pack locally.
 
 The fake lives in a directory used as ``[identity.signing] ssh_bin_dir``. B pushes with
@@ -102,3 +103,67 @@ def install_fake_ssh(directory: Path) -> FakeSsh:
     (directory / "remote-root").mkdir(exist_ok=True)
     os.chmod(directory, 0o755)
     return FakeSsh(directory)
+
+
+FAKE_GH = """#!{python}
+import json, os, sys
+here = os.path.dirname(os.path.abspath(__file__))
+argv = sys.argv[1:]
+rec = {{"argv": argv, "cwd": os.getcwd(), "env_names": sorted(os.environ), "bodies": []}}
+for i, arg in enumerate(argv):
+    path = arg.split("=", 1)[1] if arg.startswith("--body-file=") else (argv[i + 1] if arg == "--body-file" and i + 1 < len(argv) else None)
+    if path:
+        try:
+            rec["bodies"].append({{"path": path, "mode": oct(os.stat(path).st_mode & 0o777), "text": open(path).read()}})
+        except OSError:
+            rec["bodies"].append({{"path": path, "mode": None, "text": None}})
+with open(os.path.join(here, "gh.calls"), "a") as fh:
+    fh.write(json.dumps(rec) + "\\n")
+replies = json.load(open(os.path.join(here, "gh.json")))
+reply, best = replies["default"], -1
+for prefix, candidate in replies["rules"].items():
+    words = prefix.split()
+    if argv[: len(words)] == words and len(words) > best:
+        reply, best = candidate, len(words)
+sys.stdout.write(reply.get("stdout", ""))
+sys.stderr.write(reply.get("stderr", ""))
+sys.exit(reply.get("rc", 0))
+"""
+
+
+@dataclass(frozen=True)
+class FakeGhBin:
+    """A fake ``gh`` at an absolute path: records argv, cwd, env NAMES and ``--body-file`` data."""
+
+    bindir: Path
+
+    @property
+    def gh(self) -> str:
+        return str(self.bindir / "gh")
+
+    def calls(self) -> list[dict[str, Any]]:
+        log = self.bindir / "gh.calls"
+        return [json.loads(x) for x in log.read_text().splitlines()] if log.exists() else []
+
+    def script(
+        self, rules: dict[str, dict[str, Any]] | None = None, default: dict[str, Any] | None = None
+    ) -> None:
+        (self.bindir / "gh.json").write_text(
+            json.dumps({"default": default or {"stdout": "", "rc": 0}, "rules": rules or {}})
+        )
+
+
+def install_fake_gh(directory: Path, rules: dict[str, dict[str, Any]] | None = None) -> FakeGhBin:
+    directory.mkdir(parents=True, exist_ok=True)
+    script = directory / "gh"
+    script.write_text(FAKE_GH.format(python=sys.executable))
+    script.chmod(0o755)
+    fake = FakeGhBin(directory)
+    fake.script(
+        {
+            "repo view": {"stdout": '{"parent": null}', "rc": 0},
+            "pr create": {"stdout": "https://github.com/o/r/pull/7\n", "rc": 0},
+            **(rules or {}),
+        }
+    )
+    return fake

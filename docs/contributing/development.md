@@ -36,6 +36,8 @@ carter/          the CLI package
   state.py         .carter/ workspace state
   install/         carter install / uninstall, MCP config
   ops/             carter ops (audit log, config)
+  broker/          B: the push and PR broker behind carter_push / carter_pr (plan 007)
+  broker_cli.py    `python -I -m carter.broker_cli`, the only entry of the broker
 templates/       Jinja2 templates for agents and AGENTS.md
 skills/          skill definitions (edited by hand)
 knowledge/       global knowledge seed files

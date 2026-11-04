@@ -319,6 +319,7 @@ def run_host_checks(
                 "per-agent denies",
                 lambda: g2.agent_items(state, agents_reader, loaded, str(target_path(None))),
             )
+    guarded("B", lambda: _broker(state, base_dir, where, servers, home))
     guarded("git", lambda: _git(state))
     if git_ok:
         guarded("git", lambda: g2.include_items(state, base_dir))
@@ -393,6 +394,26 @@ def _identity(
     return hostcheck_id.identity_items(
         cfg, state, cwd=cwd, base_dir=base_dir, git=git_version, fetch=fetch,
         workspace=workspace_for(cfg, str(cwd)),
+    )  # fmt: skip
+
+
+def _broker(
+    state: GuardState,
+    base_dir: Path | None,
+    cwd: Path,
+    servers: Callable[[], Mapping[int, Mapping[str, str] | None]] | None,
+    home: str | None,
+) -> list[Item]:
+    """The slice-B items (``hostcheck_broker``); the working repo is only asked for its origin."""
+    from carter import hostcheck_broker  # noqa: PLC0415
+
+    try:
+        ssh_bin_dir = load_identity().signing.ssh_bin_dir
+    except ConfigError:
+        ssh_bin_dir = "/usr/bin"
+    return hostcheck_broker.items(
+        state, base_dir, cwd, servers=servers, home=home or str(Path.home()),
+        auto_pids=serverenv.auto_pids, ssh_bin_dir=ssh_bin_dir,
     )  # fmt: skip
 
 

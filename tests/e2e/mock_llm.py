@@ -15,6 +15,7 @@ Prompt grammar (the first matching line of the last user message wins):
     FORCE <tool> <json>          -> a call to <tool> even when it is NOT in the tool list (a model
                                     that remembers a tool OpenCode did not offer it)
     TASK <rest>                  -> a ``subagent`` call (agent=general) whose prompt is <rest>
+    TASKAS <agent> <rest>        -> the same with a named agent (plan 007: devops as a subagent)
     anything else                -> the text "ok"
 
 When the last message is a tool result the mock answers with the text "done".
@@ -76,6 +77,9 @@ def parse_directive(prompt: str, tool_names: list[str]) -> list[ToolCall]:
         if line.startswith("FORCE "):
             name, _, payload = line[6:].partition(" ")
             return [ToolCall(name, json.loads((payload or "{}").replace('\\"', '"')))]
+        if line.startswith("TASKAS ") and SUBAGENT_TOOL in tool_names:
+            agent, _, rest = line[7:].partition(" ")
+            return [ToolCall(SUBAGENT_TOOL, {"agent": agent, "description": "e2e", "prompt": rest})]
         if line.startswith("TASK ") and SUBAGENT_TOOL in tool_names:
             return [
                 ToolCall(

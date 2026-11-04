@@ -37,7 +37,7 @@
     {"code": "E-B-HTTPS", "slice": "B", "where": "B", "message": "`origin` is HTTPS; B pushes over SSH only. Use `carter push`.", "remediation": ""},
     {"code": "E-B-MOVED", "slice": "B", "where": "B `--exec`", "message": "HEAD moved after approval (`<pinned>` → `<now>`); refused.", "remediation": ""},
     {"code": "E-B-UNSIGNED", "slice": "1G", "where": "B, A+", "message": "Commits `<shas>` have the LLM as committer but no valid LLM signature; refused.", "remediation": ""},
-    {"code": "E-B-DEFAULT", "slice": "B", "where": "B", "message": "`<branch>` is the remote default branch; B never pushes it. Run `carter push` in your own terminal (typed confirmation).", "remediation": ""},
+    {"code": "E-B-DEFAULT", "slice": "B", "where": "B", "message": "`<branch>` is the remote default branch; B never pushes it. Run `carter push` and then `carter pr` in your own terminal, not through an agent; `carter push` asks you to type the branch name.", "remediation": ""},
     {"code": "E-B-ARGS", "slice": "B", "where": "B", "message": "Only fast-forward of the current non-default branch to `origin` is allowed.", "remediation": ""},
     {"code": "E-B-REJECTED", "slice": "B", "where": "B", "message": "B refused: 3 rejections in this session family. Start a new session or run `carter guard status --reset-b`.", "remediation": ""},
     {"code": "E-SECRET-SCAN", "slice": "1G", "where": "`carter pr`, `carter_pr`", "message": "PR text matches a secret pattern (`<rule>`); refused.", "remediation": ""},

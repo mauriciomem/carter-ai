@@ -67,6 +67,11 @@ def isolation_path(base_dir: Path | None) -> Path:
     return _carter_base(base_dir) / "isolation.json"
 
 
+def headless_profile_path(base_dir: Path | None) -> Path:
+    """``~/.carter/opencode-headless.json``: the static profile that denies B (RFC App C.9)."""
+    return _carter_base(base_dir) / "opencode-headless.json"
+
+
 def run_dir(base_dir: Path | None) -> Path:
     """``~/.carter/run/``: plugin status files and the empty ``gh`` config dir (0700)."""
     return _carter_base(base_dir) / "run"

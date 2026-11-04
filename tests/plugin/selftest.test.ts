@@ -269,3 +269,33 @@ test("the marker is added only after the gate allowed the call, and the timer is
   carter.dispose()
   r.cleanup()
 })
+
+test("slice B: a failed self-test tells the adapter once, so the broker tools can drop out", async () => {
+  let told = 0
+  const r = rig({ onFailed: () => void told++ })
+  const carter = createCarter(r.deps)
+  assert.equal(carter.brokerOn(), false) // the default golden isolation.json has b_enabled false
+  await carter.executeBefore(shell("echo hi"))
+  assert.equal(told, 0)
+  r.clock.advance(N)
+  assert.equal(carter.state(), "failed")
+  assert.equal(told, 1)
+  r.clock.advance(10 * N)
+  assert.equal(told, 1)
+  carter.dispose()
+  r.cleanup()
+})
+
+test("slice B: brokerOn needs b_enabled in the validated file and a self-test that is not failed", async () => {
+  const r = rig({}, (iso) => {
+    iso.plugin.b_enabled = true
+    iso.plugin.b_git = "/usr/bin/git"
+  })
+  const carter = createCarter(r.deps)
+  assert.equal(carter.brokerOn(), true)
+  await carter.executeBefore(shell("echo hi"))
+  r.clock.advance(N)
+  assert.equal(carter.brokerOn(), false)
+  carter.dispose()
+  r.cleanup()
+})

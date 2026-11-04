@@ -70,7 +70,9 @@ def _body(obj: Any) -> list[str]:
 def dumps(cfg: IdentityConfig) -> str:
     """Serialise ``cfg`` as schema-2 TOML."""
     out = [_HEADER, f"schema = {SCHEMA_VERSION}"]
-    for attr, path, _cls in SECTIONS:
+    for attr, path, cls in SECTIONS:
+        if attr == "broker" and getattr(cfg, attr) == cls():
+            continue  # an optional table: written only when the user set something
         out += ["", "[" + ".".join(path) + "]", *_body(getattr(cfg, attr))]
     for ws_path, ws in cfg.workspaces.items():
         out += ["", f"[{TABLE_WORKSPACES}.{_str(ws_path)}]", *_body(ws)]

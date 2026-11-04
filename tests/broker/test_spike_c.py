@@ -297,20 +297,7 @@ class TestMatchExec:
         )  # fmt: skip
         assert marker.exists(), form
 
-    @pytest.mark.parametrize(
-        "form",
-        [
-            pytest.param(
-                f,
-                marks=pytest.mark.xfail(
-                    strict=True, reason="GAP in sshcfg.scan_match_exec: step 9 must close it"
-                ),
-            )
-            if f in {"negated", "equals-argument"}
-            else f
-            for f in sorted(MATCH_EXEC_FORMS)
-        ],
-    )
+    @pytest.mark.parametrize("form", sorted(MATCH_EXEC_FORMS))  # the two gaps closed in step 9
     def test_the_existing_prescan_catches_the_form(self, tmp_path: Path, form: str) -> None:
         (tmp_path / ".ssh").mkdir()
         (tmp_path / ".ssh" / "config").write_text(MATCH_EXEC_FORMS[form].format(m="/x"))

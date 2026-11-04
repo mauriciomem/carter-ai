@@ -36,6 +36,10 @@ function fixture(opts: { sha?: string; isoEdit?: (d: any) => void; sessionDir?: 
   mkdirSync(stub, { recursive: true })
   writeFileSync(join(stub, "package.json"), '{"name":"@opencode/plugin","type":"module","main":"index.js"}')
   writeFileSync(join(stub, "index.js"), "export const Plugin = { define: (p) => p }\n")
+  const effect = join(dir, "node_modules", "effect")
+  mkdirSync(effect, { recursive: true })
+  writeFileSync(join(effect, "package.json"), '{"name":"effect","type":"module","main":"index.js"}')
+  writeFileSync(join(effect, "index.js"), 'export const Schema = { Struct: (f) => ({ struct: f }), String: "string" }\n')
   mkdirSync(plugin, { recursive: true })
   mkdirSync(join(dir, "bin"))
   const python = join(dir, "bin", "python")
@@ -72,6 +76,7 @@ exit $(cat $S/gate.rc)
     .replace("__CARTER_VERSION__", "9.9.9-test")
   writeFileSync(join(plugin, "index.ts"), rendered)
   copyFileSync(new URL("core.ts", SRC), join(plugin, "core.ts"))
+  copyFileSync(new URL("broker.ts", SRC), join(plugin, "broker.ts"))
   const f = {
     gate: (stdout: string, rc = 0, sleep = 0) => {
       writeFileSync(join(scratch, "gate.out"), stdout)
@@ -87,11 +92,13 @@ exit $(cat $S/gate.rc)
   f.tier(JSON.stringify({ schema_version: 1, tier: "t0", cap: null, effective: "t0", require_tier: null, reason: null }))
   const hooks: Fixture["hooks"] = {}
   const sessions: string[] = []
-  // Anything the plugin must NOT touch in 2a (tool registration, permission hooks) throws.
-  const forbid = (name: string) => new Proxy({}, { get: () => { throw new Error(`2a must not use ctx.${name}`) } })
+  // Slice B registers the broker tools (transform) and the evaluate hook; nothing else of ctx.
+  const transforms: any[] = []
+  const reloads: number[] = []
+  const forbid = (name: string) => new Proxy({}, { get: () => { throw new Error(`the plugin must not use ctx.${name}`) } })
   const ctx = {
     app: { name: "cli", version: "2.1.4", channel: "latest" },
-    tool: { hook: (name: string, fn: any) => (hooks[`tool.${name}`] = fn), transform: forbid("tool.transform") },
+    tool: { hook: (name: string, fn: any) => (hooks[`tool.${name}`] = fn), transform: (fn: any) => transforms.push(fn), reload: async () => { reloads.push(1) } },
     shell: { hook: (name: string, fn: any) => (hooks[`shell.${name}`] = fn) },
     session: {
       get: async ({ sessionID }: { sessionID: string }) => {
@@ -99,7 +106,7 @@ exit $(cat $S/gate.rc)
         return opts.sessionDir === undefined ? undefined : { id: sessionID, location: { directory: opts.sessionDir } }
       },
     },
-    permission: forbid("permission"),
+    permission: { hook: (name: string, fn: any) => (hooks[`permission.${name}`] = fn), assert: forbid("permission.assert"), list: forbid("permission.list"), reply: forbid("permission.reply") },
   }
   const previousHome = process.env.HOME
   process.env.HOME = home
@@ -128,9 +135,25 @@ async function withPlugin(opts: Parameters<typeof fixture>[0], body: (f: Fixture
 }
 const call = (command: string, extra: Record<string, unknown> = {}, tool = "shell") => ({ tool, sessionID: "ses_1", input: { command, ...extra } })
 
-test("it registers exactly the two hooks and touches nothing else of ctx", async () => {
+test("it registers the three hooks of 2a/B and touches nothing else of ctx", async () => {
   await withPlugin({}, async (f) => {
-    assert.deepEqual(Object.keys(f.hooks).sort(), ["shell.create.before", "tool.execute.before"])
+    assert.deepEqual(Object.keys(f.hooks).sort(), ["permission.evaluate", "shell.create.before", "tool.execute.before"])
+  })
+})
+
+test("the evaluate hook forces ask for carter_push and carter_pr unless the effect is deny, and ignores other actions", async () => {
+  await withPlugin({ isoEdit: (d) => ((d.plugin.b_enabled = true), (d.plugin.b_git = "/usr/bin/git")) }, async (f) => {
+    const run = (action: string, effect: string) => {
+      const e = { action, effect }
+      f.hooks["permission.evaluate"](e)
+      return e.effect
+    }
+    assert.equal(run("carter_push", "allow"), "ask")
+    assert.equal(run("carter_pr", "allow"), "ask")
+    assert.equal(run("carter_push", "deny"), "deny")
+    assert.equal(run("shell", "allow"), "allow")
+    assert.equal(run("carter_github_search", "allow"), "allow") // the MCP tools are not ours
+    assert.equal(run("edit", "ask"), "ask")
   })
 })
 

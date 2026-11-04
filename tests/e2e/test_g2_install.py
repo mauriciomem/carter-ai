@@ -55,7 +55,7 @@ def test_install_isolate_gate_and_restore(rig_factory, opencode_bin) -> None:
     res = carter(rig, "guard", "install", "--yes")
     assert res.returncode == 0, res.stdout + res.stderr
     assert "plugin installed:" in res.stdout and "restart the OpenCode server" in res.stdout
-    assert state(rig)["consents"]["g2"]["rev"] == 2
+    assert state(rig)["consents"]["g2"]["rev"] == 3  # slice B: revision 3 carries the B tools
     assert isolation_path(None).name == "isolation.json"
     for path in (
         home / ".carter/isolation.json",
@@ -129,7 +129,7 @@ def test_install_isolate_gate_and_restore(rig_factory, opencode_bin) -> None:
     assert "need your confirmation" in res.stdout and not (home / ".carter/isolation.json").exists()
     res = carter(rig, "guard", "install", "--yes", "--only", "g2")
     assert res.returncode == 0 and (home / ".carter/isolation.json").exists(), res.stdout
-    assert state(rig)["consents"]["g2"]["rev"] == 2
+    assert state(rig)["consents"]["g2"]["rev"] == 3  # slice B: revision 3 carries the B tools
 
     # 10. a full remove leaves nothing of Carter's but the documented keepers
     res = carter(rig, "guard", "remove", "--yes")

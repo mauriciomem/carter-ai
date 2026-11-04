@@ -76,6 +76,7 @@ def install_files(
     files: dict[str, Callable[[Path], str]] = {
         ".config/opencode/plugins/carter/index.ts": index_ts,
         ".config/opencode/plugins/carter/core.ts": lambda _h: (SRC / "core.ts").read_text(),
+        ".config/opencode/plugins/carter/broker.ts": lambda _h: (SRC / "broker.ts").read_text(),
     }
     if tamper != "delete":
         files[".carter/isolation.json"] = iso_json

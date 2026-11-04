@@ -2,7 +2,7 @@
 
 1. A **textual** scan of ``~/.ssh/config`` and the files it ``Include``s for ``Match ... exec``,
    because ``ssh -G`` itself would run that command. If it finds one, ``ssh -G`` is not run.
-2. ``<ssh_bin_dir>/ssh -G github.com`` (offline: it prints the effective config and exits),
+2. ``<ssh_bin_dir>/ssh -G git@github.com`` (offline: it prints the effective config and exits),
    flagging ``ProxyCommand``, ``LocalCommand``, ``PermitLocalCommand yes`` and
    ``KnownHostsCommand``. ``ssh_bin_dir`` defaults to ``/usr/bin`` (Apple OpenSSH) and is the
    only place ``ssh`` is looked up: never ``$PATH`` order.
@@ -46,6 +46,18 @@ def _include_targets(arguments: str, ssh_dir: Path) -> list[Path]:
     return out
 
 
+def _runs_command(criteria: str) -> bool:
+    """Does a ``Match`` line carry an ``exec`` criterion? ``ssh -G`` runs it (spike C4).
+
+    ``Match !exec "cmd"`` and ``Match exec="cmd"`` run too, so a token counts when, lower-cased
+    and stripped of ``!``, quotes, it is ``exec`` or starts with ``exec=``."""
+    for token in criteria.replace('"', " ").replace("'", " ").split():
+        word = token.lower().lstrip("!")
+        if word == "exec" or word.startswith("exec="):
+            return True
+    return False
+
+
 def scan_match_exec(home: Path) -> list[Finding]:
     """Findings for ``Match ... exec`` in ``~/.ssh/config`` and everything it includes."""
     ssh_dir = home / ".ssh"
@@ -74,10 +86,7 @@ def scan_match_exec(home: Path) -> list[Finding]:
             if line.lstrip().startswith("#"):
                 continue
             match = _MATCH.match(line)
-            if (
-                match
-                and "exec" in match.group(1).lower().replace('"', " ").replace("'", " ").split()
-            ):
+            if match and _runs_command(match.group(1)):
                 found.append(
                     _finding("Match exec", str(path), f"line {number}: ssh -G would run it")
                 )
@@ -106,15 +115,25 @@ def parse_ssh_g(output: str) -> list[Finding]:
 
 
 def check_ssh_config(
-    home: Path, *, ssh_bin_dir: str | Path = DEFAULT_SSH_BIN_DIR, host: str = "github.com"
+    home: Path,
+    *,
+    ssh_bin_dir: str | Path = DEFAULT_SSH_BIN_DIR,
+    host: str = "github.com",
+    user: str = "git",
 ) -> list[Finding]:
-    """Pre-scan, then ``ssh -G``; a missing or failing ``ssh`` is a finding, not a crash."""
+    """Pre-scan, then ``ssh -G <user>@<host>``; a missing or failing ``ssh`` is a finding.
+
+    ``-G git@github.com`` (not the bare host) so that ``Match user git`` blocks apply, as they
+    will in the push (freeze B14, erratum T4). ``home`` must be the directory OpenSSH reads:
+    the passwd home, not ``$HOME`` (spike C3)."""
     found = scan_match_exec(home)
     if found:
         return found
     ssh = Path(ssh_bin_dir) / "ssh"
     try:
-        proc = run.run([str(ssh), "-G", host], env=run.clean_env(extra={"HOME": str(home)}))
+        proc = run.run(
+            [str(ssh), "-G", f"{user}@{host}"], env=run.clean_env(extra={"HOME": str(home)})
+        )
     except run.RunError:
         return [_finding("ssh", str(ssh), "cannot run ssh, so the SSH config cannot be checked")]
     if proc.returncode != 0:

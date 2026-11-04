@@ -1,4 +1,8 @@
-"""Schema check of ``isolation.json`` (G4): exactly schema v1, anything else is invalid.
+"""Schema check of ``isolation.json`` (G4, B9): exactly schema v2, anything else is invalid.
+
+Schema 2 (slice B) adds the plugin keys for the broker tools. A plugin and a file of different
+schemas refuse each other (``E-ISOLATION-MISSING``): they are installed together, so a mixed
+pair means something was edited or half-installed, and agent shells are then not created.
 
 Split from ``isolation.py`` to stay within the module size cap. The TypeScript core performs the
 same checks on the same keys (``tests/plugin/isolation.test.ts``); any failure there or here
@@ -14,7 +18,7 @@ from typing import Any
 from carter.identity.errors import E_ISOLATION_MISSING, IdentityError
 from carter.identity.policyset import consent_groups
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2  # slice B: plugin.{b_enabled, b_caller, broker_args, b_git, b_gh}
 TOP_KEYS = frozenset(
     {"schema_version", "env", "git_config", "blocking_git_config", "pollution", "plugin"}
 )
@@ -32,6 +36,11 @@ PLUGIN_KEYS = frozenset(
         "gate_timeout_ms",
         "env_timeout_ms",
         "status_dir",
+        "b_enabled",
+        "b_caller",
+        "broker_args",
+        "b_git",
+        "b_gh",
     }  # fmt: skip
 )
 
@@ -54,7 +63,7 @@ def _pairs(value: Any, what: str) -> None:
 
 
 def validate(doc: Any) -> None:
-    """Raise ``IdentityError(E-ISOLATION-MISSING)`` unless ``doc`` is exactly schema v1."""
+    """Raise ``IdentityError(E-ISOLATION-MISSING)`` unless ``doc`` is exactly schema v2."""
     if not isinstance(doc, dict) or set(doc) != TOP_KEYS:
         raise _bad("top-level keys")
     if doc["schema_version"] != SCHEMA_VERSION or isinstance(doc["schema_version"], bool):
@@ -103,3 +112,18 @@ def validate(doc: Any) -> None:
     for key in ("self_test_ms", "gate_timeout_ms", "env_timeout_ms"):
         if not isinstance(plugin[key], int) or isinstance(plugin[key], bool) or plugin[key] <= 0:
             raise _bad(f"plugin.{key} must be a positive integer")
+    _validate_broker(plugin)
+
+
+def _validate_broker(plugin: dict[str, Any]) -> None:
+    if not isinstance(plugin["b_enabled"], bool):
+        raise _bad("plugin.b_enabled must be true or false")
+    if not isinstance(plugin["b_caller"], str) or not plugin["b_caller"]:
+        raise _bad("plugin.b_caller must be a non-empty string")
+    _strs(plugin["broker_args"], "plugin.broker_args")
+    for key in ("b_git", "b_gh"):
+        value = plugin[key]
+        if not isinstance(value, str) or (value and not os.path.isabs(value)):
+            raise _bad(f"plugin.{key} must be empty or an absolute path")
+    if plugin["b_enabled"] and not plugin["b_git"]:
+        raise _bad("plugin.b_git is needed while plugin.b_enabled is true")

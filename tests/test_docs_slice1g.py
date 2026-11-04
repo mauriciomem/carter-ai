@@ -49,11 +49,11 @@ class TestCliReference:
         block = section(text("reference/cli.md"), f"carter guard {sub}", "###")
         assert documented(block) == help_options("guard", sub), sub
 
-    def test_guard_status_has_no_options(self) -> None:
-        assert help_options("guard", "status") == set()
-        assert "carter guard status\n" in section(
-            text("reference/cli.md"), "carter guard status", "###"
-        )
+    def test_guard_status_has_only_the_reset_b_option(self) -> None:
+        """Slice B (plan 007 step 14): `--reset-b` clears the rejection counters."""
+        assert help_options("guard", "status") == {"--reset-b"}
+        block = section(text("reference/cli.md"), "carter guard status", "###")
+        assert "carter guard status [--reset-b]" in block and documented(block) == {"--reset-b"}
 
     def test_every_guard_command_is_listed(self) -> None:
         out = CliRunner().invoke(main, ["guard", "--help"]).output

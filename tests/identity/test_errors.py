@@ -193,14 +193,14 @@ class TestRenderErrorTable:
         codes = [re.match(r"\| `([^`]+)`", ln).group(1) for ln in rows]
         assert codes == [c for c in registry() if c in SLICE_1]
 
-    def test_the_current_slice_is_2c_and_lists_every_agent_facing_code_up_to_it(self):
+    def test_the_current_slice_is_b_and_lists_every_agent_facing_code_up_to_it(self):
         # plan 005 step 27: one constant (rules.CURRENT_SLICE), imported by errors.py
-        assert errors_mod.CURRENT_SLICE == "2c"
+        assert errors_mod.CURRENT_SLICE == "B"
         rows = [ln for ln in render_error_table().splitlines() if ln.startswith("| `E-")]
         codes = {re.match(r"\| `([^`]+)`", ln).group(1) for ln in rows}
         upto = {
             c for c, e in registry().items()
-            if e.slice in {"1", "1G", "2a", "2b", "2c"} and c not in errors_mod.HUMAN_FACING
+            if e.slice in {"1", "1G", "2a", "2b", "2c", "B"} and c not in errors_mod.HUMAN_FACING
         }  # fmt: skip
         assert codes == upto
         agent_2b = {
@@ -227,7 +227,10 @@ class TestRenderErrorTable:
             "E-ISOLATION-MISSING", "E-GATE", "E-GATE-FAIL", "E-PUSH-GUARD", "E-GIT-OLD",
             "E-OPENCODE-VERSION", "E-SIGN-UNAVAILABLE",
         } <= codes  # fmt: skip
-        assert "E-B-CALLER" not in codes  # B
+        assert {
+            "E-B-CALLER", "E-B-DWELL", "E-B-TIMEOUT", "E-B-HEADLESS", "E-B-POLLUTED", "E-B-NOAGENT",
+            "E-B-HTTPS", "E-B-MOVED", "E-B-DEFAULT", "E-B-ARGS", "E-B-REJECTED",
+        } <= codes  # slice B (plan 007): devops meets these  # fmt: skip
 
     def test_earlier_slices_are_a_prefix_and_later_ones_extend_it(self):
         assert "E-GATE" not in render_error_table(current="1G")

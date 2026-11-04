@@ -146,17 +146,21 @@ backup and the command fails with `E-POLICIES-MISSING`. See
 ### carter guard status
 
 ```text
-carter guard status
+carter guard status [--reset-b]
 ```
 
 Read-only. Lists the consents (declined groups are residuals), each recorded statement as
 `loaded` or `MISSING`, file drift, and the include state. It works with an absent or corrupt
 guard state and says so.
 
+`--reset-b` instead clears the rejection counters that stop `carter_push` and `carter_pr` after
+three rejections in one session family. Human terminal only (an agent shell is refused, and
+nothing an agent can call resets it). See [Push and PR tools](../guides/push-and-pr-tools.md).
+
 ### carter guard remove
 
 ```text
-carter guard remove [--dry-run] [--yes] [--only GROUPS|plugin]
+carter guard remove [--dry-run] [--yes] [--only GROUPS|plugin|broker]
 ```
 
 Removes the policies, per-agent denies and Carter's git files, each only where it is
@@ -168,7 +172,7 @@ unchanged since Carter wrote it (anything you edited is kept and reported). Keep
 |--------|-------------|
 | `--dry-run` | Show what would be removed; write nothing |
 | `-y`, `--yes` | Remove without asking. Without a terminal and without `--yes` the command is refused |
-| `--only GROUPS` | Remove only these groups' statements (and forget their consent). `plugin` removes just the plugin, `isolation.json` and `~/.carter/run/` and puts `g2` back to revision 1: the policies, per-agent denies, hooks and the token stay, and a bare `--yes` never brings the plugin back. It can be combined with group names |
+| `--only GROUPS` | Remove only these groups' statements (and forget their consent). `plugin` removes just the plugin, `isolation.json` and `~/.carter/run/` and puts `g2` back to revision 1: the policies, per-agent denies, hooks and the token stay, and a bare `--yes` never brings the plugin back. `broker` turns only the [B tools](../guides/push-and-pr-tools.md) off: `g2` goes back to revision 2, the plugin and `isolation.json` are re-rendered together with B off, and the headless profile is removed. They can be combined with group names |
 
 **Emergency rollback without Carter.** If `carter` itself is broken, delete the plugin
 directory from your own terminal: `rm -r ~/.config/opencode/plugins/carter`. A running
@@ -483,6 +487,11 @@ only if something is `RED`:
   files Carter did not write, listed by name;
 - the server environment, by name only: agent or human signals, Carter's isolation markers
   and `GH_TOKEN`/`GITHUB_TOKEN` in the OpenCode server's environment;
+- the [B tools](../guides/push-and-pr-tools.md) (`B ...` rows): on or off against the `g2` revision, the
+  headless profile, the audit store (modes, counts of decisions, nothing else), the rejection counters,
+  a persisted auto-accept or an OpenCode started with `--auto` (the dwell rule refuses every use),
+  whether the server's environment and SSH agent would be accepted, an HTTPS `origin`, and
+  `git`/`gh`/`ssh` not owned by root;
 - every agent's effective `carter_push`/`carter_pr` rule from `opencode debug agents`
   (`RED` names the agent; an agent whose config entry OpenCode dropped gets a hint);
 - OpenCode and git version bands (`E-OPENCODE-VERSION`, `E-GIT-OLD`);

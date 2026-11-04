@@ -41,6 +41,25 @@ def pids_from_ps(*, runner: Runner = subprocess.run) -> list[int]:
     return pids
 
 
+def auto_pids(*, runner: Runner = subprocess.run) -> list[int]:
+    """Pids of OpenCode processes started with ``--auto`` (every permission is accepted at once)."""
+    try:
+        done = runner(
+            ["ps", "-axo", "pid=,args="], capture_output=True, text=True, timeout=10, check=False
+        )
+    except (OSError, subprocess.SubprocessError):
+        return []
+    found: list[int] = []
+    for line in done.stdout.splitlines():
+        parts = line.split()
+        is_auto = (
+            len(parts) >= 2 and os.path.basename(parts[1]) == "opencode" and "--auto" in parts[2:]
+        )
+        if is_auto and parts[0].isdigit():
+            found.append(int(parts[0]))
+    return found
+
+
 def read_environ(
     pid: int, *, proc: Path = Path("/proc"), runner: Runner = subprocess.run
 ) -> dict[str, str] | None:

@@ -124,7 +124,7 @@ class TestOnlyPlugin:
         reload(stack)
         assert guard("install", "--yes", "--only", "g2").exit_code == 0
         assert all(p.exists() for p in plugin_files())
-        assert load(guard_state_path(None)).consents["g2"]["rev"] == 2
+        assert load(guard_state_path(None)).consents["g2"]["rev"] == 3
 
     def test_a_dry_run_changes_nothing(self, stack, home: Path) -> None:
         install(stack)

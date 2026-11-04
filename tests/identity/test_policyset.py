@@ -73,10 +73,10 @@ class TestOldLoaderContract:
         assert "~/.carter/guard-state.json" in raw()["control_paths"]
         assert "/.carter/secrets/" in raw()["credential_paths"]
 
-    def test_current_slice_is_2c_after_plan_006_step_11(self) -> None:
+    def test_current_slice_is_b_after_plan_007(self) -> None:
         from carter.identity.rules import CURRENT_SLICE
 
-        assert CURRENT_SLICE == "2c"
+        assert CURRENT_SLICE == "B"
 
 
 class TestStatementShape:

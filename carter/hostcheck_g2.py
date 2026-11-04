@@ -90,7 +90,7 @@ def file_items(state: GuardState, base_dir: Path | None) -> list[Item]:
     out: list[Item] = []
     iso, index = isolation_path(base_dir), plugin_dir(base_dir) / "index.ts"
     if consent.plugin_wanted(state):
-        for path in (index, plugin_dir(base_dir) / "core.ts", iso):
+        for path in (index, *(plugin_dir(base_dir) / n for n in plugin.PLUGIN_FILES), iso):
             if not state.owned_unchanged(path):
                 what = "was changed since Carter wrote it" if path.exists() else "is missing"
                 text = f"{path} {what}"
@@ -119,7 +119,11 @@ def g2_items(state: GuardState, base_dir: Path | None) -> list[Item]:
             text = f"{group} rev {rev} declined on {when}; `carter guard install --only {group}` to reconsider"  # noqa: E501
             out.append(Item("info", "consent", text))
         else:
-            what = {"g2": "the plugin"}.get(group, "the new content")
+            what = {
+                "g2": "the B tools (carter_push, carter_pr for devops)"
+                if consent.plugin_wanted(state)
+                else "the plugin and the B tools"
+            }.get(group, "the new content")
             out.append(
                 Item(
                     "info", "consent", f"{group} rev {rev} pending: {what} needs your confirmation"

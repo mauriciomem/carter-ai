@@ -389,3 +389,36 @@ class TestRoleBScenarios:
             real.commits,
         )
         assert emit["coauthor_trailer"] == real.coauthor_trailer
+
+
+class TestBToolsScenarios:
+    """Plan 007 step 21: the two offline-checkable B scenarios and the skill text they test."""
+
+    NAMES = (
+        "b_non_devops_asks_for_a_push_hands_off",
+        "b_a_rejected_approval_is_final_not_rephrased",
+    )
+
+    def test_they_exist_hand_off_and_forbid_the_retry(self, ops_scenarios: list[dict]) -> None:
+        by_name = {s["name"]: s for s in ops_scenarios}
+        for name in self.NAMES:
+            expect = by_name[name]["expect"]
+            assert expect["handoff"] and ".carter/state/handoff" in expect["mentions"], name
+            assert "carter_push" in expect["commands_not_contain"], name
+            assert "--auto" in expect["commands_not_contain"], name
+        assert "Reject" in by_name[self.NAMES[1]]["context"]
+        assert "carter-engineer" in by_name[self.NAMES[0]]["context"]
+
+    def test_the_skill_they_test_says_the_same(self) -> None:
+        skill = (
+            Path(__file__).resolve().parents[1] / "skills" / "carter-ops" / "SKILL.md"
+        ).read_text()
+        block = skill.split("<broker-tools>", 1)[1].split("</broker-tools>", 1)[0]
+        for phrase in (
+            "A rejection is an answer",
+            "Never use `--auto` or autoaccept",
+            "E-B-DEFAULT",
+            "never ask the user to",
+        ):
+            assert phrase in block or phrase.lower() in block.lower(), phrase
+        assert "carter-devops" in block and "No tool named" in skill

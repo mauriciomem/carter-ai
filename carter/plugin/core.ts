@@ -36,6 +36,11 @@ export interface Iso {
     gate_timeout_ms: number
     env_timeout_ms: number
     status_dir: string
+    b_enabled: boolean // slice B: the broker tools register only while this is true
+    b_caller: string // the one agent id allowed to use them (devops)
+    broker_args: string[] // `-I -m carter.broker_cli`, after python_path
+    b_git: string // absolute paths fixed at install ("" = not found)
+    b_gh: string
   }
 }
 export interface Signing {
@@ -71,6 +76,7 @@ export interface Deps {
   euid: number | undefined
   sessionDir: (sessionID: string) => Promise<string | undefined>
   log: (line: string) => void
+  onFailed?: () => void // the self-test failed: the adapter reloads the tool list so B drops out
 }
 
 // Registry texts (carter/identity/errors.json); a pytest parity test compares them.
@@ -83,6 +89,7 @@ export const MESSAGES: Record<string, string> = {
   "E-SIGN-UNAVAILABLE":
     "The LLM signing identity is unavailable (<reason>); agent commits are blocked, not downgraded. Changes are still staged. Run `carter check --host`.",
   "E-CONFIG": "config.toml is invalid; agent commits are disabled until fixed.",
+  "E-B-CALLER": "`carter_push` is devops-only.",
 }
 export class CarterError extends Error {
   code: string
@@ -211,6 +218,7 @@ const TOP = ["schema_version", "env", "git_config", "blocking_git_config", "poll
 const PLUGIN_KEYS = [
   "python_path", "carter_path", "gate_args", "env_args", "pat_file", "pat_prefix", "gh_token_dummy",
   "declined_groups", "self_test_ms", "gate_timeout_ms", "env_timeout_ms", "status_dir",
+  "b_enabled", "b_caller", "broker_args", "b_git", "b_gh",
 ] // prettier-ignore
 const isObj = (v: unknown): v is Record<string, unknown> => typeof v === "object" && v !== null && !Array.isArray(v)
 const sameKeys = (o: Record<string, unknown>, keys: string[]) =>
@@ -221,7 +229,7 @@ const posInt = (v: unknown) => typeof v === "number" && Number.isInteger(v) && v
 
 export function validateIso(doc: unknown): Iso {
   const bad = () => new CarterError("E-ISOLATION-MISSING")
-  if (!isObj(doc) || !sameKeys(doc, TOP) || doc.schema_version !== 1) throw bad()
+  if (!isObj(doc) || !sameKeys(doc, TOP) || doc.schema_version !== 2) throw bad()
   const { env, pollution: pol, plugin: pl } = doc
   if (!isObj(env) || !sameKeys(env, ["set", "delete"]) || !isObj(env.set) || !strs(env.delete)) throw bad()
   if (!Object.values(env.set).every((v) => typeof v === "string")) throw bad()
@@ -237,6 +245,9 @@ export function validateIso(doc: unknown): Iso {
   if (!strs(pl.gate_args) || !strs(pl.env_args) || !strs(pl.declined_groups)) throw bad()
   if (typeof pl.pat_prefix !== "string" || !pl.pat_prefix || typeof pl.gh_token_dummy !== "string" || !pl.gh_token_dummy) throw bad()
   if (!posInt(pl.self_test_ms) || !posInt(pl.gate_timeout_ms) || !posInt(pl.env_timeout_ms)) throw bad()
+  if (typeof pl.b_enabled !== "boolean" || typeof pl.b_caller !== "string" || !pl.b_caller || !strs(pl.broker_args)) throw bad()
+  for (const k of ["b_git", "b_gh"]) if (typeof pl[k] !== "string" || (pl[k] !== "" && !isAbsolute(pl[k]))) throw bad()
+  if (pl.b_enabled && pl.b_git === "") throw bad()
   return doc as unknown as Iso
 }
 
@@ -468,6 +479,7 @@ export function createCarter(deps: Deps) {
     since = new Date(clock.now()).toISOString()
     if (state === "failed") warn("selftest", `${MESSAGES["E-SELFTEST"].replace("<v>", deps.opencodeVersion)} (${reason})`)
     writeStatus()
+    if (state === "failed") deps.onFailed?.()
   })
   writeStatus()
 
@@ -532,6 +544,17 @@ export function createCarter(deps: Deps) {
 
   return {
     state: (): State => selfTest.state(),
+    // The validated isolation.json (throws E-ISOLATION-MISSING): the broker tools read their
+    // switches and absolute tool paths from it, never from the environment.
+    isolation: (): Iso => load(),
+    // The broker tools register only while this is true (b_enabled and the self-test not failed).
+    brokerOn: (): boolean => {
+      try {
+        return load().plugin.b_enabled && selfTest.state() !== "failed"
+      } catch {
+        return false
+      }
+    },
     pending: (): number => selfTest.pending(),
     flags: (): string[] => [...flags].sort(),
     nonce: (): string => nonce,

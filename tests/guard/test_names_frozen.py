@@ -1,3 +1,4 @@
+# ruff: noqa: E501
 """The 1G names, frozen (plan 003 step 6, F2-F6).
 
 A rename here is a deliberate act: it changes what is written to the user's machine
@@ -223,6 +224,11 @@ ISOLATION_ENV_KEYS = ("set", "delete")
 ISOLATION_POLLUTION_KEYS = ("agent_signals", "human_signals", "markers")
 ISOLATION_MARKER_KEYS = ("env", "git_config")
 ISOLATION_PLUGIN_KEYS = (
+    "b_enabled",
+    "b_caller",
+    "broker_args",
+    "b_git",
+    "b_gh",
     "python_path",
     "carter_path",
     "gate_args",
@@ -330,7 +336,13 @@ def test_the_plugin_defaults_of_the_data_file() -> None:
         assert defaults[key] == value, key
     assert defaults["status_dir"] == "run/plugin-status"
     assert defaults["gh_token_dummy"] and not defaults["gh_token_dummy"].startswith("github_pat_")
-    assert set(defaults) == {*PLUGIN_DEFAULTS, "gh_token_dummy", "status_dir"}
+    assert set(defaults) == {
+        *PLUGIN_DEFAULTS,
+        "gh_token_dummy",
+        "status_dir",
+        "broker_args",
+        "b_caller",
+    }
 
 
 def test_the_data_file_has_no_reserved_keys_left() -> None:
@@ -364,7 +376,7 @@ def test_the_isolation_schema_names() -> None:
     assert tuple(doc["pollution"]) == tuple(sorted(ISOLATION_POLLUTION_KEYS))
     assert tuple(doc["pollution"]["markers"]) == tuple(sorted(ISOLATION_MARKER_KEYS))
     assert tuple(doc["plugin"]) == tuple(sorted(ISOLATION_PLUGIN_KEYS))
-    assert doc["schema_version"] == 1
+    assert doc["schema_version"] == 2  # slice B (B9): the broker keys in `plugin`
     assert doc["blocking_git_config"] == BLOCKING_GIT_CONFIG
 
 
@@ -454,9 +466,9 @@ COMMIT_REFUSED_FLAGS = (
     "--author",
 )
 
-# H15: consent revisions after 2b (step 19). `g2` stays 2: isolation.json is unchanged.
+# H15: consent revisions after 2b (step 19); slice B (plan 007 B9) moves `g2` to 3.
 CONSENT_REVS_2B = {
-    "g2": 2,
+    "g2": 3,
     "hooks": 2,
     "sudo-docker": 1,
     "read-edit-denies": 1,
@@ -643,7 +655,7 @@ def test_h16_the_2b_error_codes_exist_with_the_2b_tag() -> None:
 def test_h16_the_current_slice_moves_only_in_step_27() -> None:
     from carter.identity.rules import CURRENT_SLICE
 
-    assert CURRENT_SLICE == "2c"  # moved by plan 006 step 11 (K13)
+    assert CURRENT_SLICE in ("2c", "B")  # 2c moved it in plan 006 step 11 (K13), B in plan 007
 
 
 # ---------------------------------------------------------------------------------------------
@@ -739,6 +751,193 @@ def test_k10_identity_add_has_the_role_option() -> None:
 def test_k13_the_current_slice_is_2c_once_step_11_has_run() -> None:
     from carter.identity.rules import CURRENT_SLICE
 
-    if CURRENT_SLICE != "2c":
+    if CURRENT_SLICE not in ("2c", "B"):
         pytest.skip("CURRENT_SLICE moves to 2c in step 11")
     assert "E-HUMAN-IDENTITY" in registry()
+
+
+# ---------------------------------------------------------------------------------------------
+# Slice B (plan 007 step 5, freeze B1-B20), frozen before dependent code. Same rules as above.
+# ---------------------------------------------------------------------------------------------
+
+MODULES_B = (
+    "carter/broker/__init__.py", "carter/broker/env.py", "carter/broker/argv.py",
+    "carter/broker/checks.py", "carter/broker/plan.py", "carter/broker/execute.py",
+    "carter/broker/pr.py", "carter/broker/counter.py", "carter/broker/audit.py",
+    "carter/broker_cli.py", "carter/plugin/broker.ts",
+    "tests/data/b_hostile_argv.json", "tests/data/ssh_g/index.json",
+)  # fmt: skip
+BROKER_ENTRY = ("-I", "-m", "carter.broker_cli")  # B2 / T6: the only entry
+BROKER_SUBCOMMANDS = ("push", "pr", "record")
+BROKER_MODES = ("plan", "execute")  # --plan / --exec
+RECORD_OUTCOMES = ("rejected", "timeout", "aborted", "corrected", "dwell")
+BROKER_EXIT_CODES = {"ok": 0, "refused": 1, "usage": 2}
+DEVOPS_AGENT = "carter-devops"  # B10 / T9
+# B3 / T5: Python judges the dwell; the floor is 500 ms, configurable upward only.
+DWELL = {"default": 500, "floor": 500, "cap": 10000, "timeout_ms": 120000}
+# B5
+REJECTIONS_MAX = 3
+COUNTER_FILE = "b-rejections.json"
+# B15
+AUDIT_DIR_REL = ("state", "audit")
+AUDIT_FILES = ("b.jsonl", "audit.log")
+AUDIT_FIELDS = (
+    "ts", "root", "session", "agent", "owner_repo", "branch", "range", "commits", "verb",
+    "decision", "code", "dwell_ms",
+)  # fmt: skip
+AUDIT_DECISIONS = (
+    "approved",
+    "rejected",
+    "corrected",
+    "timeout",
+    "aborted",
+    "dwell",
+    "refused",
+    "error",
+)
+AUDIT_ROTATE_BYTES = 5 * 1024 * 1024
+AUDIT_ROTATE_KEEP = 3
+# B4: the plan JSON (common keys, then per verb)
+PLAN_COMMON_KEYS = ("approval", "ask", "audit", "branch", "pinned_sha", "repo", "verb")
+PLAN_PUSH_KEYS = ("base_label", "commits", "count", "new", "new_branch", "old", "sensitive")
+PLAN_PR_KEYS = ("base", "body_lines", "body_preview", "draft", "head_sha", "title")
+APPROVAL_KEYS = ("min_dwell_ms", "timeout_ms")
+ASK_KEYS = ("metadata", "resources")
+# B9: isolation.json schema 2
+ISOLATION_B_KEYS = ("b_enabled", "b_caller", "broker_args", "b_git", "b_gh")
+CONSENT_REV_PLUGIN, CONSENT_REV_BROKER = 2, 3
+HEADLESS_PROFILE = "opencode-headless.json"
+BROKER_CONFIG_KEYS = ("min_dwell_ms",)  # no home key (maestro decision, plan 007)
+# B16 (E-B-HEADLESS is raised by OpenCode; E-B-REPOCFG, E-B-UNSIGNED and E-SECRET-SCAN are older)
+ERRORS_B = (
+    "E-B-CALLER", "E-B-DWELL", "E-B-TIMEOUT", "E-B-HEADLESS", "E-B-POLLUTED", "E-B-NOAGENT",
+    "E-B-HTTPS", "E-B-MOVED", "E-B-DEFAULT", "E-B-ARGS", "E-B-REJECTED",
+)  # fmt: skip
+# B19
+BROKER_TS_MAX_LINES, INDEX_TS_MAX_LINES = 200, 80
+# B11: where git and gh may be found at install (never PATH at runtime)
+TOOL_DIRS = ("/usr/bin", "/bin", "/usr/local/bin", "/opt/homebrew/bin")
+
+
+@pytest.mark.parametrize("path", MODULES_B)
+def test_b_module_paths_exist(path: str) -> None:
+    assert (REPO / path).exists(), f"{path} is frozen but missing"
+
+
+def test_b1_b2_the_entry_the_subcommands_and_the_exit_codes() -> None:
+    cli = pytest.importorskip("carter.broker_cli")
+    assert tuple(cli.OUTCOMES) == RECORD_OUTCOMES
+    assert tuple(BROKER_EXIT_CODES.values()) == (cli.EXIT_OK, cli.EXIT_REFUSED, cli.EXIT_USAGE)
+    from carter.identity import rules
+
+    assert tuple(rules.plugin_defaults()["broker_args"]) == BROKER_ENTRY
+    sub = cli.parser()._subparsers._group_actions[0].choices  # type: ignore[union-attr]
+    assert tuple(sub) == BROKER_SUBCOMMANDS
+    for verb in ("push", "pr"):
+        flags = {o for a in sub[verb]._actions for o in a.option_strings}
+        assert {"--plan", "--exec", "--pinned-sha", "--asked-at", "--answered-at"} <= flags
+        assert not {"--remote", "--ref", "--url", "--refspec", "--force", "--branch"} & flags
+
+
+def test_b3_the_dwell_and_timeout_constants() -> None:
+    from carter.broker import plan
+
+    assert (
+        DWELL["default"], DWELL["floor"], DWELL["cap"], DWELL["timeout_ms"]
+    ) == (plan.DWELL_DEFAULT_MS, plan.DWELL_FLOOR_MS, plan.DWELL_CAP_MS, plan.TIMEOUT_MS)  # fmt: skip
+    assert plan.DWELL_FLOOR_MS >= 500  # T5: the 150 ms floor of D49 was too low (spike B3)
+    from carter.identity.schema import Broker
+
+    assert Broker().min_dwell_ms == DWELL["default"]
+
+
+def test_b5_the_counter_file_and_limit() -> None:
+    from carter.broker import counter
+
+    assert (counter.MAX_REJECTIONS, counter.FILE) == (REJECTIONS_MAX, COUNTER_FILE)
+
+
+def test_b10_the_only_caller() -> None:
+    import carter.broker as broker
+    from carter.identity import rules
+
+    assert broker.DEVOPS_AGENT == DEVOPS_AGENT == rules.plugin_defaults()["b_caller"]
+    assert broker.VERBS == ("push", "pr")  # widening B needs a new ADR
+
+
+def test_b15_the_audit_store() -> None:
+    from carter.broker import audit
+
+    assert tuple(audit.FIELDS) == AUDIT_FIELDS and tuple(audit.DECISIONS) == AUDIT_DECISIONS
+    assert (audit.B_LOG, audit.OPS_LOG) == AUDIT_FILES
+    assert (audit.ROTATE_BYTES, audit.ROTATE_KEEP) == (AUDIT_ROTATE_BYTES, AUDIT_ROTATE_KEEP)
+    assert audit.audit_dir(Path("/c")) == Path("/c").joinpath(*AUDIT_DIR_REL)
+
+
+def test_b4_the_plan_json_keys(tmp_path: Path) -> None:
+    broker_world = pytest.importorskip("broker.world")
+    from carter.broker import plan
+
+    world = broker_world.World(tmp_path)
+    try:
+        world.commit("a.txt")
+        built = plan.build_push_plan(world.repo, world.ctx, broker_world.DEVOPS, world.server_env())
+        doc = plan.push_plan_json(built, world.ctx, broker_world.DEVOPS)
+        assert set(doc) == {*PLAN_COMMON_KEYS, *PLAN_PUSH_KEYS}
+        assert tuple(doc["approval"]) == APPROVAL_KEYS and tuple(sorted(doc["ask"])) == ASK_KEYS
+    finally:
+        world.close()
+
+
+def test_b9_the_isolation_broker_keys_and_the_consent_revisions() -> None:
+    from carter.guard import consent
+
+    assert set(ISOLATION_B_KEYS) <= set(ISOLATION_PLUGIN_KEYS)
+    assert (consent.PLUGIN_REV, consent.BROKER_REV) == (CONSENT_REV_PLUGIN, CONSENT_REV_BROKER)
+    assert {g.id: g.rev for g in policyset.consent_groups()}["g2"] == CONSENT_REV_BROKER
+    g2 = next(g for g in policyset.consent_groups() if g.id == "g2")
+    assert "not a security boundary" in " ".join(g2.explain)  # residual 6, B9
+
+
+def test_b8_the_headless_profile_name_and_content() -> None:
+    from carter.guard import plugin
+    from carter.install import paths
+
+    assert paths.headless_profile_path(None).name == HEADLESS_PROFILE
+    doc = json.loads(plugin.render_headless())
+    assert list(doc) == ["agents"] and list(doc["agents"]) == [DEVOPS_AGENT]
+    assert "policies" not in doc  # a global tool.use policy never matches a plugin tool (A6)
+    assert {r["action"] for r in doc["agents"][DEVOPS_AGENT]["permissions"]} == set(
+        AGENT_PERMISSION_DENIES
+    )
+
+
+def test_b11_the_tool_directories_are_fixed() -> None:
+    from carter.guard import plugin
+
+    assert tuple(plugin.TOOL_DIRS) == TOOL_DIRS
+
+
+def test_b3_the_broker_config_table() -> None:
+    from carter.identity.schema import schema_names
+
+    assert schema_names()["broker"] == BROKER_CONFIG_KEYS
+
+
+def test_b16_the_b_error_codes_exist_with_the_b_tag() -> None:
+    reg = registry()
+    for code in ERRORS_B:
+        assert reg[code].slice == "B" and reg[code].message and "\n" not in reg[code].message, code
+    for older in ("E-B-REPOCFG", "E-B-UNSIGNED"):
+        assert reg[older].slice == "1G"
+
+
+def test_b18_the_current_slice_is_b() -> None:
+    from carter.identity.rules import CURRENT_SLICE
+
+    assert CURRENT_SLICE == "B"
+
+
+def test_b19_the_ts_budgets() -> None:
+    assert len((REPO / "carter/plugin/broker.ts").read_text().splitlines()) <= BROKER_TS_MAX_LINES
+    assert len((REPO / "carter/plugin/index.ts").read_text().splitlines()) <= INDEX_TS_MAX_LINES

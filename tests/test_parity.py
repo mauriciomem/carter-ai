@@ -606,12 +606,19 @@ class TestHandoffProse:
             assert gone not in body, gone
         assert "single pusher" not in body and "sole pusher" not in body.lower()
 
-    def test_devops_says_a_broker_may_come_but_does_not_name_tools_as_usable(
+    def test_devops_describes_the_b_tools_as_approval_requests_and_nobody_else_does(
         self, rendered_agents_dir: Path
     ) -> None:
+        """Slice B (plan 007 step 21): only devops names the tools; every use asks the human."""
         body = self._body(rendered_agents_dir, "devops")
-        assert "later release" in body and "do not look for them or try them" in body
-        assert "carter_push" not in body and "carter_pr" not in body
+        assert "`carter_push`" in body and "`carter_pr`" in body
+        assert "opens a prompt" in body and "A rejection is final" in body
+        assert "never use them as a way around a refusal" in body
+        assert "If the tools are not in your list" in body and "hand off" in body
+        assert "later release" not in body
+        for role in ("engineer", "maestro", "pm", "security", "narrator", "architect", "learner"):
+            other = self._body(rendered_agents_dir, role)
+            assert "carter_push" not in other and "carter_pr" not in other, role
 
     @pytest.mark.parametrize("role", ["engineer", "maestro", "pm", "security", "narrator"])
     def test_other_agents_route_pushing_to_the_handoff(

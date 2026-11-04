@@ -29,6 +29,11 @@ def installed_rig(rig_factory, **kw: Any) -> Rig:
     rig = rig_factory(plugins={"dp": PROBE}, **kw)
     done = rig.run([*CARTER, "install", "--yes"])
     assert done.returncode == 0, done.stdout[-800:] + done.stderr[-800:]
+    # Slice B: the real carter_push now exists; this spike is about the stand-in probe tools, so
+    # B goes off (g2 back to revision 2) and the probe owns the names. The real ones are
+    # tested in test_b_contract.py.
+    off = rig.run([*CARTER, "guard", "remove", "--yes", "--only", "broker"])
+    assert off.returncode == 0, off.stdout[-800:] + off.stderr[-800:]
     rig.restart()
     return rig
 

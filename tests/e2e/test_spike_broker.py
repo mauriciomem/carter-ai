@@ -685,6 +685,9 @@ class TestSpikeAInstalled:
         rig = rig_factory(opencode=_BINARY[0], plugins={"bp": PROBE})
         done = rig.run([*CARTER, "install", "--yes"])
         assert done.returncode == 0, done.stdout[-600:] + done.stderr[-600:]
+        # slice B shipped the real tools: this spike's stand-ins own the names, so B goes off
+        off = rig.run([*CARTER, "guard", "remove", "--yes", "--only", "broker"])
+        assert off.returncode == 0, off.stdout[-600:] + off.stderr[-600:]
         rig.restart()
         run_prompt(rig, "build", FORCE)
         assert "No tool named" in last_result(rig, 0)

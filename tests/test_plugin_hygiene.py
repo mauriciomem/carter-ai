@@ -1,3 +1,4 @@
+# ruff: noqa: E501
 """Static hygiene of the TypeScript plugin sources (plan 004 step 9; RFC-0007 D7, D60).
 
 The plugin holds the marker, the tagging, a read of the static ``isolation.json`` and the call
@@ -124,15 +125,16 @@ class TestIndex:
             "__CARTER_VERSION__",
         ]
 
-    def test_index_registers_no_tool_and_no_permission_hook_in_2a(self) -> None:
+    def test_index_only_hands_the_broker_its_dependencies(self) -> None:
+        """Slice B: the tools and the permission hook live in broker.ts; index.ts wires them."""
         text = strip_comments(read(PLUGIN / "index.ts"))
-        assert "tool.transform" not in text and "permission" not in text and "evaluate" not in text
+        assert "tool.transform" not in text and "evaluate" not in text and "tool.add" not in text
+        assert text.count("registerBroker(") == 1
 
     def test_index_imports_only_the_plugin_api_node_and_core(self) -> None:
+        allowed = {"@opencode/plugin", "effect", "./core.ts", "./broker.ts"}
         for name in imports_of(PLUGIN / "index.ts"):
-            assert name == "@opencode/plugin" or name == "./core.ts" or name.startswith("node:"), (
-                name
-            )
+            assert name in allowed or name.startswith("node:"), name
 
     def test_index_stays_tiny(self) -> None:
         assert len(read(PLUGIN / "index.ts").splitlines()) <= INDEX_MAX_LINES
@@ -160,3 +162,49 @@ class TestNoPythonOnlyKnowledge:
         named_signals = names & (set(data.agent_signals) | set(data.human_signals))
         leaked = (env_like | named_signals) - PROTOCOL_NAMES
         assert leaked == set(), f"{source.name}: {sorted(leaked)} must come from isolation.json"
+
+
+# ---- slice B: the broker tool wrapper stays thin (plan 007 step 15, freeze B19) ------------------
+BROKER_MAX_LINES = 200
+
+
+class TestBrokerWrapper:
+    source = PLUGIN / "broker.ts"
+
+    def test_it_exists_and_stays_within_its_line_budget(self) -> None:
+        assert len(read(self.source).splitlines()) <= BROKER_MAX_LINES
+
+    def test_it_imports_only_node_and_core(self) -> None:
+        assert all(n == "./core.ts" or n.startswith("node:") for n in imports_of(self.source))
+        assert "@opencode" not in read(self.source) and "effect" not in imports_of(self.source)
+
+    def test_it_holds_no_git_url_or_policy_knowledge(self) -> None:
+        code = strip_strings(strip_comments(read(self.source)))
+        raw = strip_comments(read(self.source))
+        for word in (
+            "git ",
+            "ssh",
+            "refs/",
+            "origin",
+            "force",
+            "default",
+            "insteadOf",
+            "allowed_signers",
+        ):
+            assert word not in code, word  # descriptions are strings: they may say "origin"
+        assert not re.search(r"https?://", raw)
+        assert "process.env" not in code  # the server environment arrives as a dependency
+
+    def test_numbers_are_only_the_call_timeouts_and_small_counters(self) -> None:
+        code = strip_strings(strip_comments(read(self.source)))
+        numbers = {n.replace("_", "") for n in re.findall(r"\b\d[\d_]*\b", code)}
+        assert numbers <= {"0", "1", "8", "30000", "60000", "300000"}, numbers
+
+    def test_it_never_passes_save_to_the_permission_call(self) -> None:
+        code = strip_comments(read(self.source))
+        assert not re.search(r"\bsave\b", code)
+
+    def test_it_never_replies_once_or_always(self) -> None:
+        code = strip_comments(read(self.source))
+        assert '"once"' not in code and '"always"' not in code
+        assert code.count("decision:") == 1 and 'decision: "reject"' in code

@@ -16,18 +16,38 @@ show up as ``command``-scope entries.
 from __future__ import annotations
 
 import atexit
+import contextlib
+import contextvars
 import functools
 import os
 import shutil
 import subprocess
 import tempfile
-from collections.abc import Mapping, Sequence
+from collections.abc import Iterator, Mapping, Sequence
 from pathlib import Path
 
 from carter.identity.scrub import scrub_git_env
 
 DEFAULT_TIMEOUT = 30.0
 NETWORK_TIMEOUT = 300.0
+
+
+_FORCED: contextvars.ContextVar[Mapping[str, str] | None] = contextvars.ContextVar(
+    "carter_aplus_forced_env", default=None
+)
+
+
+@contextlib.contextmanager
+def forced_env(env: Mapping[str, str]) -> Iterator[None]:
+    """Make every ``clean_env()`` start from ``env`` instead of the process environment.
+
+    B uses this so that its read-only git calls (config listing, range, signatures) never see
+    the OpenCode server's environment: the base is built from scratch, then scrubbed as usual."""
+    token = _FORCED.set(dict(env))
+    try:
+        yield
+    finally:
+        _FORCED.reset(token)
 
 
 class RunError(Exception):
@@ -46,7 +66,10 @@ def clean_env(
     base: Mapping[str, str] | None = None, *, extra: Mapping[str, str] | None = None
 ) -> dict[str, str]:
     """A scrubbed copy of ``base`` (default: the process environment) for a read-only call."""
-    env = scrub_git_env(os.environ if base is None else base)
+    forced = _FORCED.get()
+    env = scrub_git_env(
+        base if base is not None else (forced if forced is not None else os.environ)
+    )
     env.pop("SSH_AUTH_SOCK", None)
     env.update(
         GIT_CONFIG_NOSYSTEM="1",

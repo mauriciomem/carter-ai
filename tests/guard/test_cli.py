@@ -192,7 +192,8 @@ class TestInstall:
         assert state.opencode_config == str(config_target(None))
         assert state.gitconfig is not None and state.guard_version == hooks.GUARD_VERSION
         assert sorted(Path(f["path"]).name for f in state.files) == [
-            "carter-guard", "core.ts", "gitconfig", "index.ts", "isolation.json",
+            "broker.ts", "carter-guard", "core.ts", "gitconfig", "index.ts", "isolation.json",
+            "opencode-headless.json",
         ]  # fmt: skip
         assert stat.S_IMODE(guard_state_path(None).stat().st_mode) == 0o600
         assert "plugin installed:" in res.output and "restart the OpenCode server" in res.output
@@ -688,4 +689,4 @@ class TestRemove:
 def test_guard_help_lists_the_three_commands() -> None:
     out = CliRunner().invoke(main, ["guard", "--help"]).output
     assert all(cmd in out for cmd in ("install", "status", "remove"))
-    assert "reset-b" not in CliRunner().invoke(main, ["guard", "status", "--help"]).output
+    assert "--reset-b" in CliRunner().invoke(main, ["guard", "status", "--help"]).output  # slice B

@@ -32,8 +32,12 @@ from carter.identity.policyset import ConsentGroup, Statement, consent_groups, p
 
 CONFIG_EDIT = "config-edit"
 PLUGIN = "plugin"  # a component, not a group: accepted only by `guard remove --only`
+BROKER = "broker"  # a component of g2 (revision 3): `guard remove --only broker` turns B off
+PLUGIN_REV = 2  # the plugin and isolation.json belong to g2 from this revision on
+BROKER_REV = 3  # the B tools (carter_push, carter_pr) need g2 at this revision (D65, B9)
 PENDING_TEXT = {
-    "g2": "plugin and isolation need your confirmation",
+    "g2": "the plugin and isolation, and the B tools (carter_push, carter_pr) for devops, "
+    "need your confirmation",
     "hooks": "the commit checks need your confirmation",
     "repo_hooks": "the commit hooks need your confirmation",
 }
@@ -53,18 +57,22 @@ def group_names() -> tuple[str, ...]:
 
 def parse_only(csv: str | None, *, allow_plugin: bool = False) -> list[str] | None:
     """``--only a,b`` → ``["a", "b"]``; ``None`` when not given. Unknown names raise
-    ``ValueError`` listing the valid ones. ``plugin`` is a component of ``g2``: ``remove`` takes
-    it, ``install`` points at ``--only g2`` (G15)."""
+    ``ValueError`` listing the valid ones. ``plugin`` and ``broker`` are components of ``g2``:
+    ``remove`` takes them, ``install`` points at ``--only g2`` (G15)."""
     if csv is None:
         return None
     names = [n.strip() for n in csv.split(",") if n.strip()]
-    if PLUGIN in names and not allow_plugin:
-        raise ValueError(
-            "`plugin` is not a group for install: use `--only g2` to confirm the plugin"
-        )
-    unknown = [n for n in names if n not in group_names() and not (allow_plugin and n == PLUGIN)]
+    components = (PLUGIN, BROKER)
+    for component in components:
+        if component in names and not allow_plugin:
+            raise ValueError(
+                f"`{component}` is not a group for install: use `--only g2` to confirm it"
+            )
+    unknown = [
+        n for n in names if n not in group_names() and not (allow_plugin and n in components)
+    ]
     if unknown or not names:
-        extra = f", {PLUGIN}" if allow_plugin else ""
+        extra = f", {PLUGIN}, {BROKER}" if allow_plugin else ""
         raise ValueError(
             f"unknown group(s): {', '.join(unknown) or '(none given)'}; "
             f"valid groups: {', '.join(group_names())}{extra}"
@@ -216,8 +224,16 @@ def reconsent_pending(state: GuardState) -> list[str]:
     ]
 
 
-def plugin_wanted(state: GuardState) -> bool:
-    """The plugin, ``isolation.json`` and the ``run/`` files belong to ``g2`` at revision 2."""
+def _g2_at_least(state: GuardState, rev: int) -> bool:
     rec = state.consents.get("g2", {})
-    needed = next(g.rev for g in consent_groups() if g.id == "g2")
-    return rec.get("decision") == "accepted" and int(rec.get("rev", 1)) >= needed
+    return rec.get("decision") == "accepted" and int(rec.get("rev", 1)) >= rev
+
+
+def plugin_wanted(state: GuardState) -> bool:
+    """The plugin, ``isolation.json`` and the ``run/`` files belong to ``g2`` from revision 2."""
+    return _g2_at_least(state, PLUGIN_REV)
+
+
+def broker_wanted(state: GuardState) -> bool:
+    """The B tools need ``g2`` accepted at revision 3 (never moved by a bare ``--yes``)."""
+    return _g2_at_least(state, BROKER_REV)

@@ -1,4 +1,9 @@
-"""D65: ``g2`` revision 2 asks again, and never upgrades silently (plan 004 step 27).
+# ruff: noqa: E501
+"""D65: ``g2`` asks again for a new revision, and never upgrades silently (plan 004 step 27).
+
+Slice B moved ``g2`` to revision 3 (the B tools): what these tests said about "revision 2" is true of
+the current revision, 3; the plugin itself is still wanted from revision 2 (``PLUGIN_REV``).
+The revision-2 to revision-3 step has its own file, ``test_consent_rev3.py``.
 
 The plugin changes the environment of every agent shell. Until a human confirms in a terminal
 (or passes ``--yes --only g2``), the plugin and ``isolation.json`` are not installed and the 1G
@@ -19,7 +24,7 @@ from carter.identity.errors import E_STATE_INVALID
 from carter.install.paths import guard_state_path, isolation_path, plugin_dir
 from guard.helpers import debug_config
 
-PENDING = "plugin and isolation need your confirmation"
+PENDING = "need your confirmation"
 
 
 def guard(*args: str, **kw):
@@ -49,14 +54,14 @@ class TestMatrix:
         defaults = {"only": None, "assume_yes": False, "interactive": True, "ask": lambda g: True}
         return consent.resolve_consents(state, **{**defaults, **kw})
 
-    def test_a_fresh_install_asks_g2_at_revision_2(self) -> None:
+    def test_a_fresh_install_asks_g2_at_the_current_revision(self) -> None:
         asked: list[str] = []
         plan = self.resolve(GuardState(), ask=lambda g: asked.append(g.id) or True)
         assert "g2" in asked and "g2" in plan.accepted
         st = GuardState()
         consent.record(st, plan, today="2026-11-04")
-        assert st.consents["g2"] == {"decision": "accepted", "date": "2026-11-04", "rev": 2}
-        assert consent.plugin_wanted(st)
+        assert st.consents["g2"] == {"decision": "accepted", "date": "2026-11-04", "rev": 3}
+        assert consent.plugin_wanted(st) and consent.broker_wanted(st)
 
     def test_accepted_at_revision_1_needs_reconsent(self) -> None:
         st = GuardState()
@@ -71,9 +76,9 @@ class TestMatrix:
         named = self.resolve(st, only=["g2"], assume_yes=True, interactive=False)
         assert named.accepted == ["g2"] and named.asked == ["g2"]
 
-    def test_accepted_at_revision_2_is_done(self) -> None:
+    def test_accepted_at_the_current_revision_is_done(self) -> None:
         st = GuardState()
-        st.consent("g2", "accepted", "2026-11-01", 2)
+        st.consent("g2", "accepted", "2026-11-01", 3)
         asked: list[str] = []
         plan = self.resolve(st, ask=lambda g: asked.append(g.id) or True)
         assert "g2" in plan.accepted and "g2" not in asked + plan.asked and not plan.pending
@@ -96,7 +101,7 @@ class TestMatrix:
         consent.record(st, no, today="2026-11-04")
         assert st.consents["g2"] == {"decision": "accepted", "date": "2026-11-01", "rev": 1}
         assert st.extra["consent_offers"] == {
-            "g2": {"rev": 2, "decision": "declined", "date": "2026-11-04"}
+            "g2": {"rev": 3, "decision": "declined", "date": "2026-11-04"}
         }
         seen: list[str] = []
         again = self.resolve(st, ask=lambda g: seen.append(g.id) or True)
@@ -104,7 +109,7 @@ class TestMatrix:
         named = self.resolve(st, only=["g2"], assume_yes=True, interactive=False)
         assert named.asked == ["g2"]  # --only g2 asks again
         consent.record(st, named, today="2026-11-05")
-        assert st.consents["g2"]["rev"] == 2 and "consent_offers" not in st.extra
+        assert st.consents["g2"]["rev"] == 3 and "consent_offers" not in st.extra
 
 
 class TestNoSilentUpgrade:
@@ -150,7 +155,7 @@ class TestNoSilentUpgrade:
         stack.fake(before=debug_config(stack.live), after=debug_config(stack.live))
         res = guard("install", "--yes", "--only", "g2")
         assert res.exit_code == 0, res.output
-        assert load(guard_state_path(None)).consents["g2"]["rev"] == 2
+        assert load(guard_state_path(None)).consents["g2"]["rev"] == 3
         assert plugin_dir(None).joinpath("index.ts").exists() and isolation_path(None).exists()
         assert "no SSH agent" in res.output  # the explanation is printed even without a question
 
@@ -164,7 +169,7 @@ class TestNoSilentUpgrade:
         out = res.output
         assert res.exit_code == 0, out
         assert out.index("no SSH agent") < out.index("Install this group?")
-        assert load(guard_state_path(None)).consents["g2"]["rev"] == 2 and plugin_present()
+        assert load(guard_state_path(None)).consents["g2"]["rev"] == 3 and plugin_present()
 
     def test_a_tty_no_keeps_the_denies_and_installs_nothing(self, stack, human_tty) -> None:
         rev1(stack)
@@ -182,7 +187,7 @@ class TestNoSilentUpgrade:
         stack.fake()
         res = guard("install", "--dry-run")
         assert (
-            "needs your confirmation for revision 2" in res.output
+            "needs your confirmation for revision 3" in res.output
             and "would write" not in res.output
         )
 

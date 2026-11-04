@@ -106,6 +106,12 @@ without a terminal, including OpenCode's `!` shell, and say so. Errors you may m
 `E-SECRET-SCAN` (the title, branch or body looks like a credential), `E-B-UNSIGNED`.
 See [Troubleshooting](../troubleshooting.md#guards).
 
+**An optional shortcut for devops (B).** If you confirmed the B tools
+([Push and PR tools](push-and-pr-tools.md)), the devops agent can instead *ask* you to approve one
+push or one pull request in OpenCode's own prompt. It is stricter than `carter push` in what it
+refuses (the default branch, HTTPS, unsigned LLM commits, risky config) and you still click for every
+use. Everything else on this page stays as it is.
+
 > [!WARNING]
 > **A plain `git push` typed into OpenCode's `!` prompt is an unvalidated fallback.** It
 > runs with your credentials but none of the checks above. It must be **typed**; never

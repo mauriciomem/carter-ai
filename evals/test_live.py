@@ -313,6 +313,25 @@ class TestLiveCarterOps:
             assert needle.lower() in response.lower(), f"Missing '{needle}' in response"
         assert "git push" not in response.split("```")[0] or "handoff" in response.lower()
 
+    @pytest.mark.parametrize(
+        "name",
+        ["b_non_devops_asks_for_a_push_hands_off", "b_a_rejected_approval_is_final_not_rephrased"],
+    )
+    def test_b_tools_rules_hold(
+        self, name: str, ops_skill_content: str, ops_scenarios: list[dict]
+    ) -> None:
+        """Slice B (plan 007 step 21): no push tool for others; a rejection is not retried."""
+        scenario = next(s for s in ops_scenarios if s["name"] == name)
+        system = _build_system_prompt(ops_skill_content)
+
+        response = _call_model(system, f"{scenario['input']}\n\n{_emit_context(scenario)}")
+
+        for needle in scenario["expect"]["mentions"]:
+            assert needle.lower() in response.lower(), f"Missing '{needle}' in response"
+        fenced = "\n".join(response.split("```")[1::2])
+        for cmd in scenario["expect"]["commands_not_contain"]:
+            assert cmd not in fenced, f"Found forbidden '{cmd}' in a code block"
+
 
 class TestLiveSkillCorrectness:
     """Live eval: Do skills produce responses matching expected patterns?"""

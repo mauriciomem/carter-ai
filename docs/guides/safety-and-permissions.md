@@ -44,7 +44,9 @@ What that means in practice:
 - **Nobody pushes.** `git push` and the `gh` write commands are denied to every agent,
   DevOps included; you push with `carter push` and open the pull request with
   `carter pr`, in your own terminal ([Write operations](write-operations.md#pushing-and-pull-requests-the-handoff)).
-  A finished branch is handed over as a file.
+  A finished branch is handed over as a file. **One optional exception:** if you confirm it,
+  DevOps alone gets two tools, `carter_push` and `carter_pr`, that *ask you to approve each use*
+  in OpenCode; see [Push and PR tools](push-and-pr-tools.md).
 - **Only DevOps can change infrastructure** and send Jira and Slack text.
 - **Read-only agents still can, but must ask.** Maestro, Architect and Learner get a
   prompt before they edit a file or run a shell command, including `git commit`.
@@ -103,6 +105,11 @@ the real work; the command gate is a speed bump in front of it, not a sandbox.
   read a script or program the agent writes and runs by path (`python3 tool.py`,
   `bash run.sh`, a sourced file), and it cannot see through every way of building a command at
   run time. What an evaded gate still cannot do is reach your SSH keys or write to GitHub.
+- **The B tools are forgeable by a same-user agent until a sandbox exists.** An agent running as
+  you, with the OpenCode server password, can answer B's approval prompt through the server API
+  after any delay. The dwell rule (an approval within half a second is refused) and the prompt
+  stop a careless agent and an auto-accepting client, not a hostile one. They are a convenience,
+  not a boundary ([Push and PR tools](push-and-pr-tools.md#residuals-accepted-written-down)).
 - **`git push --no-verify` skips the `pre-push` hook.** The hook is the backstop for pushes
   the gate never saw; the gate itself rejects every `git push`.
 - **Shell writes outside Carter's own files are not gated** (the accepted D67 residual): the

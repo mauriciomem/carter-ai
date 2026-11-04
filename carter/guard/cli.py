@@ -16,7 +16,9 @@ from typing import Any
 import click
 
 from carter import terminal
+from carter.broker import counter
 from carter.guard import consent, engine, status
+from carter.install.paths import run_dir
 
 
 def _only(_ctx: click.Context, _param: click.Parameter, value: str | None) -> list[str] | None:
@@ -132,12 +134,26 @@ def remove_cmd(
 
 @guard.command("status")
 @click.option(
+    "--reset-b",
+    is_flag=True,
+    help="Forget the B rejection counters (human terminal only; nothing an agent can call).",
+)
+@click.option(
     "--base-dir", type=click.Path(file_okay=False, path_type=Path), default=None, hidden=True
 )
-def status_cmd(base_dir: Path | None) -> None:
-    """Show consents, loaded policies and file drift (read-only; works anywhere)."""
+def status_cmd(base_dir: Path | None, reset_b: bool) -> None:
+    """Show consents, loaded policies and file drift (read-only; works anywhere).
+
+    With --reset-b it instead clears the rejection counters that stop `carter_push` /
+    `carter_pr` after three rejections in a session family (human terminal only)."""
 
     def run() -> int:
+        if reset_b:
+            terminal.require_human_terminal("guard status --reset-b", streams=("stdin",))
+            cleared = counter.reset(run_dir(base_dir).parent)
+            families = "session family" if cleared == 1 else "session families"
+            click.echo(f"B rejection counters cleared ({cleared} {families}).")
+            return 0
         status.report(base_dir, click.echo)
         return 0
 

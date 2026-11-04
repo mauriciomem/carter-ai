@@ -145,6 +145,7 @@ def full(rig_factory, opencode_bin) -> Iterator[Full]:  # type: ignore[no-untype
         extra_files={
             ".config/opencode/plugins/carter/index.ts": index_ts,
             ".config/opencode/plugins/carter/core.ts": (PLUGIN_SRC / "core.ts").read_text(),
+            ".config/opencode/plugins/carter/broker.ts": (PLUGIN_SRC / "broker.ts").read_text(),
             ".carter/isolation.json": lambda home: iso_bytes(home).decode(),
             ".carter/config.toml": config,
             ".carter/guard-state.json": guard_state,

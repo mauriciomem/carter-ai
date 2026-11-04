@@ -15,6 +15,7 @@ until you need it.
 |------|---------------------------|
 | [Safety and permissions](guides/safety-and-permissions.md) | Understand what each agent may do, and choose `guarded` or `strict` |
 | [Write operations (`ops:`)](guides/write-operations.md) | Let Carter commit and comment on Jira with your approval, and see how you push and open PRs |
+| [Push and PR tools (B)](guides/push-and-pr-tools.md) | Let the devops agent *ask* you to push a branch or open a PR, with an approval for every use, and know what it can and cannot do |
 | [Identity and signing](guides/identity-and-signing.md) | Give agents their own GitHub identity and signed commits, and undo it |
 | [MCP servers](guides/mcp-servers.md) | Give agents read access to GitHub, Terraform or Jira/Confluence |
 | [Memory and plans](guides/memory-and-plans.md) | Keep lessons, decisions and multi-session plans |

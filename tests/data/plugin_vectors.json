@@ -670,6 +670,15 @@
     ]
    ],
    "plugin": {
+    "b_caller": "carter-devops",
+    "b_enabled": false,
+    "b_gh": "",
+    "b_git": "",
+    "broker_args": [
+     "-I",
+     "-m",
+     "carter.broker_cli"
+    ],
     "carter_path": "/opt/carter/bin/carter",
     "declined_groups": [
      "sudo-docker"
@@ -772,9 +781,9 @@
      ]
     }
    },
-   "schema_version": 1
+   "schema_version": 2
   },
-  "sha256": "d5456e7d8b82dd91b901cc3ade43fb8dbeecd0bfcbe32556f754797782a40a6e",
+  "sha256": "58b6b53b8d3786bfc9cf8fc6141566dabba63e75d3a75f3d9a469ff22b9f5625",
   "apply": [
    {
     "name": "clean env, token accepted",

@@ -546,6 +546,32 @@ def _only_plugin(base_dir: Path | None, state: GuardState, echo: Echo, *, dry_ru
     echo("plugin removed; OpenCode unloads it within seconds (restart the server to be sure)")
 
 
+def _only_broker(base_dir: Path | None, state: GuardState, echo: Echo, *, dry_run: bool) -> None:
+    """``remove --only broker``: B goes off, the rest of ``g2`` stays.
+
+    ``g2`` goes back to revision 2 (the plugin keeps its shell isolation), the plugin and
+    ``isolation.json`` are re-rendered together with ``b_enabled: false``, the headless profile is
+    removed, and the revision-3 offer is recorded as declined so nothing asks again."""
+    if dry_run:
+        echo("  g2 would go back to revision 2: B off, the rest of the plugin stays")
+        echo(f"  would remove {plugin.headless_profile_path(base_dir)}")
+        return
+    day = datetime.now(UTC).date().isoformat()
+    if state.consents.get("g2", {}).get("decision") == "accepted":
+        state.consent("g2", "accepted", day, consent.PLUGIN_REV)
+        state.record_offer("g2", consent.BROKER_REV, "declined", day)
+    profile = plugin.headless_profile_path(base_dir)
+    if state.owned_unchanged(profile):
+        profile.unlink()
+        echo(f"  removed {profile}")
+    elif profile.exists():
+        echo(f"  kept {profile}: changed since Carter wrote it")
+    state.forget_file(profile)
+    if consent.plugin_wanted(state):
+        plugin.install(base_dir, state, echo)  # re-render isolation.json and the plugin together
+    echo("B is off; OpenCode needs a restart to drop the tools")
+
+
 def _known_extra_files(
     base_dir: Path | None, state: GuardState, echo: Echo, keep: Sequence[str] = ()
 ) -> None:
@@ -600,7 +626,7 @@ def remove(
     root = backups_dir(base_dir) / _stamp()
     if scoped:
         target = copy.deepcopy(state) if dry_run else state
-        names = [n for n in (only or []) if n != consent.PLUGIN]
+        names = [n for n in (only or []) if n not in (consent.PLUGIN, consent.BROKER)]
         for name in names:
             target.consents.pop(name, None)
         if names:
@@ -619,6 +645,8 @@ def remove(
             _show_diff(res, wanted, echo)
         if consent.PLUGIN in (only or []):
             _only_plugin(base_dir, target, echo, dry_run=dry_run)
+        elif consent.BROKER in (only or []):
+            _only_broker(base_dir, target, echo, dry_run=dry_run)
         elif "g2" in names and not dry_run:
             plugin.remove(base_dir, target, echo)  # the plugin belongs to g2
         hook_groups = [g for g in (only or []) if g in ("hooks", "repo_hooks", "alias")]

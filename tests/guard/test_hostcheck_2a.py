@@ -228,10 +228,10 @@ class TestG2States:
         state = load(guard_state_path(None))
         state.consent("g2", "accepted", "2026-11-01", 1)
         save(state, guard_state_path(None))
-        assert find(check(), "g2 rev 2 pending", "info")
-        state.record_offer("g2", 2, "declined", "2026-11-03")
+        assert find(check(), "g2 rev 3 pending", "info")
+        state.record_offer("g2", 3, "declined", "2026-11-03")
         save(state, guard_state_path(None))
-        assert find(check(), "g2 rev 2 declined on 2026-11-03", "info")
+        assert find(check(), "g2 rev 3 declined on 2026-11-03", "info")
 
     def test_declined_groups_are_listed_and_match_isolation_json(self, stack, human_tty) -> None:
         human_tty(True)

@@ -136,6 +136,42 @@ jobs:
             exit 1
           fi
 
+  broker:
+    # Plan 007 step 20: slice B's Python core against the OS's own git and OpenSSH (Apple's
+    # /usr/bin tools on macOS): the validators and hostile-operand table, the repo-config and
+    # ssh -G checks, push --plan/--exec through a fake ssh into a bare remote, the PR path with a
+    # fake gh, the counter, the audit store, consent revision 3 and the B items of check --host.
+    # The step after them runs the real `ssh -G` on this runner. No network, no credentials.
+    name: broker (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2
+        with:
+          python-version: "3.14"
+
+      - name: Install locked deps (with dev extra)
+        run: uv sync --locked --extra dev
+
+      - name: Tools under test
+        run: |
+          /usr/bin/ssh -V
+          /usr/bin/git --version
+
+      - name: Broker, A+ checks, consent revision 3 and check --host B items
+        run: uv run pytest tests/broker tests/aplus tests/guard/test_consent_rev3.py tests/guard/test_hostcheck_broker.py tests/guard/test_status_reset_b.py tests/guard/test_names_frozen.py -q
+
+      - name: The real ssh -G of this OS is judged by the C.5 key list
+        run: uv run pytest tests/broker/test_ssh_g_live.py -q
+
   gate-budget:
     # RFC App C.4.2: p95 < 100 ms per gate call, interpreter start-up included, measured on the
     # installed tool (`uv tool install .`) the plugin will really call. Required check. If it
@@ -370,3 +406,15 @@ jobs:
 
       - name: carter guard install --dry-run runs (writes nothing)
         run: carter guard install --dry-run
+
+      - name: The broker core and the plugin files are in the installed package
+        run: |
+          py="$(uv tool dir)/carter-ai/bin/python"
+          "$py" -I - <<'PY'
+          import pathlib, carter
+          import carter.broker_cli, carter.broker.execute, carter.broker.pr
+          root = pathlib.Path(carter.__file__).parent
+          for name in ("index.ts", "core.ts", "broker.ts"):
+              assert (root / "plugin" / name).is_file(), name
+          print("broker and plugin files ok")
+          PY

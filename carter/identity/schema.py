@@ -81,6 +81,18 @@ class Github:
 
 
 @dataclass(frozen=True)
+class Broker:
+    """``[broker]`` (slice B): the approval dwell. Optional.
+
+    ``min_dwell_ms`` can only be raised: the effective value is at least 500 ms (freeze B3).
+    There is deliberately no home key: B's child ``HOME`` and the ``~/.ssh/config`` scan always
+    come from the system account entry (maestro decision, plan 007 notes); a ``[broker] home``
+    in the file is an unknown key and is ignored."""
+
+    min_dwell_ms: int = 500
+
+
+@dataclass(frozen=True)
 class Workspace:
     """``[workspaces."<abs path>"]``: per-workspace controls and pinned policy."""
 
@@ -98,6 +110,7 @@ SECTIONS: tuple[tuple[str, tuple[str, ...], type], ...] = (
     ("disclosure", ("identity", "disclosure"), Disclosure),
     ("attribution", ("attribution",), Attribution),
     ("github", ("github",), Github),
+    ("broker", ("broker",), Broker),
 )
 TABLE_WORKSPACES = "workspaces"
 WORKSPACE_PLACEHOLDER = '"<abs path>"'
@@ -114,6 +127,7 @@ class IdentityConfig:
     disclosure: Disclosure = field(default_factory=Disclosure)
     attribution: Attribution = field(default_factory=Attribution)
     github: Github = field(default_factory=Github)
+    broker: Broker = field(default_factory=Broker)
     workspaces: dict[str, Workspace] = field(default_factory=dict)
     schema: int = SCHEMA_VERSION
     state: State = "absent"
