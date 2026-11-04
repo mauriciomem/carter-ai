@@ -29,13 +29,14 @@ from carter.identity.errors import (
     E_GUARD_T01SIGN,
     E_GUARD_TRAILER,
     E_GUARD_UNSIGNED,
+    E_HUMAN_IDENTITY,
     E_PUSH_GUARD,
     registry,
 )
-from carter.identity.rules import STRONG_AGENT_SIGNAL, load_rules
+from carter.identity.rules import STRONG_AGENT_SIGNAL, human_identity_rules, load_rules
 from carter.install.paths import guard_script_path
 
-GUARD_VERSION = "2.0.0"
+GUARD_VERSION = "2.1.0"
 EVENT = "pre-push"
 HOOK_NAME = "carter-guard-pre-push"
 COMMIT_EVENTS = ("prepare-commit-msg", "commit-msg", "post-commit")
@@ -43,6 +44,14 @@ EVENTS = (EVENT, *COMMIT_EVENTS)  # revision 2 of the `hooks` group wires all fo
 # Hints that follow a reject; not registry entries (the registry holds the message and fix).
 STALE_HINT = "If you just changed `max_tier`, run `carter update`."
 RESTART_HINT = "If this persists, restart the agent from a clean terminal."
+# 2c (K1): the amend rule has its own text under the registered code E-GUARD-COMMITTER.
+AUTHOR_CHANGED = (
+    f"carter-guard: commit rejected ({E_GUARD_COMMITTER}): "
+    "an agent may not change a commit's author"
+)
+AUTHOR_CHANGED_FIX = (
+    "Amend without --reset-author or --author; ask the user if the author must change."
+)
 COMMIT_BLOCK = (
     "carter-guard: agent commit blocked (the guard script is missing or failed)",
     "Run `carter guard status`, or ask the user to run `carter guard install`.",
@@ -125,9 +134,36 @@ def message_assignments() -> str:
     values["R_SIGNCFG"] = reg[E_GUARD_SIGNCFG].remediation
     values["R_TRAILER"] = reg[E_GUARD_TRAILER].remediation
     values["R_UNSIGNED"] = reg[E_GUARD_UNSIGNED].remediation
+    values["M_HUMAN_0"] = reg[E_HUMAN_IDENTITY].message
+    # a fixed problem token follows it, never a value
+    values["M_HUMAN_1"] = f"carter-guard: human identity problem ({E_HUMAN_IDENTITY}): "
+    values["R_HUMAN"] = reg[E_HUMAN_IDENTITY].remediation
+    values["M_AUTHOR_0"] = AUTHOR_CHANGED
+    values["R_AUTHOR"] = AUTHOR_CHANGED_FIX
     values["STALE_HINT"] = STALE_HINT
     values["RESTART_HINT"] = RESTART_HINT
     return "\n".join(f"{k}={shlex.quote(v)}" for k, v in values.items())
+
+
+_FALLBACK = re.compile(r"[a-z0-9@._*-]+\Z")
+
+
+def human_rules_statements() -> str:
+    """``human_fallback_email`` / ``human_fallback_pair``: the K2 fallbacks from ``g2_rules.json``
+    as ``case`` patterns over a lower-cased argument (a pattern ends up in shell source: only
+    safe characters are accepted)."""
+    rules = human_identity_rules()
+    emails = [e.casefold() for e in rules["fallback_emails"]]
+    pairs = [(n.casefold(), e.casefold()) for n, e in rules["fallback_pairs"]]
+    for item in (*emails, *(x for pair in pairs for x in pair)):
+        if not _FALLBACK.match(item):
+            raise ValueError(f"not a safe fallback pattern: {item!r}")
+    email_case = " | ".join(emails)
+    pair_case = " | ".join(f"{n}:{e}" for n, e in pairs)
+    return (
+        f"human_fallback_email() {{ case $1 in {email_case}) return 0 ;; esac; return 1; }}\n"
+        f"human_fallback_pair() {{ case $1:$2 in {pair_case}) return 0 ;; esac; return 1; }}"
+    )
 
 
 def render_script() -> str:
@@ -139,6 +175,7 @@ def render_script() -> str:
         .replace("@@IS_AGENT@@", _function("is_agent", is_agent_statements()))
         .replace("@@BLOCK@@", block_statement())
         .replace("@@MESSAGES@@", message_assignments())
+        .replace("@@HUMAN_RULES@@", human_rules_statements())
         .replace("@@SIGNCFG_CODE@@", E_GUARD_SIGNCFG)
         .replace("@@UNSIGNED_CODE@@", E_GUARD_UNSIGNED)
     )

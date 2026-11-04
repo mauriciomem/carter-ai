@@ -1625,7 +1625,7 @@
    "key-missing",
    "fingerprint-mismatch",
    "shim-missing",
-   "role-b-not-built"
+   "human-identity-invalid"
   ],
   "cases": [
    {
@@ -1880,17 +1880,17 @@
     "reason": "shim-missing"
    },
    {
-    "name": "effective t2, reason role-b-not-built",
+    "name": "effective t2, reason human-identity-invalid",
     "outcome": {
      "kind": "ok",
-     "stdout": "{\"schema_version\": 1, \"tier\": \"t2\", \"cap\": null, \"effective\": \"t2\", \"require_tier\": null, \"reason\": \"role-b-not-built\"}"
+     "stdout": "{\"schema_version\": 1, \"tier\": \"t2\", \"cap\": null, \"effective\": \"t2\", \"require_tier\": null, \"reason\": \"human-identity-invalid\"}"
     },
     "block": true,
     "flags": [
      "sign-unavailable"
     ],
     "signing": null,
-    "reason": "role-b-not-built"
+    "reason": "human-identity-invalid"
    },
    {
     "name": "effective t2, reason tier-required",
@@ -3290,6 +3290,180 @@
    {
     "name": "null",
     "signing": null
+   },
+   {
+    "name": "role b: an env name managed by the isolation block next to the author",
+    "signing": {
+     "env": {
+      "GIT_AUTHOR_NAME": "LLM Bot",
+      "GIT_AUTHOR_EMAIL": "12345+llm-bot@users.noreply.github.com",
+      "GIT_COMMITTER_NAME": "LLM Bot",
+      "GIT_COMMITTER_EMAIL": "12345+llm-bot@users.noreply.github.com",
+      "CARTER_IDENTITY": "llm-bot",
+      "GIT_ASKPASS": "/bin/true"
+     },
+     "git_config": [
+      [
+       "gpg.format",
+       "ssh"
+      ],
+      [
+       "user.signingkey",
+       "key::ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIBQUck5VvSpXHhZ5JFCGxR3zhC07GvQUN5j6rv6VJbaY"
+      ],
+      [
+       "gpg.ssh.program",
+       "/home/test/.carter/bin/carter-ssh-sign"
+      ],
+      [
+       "commit.gpgsign",
+       "true"
+      ]
+     ],
+     "fingerprint": "SHA256:2uXQrkCgLxqvXxMrbBJwmanqsboZn/lN5PAQyHhQDtQ"
+    }
+   }
+  ],
+  "env_keys_role_b": [
+   "GIT_AUTHOR_NAME",
+   "GIT_AUTHOR_EMAIL",
+   "GIT_COMMITTER_NAME",
+   "GIT_COMMITTER_EMAIL",
+   "CARTER_IDENTITY"
+  ],
+  "block_role_b": {
+   "env": {
+    "GIT_AUTHOR_NAME": "LLM Bot",
+    "GIT_AUTHOR_EMAIL": "12345+llm-bot@users.noreply.github.com",
+    "GIT_COMMITTER_NAME": "LLM Bot",
+    "GIT_COMMITTER_EMAIL": "12345+llm-bot@users.noreply.github.com",
+    "CARTER_IDENTITY": "llm-bot"
+   },
+   "git_config": [
+    [
+     "gpg.format",
+     "ssh"
+    ],
+    [
+     "user.signingkey",
+     "key::ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIBQUck5VvSpXHhZ5JFCGxR3zhC07GvQUN5j6rv6VJbaY"
+    ],
+    [
+     "gpg.ssh.program",
+     "/home/test/.carter/bin/carter-ssh-sign"
+    ],
+    [
+     "commit.gpgsign",
+     "true"
+    ]
+   ],
+   "fingerprint": "SHA256:2uXQrkCgLxqvXxMrbBJwmanqsboZn/lN5PAQyHhQDtQ"
+  },
+  "apply_role_b": [
+   {
+    "name": "role b: empty environment",
+    "env": {},
+    "expected": {
+     "env": {
+      "GIT_AUTHOR_NAME": "LLM Bot",
+      "GIT_AUTHOR_EMAIL": "12345+llm-bot@users.noreply.github.com",
+      "GIT_COMMITTER_NAME": "LLM Bot",
+      "GIT_COMMITTER_EMAIL": "12345+llm-bot@users.noreply.github.com",
+      "CARTER_IDENTITY": "llm-bot",
+      "GIT_CONFIG_KEY_0": "gpg.format",
+      "GIT_CONFIG_VALUE_0": "ssh",
+      "GIT_CONFIG_KEY_1": "user.signingkey",
+      "GIT_CONFIG_VALUE_1": "key::ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIBQUck5VvSpXHhZ5JFCGxR3zhC07GvQUN5j6rv6VJbaY",
+      "GIT_CONFIG_KEY_2": "gpg.ssh.program",
+      "GIT_CONFIG_VALUE_2": "/home/test/.carter/bin/carter-ssh-sign",
+      "GIT_CONFIG_KEY_3": "commit.gpgsign",
+      "GIT_CONFIG_VALUE_3": "true",
+      "GIT_CONFIG_COUNT": "4"
+     },
+     "flags": []
+    }
+   },
+   {
+    "name": "role b: an inherited author and committer are replaced",
+    "env": {
+     "GIT_AUTHOR_NAME": "Evil",
+     "GIT_AUTHOR_EMAIL": "evil@example.invalid",
+     "GIT_COMMITTER_NAME": "Evil",
+     "GIT_COMMITTER_EMAIL": "evil@example.invalid"
+    },
+    "expected": {
+     "env": {
+      "GIT_AUTHOR_NAME": "LLM Bot",
+      "GIT_AUTHOR_EMAIL": "12345+llm-bot@users.noreply.github.com",
+      "GIT_COMMITTER_NAME": "LLM Bot",
+      "GIT_COMMITTER_EMAIL": "12345+llm-bot@users.noreply.github.com",
+      "CARTER_IDENTITY": "llm-bot",
+      "GIT_CONFIG_KEY_0": "gpg.format",
+      "GIT_CONFIG_VALUE_0": "ssh",
+      "GIT_CONFIG_KEY_1": "user.signingkey",
+      "GIT_CONFIG_VALUE_1": "key::ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIBQUck5VvSpXHhZ5JFCGxR3zhC07GvQUN5j6rv6VJbaY",
+      "GIT_CONFIG_KEY_2": "gpg.ssh.program",
+      "GIT_CONFIG_VALUE_2": "/home/test/.carter/bin/carter-ssh-sign",
+      "GIT_CONFIG_KEY_3": "commit.gpgsign",
+      "GIT_CONFIG_VALUE_3": "true",
+      "GIT_CONFIG_COUNT": "4"
+     },
+     "flags": []
+    }
+   },
+   {
+    "name": "role b: an inherited author alone is replaced",
+    "env": {
+     "GIT_AUTHOR_EMAIL": "human@example.invalid"
+    },
+    "expected": {
+     "env": {
+      "GIT_AUTHOR_EMAIL": "12345+llm-bot@users.noreply.github.com",
+      "GIT_AUTHOR_NAME": "LLM Bot",
+      "GIT_COMMITTER_NAME": "LLM Bot",
+      "GIT_COMMITTER_EMAIL": "12345+llm-bot@users.noreply.github.com",
+      "CARTER_IDENTITY": "llm-bot",
+      "GIT_CONFIG_KEY_0": "gpg.format",
+      "GIT_CONFIG_VALUE_0": "ssh",
+      "GIT_CONFIG_KEY_1": "user.signingkey",
+      "GIT_CONFIG_VALUE_1": "key::ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIBQUck5VvSpXHhZ5JFCGxR3zhC07GvQUN5j6rv6VJbaY",
+      "GIT_CONFIG_KEY_2": "gpg.ssh.program",
+      "GIT_CONFIG_VALUE_2": "/home/test/.carter/bin/carter-ssh-sign",
+      "GIT_CONFIG_KEY_3": "commit.gpgsign",
+      "GIT_CONFIG_VALUE_3": "true",
+      "GIT_CONFIG_COUNT": "4"
+     },
+     "flags": []
+    }
+   },
+   {
+    "name": "role b: appends after a valid inherited count",
+    "env": {
+     "GIT_CONFIG_COUNT": "1",
+     "GIT_CONFIG_KEY_0": "commit.gpgsign",
+     "GIT_CONFIG_VALUE_0": "false"
+    },
+    "expected": {
+     "env": {
+      "GIT_CONFIG_COUNT": "5",
+      "GIT_CONFIG_KEY_0": "commit.gpgsign",
+      "GIT_CONFIG_VALUE_0": "false",
+      "GIT_AUTHOR_NAME": "LLM Bot",
+      "GIT_AUTHOR_EMAIL": "12345+llm-bot@users.noreply.github.com",
+      "GIT_COMMITTER_NAME": "LLM Bot",
+      "GIT_COMMITTER_EMAIL": "12345+llm-bot@users.noreply.github.com",
+      "CARTER_IDENTITY": "llm-bot",
+      "GIT_CONFIG_KEY_1": "gpg.format",
+      "GIT_CONFIG_VALUE_1": "ssh",
+      "GIT_CONFIG_KEY_2": "user.signingkey",
+      "GIT_CONFIG_VALUE_2": "key::ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIBQUck5VvSpXHhZ5JFCGxR3zhC07GvQUN5j6rv6VJbaY",
+      "GIT_CONFIG_KEY_3": "gpg.ssh.program",
+      "GIT_CONFIG_VALUE_3": "/home/test/.carter/bin/carter-ssh-sign",
+      "GIT_CONFIG_KEY_4": "commit.gpgsign",
+      "GIT_CONFIG_VALUE_4": "true"
+     },
+     "flags": []
+    }
    }
   ]
  }

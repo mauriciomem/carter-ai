@@ -1,4 +1,4 @@
-"""The slice-2b items of ``carter check --host``: the LLM identity (plan 005 step 24).
+"""The slice-2b/2c items of ``carter check --host``: the LLM identity and role b (plans 005, 006).
 
 Read-only and names only: logins, fingerprints, states and file names; never a key, a token, a
 socket path or an environment value. A RED item makes agent commits fail (or lets a wrong key
@@ -8,18 +8,20 @@ account's public key lists without credentials; with no reader, or offline, thos
 
 from __future__ import annotations
 
-from collections.abc import Callable
+import os
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
 
 from carter.checkitems import Item, Level
-from carter.guard import consent, gitconfig, mirror_io, repohooks
+from carter.guard import consent, gitconfig, hooks, mirror_io, repohooks
 from carter.guard.state import GuardState
+from carter.human_items import dco_items, human_items
 from carter.identity import mirror, shim
 from carter.identity.agent_setup import setup_from_config
-from carter.identity.errors import E_GIT_OLD, registry
+from carter.identity.errors import E_GIT_OLD, E_ROLE_B_TIER, registry
 from carter.identity.payload import public_blob, shim_path, shim_state
-from carter.identity.resolve import configured_tier, effective_tier
+from carter.identity.resolve import Resolution, configured_tier, effective_tier, resolve
 from carter.identity.schema import IdentityConfig
 from carter.identity_show import PROBE_TEXT, expected_socket, probe_setup, shim_socket
 from carter.install.paths import carter_gitconfig_path
@@ -211,10 +213,50 @@ def guard_items(state: GuardState, git: tuple[int, int] | None) -> list[Item]:
 
 def group_items(cfg: IdentityConfig, state: GuardState) -> list[Item]:
     alias = state.consents.get("alias", {}).get("decision") or "not installed (optional)"
-    out = [Item("info", "consent", f"alias (git ai-commit): {alias}")]
-    if cfg.identity.role == "author":
-        text = "identity.role = author is blocked until 2c: agent commits are refused"
-        out.append(Item("warn", "role", text))
+    return [Item("info", "consent", f"alias (git ai-commit): {alias}")]
+
+
+def role_items(
+    cfg: IdentityConfig,
+    res: Resolution,
+    cwd: Path,
+    base_dir: Path | None,
+    home: Path | None,
+    env: Mapping[str, str],
+    *,
+    ask: bool,
+) -> list[Item]:
+    """Role ``author`` (plan 006 K3, K7, K8, K12). Below T2 it is refused, never downgraded; at T2
+    the human identity, the address link, the DCO file and the age of the guard script matter.
+    ``ask`` is a live run: the link may be looked up (human terminal only; the cache otherwise)."""
+    out = [Item("warn", "role", w) for w in res.warnings]
+    if res.role != "author":
+        return out
+    if res.tier != "t2":
+        why = "a workspace cap" if res.cap else f"the configured tier is {res.configured_tier}"
+        out.append(
+            Item(
+                "red",
+                "role",
+                f"role author needs T2 and {why}: agent commits are refused ({E_ROLE_B_TIER}), "
+                "never made as role co-author",
+                "Remove the cap or add the signing key (`carter identity add`), or choose "
+                "`--role co-author`.",
+            )
+        )
+        return out
+    out += human_items(cfg, cwd, home=home, env=env, refresh=ask) + dco_items(cwd)
+    installed = hooks.script_path(base_dir)
+    if installed.is_file() and installed.read_text(encoding="utf-8") != hooks.render_script():
+        out.append(
+            Item(
+                "red",
+                "guards",
+                "the commit hook script is from an older Carter and does not know role author: "
+                "it would credit the LLM, not you",
+                "Run `carter guard install` in your terminal.",
+            )
+        )
     return out
 
 
@@ -228,12 +270,23 @@ def identity_items(
     git: tuple[int, int] | None = None,
     fetch: Fetch | None = None,
     workspace: str | None = None,
+    env: Mapping[str, str] | None = None,
 ) -> list[Item]:
     """Everything the identity adds to ``check --host``; empty when none is configured."""
     if not cfg.identity.login:
         return []
     tier = configured_tier(cfg)
+    env = os.environ if env is None else env
     out = group_items(cfg, state)
+    out += role_items(
+        cfg,
+        resolve(cfg, workspace=workspace, env=env),
+        cwd,
+        base_dir,
+        home,
+        env,
+        ask=fetch is not None,
+    )
     if tier != "t0":
         out += mirror_items(cfg, cwd, workspace, base_dir)
         out += fragment_items(cfg, state, base_dir) + worktree_items(cfg)

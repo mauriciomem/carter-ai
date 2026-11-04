@@ -1,5 +1,4 @@
-"""``carter commit``, the core (RFC-0007 §4.3; D26, D36, D57, D64; freeze H14; plan 005 step 21).
-
+"""``carter commit``, the core (RFC-0007 §4.3; D26, D36, D57, D64; H14; plan 005 step 21).
 Click-free and process-free until ``run_git``: ``plan_commit`` turns the user's ``git commit``
 arguments and the config into one git invocation. It builds the same signing block as the plugin
 (``payload``) and signs through the same shim and agent; it never reads or uses the human's key.
@@ -15,8 +14,8 @@ arguments and the config into one git invocation. It builds the same signing blo
   human's key. T1 warns ``E-COMMIT-T1``; T0 uses ``Assisted-by: Carter``.
 
 Refused (``REFUSED_FLAGS``): flags that skip a hook, change the signature or pick an identity. A
-bare ``-S``/``--gpg-sign`` is dropped with a note; ``-a`` and ``--reset-author`` pass. Role b, a
-broken config and an unmet ``require_tier`` refuse. Stdlib-only (see ``test_stdlib_only``).
+bare ``-S``/``--gpg-sign`` is dropped with a note; ``-a`` and ``--reset-author`` pass. The role is
+ignored (D26, K9); a broken config or unmet ``require_tier`` refuses. Stdlib-only.
 """
 
 from __future__ import annotations
@@ -179,7 +178,10 @@ def plan_commit(
     offer_unlock: Callable[[], bool] | None = None,
 ) -> Plan:
     kept, notes, sep = _screen(args)
-    res = resolve(cfg, workspace=workspace_for(cfg, cwd), env=env)
+    where = workspace_for(cfg, cwd)
+    if resolve(cfg, workspace=where, env=env).role == "author":
+        notes.append("role not applied (own terminal)")
+    res = resolve(cfg, workspace=where, env=env, force_role="co-author")  # D26
     res.ensure_commits_allowed()
     if res.require_tier and TIERS.index(res.tier) < TIERS.index(res.require_tier):
         raise IdentityError(

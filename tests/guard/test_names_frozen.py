@@ -426,7 +426,7 @@ TIER_REASONS_2B = (
     "key-missing",
     "fingerprint-mismatch",
     "shim-missing",
-    "role-b-not-built",
+    "human-identity-invalid",  # 2c (K3): replaces role-b-not-built
 )
 
 # H5: the keys of Carter's gitconfig, and the fragment name rule (step 13).
@@ -643,4 +643,102 @@ def test_h16_the_2b_error_codes_exist_with_the_2b_tag() -> None:
 def test_h16_the_current_slice_moves_only_in_step_27() -> None:
     from carter.identity.rules import CURRENT_SLICE
 
-    assert CURRENT_SLICE == "2b"  # moved by step 27, as frozen
+    assert CURRENT_SLICE == "2c"  # moved by plan 006 step 11 (K13)
+
+
+# ---------------------------------------------------------------------------------------------
+# Slice 2c (plan 006 step 3, K1-K13), frozen before dependent code. Same rules as 2b above.
+# ---------------------------------------------------------------------------------------------
+
+MODULES_2C = {
+    "carter/identity/coauthor.py": "step 4",
+    "tests/data/human_identity_vectors.json": "step 4",
+}
+# K5: role b adds the author to the same atomic dict; role a is unchanged.
+SIGNING_ENV_KEYS_B = (
+    "GIT_AUTHOR_NAME",
+    "GIT_AUTHOR_EMAIL",
+    "GIT_COMMITTER_NAME",
+    "GIT_COMMITTER_EMAIL",
+    "CARTER_IDENTITY",
+)
+# K2: one definition of a usable human identity; K7: the link states and the cache.
+HUMAN_PROBLEMS = ("missing-name", "missing-email", "bad-name", "bad-email", "llm-email", "fallback")
+HUMAN_FALLBACK_EMAILS = ("carter-bot@*",)  # alone; narrowed by the maintainer
+HUMAN_FALLBACK_PAIRS = (("Carter", "state@carter.invalid"),)  # only together
+LINK_CACHE_REL = ".carter/run/coauthor-link.json"
+LINK_CACHE_TTL_S = 7 * 24 * 3600
+LINK_STATES = ("noreply", "verified")
+# K3: the new code. K10: the flag.
+ERRORS_NEW_2C = ("E-HUMAN-IDENTITY",)
+ADD_ROLE_CHOICES = ("co-author", "author")
+
+
+@pytest.mark.parametrize("path", sorted(MODULES_2C), ids=str)
+def test_2c_module_paths_exist_once_their_step_has_run(path: str) -> None:
+    if (REPO / path).exists():
+        return
+    if os.environ.get("CARTER_NAMES_STRICT") == "1":
+        pytest.fail(f"{path} ({MODULES_2C[path]}) is frozen but missing")
+    pytest.skip(f"{path} arrives in {MODULES_2C[path]}")
+
+
+def test_k5_the_role_b_signing_env_keys_and_the_role_a_keys_stay() -> None:
+    payload = pytest.importorskip("carter.identity.payload")
+    assert payload.SIGNING_ENV_KEYS_B == SIGNING_ENV_KEYS_B
+    assert payload.SIGNING_ENV_KEYS == SIGNING_ENV_KEYS
+    assert set(SIGNING_ENV_KEYS) < set(SIGNING_ENV_KEYS_B)
+    vectors = json.loads((REPO / "tests/data/plugin_vectors.json").read_text())
+    assert tuple(vectors["signing"]["env_keys_role_b"]) == SIGNING_ENV_KEYS_B
+
+
+def test_k3_the_reasons_replace_role_b_not_built() -> None:
+    payload = pytest.importorskip("carter.identity.payload")
+    assert "role-b-not-built" not in payload.REASONS
+    assert payload.REASONS[-1] == "human-identity-invalid"
+
+
+def test_k2_the_human_identity_problems_and_fallbacks() -> None:
+    from carter.identity.rules import human_identity_rules
+
+    coauthor = pytest.importorskip("carter.identity.coauthor")
+    assert coauthor.PROBLEMS == HUMAN_PROBLEMS
+    rules = human_identity_rules()
+    assert tuple(rules["fallback_emails"]) == HUMAN_FALLBACK_EMAILS
+    assert tuple(tuple(p) for p in rules["fallback_pairs"]) == HUMAN_FALLBACK_PAIRS
+    vectors = json.loads((REPO / "tests/data/human_identity_vectors.json").read_text())
+    assert {c["problem"] for c in vectors["cases"]} - {""} == set(HUMAN_PROBLEMS)
+
+
+def test_k7_the_link_cache_name_ttl_and_states() -> None:
+    coauthor = pytest.importorskip("carter.identity.coauthor")
+    if not hasattr(coauthor, "LINK_CACHE_REL"):
+        pytest.skip("the link cache arrives in step 6")
+    assert coauthor.LINK_CACHE_REL == LINK_CACHE_REL
+    assert coauthor.LINK_CACHE_TTL_S == LINK_CACHE_TTL_S
+    assert coauthor.LINK_STATES == LINK_STATES
+
+
+def test_k3_the_2c_error_code_exists_with_the_2c_tag() -> None:
+    reg = registry()
+    for code in ERRORS_NEW_2C:
+        assert reg[code].slice == "2c" and reg[code].message and "\n" not in reg[code].message, code
+        assert "no downgrade" in reg[code].message
+    assert reg["E-ROLE-B-TIER"].slice == "1"  # reused, text unchanged
+
+
+def test_k10_identity_add_has_the_role_option() -> None:
+    cli = pytest.importorskip("carter.identity_cli")
+    add = cli.identity.commands["add"]
+    role = next((o for o in add.params if o.opts[0] == "--role"), None)
+    if role is None:
+        pytest.skip("--role arrives in step 8")
+    assert tuple(role.type.choices) == ADD_ROLE_CHOICES
+
+
+def test_k13_the_current_slice_is_2c_once_step_11_has_run() -> None:
+    from carter.identity.rules import CURRENT_SLICE
+
+    if CURRENT_SLICE != "2c":
+        pytest.skip("CURRENT_SLICE moves to 2c in step 11")
+    assert "E-HUMAN-IDENTITY" in registry()

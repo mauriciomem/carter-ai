@@ -13,9 +13,11 @@ Output (one JSON object, schema 1)::
 ``reason`` is ``null`` (nothing to do or a block follows), ``config-error`` (config.toml
 unreadable, unknown schema or an incomplete signing setup: E-CONFIG), ``tier-required`` (a pinned
 ``require_tier`` or role ``author`` below T2 is not met), ``key-missing``, ``fingerprint-mismatch``,
-``shim-missing`` or ``role-b-not-built`` (see ``payload``). Only an *absent* file is T0 with no
-reason; a schema-1 file is recognised and is T0 too. The entry never probes the agent and never
-prints a value from the config beyond the block itself (no key comment, no private-key path).
+``shim-missing`` or ``human-identity-invalid`` (role ``author``: the human's ``user.name`` /
+``user.email`` in ``--cwd`` are empty, the LLM's or a Carter fallback; see ``payload``).
+Only an *absent* file is T0 with no reason; a schema-1 file is
+recognised and is T0 too. The entry never probes the agent and never prints a value from the
+config beyond the block itself (no key comment, no private-key path).
 """
 
 from __future__ import annotations
@@ -27,10 +29,12 @@ from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
 
+from carter.identity.coauthor import human_identity
 from carter.identity.config import ConfigError, default_path, load_identity
 from carter.identity.payload import ShimState, build_payload, shim_state
 from carter.identity.resolve import resolve
 from carter.identity.schema import IdentityConfig
+from carter.identity.trailer import noreply_email
 
 SCHEMA_VERSION = 1
 
@@ -71,7 +75,9 @@ def answer(
     out["require_tier"] = res.require_tier or None
     # Only a T2 setup needs the shim checked; below that no file is touched.
     shim = shim_state(home) if res.tier == "t2" else ShimState("", False)
-    built = build_payload(cfg, res, shim)
+    built = build_payload(
+        cfg, res, shim, lambda: human_identity(cwd, noreply_email(cfg))
+    )  # git is asked only for role `author`, after every other check passed
     out["reason"] = built.reason
     if built.block is not None:
         out["signing"] = built.block

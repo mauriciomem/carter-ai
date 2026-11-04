@@ -2,7 +2,6 @@
 
 The caller passes the parsed config, the workspace path and the environment mapping, so
 the same inputs always give the same answer and nothing here can write or run git.
-Slice 1 only *reports* the result; wiring it to commits is slice 2b.
 
 ``carter.yaml`` is deliberately not an input: its ``identity.role`` and
 ``identity.require_tier`` reach this module only after a human runs ``carter update``
@@ -126,17 +125,24 @@ def resolve_role(
 ) -> RoleResolution:
     """Pinned workspace role > ``CARTER_IDENTITY_ROLE`` > ``[identity] role`` > co-author."""
     pinned = _workspace(cfg, workspace).role
-    if pinned:
-        return RoleResolution(pinned, "workspace")
-    warnings: tuple[str, ...] = ()
     session = env.get(ENV_ROLE, "")
-    if session in ROLES:
-        return RoleResolution(session, "env")
-    if session:  # a typo must not silently pick another role; never echo the value
-        warnings = (f"{ENV_ROLE} is not one of {list(ROLES)}; ignored",)
-    if cfg.identity.role != "co-author":
-        return RoleResolution(cfg.identity.role, "config", warnings)
-    return RoleResolution("co-author", "default", warnings)
+    warnings: list[str] = []
+    if session and session not in ROLES:  # a typo must not silently pick another role
+        warnings.append(f"{ENV_ROLE} is not one of {list(ROLES)}; ignored")  # never echo it
+        session = ""
+    configured = cfg.identity.role if cfg.identity.role != "co-author" else ""
+    # D20: a lower source that differs is reported (source names only), never obeyed or refused.
+    winner, source = (pinned, "workspace") if pinned else (session, "env") if session else ("", "")
+    if pinned and session and session != pinned:
+        warnings.append(f"{ENV_ROLE} asks for another role; the workspace pin wins")
+    if winner and configured and configured != winner:
+        by = "the workspace pin" if source == "workspace" else ENV_ROLE
+        warnings.append(f"[identity] role in config.toml differs; {by} wins")
+    if winner:
+        return RoleResolution(winner, source, tuple(warnings))  # type: ignore[arg-type]
+    return RoleResolution(
+        configured or "co-author", "config" if configured else "default", tuple(warnings)
+    )
 
 
 def _workspace(cfg: IdentityConfig, path: str | None) -> Workspace:
@@ -167,8 +173,15 @@ class Resolution:
             raise IdentityError(E_CONFIG, MSG_CONFIG, self.refusal_detail)
 
 
-def resolve(cfg: IdentityConfig, *, workspace: str | None, env: Mapping[str, str]) -> Resolution:
-    """Resolve tier and role.
+def resolve(
+    cfg: IdentityConfig,
+    *,
+    workspace: str | None,
+    env: Mapping[str, str],
+    force_role: str | None = None,
+) -> Resolution:
+    """Resolve tier and role. ``force_role`` skips the role precedence (``carter commit`` ignores
+    the role, D26: it passes ``co-author``).
 
     Refusals, in order: a signing setup that is not a complete T2 (E-CONFIG, no fallback
     to T1/T0, RFC §4.1), then role ``author`` below T2 (E-ROLE-B-TIER, never downgraded).
@@ -176,7 +189,9 @@ def resolve(cfg: IdentityConfig, *, workspace: str | None, env: Mapping[str, str
     ws = _workspace(cfg, workspace)
     configured = configured_tier(cfg)
     tier = effective_tier(configured, ws.max_tier)
-    role = resolve_role(cfg, workspace, env)
+    role = (
+        RoleResolution(force_role, "default") if force_role else resolve_role(cfg, workspace, env)
+    )
     warnings = list(role.warnings)
     reason, detail = "", ""
     missing = _missing_for_t2(cfg)

@@ -201,6 +201,13 @@ def lock_cmd(stop_all: bool) -> None:
     metavar="PATH",
     help="A signing program such as op-ssh-sign (kept behind the shim).",
 )
+@click.option(
+    "--role",
+    type=click.Choice(["co-author", "author"]),
+    default=None,
+    help="co-author (default): you author, the LLM commits. author: the LLM authors and you are "
+    "credited by a trailer (needs T2; not for DCO repositories).",
+)
 @click.option("--dry-run", is_flag=True, help="Check everything and show the plan; write nothing.")
 def add_cmd(
     login: str,
@@ -208,6 +215,7 @@ def add_cmd(
     private_key: str | None,
     agent_socket: str | None,
     signing_program: str | None,
+    role: str | None,
     dry_run: bool,
 ) -> None:
     """Set up the LLM identity: T1 with --login, T2 with a public key too.
@@ -227,7 +235,7 @@ def add_cmd(
         try:
             plan = identity_add.plan_add(
                 identity_add.AddRequest(
-                    login, ssh_public_key, private_key, agent_socket, signing_program
+                    login, ssh_public_key, private_key, agent_socket, signing_program, role
                 )
             )
         except ValueError as exc:
@@ -240,6 +248,17 @@ def add_cmd(
             click.echo(f"Rotation: {plan.rotated_from} moves to previous_public_keys")
         for note in plan.notes:
             click.echo(f"Note: {note}")
+        if plan.cfg.identity.role == "author":
+            from pathlib import Path
+
+            from carter.human_items import dco_items, human_items
+
+            click.echo("Role: author (the LLM authors; you are credited by Co-authored-by)")
+            for item in [
+                *human_items(plan.cfg, Path.cwd(), refresh=True, record=not dry_run),
+                *dco_items(Path.cwd()),
+            ]:
+                click.echo(item.render())
         click.echo("Files:")
         for name in plan.files:
             click.echo(f"  {name}")

@@ -168,12 +168,11 @@ _OPENCODE_COMMUNICATION = (
 # The commit-attribution rule. One constant: it is installed into the global AGENTS.md and
 # is also the text of the upgrade note for users whose AGENTS.md we must not rewrite.
 _ATTRIBUTION_RULE = (
-    "- Commits: the user is the author (their own git config); the committer is the user, or"
-    " the LLM identity at T2 when the Carter plugin signs for you. Never pass `--author`,"
-    " `--no-verify`, `-s` or `-S`, never set `GIT_COMMITTER_*`, and never add `Signed-off-by`"
-    " unless the user asks for it on that commit. Credit comes only from the"
-    " `coauthor_trailer` that `carter ops config --emit` prints; if `commits` is `refused`,"
-    " stop and report.\n"
+    "- Commits: the user is the author (their own git config) unless `carter ops config --emit`"
+    " says `author` is `llm` (role b: the Carter plugin sets it); the committer is the user, or"
+    " the LLM at T2. Never pass `--author`, `--no-verify`, `-s` or `-S`, never set `GIT_AUTHOR_*`"
+    " or `GIT_COMMITTER_*`, and never add `Signed-off-by` unless the user asks. Credit comes only"
+    " from the `coauthor_trailer` it prints; if `commits` is `refused`, stop and report.\n"
     "- Pushing and every other GitHub write are human-only. When a branch is ready, write"
     " the handoff file (`carter-ops` skill) and tell the user: " + OWN_TERMINAL + "\n"
 )
@@ -202,6 +201,7 @@ _KNOWN_PREVIOUS_AGENTS_MD_SHA256 = frozenset(
         "f96032e740c9fc9660d0798c36ed38b53aa12d7323b21bddf338834ca37d5401",
         "252415df75dd375f9afe2189572c14b90930f35e14f2ac14eeb26752f1e86eeb",
         "7aea1b84a6693292380e2c15796dcd33b612e8c2787af40e90b1b3c83f31e0a1",  # v0.18.0 (plan 005)
+        "15a896f96a1c6e172e66e51c54a1553cac04c8ba0bef913c0cd8072a8144a6c6",  # the 2b text
     }
 )
 

@@ -155,6 +155,9 @@ class GuardLab(Lab):
 EDITOR_APPENDS = {"commit (editor)", "commit -t template"}
 # the lab's reword editor replaces the whole message: the trailer is gone with it
 EDITOR_REWRITES = {"rebase -i reword"}
+# Plan 006 K1: an agent may not change a commit's author, so the hook refuses this one (it is also
+# on the gate's forbidden list); the recorded data is the git behaviour without Carter's rule.
+AUTHOR_CHANGERS = {"commit --amend --reset-author"}
 
 
 def comparable(entry: dict[str, Any]) -> dict[str, Any]:
@@ -191,6 +194,11 @@ class TestCleanAgentFlow:
             want = DATA["ops"][name].get(mode)
             assert (got is None) == (want is None), (name, mode)
             if got is None or want is None:
+                continue
+            if name in AUTHOR_CHANGERS:
+                assert got["rc"] != want["rc"], (name, mode)
+                assert "may not change a commit's author" in got["stderr"], (name, mode)
+                assert not any(c["llm"] for c in got["new"]), (name, mode)
                 continue
             if name in EDITOR_APPENDS | EDITOR_REWRITES and "commit-msg" in fired(want):
                 # the editor put text after the trailer: it is no longer in the last paragraph, so

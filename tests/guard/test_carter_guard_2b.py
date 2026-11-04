@@ -65,7 +65,9 @@ class World:
     def chome(self) -> Path:
         return self.home / ".carter"
 
-    def configure(self, tier: str, *, caps: dict[str, Workspace] | None = None) -> IdentityConfig:
+    def configure(
+        self, tier: str, *, caps: dict[str, Workspace] | None = None, role: str = "co-author"
+    ) -> IdentityConfig:
         """Write config.toml, the mirror, the guard script and (T2) the shim for ``tier``."""
         signing = Signing()
         if tier == "t2":
@@ -73,7 +75,9 @@ class World:
             fpr = self.key.fingerprint if self.key else fingerprint_of(FAKE_BLOB)
             signing = Signing(public_key=blob, fingerprint=fpr)
         ident = (
-            Identity(login=LOGIN, id=UID, email=EMAIL, name=LOGIN) if tier != "t0" else Identity()
+            Identity(role=role, login=LOGIN, id=UID, email=EMAIL, name=LOGIN)
+            if tier != "t0"
+            else Identity()
         )
         cfg = IdentityConfig(
             identity=ident, signing=signing, workspaces=caps or {}, state="current"
@@ -107,9 +111,15 @@ class World:
             path.write_text(hooks.repo_hook_text(self.script, event))
             path.chmod(0o755)
 
-    def env(self, *, block: bool = True, extra: dict[str, str] | None = None) -> dict[str, str]:
-        """An agent shell: the plugin's identity block (T2) on top of the hermetic environment."""
-        out = {**os.environ, **AGENT, "GIT_AUTHOR_NAME": LOGIN, "GIT_AUTHOR_EMAIL": EMAIL}
+    def env(
+        self, *, block: bool = True, extra: dict[str, str] | None = None, author_llm: bool = False
+    ) -> dict[str, str]:
+        """An agent shell: the plugin's identity block (T2) on top of the hermetic environment.
+        The author is the human's own git identity (role a) unless ``author_llm`` (role b: the
+        plugin's block then carries ``GIT_AUTHOR_*`` of the LLM)."""
+        out = {**os.environ, **AGENT}
+        if author_llm:
+            out |= {"GIT_AUTHOR_NAME": LOGIN, "GIT_AUTHOR_EMAIL": EMAIL}
         answer = entry.answer(str(self.repo), {}, str(self.chome / "config.toml"), self.home)
         if block and answer.get("signing"):
             out = to_git_env(out, answer["signing"]).env

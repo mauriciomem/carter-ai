@@ -274,6 +274,39 @@ class TestCommitShapeUnderPollution:
 
         assert _shape(carter_dir) == IDENT
 
+    def test_a_role_b_environment_leaves_state_commits_human_and_unsigned(
+        self, tmp_path, config, monkeypatch
+    ):
+        """Plan 006 H8: the complete role-b block (LLM author and committer, signing on) in the
+        process environment must not reach `.carter` state commits: they stay human/human."""
+        from carter.identity.payload import to_git_env
+
+        _human_git(monkeypatch, tmp_path)
+        carter_dir = init_workspace(tmp_path / "ws", config, git_state=True)
+        (carter_dir / "knowledge" / "b.md").write_text("x\n")
+        email = "4242+llm-bot@users.noreply.github.com"
+        block = {
+            "env": {
+                "GIT_AUTHOR_NAME": "llm-bot", "GIT_AUTHOR_EMAIL": email,
+                "GIT_COMMITTER_NAME": "llm-bot", "GIT_COMMITTER_EMAIL": email,
+                "CARTER_IDENTITY": "llm-bot",
+            },
+            "git_config": [
+                ["gpg.format", "ssh"],
+                ["user.signingkey", "key::ssh-ed25519 AAAA"],
+                ["gpg.ssh.program", "/nope"],
+                ["commit.gpgsign", "true"],
+            ],
+        }  # fmt: skip
+        for key, value in to_git_env({}, block).env.items():
+            monkeypatch.setenv(key, value)
+
+        assert commit_state(carter_dir, "chore: role b snapshot") is True
+
+        assert _shape(carter_dir) == IDENT
+        raw = _git(carter_dir, "cat-file", "commit", "HEAD").stdout
+        assert "gpgsig" not in raw and "llm-bot" not in raw.split("\n\n")[0]
+
     def test_init_commit_is_also_clean_under_pollution(
         self, tmp_path, config, monkeypatch, pollute_git_env
     ):

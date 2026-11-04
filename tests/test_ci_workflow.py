@@ -93,6 +93,7 @@ class TestJobs:
         assert (
             "tests/identity" in text
             and "test_carter_guard_2b.py" in text
+            and "test_carter_guard_2c.py" in text
             and "/usr/bin/ssh -V" in text
         )
         last = job["steps"][-1]

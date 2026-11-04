@@ -41,7 +41,7 @@ Never use remembered, typed or example values. The JSON has these keys:
 |-----|--------------------|
 | `tier` | `t0` (nothing configured), `t1` (LLM account, no key) or `t2` (account and key) |
 | `role`, `role_source` | Who the commit is attributed to, and where that setting came from |
-| `author`, `committer` | `human` or `llm`: who git records. At T2 the committer is `llm` and the plugin sets it up; below T2 both are `human` |
+| `author`, `committer` | `human` or `llm`: who git records. At T2 the committer is `llm` and the plugin sets it up; below T2 both are `human`. The author is `llm` only in role b (`role` is `author`, T2 only) |
 | `signer_fpr` | The LLM key's public fingerprint at T2, else empty. Use it only to compare with `git log` |
 | `coauthor_trailer`, `coauthor_linked` | The exact trailer line for every commit message you make, and whether GitHub credits it (`true` for `Co-authored-by`) |
 | `commits` | `allowed` or `refused` |
@@ -52,12 +52,16 @@ When `commits` is `refused`, stop. Make no commit. Report the `refusal_reason` c
 message from the error table to the user. Do not edit the config, retry with other flags, or
 work around it.
 
-**Commit shape by tier.** The user is always the author (their own git config). Below T2 (`t0`,
-`t1`, or a workspace capped by `max_tier`) the user is also the committer and the commit is
-unsigned; credit goes only through the trailer. At `t2` the plugin gives your shell the signing
-environment: the committer is the LLM identity and the commit is signed with its key while the
-human has that key unlocked. You change nothing for this: the same `git commit` recipe works at
-every tier. Never pass `--author`, `--no-verify`, `-s`, `-S`, `--gpg-sign` or `--no-gpg-sign`,
+**Commit shape by tier and role.** In role `co-author` (the default) the user is the author
+(their own git config). Below T2 (`t0`, `t1`, or a workspace capped by `max_tier`) the user is
+also the committer and the commit is unsigned; credit goes only through the trailer. At `t2` the
+plugin gives your shell the signing environment: the committer is the LLM identity and the commit
+is signed with its key while the human has that key unlocked. In role `author` (T2 only; `role` in
+the emit) the plugin also makes the LLM the **author**, and `coauthor_trailer` is the **user's**
+line (`Co-authored-by: <user.name> <user.email>`): the user is credited by the trailer. Role
+`author` never degrades: below T2, with a locked key, or with no usable git identity of the user,
+the emit says `commits: refused` or the commit fails and nothing is made. You change nothing for
+any of this: the same `git commit` recipe works at every tier and role. Never pass `--author`, `--no-verify`, `-s`, `-S`, `--gpg-sign` or `--no-gpg-sign`,
 never set `GIT_COMMITTER_*` or any `-c` signing option, and never add a `Signed-off-by` unless the
 user asks for it on that commit. Do not run `carter commit` or `git ai-commit`: they are for the
 user's own terminal.
@@ -103,7 +107,7 @@ Never run any of these (generated from `g2_rules.json`):
 | `E-SIGN-AGENT-REFUSE` | `carter commit`, agent shell | Refusing: key locked and this is an agent shell [D36]. Changes left staged. | — |
 | `E-SHIM-REFUSED` | shim | Signing refused: only the configured LLM key via the agent may sign (no `-S<key>`). | — |
 | `E-ISOLATION-MISSING` | plugin, agent shell creation | Carter isolation file is missing, invalid, or doesn't match its install-time hash; agent shells are disabled. Run `carter guard install` in your terminal. | — |
-| `E-SIGN-UNAVAILABLE` | plugin, agent `git commit` at T2 | The LLM signing identity is unavailable (<reason>); agent commits are blocked, not downgraded. Changes are still staged. Run `carter check --host`. | <reason> is one of: config-error, tier-required, role-b-not-built, key-missing, fingerprint-mismatch, shim-missing, sign-unavailable. |
+| `E-SIGN-UNAVAILABLE` | plugin, agent `git commit` at T2 | The LLM signing identity is unavailable (<reason>); agent commits are blocked, not downgraded. Changes are still staged. Run `carter check --host`. | <reason> is one of: config-error, tier-required, key-missing, fingerprint-mismatch, shim-missing, human-identity-invalid, sign-unavailable. |
 | `E-SELFTEST` | first shell-tool call (state `failed`) | Carter plugin self-test failed on OpenCode <v>: all shells are treated as agent shells and B is disabled. See `carter check --host`. | — |
 | `E-GUARD-NOIDENT` | prepare-commit-msg (T2) | carter-guard: agent commits need the Carter identity block (plugin not loaded?). | Check the plugin is loaded (`carter check --host`); restart OpenCode; no per-command fallback. |
 | `E-GUARD-COMMITTER` | prepare-commit-msg (T2) | carter-guard: commit rejected: committer is <x>, expected <y> | Remove `GIT_COMMITTER_*` overrides; re-run `carter identity add` if `carter.llmEmail` is stale. |
@@ -125,6 +129,7 @@ Never run any of these (generated from `g2_rules.json`):
 | `E-SECRET-SCAN` | `carter pr`, `carter_pr` | PR text matches a secret pattern (`<rule>`); refused. | — |
 | `E-HANDOFF` | `carter pr` | No valid handoff at `.carter/state/handoff/<branch>.md`, or `head_sha` is not an ancestor of HEAD. | — |
 | `E-CONFIG` | any identity command | config.toml is invalid; agent commits are disabled until fixed. | Never falls back to defaults. |
+| `E-HUMAN-IDENTITY` | plugin / `carter ops config --emit` / prepare-commit-msg, role `author` | Role `author` needs your git identity (`user.name` and `user.email`): empty, the LLM's or a Carter fallback; refusing (no downgrade). | Set `user.name` and `user.email` in your own git config (a workspace `includeIf` override counts), then ask the agent to retry. |
 | `E-ROLE-B-TIER` | role b without T2 | Role `author` needs a signing key; refusing (no downgrade). | — |
 | `E-TIER-CAPPED` | plugin / `carter commit` / commit-msg | This workspace caps the tier at `<t>` (`max_tier`): agent commits are unsigned human/human with the `<t>` trailer. | A stale mirror in either direction rejects the agent commit with "run `carter update`". |
 | `E-TIER-REQUIRED` | plugin (agent commit blocked) / `carter commit`, below the pinned `require_tier` | This workspace requires tier `<t>`; configure the LLM identity. | — |
@@ -173,7 +178,7 @@ staged. What you may see, and what it means:
 | `error: Couldn't find key in agent?` or `Couldn't get agent socket`, then `fatal: failed to write commit object` | `E-SIGN-LOCKED` / `E-SIGN-NOAGENT` | the key is locked, expired, or the agent stopped |
 | `Signing refused: only the configured LLM key` | `E-SHIM-REFUSED` | something asked for another key; you did not cause it with a normal commit |
 | the plugin warning `The LLM signing identity is unavailable (<reason>)` | `E-SIGN-UNAVAILABLE` | the identity or shim is broken; `<reason>` names which part |
-| a `carter-guard:` line from a git hook | `E-GUARD-NOIDENT`, `-COMMITTER`, `-SIGNCFG`, `-TRAILER`, `-T01SIGN`, `-UNSIGNED` | a commit hook rejected or warned |
+| a `carter-guard:` line from a git hook | `E-GUARD-NOIDENT`, `-COMMITTER`, `-SIGNCFG`, `-TRAILER`, `-T01SIGN`, `-UNSIGNED`, `E-HUMAN-IDENTITY` | a commit hook rejected or warned |
 
 **One action for a locked or unavailable key:** stop, leave the changes staged, and tell the user:
 "The LLM signing key is locked. Run `carter identity unlock` in your own terminal (or
@@ -184,6 +189,11 @@ staged. What you may see, and what it means:
 - `E-GUARD-TRAILER`: the message lost its `Co-authored-by` or `Assisted-by` line (an editor or a
   reword removed it). Commit again with `-m` and the `--trailer` from the recipe.
 - `E-GUARD-T01SIGN`: you (or a command) asked for a signature below T2. Remove the signing option.
+- `E-HUMAN-IDENTITY` (role `author`): the user's `user.name` or `user.email` is empty, is the LLM's,
+  or is a Carter fallback. Stop and tell the user to set their own git identity (you cannot, and
+  must not try); the commit is never made as role `co-author` instead.
+- `E-GUARD-COMMITTER` with "may not change a commit's author": you tried `--amend --reset-author`
+  or `--author` on a commit by someone else. Amend without those flags, or ask the user.
 - `E-GUARD-NOIDENT`, `E-GUARD-COMMITTER`, `E-GUARD-SIGNCFG`: the plugin did not load, the committer
   was overridden, or a signing option was set. Stop and tell the user (restart the agent from a
   clean terminal; `carter check --host`). Do not set any variable or `-c` option to fix it.
@@ -193,7 +203,7 @@ staged. What you may see, and what it means:
 **Never**, for any of these: retry with `-c`, `--no-gpg-sign`, `-S<key>`, `--no-verify`, another
 committer, a `GIT_COMMITTER_*` or `CARTER_*` variable, or `git ai-commit`; never run
 `carter identity unlock` or `lock` (they refuse inside OpenCode); never edit config, the shim or
-the hooks. With `E-ROLE-B-TIER` (role `author`, not built yet), `E-TIER-REQUIRED` or `E-CONFIG`
+the hooks. With `E-ROLE-B-TIER` (role `author` needs T2), `E-HUMAN-IDENTITY`, `E-TIER-REQUIRED` or `E-CONFIG`
 (`commits` is `refused`) you stop and report as above.
 
 </signing>
@@ -236,8 +246,9 @@ files only. Verify the commit with the last command. Below T2 (`committer` is `h
 and `%cn` must both equal `git config user.name`, and `%G?` must be `N` (unsigned). At T2
 (`committer` is `llm`): `%an` equals `git config user.name`, `%cn` is the LLM committer, and `%G?`
 is `G` or `E` (a signature exists; `E` only means this shell has no allowed-signers file), never
-`N`. If it does not match, stop and report; never fix it with `--author`, `--reset-author` or a
-signing flag.
+`N`. In role `author` (`author` is `llm`): `%an` and `%cn` are both the LLM and `%G?` is `G` or
+`E`, and the last paragraph of the message is the user's `coauthor_trailer`. If it does not match,
+stop and report; never fix it with `--author`, `--reset-author` or a signing flag.
 
 Commit messages, branch names and PR text are always in English, whatever language the user
 chats in. If `--trailer` is unavailable (git < 2.32), put the `coauthor_trailer` line as the
@@ -361,7 +372,7 @@ When showing the plan to the user, use this structure:
 **Branch:** <name> (if applicable)
 **Files:** <list> (if applicable)
 **Message:** <commit message or body text>
-**Attribution:** authored by you (your git config), unsigned; trailer: `<coauthor_trailer>`
+**Attribution:** role=<role> (source: <role_source>) · author: <you|the LLM> · committer+signer: <you, unsigned|the LLM, signed> · trailer: `<coauthor_trailer>` · linked: <coauthor_linked>
 
 Commands:
 1. <exact command 1>

@@ -3,8 +3,9 @@
 Local: a throwaway repository, a throwaway ``allowed_signers`` (the current key and the
 ``previous_public_keys``), one commit made with the real shim and the loaded key through the same
 signing block the plugin sends, then ``git log`` with ``%G?`` and ``%GF`` and a look at the shape
-(author is not the LLM, committer is, the fingerprint is the stored one, the trailer is in the
-message). A locked or wrong agent is reported before anything is attempted; the shim never
+(role co-author: author is not the LLM; role author: author is the LLM and the human's
+``Co-authored-by`` is in the message; the committer is the LLM and the fingerprint the stored
+one). A locked or wrong agent is reported before anything is attempted; the shim never
 prompts. The temporary directory is removed on every path. Nothing reads the private key.
 
 ``--remote``: GitHub's own verdict for one commit through the unauthenticated client; an
@@ -21,11 +22,12 @@ from collections.abc import Mapping
 from pathlib import Path
 
 from carter.checkitems import Item
-from carter.identity import github
+from carter.identity import coauthor, github
 from carter.identity.agent_setup import setup_from_config
 from carter.identity.env import answer
 from carter.identity.errors import (
     E_GITHUB_UNREACHABLE,
+    E_HUMAN_IDENTITY,
     E_SIGN_LOCKED,
     IdentityError,
     registry,
@@ -33,7 +35,7 @@ from carter.identity.errors import (
 from carter.identity.payload import fingerprint_of, public_blob, shim_path, to_git_env
 from carter.identity.resolve import resolve
 from carter.identity.schema import IdentityConfig
-from carter.identity.trailer import coauthor_trailer
+from carter.identity.trailer import coauthor_trailer, noreply_email
 from carter.identity_show import key_items, probe_setup
 
 HUMAN = "carter-verify <verify@invalid.example>"
@@ -59,7 +61,12 @@ def allowed_signers_text(cfg: IdentityConfig) -> str:
 
 
 def _shape(
-    repo: Path, env: Mapping[str, str], cfg: IdentityConfig, signers: Path, home: Path
+    repo: Path,
+    env: Mapping[str, str],
+    cfg: IdentityConfig,
+    signers: Path,
+    home: Path,
+    role: str = "co-author",
 ) -> list[Item]:
     verify = [
         "-c",
@@ -91,17 +98,29 @@ def _shape(
         items.append(
             Item("red", "signature", f"the test commit's signature is `{status or '?'}`, not good")
         )
-    items.append(
-        Item("ok", "author", "the author is not the LLM")
-        if cfg.identity.email not in author
-        else Item("red", "author", "the author is the LLM; role co-author expects you")
-    )
+    llm_authored = cfg.identity.email in author
+    if role == "author":
+        items.append(
+            Item("ok", "author", "the author is the LLM (role author)")
+            if llm_authored
+            else Item("red", "author", "the author is not the LLM; role author expects the LLM")
+        )
+    else:
+        items.append(
+            Item("ok", "author", "the author is not the LLM")
+            if not llm_authored
+            else Item("red", "author", "the author is the LLM; role co-author expects you")
+        )
     items.append(
         Item("ok", "committer", "the committer is the LLM")
         if committer == cfg.identity.email
         else Item("red", "committer", "the committer is not the LLM identity")
     )
-    wanted = coauthor_trailer(cfg, resolve(cfg, workspace=None, env={}))
+    wanted = (
+        coauthor.human_identity(repo, noreply_email(cfg)).trailer
+        if role == "author"
+        else coauthor_trailer(cfg, resolve(cfg, workspace=None, env={}))
+    )
     items.append(
         Item("ok", "trailer", wanted)
         if wanted and wanted in body
@@ -153,6 +172,16 @@ def verify_local(
         signers.write_text(allowed_signers_text(cfg))
         repo.mkdir()
         block = answer(str(repo), {}, str(config_path), home)
+        if block.get("reason") == "human-identity-invalid":
+            return [
+                *items,
+                Item(
+                    "red",
+                    "verify",
+                    f"{E_HUMAN_IDENTITY}: role author needs a usable git user.name and user.email",
+                    "Set them in your own git config, then run `carter identity verify` again.",
+                ),
+            ]
         if not block.get("signing"):
             return [
                 *items,
@@ -175,7 +204,10 @@ def verify_local(
             },
             block["signing"],
         ).env
-        trailer = coauthor_trailer(cfg, resolve(cfg, workspace=None, env={}))
+        res = resolve(cfg, workspace=None, env={})
+        trailer = coauthor_trailer(cfg, res)
+        if res.role == "author":
+            trailer = coauthor.human_identity(repo, noreply_email(cfg)).trailer
         if _git(repo, env, "init", "-q").returncode != 0:
             return [*items, Item("red", "verify", "git could not create the test repository")]
         made = _git(
@@ -192,7 +224,7 @@ def verify_local(
                     "Run `carter identity unlock`, or `carter identity add` again.",
                 ),
             ]
-        return [*items, *_shape(repo, env, cfg, signers, home)]
+        return [*items, *_shape(repo, env, cfg, signers, home, res.role)]
     finally:
         shutil.rmtree(scratch, ignore_errors=True)
 

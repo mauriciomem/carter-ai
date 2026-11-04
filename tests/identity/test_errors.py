@@ -37,6 +37,7 @@ ADDED_BEYOND_APPENDIX_B = {
     "E-FALSE-MISSING",
     "E-IDENTITY-CHECK",  # plan 005 H16
     "E-GITHUB-UNREACHABLE",
+    "E-HUMAN-IDENTITY",  # plan 006 K3
 }
 
 
@@ -192,14 +193,14 @@ class TestRenderErrorTable:
         codes = [re.match(r"\| `([^`]+)`", ln).group(1) for ln in rows]
         assert codes == [c for c in registry() if c in SLICE_1]
 
-    def test_the_current_slice_is_2b_and_lists_every_agent_facing_code_up_to_it(self):
+    def test_the_current_slice_is_2c_and_lists_every_agent_facing_code_up_to_it(self):
         # plan 005 step 27: one constant (rules.CURRENT_SLICE), imported by errors.py
-        assert errors_mod.CURRENT_SLICE == "2b"
+        assert errors_mod.CURRENT_SLICE == "2c"
         rows = [ln for ln in render_error_table().splitlines() if ln.startswith("| `E-")]
         codes = {re.match(r"\| `([^`]+)`", ln).group(1) for ln in rows}
         upto = {
             c for c, e in registry().items()
-            if e.slice in {"1", "1G", "2a", "2b"} and c not in errors_mod.HUMAN_FACING
+            if e.slice in {"1", "1G", "2a", "2b", "2c"} and c not in errors_mod.HUMAN_FACING
         }  # fmt: skip
         assert codes == upto
         agent_2b = {
@@ -208,7 +209,7 @@ class TestRenderErrorTable:
             "E-GUARD-TRAILER", "E-GUARD-T01SIGN", "E-GUARD-UNSIGNED", "E-TIER-CAPPED",
             "E-TIER-REQUIRED", "E-ROLE-B-TIER",
         }  # fmt: skip
-        assert agent_2b <= codes
+        assert agent_2b <= codes and "E-HUMAN-IDENTITY" in codes  # plan 006 K13
         human = {
             "E-UNLOCK-TTY",
             "E-UNLOCK-OPENCODE",

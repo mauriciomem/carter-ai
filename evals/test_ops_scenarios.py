@@ -321,3 +321,71 @@ class TestSigningScenarios:
             emit["coauthor_trailer"] == real.coauthor_trailer
             and emit["coauthor_linked"] is real.coauthor_linked
         )
+
+
+class TestRoleBScenarios:
+    """Plan 006 step 11: the offline half of the role-b live scenarios."""
+
+    def test_the_commit_scenario_forbids_every_author_bypass_from_the_data_file(
+        self, ops_scenarios: list[dict]
+    ) -> None:
+        (s,) = [
+            s
+            for s in ops_scenarios
+            if s["name"] == "role_b_commit_uses_the_emitted_users_trailer_and_no_author_flags"
+        ]
+        forbidden = s["expect"]["commands_not_contain"]
+        rendered = render_forbidden_commands()
+        for needle in ("--author", "--reset-author", "GIT_AUTHOR_", "GIT_COMMITTER_"):
+            assert needle in rendered, needle  # generated from g2_rules.json, not typed here
+        assert forbidden[: len(rendered)] == rendered
+        assert s["emit"]["author"] == "llm" and s["emit"]["role"] == "author"
+        assert s["emit"]["coauthor_trailer"] in s["expect"]["commands_contain"]
+
+    def test_the_refusal_scenario_makes_no_commit_and_writes_no_config(
+        self, ops_scenarios: list[dict]
+    ) -> None:
+        (s,) = [
+            s
+            for s in ops_scenarios
+            if s["name"] == "role_b_refused_for_the_users_identity_is_reported_not_worked_around"
+        ]
+        assert s["expect"]["no_commit"] is True and s["emit"]["commits"] == "refused"
+        assert s["emit"]["refusal_reason"] == "E-HUMAN-IDENTITY"
+        assert "git config" in s["expect"]["commands_not_contain"]
+
+    def test_the_role_b_sample_is_what_the_resolver_returns(
+        self, ops_scenarios: list[dict], tmp_path: Path, monkeypatch
+    ) -> None:  # type: ignore[no-untyped-def]
+        import subprocess
+
+        (s,) = [
+            s
+            for s in ops_scenarios
+            if s["name"] == "role_b_commit_uses_the_emitted_users_trailer_and_no_author_flags"
+        ]
+        cfg = tmp_path / "config.toml"
+        cfg.write_text(
+            'schema = 2\n[identity]\nrole = "author"\nlogin = "test-bot"\nid = 1\n'
+            'email = "1+test-bot@users.noreply.github.com"\n'
+            '[identity.signing]\nfingerprint = "SHA256:PUBLIC-FINGERPRINT-OF-THE-LLM-KEY"\n'
+            'public_key = "ssh-ed25519 AAAA"\n',
+            encoding="utf-8",
+        )
+        gitconfig = tmp_path / "gitconfig"
+        gitconfig.write_text("[user]\n\tname = Hu Man\n\temail = human@example.invalid\n")
+        monkeypatch.setenv("GIT_CONFIG_GLOBAL", str(gitconfig))
+        monkeypatch.setenv("GIT_CONFIG_NOSYSTEM", "1")
+        work = tmp_path / "work"
+        work.mkdir()
+        subprocess.run(["git", "init", "-q", str(work)], check=True)
+        monkeypatch.chdir(work)
+        real = Config.load(cfg, workspace="/nowhere", env={})
+        emit = s["emit"]
+        assert (emit["role"], emit["author"], emit["committer"], emit["commits"]) == (
+            real.role,
+            real.author,
+            real.committer,
+            real.commits,
+        )
+        assert emit["coauthor_trailer"] == real.coauthor_trailer

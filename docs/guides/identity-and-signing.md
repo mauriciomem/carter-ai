@@ -31,9 +31,10 @@ want commits that GitHub can show as signed by the agent's own account.
 | Role | Author | Committer and signer | Trailer | Status |
 |------|--------|----------------------|---------|--------|
 | `co-author` (default) | you | the LLM account, with its key | `Co-authored-by: <LLM login> <noreply address>` | available |
-| `author` | the LLM account | the LLM account | `Co-authored-by: <you>` | not built yet: it is refused (`E-ROLE-B-TIER`) |
+| `author` | the LLM account | the LLM account | `Co-authored-by: <you>` | available at T2 only; [see below](#role-author-the-llm-is-the-author) |
 
-You do not choose a role when you set the identity up; the default is the one you want.
+The default is the one most people want. Role `author` is for when you want GitHub to show the LLM
+as the author of its work and to credit you as the co-author. You choose it later, on purpose.
 
 ## Tiers: what is configured, and what a stranger sees
 
@@ -51,6 +52,96 @@ Two rules protect you from surprises:
   unsigned.
 
 `carter ops config --emit` prints the tier, the role and the other facts the agents read.
+
+## Role `author`: the LLM is the author
+
+In this role the LLM is the **author and the committer**, the commit is signed by its key, and
+**you** are credited by a trailer built from your own git identity:
+
+```text
+author:     <LLM name> <id+login@users.noreply.github.com>
+committer:  the same, signed with the LLM key
+trailer:    Co-authored-by: <your user.name> <your user.email>
+```
+
+**How to turn it on.** It needs T2 (the account and the key). Either of these:
+
+- `carter identity add --login <name> --role author` (a role-only change when the identity already
+  exists; `--role co-author` turns it back), or
+- put `role: author` under `identity:` in the workspace's `carter.yaml` and run `carter update`,
+  which shows the change and pins it for that workspace.
+
+`CARTER_IDENTITY_ROLE=author` set **before** OpenCode starts chooses it for one session. The agent
+cannot change the role: it cannot set variables, and the pinned file is not writable by it.
+
+**Which source wins.** The workspace pin, then `CARTER_IDENTITY_ROLE`, then `[identity] role` in
+`config.toml`, then `co-author`. If a weaker source disagrees with the winner you get a warning
+(`carter identity show`, `carter check --host`), never a refusal. A role value that is not one of
+the two is an error that switches agent commits off.
+
+**It never degrades.** Role `author` is never swapped for role `co-author`, and never made
+unsigned:
+
+| Situation | What happens |
+|-----------|--------------|
+| Below T2, or a workspace cap (`max_tier`) | Agent commits are refused (`E-ROLE-B-TIER`). `carter update` also refuses to pin `author` next to a cap |
+| The key is locked or expired | The commit fails and your changes stay staged, as in role `co-author` |
+| Your `user.name` or `user.email` is empty, is the LLM's, or is one of Carter's own fallbacks | Refused (`E-HUMAN-IDENTITY`): there is nobody to credit |
+| The plugin did not load, the shim changed, the config is broken | The commit fails (`E-SIGN-UNAVAILABLE`, the guard's `E-GUARD-NOIDENT`) |
+
+**Your identity is read from git, in the folder of the commit.** The line is
+`Co-authored-by: <user.name> <user.email>` exactly as `git config` reports them there, so a
+`includeIf` override for a work folder is respected. Carter never invents or replaces it. A name
+with odd characters (a new line, `<`, `>`) is refused rather than pasted into a message.
+
+**GitHub must know your address, or you get no credit.** In this role the trailer is the only thing
+that ties the commit to you. Carter checks it and says so:
+
+- `yes (noreply)`: it is an `<id>+<login>@users.noreply.github.com` address and GitHub agrees on the
+  account (an unauthenticated lookup);
+- `yes (verified)`: it is one of the verified emails of your account (asked with `gh api
+  /user/emails`);
+- otherwise it is `unknown` and you get a warning. Fix it by using your noreply address as
+  `user.email`, or by adding the address to your GitHub account.
+
+The two lookups run only in **your own terminal**, from `carter identity add` and `carter check
+--host`. The answer is remembered for 7 days in `~/.carter/run/coauthor-link.json` as a hash, never
+as an address; `carter ops config --emit` reads that file and never asks the network.
+
+**What GitHub shows.** The commit is shown as made by the LLM account with you as co-author, and
+Verified when the LLM key is registered as a signing key. The contribution graph counts the LLM
+for the commit; you count as co-author only when your address is linked. We have checked this
+against GitHub's documentation, not yet on a real repository (that check is a manual step).
+
+| The commit | Neither account in vigilant mode | LLM account in vigilant mode | Your account in vigilant mode |
+|------------|----------------------------------|------------------------------|-------------------------------|
+| Role `author`, signed by the LLM | Verified | Verified | Verified, or Partially verified if GitHub counts co-authors (not confirmed) |
+| The same commit after **you** amend it and sign with your key | Verified | Partially verified | Verified |
+| The same commit after **you** amend it without signing | no badge | Unverified | Unverified |
+
+Both "Partially verified" and "Unverified" after a rewrite are truthful: the signature is no longer
+the author's. Do not turn vigilant mode off to hide them. Let the agent do rewrites: it keeps the
+original author and signs as the LLM again.
+
+**What an agent may and may not rewrite.** `git commit --amend`, `rebase`, `cherry-pick` and
+`commit -C` keep the **original author** of a commit. An agent that asks for a different author
+(`--reset-author`, `--author`) is stopped: the command gate refuses the literal command, and if it
+reaches git anyway the commit hook rejects it (`E-GUARD-COMMITTER`, "an agent may not change a
+commit's author"). That is how a commit of yours cannot become the LLM's.
+
+**Not for projects that check a DCO sign-off.** A DCO check compares the `Signed-off-by` line with
+the commit's **author**. Carter never signs off for the LLM, so an LLM-authored commit cannot
+pass such a check. `carter identity show` and `carter check --host` warn when the repository has
+`.github/dco.yml`, `.github/dco.yaml`, `.dco.yml` or a `DCO` file. Use `role: co-author` there
+and pin it with `carter update`. Squash-merging a pull request usually makes the PR's author the
+author of the squashed commit, which undoes this role on `main`.
+
+**`carter commit` ignores the role.** At your own terminal you are always the author and the LLM
+the committer (see above); it tells you "role not applied (own terminal)".
+
+**After an upgrade** run `carter guard install` once: the commit hook script in `~/.carter/hooks/`
+is re-rendered, and `carter check --host` reports a script from an older Carter as `RED` while the
+role is `author`.
 
 ## Before you start
 
@@ -317,6 +408,8 @@ Honest limits, so you can judge what you are getting:
 - **`--signing-program` mode** has no shim check: Carter cannot see what the program signs.
 - **The private key file** is protected only by its passphrase and its file mode (0600).
 - **A squash merge** removes the LLM's signature from `main`.
+- **The hooks do not know the role.** They check that the commit is consistent (the committer is the LLM; when the author is the LLM the trailer is yours, otherwise the LLM's). A shell that carries the LLM as author in a workspace pinned to `co-author` would still produce an honest role-`author` commit; the plugin never builds that, and the command gate forbids setting `GIT_AUTHOR_*`.
+- **`--author` on a brand new commit** is stopped only by the command gate, not by the hook.
 
 ## See also
 

@@ -126,7 +126,7 @@ jobs:
           uv run python -c "from pathlib import Path; from carter.identity.agent_paths import socket_path; print('socket path length', len(str(socket_path(Path.home()))))"
 
       - name: Identity, shim, agent, hooks and commit tests (real OpenSSH)
-        run: uv run pytest tests/identity tests/guard/test_carter_guard_2b.py tests/guard/test_remove_2b.py tests/test_commit_cli.py tests/test_plugin_entry_roundtrip.py -q
+        run: uv run pytest tests/identity tests/guard/test_carter_guard_2b.py tests/guard/test_carter_guard_2c.py tests/guard/test_git_behaviour_2c.py tests/guard/test_remove_2b.py tests/test_commit_cli.py tests/test_plugin_entry_roundtrip.py -q
 
       - name: No ssh-agent of ours is left behind
         if: always()
@@ -263,7 +263,7 @@ jobs:
       - name: Commit-hook events on git 2.39 (per-repo hooks, the T2 minimum, the hook matrix)
         # test_hook_matrix replays config hooks and skips itself below 2.54; the per-repo events and
         # the git >= 2.40 refusal are what this axis proves.
-        run: uv run pytest tests/guard/test_repohooks_2b.py tests/guard/test_gitold_2b.py tests/guard/test_hook_matrix.py -q
+        run: uv run pytest tests/guard/test_repohooks_2b.py tests/guard/test_gitold_2b.py tests/guard/test_hook_matrix.py tests/guard/test_carter_guard_2c.py tests/guard/test_git_behaviour_2c.py -q
 
   macos-sh:
     # The POSIX guard script under macOS /bin/sh and Apple's /usr/bin/git (Xcode git, < 2.54).
@@ -295,7 +295,7 @@ jobs:
         run: |
           /usr/bin/ssh -V
           uv run python -c "from pathlib import Path; from carter.identity.agent_paths import socket_path; print('socket path length', len(str(socket_path(Path.home()))))"
-          PATH="/usr/bin:$PATH" uv run pytest tests/identity/test_shim.py tests/identity/test_unlock_cli.py tests/guard/test_carter_guard_2b.py -q
+          PATH="/usr/bin:$PATH" uv run pytest tests/identity/test_shim.py tests/identity/test_unlock_cli.py tests/guard/test_carter_guard_2b.py tests/guard/test_carter_guard_2c.py -q
 
   install-smoke:
     # `floor` = minimum supported OpenCode (required). `latest` = newest 2.x

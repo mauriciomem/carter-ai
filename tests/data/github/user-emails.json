@@ -1,0 +1,5 @@
+[
+  {"email": "octocat@example.invalid", "primary": true, "verified": true, "visibility": "private"},
+  {"email": "583231+octocat@users.noreply.github.com", "primary": false, "verified": true, "visibility": null},
+  {"email": "old-address@example.invalid", "primary": false, "verified": false, "visibility": null}
+]

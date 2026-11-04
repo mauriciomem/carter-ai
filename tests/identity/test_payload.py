@@ -11,6 +11,7 @@ from pathlib import Path
 import pytest
 
 from carter.identity import payload
+from carter.identity.coauthor import Human
 from carter.identity.isolation_apply import apply_isolation
 from carter.identity.payload import (
     ShimState,
@@ -51,8 +52,12 @@ def cfg(
     )
 
 
-def build(c: IdentityConfig, shim: ShimState = SHIM, ws: str | None = None, env=None):  # type: ignore[no-untyped-def]
-    return build_payload(c, resolve(c, workspace=ws, env=env or {}), shim)
+HUMAN = Human("Hu Man", "human@example.invalid", "")
+BAD_HUMAN = Human("", "", "missing-name")
+
+
+def build(c: IdentityConfig, shim: ShimState = SHIM, ws: str | None = None, env=None, human=HUMAN):  # type: ignore[no-untyped-def]
+    return build_payload(c, resolve(c, workspace=ws, env=env or {}), shim, lambda: human)
 
 
 class TestBlock:
@@ -117,6 +122,73 @@ class TestBlock:
         assert "/secret/path" not in text and '"/s"' not in text and "socket" not in text
 
 
+class TestRoleB:
+    """Plan 006 step 4 (freeze K3-K5): the author joins the same atomic block."""
+
+    def test_the_role_b_block_has_all_five_env_keys_in_the_frozen_order(self) -> None:
+        got = build(cfg(role="author"))
+        assert got.reason is None and got.block is not None
+        assert tuple(got.block["env"]) == payload.SIGNING_ENV_KEYS_B
+        assert got.block["env"] == {
+            "GIT_AUTHOR_NAME": "LLM Bot",
+            "GIT_AUTHOR_EMAIL": EMAIL,
+            "GIT_COMMITTER_NAME": "LLM Bot",
+            "GIT_COMMITTER_EMAIL": EMAIL,
+            "CARTER_IDENTITY": LOGIN,
+        }
+        assert tuple(k for k, _ in got.block["git_config"]) == payload.SIGNING_GIT_CONFIG_KEYS
+
+    def test_the_signing_entries_are_the_same_as_in_role_a(self) -> None:
+        a, b = build(cfg()), build(cfg(role="author"))
+        assert a.block is not None and b.block is not None
+        assert a.block["git_config"] == b.block["git_config"]
+        assert a.block["fingerprint"] == b.block["fingerprint"]
+        committer = {
+            k: v for k, v in b.block["env"].items() if k.startswith(("GIT_COMMITTER", "CARTER"))
+        }
+        assert committer == a.block["env"]  # the committer part is identical
+
+    def test_the_human_is_not_in_the_block(self) -> None:
+        got = build(cfg(role="author"))
+        assert "human@example.invalid" not in json.dumps(got.block) and "Hu Man" not in json.dumps(
+            got.block
+        )
+
+    def test_the_author_falls_back_to_the_login_like_the_committer(self) -> None:
+        got = build(cfg(role="author", name=""))
+        assert got.block is not None and got.block["env"]["GIT_AUTHOR_NAME"] == LOGIN
+
+    def test_the_human_reader_is_not_called_for_role_a_or_for_an_earlier_reason(self) -> None:
+        def boom() -> Human:
+            raise AssertionError("git must not be asked")
+
+        for c, shim in (
+            (cfg(), SHIM),
+            (cfg(role="author"), NO_SHIM),
+            (cfg(role="author", fingerprint="SHA256:" + "A" * 43), SHIM),
+        ):
+            build_payload(c, resolve(c, workspace=None, env={}), shim, boom)
+        t1 = IdentityConfig(
+            identity=Identity(role="author", login=LOGIN, id=UID, email=EMAIL), state="current"
+        )
+        build_payload(t1, resolve(t1, workspace=None, env={}), SHIM, boom)
+
+    def test_a_forced_role_ignores_the_resolved_one_carter_commit(self) -> None:
+        c = cfg(role="author")
+        got = build_payload(c, resolve(c, workspace=None, env={}), SHIM, None, role="co-author")
+        assert got.block is not None and tuple(got.block["env"]) == payload.SIGNING_ENV_KEYS
+
+    def test_role_author_below_t2_never_gets_a_block(self) -> None:
+        t1 = IdentityConfig(
+            identity=Identity(role="author", login=LOGIN, id=UID, email=EMAIL), state="current"
+        )
+        assert build(t1).block is None
+
+    def test_a_cap_below_t2_with_role_author_is_tier_required_not_a_co_author_block(self) -> None:
+        c = cfg(role="author", workspaces={"/w": Workspace(max_tier="t1")})
+        assert build(c, ws="/w") == payload.Built(reason="tier-required")
+
+
 class TestReasons:
     """All or nothing: a reason and no block, or a block and no reason."""
 
@@ -129,8 +201,17 @@ class TestReasons:
         assert build(t1) == payload.Built()
         assert build(IdentityConfig(state="absent")) == payload.Built()
 
-    def test_role_author_at_t2_is_role_b_not_built_and_never_a_co_author_block(self) -> None:
-        assert build(cfg(role="author")) == payload.Built(reason="role-b-not-built")
+    def test_role_author_at_t2_without_a_usable_human_is_a_reason_and_never_a_co_author_block(
+        self,
+    ) -> None:
+        assert build(cfg(role="author"), human=BAD_HUMAN) == payload.Built(
+            reason="human-identity-invalid"
+        )
+        assert payload.build_payload(
+            *(lambda c: (c, resolve(c, workspace=None, env={}), SHIM))(cfg(role="author"))
+        ) == payload.Built(
+            reason="human-identity-invalid"
+        )  # no reader at all: refuse, do not guess
 
     def test_role_author_below_t2_is_tier_required(self) -> None:
         t1 = IdentityConfig(
@@ -174,13 +255,16 @@ class TestReasons:
         assert (
             build(cfg(fingerprint="SHA256:" + "A" * 43), NO_SHIM).reason == "fingerprint-mismatch"
         )
-        assert build(cfg(role="author"), NO_SHIM).reason == "role-b-not-built"
+        assert build(cfg(role="author"), NO_SHIM, human=BAD_HUMAN).reason == "shim-missing"
+        assert build(
+            cfg(role="author", fingerprint="SHA256:" + "A" * 43), human=BAD_HUMAN
+        ).reason == ("fingerprint-mismatch")  # the human is asked last
 
     def test_every_reason_is_registered_and_none_comes_with_a_block(self) -> None:
         seen = set()
         cases = [
             build(cfg(workspaces={"/w": Workspace(max_tier="t1", require_tier="t2")}), ws="/w"),
-            build(cfg(role="author")),
+            build(cfg(role="author"), human=BAD_HUMAN),
             build(cfg(signing=Signing(public_key="x"))),
             build(cfg(signing=Signing(public_key="ssh-ed25519", fingerprint="SHA256:x"))),
             build(cfg(fingerprint="SHA256:" + "A" * 43)),
@@ -194,7 +278,7 @@ class TestReasons:
         assert seen <= set(payload.REASONS)
         assert seen >= {
             "tier-required",
-            "role-b-not-built",
+            "human-identity-invalid",
             "config-error",
             "key-missing",
             "fingerprint-mismatch",
@@ -282,6 +366,19 @@ class TestToGitEnv:
             snapshot = dict(before)
             got = to_git_env(before, self.BLOCK)
             assert before == snapshot, case["name"]  # the input is not modified
+            assert (got.env, got.flags) == (case["expected"]["env"], case["expected"]["flags"]), (
+                case["name"]
+            )
+
+    def test_the_golden_role_b_apply_vectors_and_the_block_equals_build_payload(self) -> None:
+        """Plan 006 step 9: a polluted inherited GIT_AUTHOR_* is overwritten by the block."""
+        block_b = V["signing"]["block_role_b"]
+        assert tuple(block_b["env"]) == payload.SIGNING_ENV_KEYS_B
+        built = build(cfg(role="author", name="LLM Bot"))
+        assert built.block is not None and built.block["env"].keys() == block_b["env"].keys()
+        for case in V["signing"]["apply_role_b"]:
+            before = vectors.expand(case["env"])
+            got = to_git_env(before, block_b)
             assert (got.env, got.flags) == (case["expected"]["env"], case["expected"]["flags"]), (
                 case["name"]
             )

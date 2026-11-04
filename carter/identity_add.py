@@ -29,6 +29,7 @@ from carter.identity.errors import (
     E_CONFIG,
     E_GITHUB_UNREACHABLE,
     E_IDENTITY_CHECK,
+    E_ROLE_B_TIER,
     E_STATE_INVALID,
     IdentityError,
     registry,
@@ -57,6 +58,7 @@ class AddRequest:
     private_key: str | None = None
     agent_socket: str | None = None
     signing_program: str | None = None
+    role: str | None = None  # K10: co-author | author; None keeps what config.toml has
 
 
 @dataclass
@@ -182,13 +184,34 @@ def plan_add(
     new_ident = replace(
         ident, login=user.login, id=user.id, email=email, name=ident.name or user.login
     )
+    if req.role:
+        new_ident = replace(new_ident, role=req.role)
     old = current.signing
     has_old = bool(old.public_key)
     managed = bool(req.agent_socket or req.signing_program)
     if req.ssh_public_key is None:
-        if has_old or managed or req.private_key:
+        # K10: a role-only change on an existing T2 identity needs no key arguments.
+        role_only = bool(req.role) and has_old and not managed and not req.private_key
+        if (has_old or managed or req.private_key) and not role_only:
             raise fail(
                 E_IDENTITY_CHECK, "a signing key is configured; pass --ssh-public-key to change it"
+            )
+        if req.role == "author" and not has_old:
+            raise IdentityError(E_ROLE_B_TIER)  # role b needs T2: nothing is written
+        if role_only:
+            return _finish(
+                AddPlan(
+                    replace(current, identity=new_ident, state="current"),
+                    user.login,
+                    user.id,
+                    old.fingerprint,
+                    "",
+                    notes=[
+                        *api_notes,
+                        f"role: {req.role} (config.toml only; the key is unchanged)",
+                    ],
+                ),
+                home,
             )
         return _finish(
             AddPlan(

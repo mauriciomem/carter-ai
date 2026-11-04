@@ -928,6 +928,37 @@ class TestGlobalAttributionRule:
         assert agents_md.read_text() == _OPENCODE_AGENTS_MD
         assert not (base_dir / "carter" / "upgrade-notes").exists()
 
+    def test_unmodified_2b_file_is_upgraded_in_place_to_the_role_b_aware_rule(
+        self, base_dir: Path
+    ) -> None:
+        """Plan 006: the AGENTS.md text of 2b (author = the user only) is replaced, not kept."""
+        import hashlib
+
+        old_first = (
+            "- Commits: the user is the author (their own git config); the committer is the user,"
+            " or the LLM identity at T2 when the Carter plugin signs for you. Never pass"
+            " `--author`, `--no-verify`, `-s` or `-S`, never set `GIT_COMMITTER_*`, and never"
+            " add `Signed-off-by` unless the user asks for it on that commit. Credit comes only"
+            " from the"
+            " `coauthor_trailer` that `carter ops config --emit` prints; if `commits` is `refused`,"
+            " stop and report.\n"
+        )
+        v2b = _OPENCODE_AGENTS_MD.replace(_ATTRIBUTION_RULE.splitlines(keepends=True)[0], old_first)
+        assert (
+            hashlib.sha256(v2b.encode()).hexdigest()
+            == "15a896f96a1c6e172e66e51c54a1553cac04c8ba0bef913c0cd8072a8144a6c6"
+        )
+        agents_md = base_dir / "opencode" / "AGENTS.md"
+        agents_md.parent.mkdir(parents=True)
+        agents_md.write_text(v2b)
+
+        self._install(base_dir)
+
+        assert agents_md.read_text() == _OPENCODE_AGENTS_MD
+        assert (
+            "role b" in _ATTRIBUTION_RULE and not (base_dir / "carter" / "upgrade-notes").exists()
+        )
+
     def test_a_modified_v017_file_is_kept_and_the_note_has_both_rules(
         self, base_dir: Path, capsys: pytest.CaptureFixture[str]
     ) -> None:

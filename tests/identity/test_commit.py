@@ -28,7 +28,6 @@ from carter.identity.commit import (
 from carter.identity.config import load_identity
 from carter.identity.errors import (
     E_CONFIG,
-    E_ROLE_B_TIER,
     E_SIGN_AGENT_REFUSE,
     E_TIER_REQUIRED,
     IdentityError,
@@ -233,13 +232,17 @@ class TestPlanBelowT2:
                 "x",
             )
         assert err.value.code == E_CONFIG
-        role_b = cfg_of("t1")
+
+    def test_role_author_does_not_refuse_carter_commit_it_ignores_the_role(self) -> None:
+        """Plan 006 K9 (D26): the role is for agents; at your terminal you are always the author."""
         role_b = IdentityConfig(
             identity=Identity(login=LOGIN, id=UID, email=EMAIL, role="author"), state="current"
         )
-        with pytest.raises(IdentityError) as err2:
-            plan(role_b, "-m", "x")
-        assert err2.value.code == E_ROLE_B_TIER
+        got = plan(role_b, "-m", "x")
+        assert (
+            got.shape == "unsigned"
+        )  # T1 here: nothing to sign with; not an E-ROLE-B-TIER refusal
+        assert any("role not applied (own terminal)" in n for n in got.notes)
 
     def test_an_unmet_require_tier_refuses(self, tmp_path: Path) -> None:
         cfg = cfg_of("t1", workspaces={str(tmp_path): Workspace(require_tier="t2")})
@@ -380,6 +383,28 @@ def lab(
 
 @real_ssh
 class TestK1:
+    def test_in_a_role_author_config_it_is_still_human_author_and_llm_committer(
+        self, lab: Lab
+    ) -> None:
+        """Plan 006 K9: `carter commit` ignores the role; a polluted GIT_AUTHOR_* changes nothing."""
+        assert lab.agent.add(lab.key) == 0  # type: ignore[attr-defined]
+        cfg_file = lab.home / ".carter" / "config.toml"
+        text = cfg_file.read_text()
+        cfg_file.write_text(
+            text.replace('role = "co-author"', 'role = "author"')
+            if 'role = "co-author"' in text
+            else text.replace("[identity]\n", '[identity]\nrole = "author"\n', 1)
+        )
+        code, plan_ = lab.commit(
+            "-m", "ignores the role", env={"GIT_AUTHOR_NAME": "evil", "GIT_AUTHOR_EMAIL": "evil@x"}
+        )
+        assert code == 0 and plan_.shape == "k1"
+        got = lab.show()
+        assert got["status"] == "G" and got["author"] == f"{HUMAN[0]} <{HUMAN[1]}>"
+        assert got["committer"] == f"{LOGIN} <{EMAIL}>"
+        assert any("role not applied" in n for n in plan_.notes)
+        assert got["body"].strip().splitlines() == ["ignores the role", "", COAUTHOR]
+
     def test_a_loaded_key_gives_human_author_llm_committer_good_signature_and_the_trailer(
         self, lab: Lab
     ) -> None:

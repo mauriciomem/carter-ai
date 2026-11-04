@@ -138,6 +138,11 @@ asks git to sign with *your* key. Setting this up is described in
   git log -1 --format='%an|%cn|%G?'    # you|you|N
   ```
 
+  In the opt-in role `author` (T2 only) the LLM is also the author, the trailer is **your**
+  `Co-authored-by: <user.name> <user.email>`, and the last line reads `LLM|LLM|G`; see
+  [Identity and signing](identity-and-signing.md#role-author-the-llm-is-the-author). It is refused
+  (never downgraded) below T2 or when your own git identity is unusable (`E-HUMAN-IDENTITY`).
+
   The agent checks that last line. Below T2 the author and committer are you and the
   signature status is `N` (unsigned). At T2 the committer is the LLM identity and the status
   is `G` or `E` (a signature exists), never `N`. If the emit says `commits: refused`, the agent

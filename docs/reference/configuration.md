@@ -84,7 +84,7 @@ these two values, asks, and pins them in `~/.carter/config.toml` (see
 
 | Key | Default | Description |
 |-----|---------|-------------|
-| `role` | not set | `co-author` (the default role) or `author`. `author` needs a signing key; below that tier commits are refused, never downgraded |
+| `role` | not set | `co-author` (the default role) or `author`. `author` makes the LLM the author and credits you by a trailer. It needs a signing key (T2); below that tier or under a `max_tier` cap commits are refused, never downgraded, and `carter update` refuses to pin it next to a cap |
 | `require_tier` | not set | The lowest tier this workspace accepts: `t0`, `t1` or `t2` |
 | `git_account` | not set | Deprecated and ignored. `carter check` and `carter update` warn if it is present |
 | `bot_name` | not set | Deprecated and ignored, with the same warning. The co-author comes from `~/.carter/config.toml` |

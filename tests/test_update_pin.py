@@ -251,6 +251,32 @@ class TestRefusals:
         assert "max_tier" in result.output and "require_tier" in result.output
         assert snap(cfg_path) == before
 
+    def test_role_author_next_to_a_cap_is_refused_and_nothing_is_written(self, ws, cfg_path):
+        """Plan 006 K8: role b needs T2, a cap is always below it; never downgraded."""
+        cfg_path.parent.mkdir(parents=True)
+        cfg_path.write_text(T1 + f'[workspaces."{ws.resolve()}"]\nmax_tier = "t1"\n')
+        before = snap(cfg_path)
+        set_policy(ws, role="author")
+
+        result = update(ws, "--yes")
+
+        assert result.exit_code == 1
+        assert "E-ROLE-B-TIER" in result.output and "max_tier" in result.output
+        assert snap(cfg_path) == before
+
+    def test_a_cap_added_by_hand_after_the_pin_is_refused_by_the_mirror_step(self, ws, cfg_path):
+        cfg_path.parent.mkdir(parents=True)
+        cfg_path.write_text(T1)
+        set_policy(ws, role="author")
+        assert update(ws, "--yes").exit_code == 0
+        cfg_path.write_text(
+            cfg_path.read_text().replace('role = "author"', 'role = "author"\nmax_tier = "t1"')
+        )
+
+        result = update(ws, "--yes")
+
+        assert result.exit_code == 1 and "E-ROLE-B-TIER" in result.output
+
     def test_cap_equal_to_require_tier_is_fine(self, ws, cfg_path):
         cfg_path.parent.mkdir(parents=True)
         cfg_path.write_text(T1 + f'[workspaces."{ws.resolve()}"]\nmax_tier = "t1"\n')

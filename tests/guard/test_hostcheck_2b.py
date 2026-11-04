@@ -367,17 +367,11 @@ class TestGuardsAndGroups:
         assert find(items, "guards", "fail closed").level == "info"  # type: ignore[union-attr]
         assert find(items, "git", "E-GIT-OLD").level == "red"  # type: ignore[union-attr]
 
-    def test_role_author_and_alias_are_listed(
+    def test_the_alias_consent_is_listed(
         self, home: Path, fake: FakeGitHub, key: KeyPair, tmp_path: Path
     ) -> None:
         make(fake, key)
-        cfg = load_identity()
-        write_config(
-            replace(cfg, identity=replace(cfg.identity, role="author")),
-            home / ".carter" / "config.toml",
-        )
         items = run(tmp_path)
-        assert find(items, "role", "blocked until 2c").level == "warn"  # type: ignore[union-attr]
         assert find(items, "consent", "alias").level == "info"  # type: ignore[union-attr]
 
     def test_no_identity_no_items(self, home: Path, tmp_path: Path) -> None:

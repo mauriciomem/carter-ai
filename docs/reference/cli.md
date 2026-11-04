@@ -206,8 +206,13 @@ On success it shows the plan and asks once, then writes `config.toml` (the previ
 `~/.carter/backups/`), the signing shim `~/.carter/bin/carter-ssh-sign`, `allowed_signers`, and the
 tier mirror in `~/.carter/gitconfig`; every file is recorded with its hash and a failure puts them
 all back. Running `add` again with another key is a **rotation**: the old public key moves to
-`previous_public_keys`, so old commits still verify. It never writes your global git config and
-the role is not an option of `add`: it is set by `carter.yaml` or `CARTER_IDENTITY_ROLE`.
+`previous_public_keys`, so old commits still verify. It never writes your global git config.
+`--role` writes `[identity] role` in `config.toml` (your preference; a pinned workspace role or
+`CARTER_IDENTITY_ROLE` still wins). `--role author` needs T2: without a key (given now or already
+configured) it is `E-ROLE-B-TIER` and nothing is written. On an existing T2 identity,
+`add --login <name> --role author` changes only the role. With role `author` it also reports
+whether your git identity is usable and whether GitHub knows your address (asked of GitHub and `gh`
+only in your own terminal; a dry run caches nothing).
 
 | Option | Meaning |
 |--------|---------|
@@ -216,6 +221,7 @@ the role is not an option of `add`: it is set by `carter.yaml` or `CARTER_IDENTI
 | `--private-key PATH` | Path to its private key; stored, never read. |
 | `--agent-socket PATH` | A password manager's agent socket, instead of Carter's agent. |
 | `--signing-program PATH` | A signing program such as `op-ssh-sign`, kept behind the shim. |
+| `--role co-author\|author` | `co-author` (default): you author, the LLM commits. `author`: the LLM authors and you are credited by a trailer (T2 only; not for DCO repositories). |
 | `--dry-run` | Run every check, show the plan, write nothing. Works anywhere, an agent shell too. |
 
 Writing needs your own terminal (`E-HUMAN-TERMINAL` elsewhere).
@@ -338,8 +344,9 @@ as an alias. The exit code is git's.
   staged.
 - **T1:** unsigned, you as author and committer, with the trailer (`E-COMMIT-T1`). **T0:**
   unsigned, with `Assisted-by: Carter`. A workspace `max_tier` lowers the tier for commits made
-  there. An unmet `require_tier` is `E-TIER-REQUIRED`; a broken `config.toml` is `E-CONFIG`; role `author`
-  is refused until it is built (`E-ROLE-B-TIER`).
+  there. An unmet `require_tier` is `E-TIER-REQUIRED`; a broken `config.toml` is `E-CONFIG`. **The
+  role is ignored here**: you are always the author, a role `author` configuration changes nothing
+  and the command says "role not applied (own terminal)".
 - **Your own key is never used.** `GIT_AUTHOR_*`, `GIT_COMMITTER_*`, `GIT_CONFIG_*` and your
   `SSH_AUTH_SOCK` are not passed on, unsigned commits are made with signing switched off and every
   `gpg.*.program` set to `false`, and a bare `-S` or `--gpg-sign` is dropped with a note.
@@ -495,7 +502,13 @@ only if something is `RED`:
   absent from `https://github.com/<login>.keys` (`RED` if it is an authentication key; `INFO`
   "not checked" offline; no token is sent) and listed as a signing key (`WARN` if not), the four
   hook events, an older git on the machine, and git 2.40 or newer (`E-GIT-OLD`). T2 with no commit
-  guard installed is `RED`; `identity.role = author` is a `WARN` (blocked until 2c).
+  guard installed is `RED`;
+- **role `author`**: below T2 or under a cap it is `RED` (`E-ROLE-B-TIER`); at T2 your git identity in the
+  current directory (`RED` with `E-HUMAN-IDENTITY` and a short reason if unusable), whether GitHub
+  knows your address (`WARN` if not; the lookup runs in your own terminal and is cached for 7
+  days, in an agent shell only the cache is read), a DCO file in the repository (`WARN`), a
+  precedence conflict (`WARN`), and a commit hook script from an older Carter (`RED`). Your name
+  and address are never printed.
 
 Without the plugin the check says "plugin not installed" (never a pass), and shows
 "g2 rev 2 pending" when the plugin is waiting for your confirmation.
@@ -561,9 +574,11 @@ when you run it, from `~/.carter/config.toml` and the environment:
 |-----|---------|
 | `tier` | `t0` (nothing configured), `t1` (LLM account, no key) or `t2` (account and key) |
 | `role`, `role_source` | `co-author` or `author`, and where it came from (`workspace`, `env`, `config`, `default`) |
-| `coauthor_trailer` | The trailer line for commit messages: `Assisted-by: Carter` at T0, `Co-authored-by: <login> <noreply address>` above |
+| `author`, `committer` | `human` or `llm`: who git records. The author is `llm` only in role `author` at T2 |
+| `coauthor_trailer` | The trailer line for commit messages: `Assisted-by: Carter` at T0, `Co-authored-by: <login> <noreply address>` above; in role `author` it is **your** line, `Co-authored-by: <user.name> <user.email>` |
+| `coauthor_linked` | Whether GitHub credits that trailer (from the cache; role `author` needs your address linked) |
 | `commits` | `allowed` or `refused` |
-| `refusal_reason` | The error code when `commits` is `refused` (for example `E-CONFIG` or `E-ROLE-B-TIER`) |
+| `refusal_reason` | The error code when `commits` is `refused` (for example `E-CONFIG`, `E-ROLE-B-TIER` or `E-HUMAN-IDENTITY`) |
 | `footer` | Text appended to GitHub and Jira bodies |
 | `has_github_token` | Whether `GITHUB_TOKEN` is set in the environment (the token file is not counted) |
 

@@ -23,7 +23,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from carter.identity.errors import E_TIER_REQUIRED
+from carter.identity.errors import E_ROLE_B_TIER, E_TIER_REQUIRED
 from carter.identity.resolve import configured_tier, effective_tier
 from carter.identity.schema import TIERS, IdentityConfig
 from carter.identity.trailer import noreply_email
@@ -71,7 +71,14 @@ def base_entries(cfg: IdentityConfig) -> list[Entry]:
 
 
 def check_caps(cfg: IdentityConfig) -> None:
-    """Refuse a ``max_tier`` below the pinned ``require_tier`` (E-TIER-REQUIRED)."""
+    """Refuse a ``max_tier`` below the pinned ``require_tier`` (E-TIER-REQUIRED), and a cap on a
+    workspace that pins role ``author`` (E-ROLE-B-TIER: role b needs T2, every cap is below it)."""
+    role_b = [key for key, ws in cfg.workspaces.items() if ws.max_tier and ws.role == "author"]
+    if role_b:
+        raise MirrorError(
+            f"{E_ROLE_B_TIER}: role `author` is pinned together with a max_tier cap, and role b "
+            "needs T2 (no downgrade): " + ", ".join(role_b)
+        )
     bad = [
         key
         for key, ws in cfg.workspaces.items()

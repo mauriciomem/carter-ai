@@ -427,7 +427,7 @@ def cli(*args: str, input: str | None = None, env: dict[str, str] | None = None)
 
 
 class TestCommand:
-    def test_registered_with_the_frozen_options_and_no_role(self) -> None:
+    def test_registered_with_the_frozen_options_and_the_role_flag(self) -> None:
         from carter.identity_cli import identity
 
         opts = {o.opts[0] for o in identity.commands["add"].params} - {"--help"}
@@ -437,6 +437,7 @@ class TestCommand:
             "--private-key",
             "--agent-socket",
             "--signing-program",
+            "--role",
             "--dry-run",
         }
 

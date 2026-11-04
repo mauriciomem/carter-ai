@@ -42,6 +42,10 @@ REQUIRED = (
     "carter/identity_verify.py",
     "carter/commit_cli.py",
     "carter/hostcheck_id.py",
+    # plan 006 (2c): role b
+    "carter/identity/coauthor.py",
+    "carter/identity/coauthor_link.py",
+    "carter/human_items.py",
 )
 
 

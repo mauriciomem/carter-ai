@@ -154,3 +154,63 @@ def test_a_block_built_by_python_is_accepted_by_the_ts_and_applied_the_same_way(
     got = json.loads(node(script))
     assert got["accepted"] is True
     assert got["env"] == expected.env and got["flags"] == expected.flags
+
+
+def test_a_role_b_block_built_by_python_is_accepted_by_the_ts_and_applied_the_same_way() -> None:
+    """Plan 006 step 9: the TS is thin: the same two functions handle the five-key role-b env."""
+    from carter.identity.coauthor import Human
+    from carter.identity.isolation_apply import apply_isolation
+    from carter.identity.payload import ShimState, build_payload, fingerprint_of, to_git_env
+    from carter.identity.resolve import resolve
+    from carter.identity.schema import Identity, IdentityConfig, Signing
+
+    blob = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIBQUck5VvSpXHhZ5JFCGxR3zhC07GvQUN5j6rv6VJbaY"
+    cfg = IdentityConfig(
+        identity=Identity(
+            role="author", login="llm-bot", id=7, email="7+llm-bot@users.noreply.github.com"
+        ),
+        signing=Signing(public_key=blob, fingerprint=fingerprint_of(blob)),
+        state="current",
+    )  # fmt: skip
+    built = build_payload(
+        cfg,
+        resolve(cfg, workspace=None, env={}),
+        ShimState("/home/example/.carter/bin/carter-ssh-sign", True),
+        lambda: Human("Hu Man", "human@example.invalid", ""),
+    )
+    assert built.block is not None and "GIT_AUTHOR_EMAIL" in built.block["env"]
+    doc = isolation.render(
+        home="/home/example",
+        python_path="/p/python",
+        carter_path="/p/carter",
+        false_path="/usr/bin/false",
+    )
+    start = {**apply_isolation({"PATH": "/usr/bin"}, doc, None).env, "GIT_AUTHOR_NAME": "Evil"}
+    expected = to_git_env(start, built.block)
+    script = f"""
+    import {{ validateSigning, applySigning }} from '{CORE.as_uri()}'
+    const block = {json.dumps(built.block)}
+    const accepted = validateSigning(block, {json.dumps(doc)}) !== null
+    const out = applySigning({json.dumps(start)}, block)
+    console.log(JSON.stringify({{ accepted, env: out.env, flags: out.flags }}))
+    """
+    got = json.loads(node(script))
+    assert got["accepted"] is True and got["env"] == expected.env and got["flags"] == expected.flags
+    assert got["env"]["GIT_AUTHOR_NAME"] == "llm-bot"
+
+
+def test_the_ts_has_no_role_logic_and_isolation_json_is_unchanged() -> None:
+    """The plugin never names a role; `identity env` decides (K5). The hash stays pinned."""
+    import re
+
+    for name in ("core.ts", "index.ts"):
+        text = (CORE.parent / name).read_text(encoding="utf-8")
+        assert not re.search(
+            r"co-author|\"author\"|role[-_ ]b|human-identity",
+            text.replace("human-identity-invalid", ""),
+        ), name
+    vectors = json.loads((CORE.parents[2] / "tests" / "data" / "plugin_vectors.json").read_text())
+    assert (
+        vectors["isolation"]["sha256"]
+        == "d5456e7d8b82dd91b901cc3ade43fb8dbeecd0bfcbe32556f754797782a40a6e"
+    )

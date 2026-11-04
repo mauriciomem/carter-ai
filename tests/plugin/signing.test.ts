@@ -42,6 +42,43 @@ test("signing vectors: the plugin rejects exactly the shapes it can judge", () =
   for (const c of vectors.signing.invalid) assert.equal(validateSigning(c.signing, isoDoc), null, c.name)
 })
 
+const blockB: Signing = vectors.signing.block_role_b
+
+test("role b vectors: the block with the author is accepted and applied like the committer-only block (no new function)", () => {
+  assert.deepEqual(validateSigning(blockB, isoDoc), blockB)
+  assert.deepEqual(Object.keys(blockB.env), vectors.signing.env_keys_role_b)
+  for (const c of vectors.signing.apply_role_b) {
+    const got = applySigning(expand(c.env), blockB)
+    assert.deepEqual(got.env, c.expected.env, c.name)
+    assert.deepEqual(got.flags, c.expected.flags, c.name)
+  }
+})
+
+test("a role-b block puts the LLM author on the agent shell and overwrites an inherited one", async () => {
+  const r = rig()
+  respondWith(r, answer({ signing: blockB }))
+  const carter = createCarter(r.deps)
+  const ev = await agentShell(carter, "/work", { GIT_AUTHOR_NAME: "Evil", GIT_AUTHOR_EMAIL: "evil@example.invalid" })
+  assert.equal(ev.env.GIT_AUTHOR_NAME, blockB.env.GIT_AUTHOR_NAME)
+  assert.equal(ev.env.GIT_AUTHOR_EMAIL, blockB.env.GIT_AUTHOR_EMAIL)
+  assert.equal(ev.env.GIT_COMMITTER_EMAIL, blockB.env.GIT_COMMITTER_EMAIL)
+  assert.ok(!carter.flags().includes("sign-unavailable"))
+  carter.dispose()
+  r.cleanup()
+})
+
+test("when the entry gives a reason (e.g. human-identity-invalid) there is no author, no committer and the blocking entries apply", async () => {
+  const r = rig()
+  respondWith(r, answer({ reason: "human-identity-invalid", signing: undefined }))
+  const carter = createCarter(r.deps)
+  const ev = await agentShell(carter, "/work", {})
+  for (const k of ["GIT_AUTHOR_NAME", "GIT_AUTHOR_EMAIL", "GIT_COMMITTER_NAME", "GIT_COMMITTER_EMAIL", "CARTER_IDENTITY"]) assert.ok(!(k in ev.env), k)
+  assert.deepEqual(entries(ev.env).slice(N), isoDoc.blocking_git_config)
+  assert.match(r.logs.join("\n"), /\(human-identity-invalid\)/)
+  carter.dispose()
+  r.cleanup()
+})
+
 test("validateSigning refuses names the isolation block manages, read from isolation.json and not from a list in the plugin", () => {
   const withIso = (name: string) => ({ ...block, env: { ...block.env, [name]: "x" } })
   for (const name of [...Object.keys(isoDoc.env.set), ...isoDoc.env.delete]) assert.equal(validateSigning(withIso(name), isoDoc), null, name)
@@ -88,7 +125,7 @@ test("every reason, a block with a reason, a block at t0/t1, a partial block, a 
     ["key-missing", answer({ reason: "key-missing", signing: undefined })],
     ["fingerprint-mismatch", answer({ reason: "fingerprint-mismatch", signing: undefined })],
     ["shim-missing", answer({ reason: "shim-missing", signing: undefined })],
-    ["role-b-not-built", answer({ reason: "role-b-not-built", signing: undefined })],
+    ["human-identity-invalid", answer({ reason: "human-identity-invalid", signing: undefined })],
     ["tier-required", answer({ reason: "tier-required", signing: undefined })],
     ["a reason wins over a block", answer({ reason: "shim-missing" })],
     ["t2 without a block", answer({ signing: undefined })],

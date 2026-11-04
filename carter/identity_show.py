@@ -20,6 +20,7 @@ from carter.checkitems import Item
 from carter.guard import consent, repohooks
 from carter.guard.configwrite import Reader
 from carter.guard.state import load_or_empty_readonly
+from carter.human_items import dco_items, human_items
 from carter.identity import agent_paths, mirror
 from carter.identity.agent_probe import Probe, probe
 from carter.identity.agent_setup import Setup, setup_from_config
@@ -33,7 +34,7 @@ from carter.install.paths import carter_gitconfig_path, guard_state_path
 
 ROLE_TEXT = {
     "co-author": "co-author: the human is the author, the LLM is credited with a trailer",
-    "author": "author: the LLM is author and committer (T2 only)",
+    "author": "author: the LLM is author and committer, you are credited by a trailer (T2 only)",
 }
 SHAPES = {
     ("co-author", "t0"): "author and committer are you; trailer `Assisted-by: Carter`; unsigned",
@@ -42,7 +43,7 @@ SHAPES = {
         "co-author",
         "t2",
     ): "author is you, committer and signer are the LLM; trailer `Co-authored-by`",
-    ("author", "t2"): "author, committer and signer are the LLM",
+    ("author", "t2"): "author, committer and signer are the LLM; trailer `Co-authored-by: <you>`",
 }
 PROBE_TEXT: dict[str, tuple[str, str, str]] = {
     "ok": ("ok", "the LLM key is loaded in the agent", ""),
@@ -226,6 +227,8 @@ def show_items(
         ),
     ]
     items += [Item("warn", "role", w) for w in res.warnings]
+    if res.role == "author" and res.tier == "t2":
+        items += human_items(cfg, cwd, home=base, env=env) + dco_items(cwd)
     if res.configured_tier == "t2":
         items += key_items(cfg, base)
     items += mirror_items(cfg, base, workspace, cwd)

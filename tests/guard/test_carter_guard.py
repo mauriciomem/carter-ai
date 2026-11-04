@@ -230,7 +230,7 @@ class TestPortability:
 
     def test_no_bashisms(self) -> None:
         bad = (
-            r"\[\[",
+            r"\[\[(?!:)",  # `[[ ]]` is a bashism; `[[:space:]]` (a POSIX class in a pattern) is not
             r"\blocal\b",
             r"\bfunction\b",
             r"echo -e",
@@ -251,7 +251,8 @@ class TestPortability:
         # the part of the script that runs before an agent is known: up to Carter's git file
         lines = self.code_lines()
         human = lines[: next(i for i, ln in enumerate(lines) if ln.startswith("cfg="))]
-        code = re.sub(r"'[^']*'", "''", "\n".join(human))  # message text is data
+        joined = "\n".join(human).replace("'\"'\"'", "")  # shlex's escaped apostrophe is data too
+        code = re.sub(r"'[^']*'", "''", joined)  # message text is data
         words = set(re.findall(r"(?<![\w$-])([a-z][a-z-]+)(?=\s|$|;)", code))
         for cmd in (
             "git",

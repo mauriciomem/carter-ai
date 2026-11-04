@@ -20,7 +20,7 @@ import pytest
 
 from carter.identity import shim
 from carter.identity.payload import shim_path
-from guard.test_carter_guard_2b import EMAIL, World
+from guard.test_carter_guard_2b import EMAIL, LOGIN, World
 from ssh_rig import KeyPair, real_ssh
 
 REPO = Path(__file__).resolve().parent.parent
@@ -34,10 +34,10 @@ BASE = {
 }
 
 
-def entry(world: World, cwd: Path) -> str:
+def entry(world: World, cwd: Path, **env: str) -> str:
     done = subprocess.run(
         [sys.executable, "-I", "-m", "carter.identity.env", "--json", "--cwd", str(cwd)],
-        env={**os.environ, "HOME": str(world.home), "PYTHONPATH": str(REPO)},
+        env={**os.environ, "HOME": str(world.home), "PYTHONPATH": str(REPO), **env},
         capture_output=True,
         text=True,
         check=True,
@@ -191,21 +191,6 @@ class TestEveryFailureBlocks:
         assert json.loads(entry(world, world.repo))["reason"] == "fingerprint-mismatch"
         self.blocked(world)
 
-    def test_role_b_stays_blocked_until_2c(self, world: World) -> None:
-        cfg = world.home / ".carter" / "config.toml"
-        text = cfg.read_text()
-        assert 'role = "co-author"' in text or "role" not in text.split("[identity.signing]")[0]
-        cfg.write_text(
-            text.replace('role = "co-author"', 'role = "author"')
-            if 'role = "co-author"' in text
-            else text.replace("[identity]\n", '[identity]\nrole = "author"\n', 1)
-        )
-        assert json.loads(entry(world, world.repo))["reason"] in (
-            "role-b-not-built",
-            "tier-required",
-        )
-        self.blocked(world)
-
     def test_an_unmet_require_tier(self, world: World) -> None:
         cfg = world.home / ".carter" / "config.toml"
         ws = str(world.repo.parent.resolve())
@@ -271,3 +256,79 @@ class TestBelowT2:
             ).stdout
             == ""
         )
+
+
+def pin_role_author(world: World) -> None:
+    cfg = world.home / ".carter" / "config.toml"
+    text = cfg.read_text()
+    cfg.write_text(
+        text.replace('role = "co-author"', 'role = "author"')
+        if 'role = "co-author"' in text
+        else text.replace("[identity]\n", '[identity]\nrole = "author"\n', 1)
+    )
+
+
+@real_ssh
+class TestRoleB:
+    """Plan 006 step 4/9: the real entry, the plugin core and real git, role ``author``."""
+
+    def test_with_a_human_identity_the_commit_is_l_l_g_and_the_human_is_not_in_the_block(
+        self, world: World
+    ) -> None:
+        pin_role_author(world)
+        answer = entry(world, world.repo)
+        assert "human@example.invalid" not in answer
+        out = plugin(answer, world.repo.parent)
+        assert out["decision"]["block"] is False and out["decision"]["reason"] is None
+        env = out["env"]
+        assert env["GIT_AUTHOR_EMAIL"] == EMAIL == env["GIT_COMMITTER_EMAIL"]
+        done = commit(world, env)
+        assert done.returncode == 0, done.stderr
+        assert log(world) == f"G|{world.key.fingerprint}|{LOGIN}|{EMAIL}"  # type: ignore[union-attr]
+        authors = subprocess.run(
+            ["git", "log", "-1", "--format=%an|%ae"], cwd=world.repo,
+            env={**BASE, "HOME": str(world.home)}, capture_output=True, text=True,
+        ).stdout.strip()  # fmt: skip
+        assert authors == f"{LOGIN}|{EMAIL}"
+
+    @pytest.mark.parametrize(
+        "config",
+        [
+            "",
+            "[user]\n\tname = Hu Man\n",
+            "[user]\n\tname = Carter\n\temail = state@carter.invalid\n",
+        ],
+    )
+    def test_without_a_usable_human_identity_nothing_is_signed_and_nothing_is_committed(
+        self, world: World, tmp_path: Path, config: str
+    ) -> None:
+        pin_role_author(world)
+        empty = tmp_path / "gitconfig-empty"
+        empty.write_text(config)
+        answer = entry(world, world.repo, GIT_CONFIG_GLOBAL=str(empty))
+        assert json.loads(answer)["reason"] == "human-identity-invalid"
+        out = plugin(answer, world.repo.parent)
+        assert out["decision"]["block"] is True and out["decision"]["signing"] is None
+        assert (
+            "GIT_AUTHOR_EMAIL" not in out["env"]
+            or out["env"]["GIT_AUTHOR_EMAIL"] == BASE["GIT_AUTHOR_EMAIL"]
+        )
+        done = commit(world, out["env"])
+        assert done.returncode != 0
+        count = subprocess.run(
+            ["git", "rev-list", "--count", "--all"], cwd=world.repo,
+            env={**BASE, "HOME": str(world.home)}, capture_output=True, text=True,
+        ).stdout.strip()  # fmt: skip
+        assert count in ("0", "")
+
+    def test_role_b_below_t2_or_under_a_cap_is_refused_never_a_role_a_block(
+        self, world: World
+    ) -> None:
+        pin_role_author(world)
+        cfg = world.home / ".carter" / "config.toml"
+        ws = str(world.repo.parent.resolve())
+        cfg.write_text(cfg.read_text() + f'\n[workspaces."{ws}"]\nmax_tier = "t1"\n')
+        answer = entry(world, world.repo)
+        assert json.loads(answer)["reason"] == "tier-required"
+        out = plugin(answer, world.repo.parent)
+        assert out["decision"]["block"] is True and "GIT_COMMITTER_EMAIL" not in out["env"]

@@ -14,6 +14,7 @@ from pathlib import Path
 import pytest
 
 from carter.identity import env as entry
+from carter.identity import payload
 from carter.identity.payload import fingerprint_of, shim_path
 from identity import vectors
 
@@ -27,6 +28,16 @@ SIGNING = (
     f'public_key = "{BLOB} llm@laptop"\nprivate_key_path = "/secret/dir/llm_key"\n'
 )
 KEYS = vectors.load()["tier"]["env_keys"]
+
+
+def git_user(tmp_path: Path, name: str, email: str) -> None:
+    """The human's identity, in the hermetic global git config."""
+    lines = (
+        ["[user]"]
+        + ([f"\tname = {name}"] if name else [])
+        + ([f"\temail = {email}"] if email else [])
+    )
+    Path(os.environ["GIT_CONFIG_GLOBAL"]).write_text("\n".join(lines) + "\n")
 
 
 def install_shim(home: Path, *, record: bool = True) -> Path:
@@ -97,13 +108,8 @@ class TestAnswer:
                 "fingerprint-mismatch",
             ),
             (IDENT + SIGNING.replace(BLOB, "ssh-ed25519 !!!"), True, "key-missing"),
-            (
-                IDENT.replace("[identity]\n", '[identity]\nrole = "author"\n') + SIGNING,
-                True,
-                "role-b-not-built",
-            ),
         ],
-        ids=["no shim", "fingerprint of another key", "public key not a blob", "role b"],
+        ids=["no shim", "fingerprint of another key", "public key not a blob"],
     )
     def test_each_failure_has_its_reason_and_no_block(
         self, tmp_path: Path, config: str, shim: bool, reason: str
@@ -111,6 +117,94 @@ class TestAnswer:
         got = run(tmp_path, config, shim=shim)
         assert (got["effective"], got["reason"]) == ("t2", reason)
         assert "signing" not in got
+
+    def test_role_b_adds_the_author_to_the_same_block_when_the_human_has_an_identity(
+        self, tmp_path: Path
+    ) -> None:
+        git_user(tmp_path, "Hu Man", "human@example.invalid")
+        got = run(
+            tmp_path, IDENT.replace("[identity]\n", '[identity]\nrole = "author"\n') + SIGNING
+        )
+        assert (got["effective"], got["reason"]) == ("t2", None)
+        assert tuple(got["signing"]["env"]) == payload.SIGNING_ENV_KEYS_B
+        email = f"{UID}+{LOGIN}@users.noreply.github.com"
+        assert (
+            got["signing"]["env"]["GIT_AUTHOR_EMAIL"]
+            == email
+            == got["signing"]["env"]["GIT_COMMITTER_EMAIL"]
+        )
+        assert "human@example.invalid" not in json.dumps(got)  # the human is checked, never emitted
+
+    @pytest.mark.parametrize(
+        ("name", "email"),
+        [
+            ("", ""),
+            ("Hu Man", ""),
+            ("", "human@example.invalid"),
+            ("Hu Man", f"{UID}+{LOGIN}@users.noreply.github.com"),
+            ("Hu Man", "carter-bot@users.noreply.github.com"),
+            ("Carter", "state@carter.invalid"),
+        ],
+        ids=["none", "no email", "no name", "the LLM's email", "old default", "state fallback"],
+    )
+    def test_role_b_without_a_usable_human_identity_has_the_reason_and_no_block(
+        self, tmp_path: Path, name: str, email: str
+    ) -> None:
+        git_user(tmp_path, name, email)
+        got = run(
+            tmp_path, IDENT.replace("[identity]\n", '[identity]\nrole = "author"\n') + SIGNING
+        )
+        assert (got["effective"], got["reason"]) == ("t2", "human-identity-invalid")
+        assert "signing" not in got
+
+    def test_a_person_named_carter_with_a_real_address_is_a_valid_human(
+        self, tmp_path: Path
+    ) -> None:
+        """K2 narrowed: only the pair `Carter` + `state@carter.invalid` is Carter's fallback."""
+        role_b = IDENT.replace("[identity]\n", '[identity]\nrole = "author"\n') + SIGNING
+        for name, email in (
+            ("Carter", "carter@example.invalid"),
+            ("Hu Man", "state@carter.invalid"),
+        ):
+            git_user(tmp_path, name, email)
+            sub = tmp_path / email.split("@")[0]
+            sub.mkdir(exist_ok=True)
+            got = run(sub, role_b)
+            assert got["reason"] is None and "signing" in got, (name, email)
+
+    def test_role_b_reads_the_identity_in_the_given_directory_include_if_respected(
+        self, tmp_path: Path
+    ) -> None:
+        git_user(tmp_path, "Hu Man", "human@example.invalid")
+        work = tmp_path / "work" / "proj"
+        work.mkdir(parents=True)
+        override = tmp_path / "work.gitconfig"
+        override.write_text("[user]\n\temail = carter-bot@users.noreply.github.com\n")
+        gc = Path(os.environ["GIT_CONFIG_GLOBAL"])
+        gc.write_text(
+            gc.read_text() + f'[includeIf "gitdir:{tmp_path}/work/"]\n\tpath = {override}\n'
+        )
+        subprocess.run(["git", "init", "-q", str(work)], check=True)
+        cfg = IDENT.replace("[identity]\n", '[identity]\nrole = "author"\n') + SIGNING
+        assert run(tmp_path, cfg)["reason"] is None
+        assert run(tmp_path, cfg, cwd=work)["reason"] == "human-identity-invalid"
+
+    def test_role_a_and_the_early_reasons_make_no_git_call(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from carter.identity import coauthor
+
+        def boom(*_a: object, **_k: object) -> object:
+            raise AssertionError("git was asked")
+
+        monkeypatch.setattr(coauthor.subprocess, "run", boom)
+        assert run(tmp_path, IDENT + SIGNING)["reason"] is None  # role a
+        role_b = IDENT.replace("[identity]\n", '[identity]\nrole = "author"\n') + SIGNING
+        (tmp_path / "b").mkdir()
+        assert run(tmp_path / "b", role_b, shim=False)["reason"] == "shim-missing"
+        t1 = IDENT.replace("[identity]\n", '[identity]\nrole = "author"\n')
+        (tmp_path / "c").mkdir()
+        assert run(tmp_path / "c", t1)["reason"] == "tier-required"
 
     def test_a_shim_without_a_guard_state_record_is_shim_missing(self, tmp_path: Path) -> None:
         home = tmp_path / "home"

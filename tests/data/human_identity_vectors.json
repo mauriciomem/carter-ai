@@ -1,0 +1,235 @@
+{
+  "version": 1,
+  "note": "Plan 006 K2. One oracle for carter.identity.coauthor.validate (Python) and the POSIX check in the rendered guard script. llm_email is the LLM's noreply address. problem is '' for a valid identity, else one of: missing-name, missing-email, bad-name, bad-email, llm-email, fallback. Plan 006 K2 narrowed by the maintainer: the state-commit fallback is the PAIR name Carter + state@carter.invalid; each alone is a valid identity. carter-bot@* stays a fallback by itself.",
+  "llm_email": "4242+llm-bot@users.noreply.github.com",
+  "cases": [
+    {
+      "id": "plain",
+      "name": "Hu Man",
+      "email": "human@example.invalid",
+      "problem": ""
+    },
+    {
+      "id": "noreply",
+      "name": "Octo Cat",
+      "email": "583231+octocat@users.noreply.github.com",
+      "problem": ""
+    },
+    {
+      "id": "unicode",
+      "name": "Ünï Çödé",
+      "email": "unï@example.invalid",
+      "problem": ""
+    },
+    {
+      "id": "comma-and-dot-inside",
+      "name": "Hu, Man Jr.",
+      "email": "human@example.invalid",
+      "problem": ""
+    },
+    {
+      "id": "quote-inside",
+      "name": "Hu \"Man\" Doe",
+      "email": "human@example.invalid",
+      "problem": ""
+    },
+    {
+      "id": "single-word-name",
+      "name": "human",
+      "email": "human@example.invalid",
+      "problem": ""
+    },
+    {
+      "id": "name-empty",
+      "name": "",
+      "email": "human@example.invalid",
+      "problem": "missing-name"
+    },
+    {
+      "id": "name-blank",
+      "name": "   ",
+      "email": "human@example.invalid",
+      "problem": "missing-name"
+    },
+    {
+      "id": "email-empty",
+      "name": "Hu Man",
+      "email": "",
+      "problem": "missing-email"
+    },
+    {
+      "id": "both-empty",
+      "name": "",
+      "email": "",
+      "problem": "missing-name"
+    },
+    {
+      "id": "name-newline",
+      "name": "Hu\nCo-authored-by: x <x@y.invalid>",
+      "email": "human@example.invalid",
+      "problem": "bad-name"
+    },
+    {
+      "id": "name-tab",
+      "name": "Hu\tMan",
+      "email": "human@example.invalid",
+      "problem": "bad-name"
+    },
+    {
+      "id": "name-escape",
+      "name": "Hu\u001bMan",
+      "email": "human@example.invalid",
+      "problem": "bad-name"
+    },
+    {
+      "id": "name-angle-open",
+      "name": "Hu <Man",
+      "email": "human@example.invalid",
+      "problem": "bad-name"
+    },
+    {
+      "id": "name-angle-close",
+      "name": "Hu Man>",
+      "email": "human@example.invalid",
+      "problem": "bad-name"
+    },
+    {
+      "id": "name-leading-space",
+      "name": " Hu Man",
+      "email": "human@example.invalid",
+      "problem": "bad-name"
+    },
+    {
+      "id": "name-trailing-space",
+      "name": "Hu Man ",
+      "email": "human@example.invalid",
+      "problem": "bad-name"
+    },
+    {
+      "id": "email-space",
+      "name": "Hu Man",
+      "email": "hu man@example.invalid",
+      "problem": "bad-email"
+    },
+    {
+      "id": "email-newline",
+      "name": "Hu Man",
+      "email": "human@example.invalid\nx",
+      "problem": "bad-email"
+    },
+    {
+      "id": "email-angle",
+      "name": "Hu Man",
+      "email": "<human@example.invalid>",
+      "problem": "bad-email"
+    },
+    {
+      "id": "email-two-ats",
+      "name": "Hu Man",
+      "email": "a@b@example.invalid",
+      "problem": "bad-email"
+    },
+    {
+      "id": "email-no-at",
+      "name": "Hu Man",
+      "email": "human.example.invalid",
+      "problem": "bad-email"
+    },
+    {
+      "id": "email-no-local",
+      "name": "Hu Man",
+      "email": "@example.invalid",
+      "problem": "bad-email"
+    },
+    {
+      "id": "email-no-domain",
+      "name": "Hu Man",
+      "email": "human@",
+      "problem": "bad-email"
+    },
+    {
+      "id": "llm-email",
+      "name": "Hu Man",
+      "email": "4242+llm-bot@users.noreply.github.com",
+      "problem": "llm-email"
+    },
+    {
+      "id": "llm-email-upper",
+      "name": "Hu Man",
+      "email": "4242+LLM-BOT@USERS.NOREPLY.GITHUB.COM",
+      "problem": "llm-email"
+    },
+    {
+      "id": "llm-email-with-llm-name",
+      "name": "llm-bot",
+      "email": "4242+llm-bot@users.noreply.github.com",
+      "problem": "llm-email"
+    },
+    {
+      "id": "carter-bot-default",
+      "name": "Hu Man",
+      "email": "carter-bot@users.noreply.github.com",
+      "problem": "fallback"
+    },
+    {
+      "id": "carter-bot-other-domain",
+      "name": "Hu Man",
+      "email": "carter-bot@example.invalid",
+      "problem": "fallback"
+    },
+    {
+      "id": "carter-bot-upper",
+      "name": "Hu Man",
+      "email": "Carter-Bot@Example.Invalid",
+      "problem": "fallback"
+    },
+    {
+      "id": "state-commit-email-with-another-name-is-valid",
+      "name": "Hu Man",
+      "email": "state@carter.invalid",
+      "problem": ""
+    },
+    {
+      "id": "state-commit-pair",
+      "name": "Carter",
+      "email": "state@carter.invalid",
+      "problem": "fallback"
+    },
+    {
+      "id": "a-person-named-carter-with-a-real-email-is-valid",
+      "name": "Carter",
+      "email": "human@example.invalid",
+      "problem": ""
+    },
+    {
+      "id": "carter-lowercase-with-a-real-email-is-valid",
+      "name": "carter",
+      "email": "human@example.invalid",
+      "problem": ""
+    },
+    {
+      "id": "name-contains-carter",
+      "name": "Carter Jones",
+      "email": "human@example.invalid",
+      "problem": ""
+    },
+    {
+      "id": "email-contains-carter-bot",
+      "name": "Hu Man",
+      "email": "not-carter-bot@example.invalid",
+      "problem": ""
+    },
+    {
+      "id": "state-commit-pair-upper",
+      "name": "CARTER",
+      "email": "State@Carter.Invalid",
+      "problem": "fallback"
+    },
+    {
+      "id": "carter-with-a-noreply-email",
+      "name": "Carter",
+      "email": "583231+carter@users.noreply.github.com",
+      "problem": ""
+    }
+  ]
+}

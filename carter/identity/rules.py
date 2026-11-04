@@ -25,7 +25,7 @@ from importlib import resources
 from typing import Any
 
 SLICES = ("1", "1G", "2a", "2b", "2c", "B", "CI-E")
-CURRENT_SLICE = "2b"  # bumped by the slice that starts enforcing more classes
+CURRENT_SLICE = "2c"  # bumped by the slice that starts enforcing more classes
 BEGIN_MARK = "<!-- forbidden:begin -->"
 END_MARK = "<!-- forbidden:end -->"
 
@@ -93,6 +93,13 @@ def gate_rules() -> tuple[GateRule, ...]:
 def plugin_defaults() -> dict[str, Any]:
     """Defaults for ``isolation.json``'s ``plugin`` block (G4); paths are filled at install."""
     return dict(_data()["plugin"])
+
+
+def human_identity_rules() -> dict[str, Any]:
+    """The values that mean "git had no real human identity" (K2): fallback emails (``*`` globs,
+    compared case-insensitively) and fallback names. One copy; the entry, ``--emit``, the checks
+    and the rendered guard script all read it."""
+    return dict(_data()["human_identity"])
 
 
 def shim_data() -> dict[str, Any]:

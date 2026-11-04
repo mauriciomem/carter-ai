@@ -9,8 +9,13 @@ fast and must not import click or ``carter.guard``). It never opens a key and ne
 agent: a locked key still yields the block, and the commit then fails at signing with the raw git
 error (``E-SIGN-LOCKED`` / ``E-SIGN-NOAGENT``).
 
-Reasons (H3), in the order they are decided: ``config-error``, ``tier-required``,
-``role-b-not-built``, ``key-missing``, ``fingerprint-mismatch``, ``shim-missing``.
+Role ``author`` (2c, freeze K5) adds ``GIT_AUTHOR_NAME/EMAIL`` (the LLM) to the same dict: author,
+committer, ``CARTER_IDENTITY`` and the signing entries are all present or all absent, so an
+LLM-authored commit the human's key signs (hazard H7) cannot be produced. The human's identity is
+only *checked* here (``human-identity-invalid``); the hook re-reads it at commit time.
+
+Reasons (H3, K3), in the order they are decided: ``config-error``, ``tier-required``,
+``key-missing``, ``fingerprint-mismatch``, ``shim-missing``, ``human-identity-invalid``.
 """
 
 from __future__ import annotations
@@ -20,11 +25,12 @@ import binascii
 import hashlib
 import json
 import stat
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from carter.identity.coauthor import Human
 from carter.identity.errors import E_CONFIG, E_ROLE_B_TIER
 from carter.identity.isolation_apply import (
     Applied,
@@ -38,6 +44,13 @@ from carter.identity.trailer import noreply_email
 
 SIGNING_KEYS = ("env", "git_config", "fingerprint")
 SIGNING_ENV_KEYS = ("GIT_COMMITTER_NAME", "GIT_COMMITTER_EMAIL", "CARTER_IDENTITY")
+SIGNING_ENV_KEYS_B = (
+    "GIT_AUTHOR_NAME",
+    "GIT_AUTHOR_EMAIL",
+    "GIT_COMMITTER_NAME",
+    "GIT_COMMITTER_EMAIL",
+    "CARTER_IDENTITY",
+)
 SIGNING_GIT_CONFIG_KEYS = ("gpg.format", "user.signingkey", "gpg.ssh.program", "commit.gpgsign")
 REASONS = (
     "config-error",
@@ -45,7 +58,7 @@ REASONS = (
     "key-missing",
     "fingerprint-mismatch",
     "shim-missing",
-    "role-b-not-built",
+    "human-identity-invalid",
 )
 
 SHIM_REL = ".carter/bin/carter-ssh-sign"
@@ -121,16 +134,25 @@ class Built:
     reason: str | None = None
 
 
-def build_payload(cfg: IdentityConfig, res: Resolution, shim: ShimState) -> Built:
-    """The signing block for ``cfg`` at the resolved tier, or the reason there is none."""
+def build_payload(
+    cfg: IdentityConfig,
+    res: Resolution,
+    shim: ShimState,
+    human: Callable[[], Human] | None = None,
+    *,
+    role: str | None = None,
+) -> Built:
+    """The signing block for ``cfg`` at the resolved tier, or the reason there is none.
+
+    ``human`` reads and validates the human's git identity; it is called only for role ``author``
+    at T2 after every other check has passed (the role-a path stays free of git calls). ``role``
+    overrides the resolved role (``carter commit`` passes ``co-author``: it ignores the role)."""
     if res.refusal_reason == E_CONFIG:
         return Built(reason="config-error")
     if res.refusal_reason == E_ROLE_B_TIER or _tier_unmet(res):
         return Built(reason="tier-required")
     if res.tier != "t2":
         return Built()
-    if res.role == "author":
-        return Built(reason="role-b-not-built")  # never degrades to co-author; 2c lifts it
     blob = public_blob(cfg.signing.public_key)
     if not blob:
         return Built(reason="key-missing")
@@ -139,13 +161,21 @@ def build_payload(cfg: IdentityConfig, res: Resolution, shim: ShimState) -> Buil
     if not shim.ok:
         return Built(reason="shim-missing")
     ident = cfg.identity
+    llm = {"NAME": ident.name or ident.login, "EMAIL": noreply_email(cfg)}
+    env: dict[str, str] = {}
+    if (role or res.role) == "author":
+        # Never degrades to co-author: no usable human identity, no block (K3, K4).
+        if human is None or not human().ok:
+            return Built(reason="human-identity-invalid")
+        env = {"GIT_AUTHOR_NAME": llm["NAME"], "GIT_AUTHOR_EMAIL": llm["EMAIL"]}
+    env |= {
+        "GIT_COMMITTER_NAME": llm["NAME"],
+        "GIT_COMMITTER_EMAIL": llm["EMAIL"],
+        "CARTER_IDENTITY": ident.login,
+    }
     return Built(
         block={
-            "env": {
-                "GIT_COMMITTER_NAME": ident.name or ident.login,
-                "GIT_COMMITTER_EMAIL": noreply_email(cfg),
-                "CARTER_IDENTITY": ident.login,
-            },
+            "env": env,
             "git_config": [
                 ["gpg.format", "ssh"],
                 ["user.signingkey", f"key::{blob}"],
