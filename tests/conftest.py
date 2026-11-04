@@ -24,6 +24,7 @@ from host_guard import (
     is_allowed_connect,
     is_local_host,
 )
+from ssh_rig import rig  # noqa: F401  (opt-in real_ssh_agent fixture)
 
 # Resolved once at import, before any fixture can redirect HOME. The hermetic fixture
 # compares against it, so it must not be recomputed lazily.

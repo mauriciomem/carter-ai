@@ -13,6 +13,12 @@ import threading
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from pathlib import Path
+from urllib.parse import urlsplit
+
+FIXTURES = Path(__file__).resolve().parent / "data" / "github"
+DEFAULT_API = "https://api.github.com"
+DEFAULT_WEB = "https://github.com"
 
 ZERO_SHA = "0" * 40
 EXPIRY_HEADER = "Github-Authentication-Token-Expiration"
@@ -48,6 +54,37 @@ class Reply:
     status: int = 200
     body: str = "{}"
     headers: dict[str, str] = field(default_factory=dict)
+    content_type: str = "application/json; charset=utf-8"
+
+
+def fixture(name: str) -> str:
+    """The text of ``tests/data/github/<name>`` (shapes pinned from the public REST docs)."""
+    return (FIXTURES / name).read_text()
+
+
+def web_base(api_url: str | None) -> str:
+    """The origin that serves ``/<login>.keys`` for a given ``GITHUB_API_URL`` (plan 005 step 5).
+
+    Default API: ``https://github.com``. A GitHub Enterprise Server API root ends in
+    ``/api/v3``: its origin. Anything else (a loopback fake): the same URL, so one server
+    covers both the API and the web page. Redirects are never followed.
+    """
+    url = (api_url or DEFAULT_API).rstrip("/")
+    if url == DEFAULT_API:
+        return DEFAULT_WEB
+    if urlsplit(url).path == "/api/v3":
+        parts = urlsplit(url)
+        return f"{parts.scheme}://{parts.netloc}"
+    return url
+
+
+RATE_HEADERS = {
+    "x-ratelimit-limit": "60",
+    "x-ratelimit-remaining": "0",
+    "x-ratelimit-used": "60",
+    "x-ratelimit-reset": "1793760000",
+    "x-ratelimit-resource": "core",
+}
 
 
 class FakeGitHub:
@@ -75,7 +112,7 @@ class FakeGitHub:
                     reply = route(rec) if callable(route) else route
                 payload = reply.body.encode()
                 self.send_response(reply.status)
-                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Type", reply.content_type)
                 self.send_header("Content-Length", str(len(payload)))
                 for key, value in reply.headers.items():
                     self.send_header(key, value)
@@ -106,6 +143,31 @@ class FakeGitHub:
         self.thread.join(timeout=5)
 
     # -- scripting helpers ---------------------------------------------------------
+    def authorized_requests(self) -> list[Recorded]:
+        """Requests that carried credentials (the unauthenticated calls must have none)."""
+        return [r for r in self.requests if "authorization" in r.headers or "cookie" in r.headers]
+
+    def public_world(
+        self,
+        login: str = "octocat",
+        *,
+        user: str = "user.json",
+        signing_keys: str = "signing-keys-match.json",
+        auth_keys: str = "keys-without.txt",
+    ) -> None:
+        """The three unauthenticated reads of ``identity add``: the account, its signing
+        keys (API) and its authentication keys (the web page, same server)."""
+        self.on("GET", f"/users/{login}", Reply(200, fixture(user)))
+        self.on("GET", f"/users/{login}/ssh_signing_keys", Reply(200, fixture(signing_keys)))
+        self.on(
+            "GET",
+            f"/{login}.keys",
+            Reply(200, fixture(auth_keys), content_type="text/plain; charset=utf-8"),
+        )
+
+    def commit_world(self, owner_repo: str, sha: str, name: str = "commit-verified.json") -> None:
+        self.on("GET", f"/repos/{owner_repo}/commits/{sha}", Reply(200, fixture(name)))
+
     def on(self, method: str, path: str, reply: Reply | Callable[[Recorded], Reply]) -> None:
         self.routes[(method, path)] = reply
 

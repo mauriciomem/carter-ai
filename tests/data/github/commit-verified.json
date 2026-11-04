@@ -1,0 +1,34 @@
+{
+  "url": "https://api.github.com/repos/octocat/hello/commits/a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+  "sha": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+  "node_id": "MDY6Q29tbWl0",
+  "html_url": "https://github.com/octocat/hello/commit/a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+  "commit": {
+    "url": "https://api.github.com/repos/octocat/hello/git/commits/a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+    "author": {
+      "name": "Fixture Human",
+      "email": "583231+octocat@users.noreply.github.com",
+      "date": "2026-11-01T10:00:00Z"
+    },
+    "committer": {
+      "name": "carter-llm",
+      "email": "9001+carter-llm@users.noreply.github.com",
+      "date": "2026-11-01T10:00:00Z"
+    },
+    "message": "feat: example\n\nCo-authored-by: carter-llm <9001+carter-llm@users.noreply.github.com>",
+    "tree": {
+      "sha": "b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2",
+      "url": "https://api.github.com/repos/octocat/hello/git/trees/b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2"
+    },
+    "comment_count": 0,
+    "verification": {
+      "verified": true,
+      "reason": "valid",
+      "signature": "-----BEGIN SSH SIGNATURE-----\nU1NIU0lH...(truncated for the fixture)\n-----END SSH SIGNATURE-----",
+      "payload": "tree b2...\nauthor ...",
+      "verified_at": "2026-11-01T10:00:05Z"
+    }
+  },
+  "parents": [],
+  "files": []
+}
