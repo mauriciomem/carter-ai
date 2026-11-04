@@ -136,6 +136,19 @@ class TestProbes:
         got = probe.push_refused(env, subprocess.run)
         assert got.status == "FAIL"
 
+    def test_the_probe_does_not_depend_on_the_commit_guards_or_a_signing_key(
+        self, home: Path, empty_gh: Path
+    ) -> None:
+        """At T2 the agent environment carries a signing block and the commit guards want the LLM as
+        committer: the probe's scratch commit object must not go through either (final rehearsal)."""
+        env = agent_env(home)
+        n = int(env["GIT_CONFIG_COUNT"])
+        env.update({f"GIT_CONFIG_KEY_{n}": "commit.gpgsign", f"GIT_CONFIG_VALUE_{n}": "true"})
+        env[f"GIT_CONFIG_KEY_{n + 1}"] = "gpg.ssh.program"
+        env[f"GIT_CONFIG_VALUE_{n + 1}"] = "/nonexistent/shim"
+        env["GIT_CONFIG_COUNT"] = str(n + 2)
+        assert probe.push_refused(env, subprocess.run).status == "PASS"
+
     def test_the_scratch_repository_is_removed(
         self, home: Path, empty_gh: Path, tmp_path: Path
     ) -> None:

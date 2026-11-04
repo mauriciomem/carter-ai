@@ -122,14 +122,24 @@ def push_refused(env: Mapping[str, str], runner: Runner) -> Result:
         steps = [
             ["git", "init", "-q"],
             ["git", "remote", "add", "origin", "git@github.com:carter-probe/none.git"],
-            ["git", "commit", "-q", "--allow-empty", "-m", "probe"],
         ]
         for step in steps:
             if _run(runner, step, full, scratch, 20).returncode != 0:
                 return Result("FAIL", "push_refused", "the scratch repository failed")
+        # A commit OBJECT, not `git commit`: no commit hooks and no signing, so this probe means the
+        # same at T2 (where the commit guards require the LLM as committer and the key unlocked) as
+        # at T0/T1. Found by the final rehearsal: `git commit` as "probe" was refused at T2.
+        tree = _run(
+            runner, ["git", "hash-object", "-t", "tree", "-w", "/dev/null"], full, scratch, 20
+        )
+        made = _run(
+            runner, ["git", "commit-tree", tree.stdout.strip(), "-m", "probe"], full, scratch, 20
+        )
+        if tree.returncode != 0 or made.returncode != 0 or not made.stdout.strip():
+            return Result("FAIL", "push_refused", "the scratch repository failed")
         done = _run(
             runner,
-            ["git", "push", "--dry-run", "origin", "HEAD:refs/heads/probe"],
+            ["git", "push", "--dry-run", "origin", f"{made.stdout.strip()}:refs/heads/probe"],
             full,
             scratch,
             20,
