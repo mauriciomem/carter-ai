@@ -24,6 +24,7 @@ CAP_TIERS = ("t0", "t1")  # [workspaces.*] max_tier (D64)
 REQUIRE_TIERS = ("t0", "t1", "t2")  # [workspaces.*] require_tier (D62)
 OPTIONAL_ROLES = ROLES  # a pinned workspace role
 SIGNING_FORMATS = ("ssh",)  # v1: ssh only
+SIGNING_MODES = ("file", "agent")  # D68 d: sign from the key file, or through the agent
 
 
 def _choice(default: Any, choices: tuple[str, ...]) -> Any:
@@ -54,7 +55,10 @@ class Signing:
     previous_public_keys: tuple[str, ...] = ()
     agent_socket: str = ""
     program: str = ""
-    ttl: str = "8h"
+    ttl: str = ""  # D68 e: no lifetime unless `unlock --ttl` or this key says so
+    mode: str = _choice(
+        "", SIGNING_MODES
+    )  # D68 d: "file" = a key without passphrase, signed in place
     ssh_bin_dir: str = "/usr/bin"  # Apple OpenSSH; Homebrew users override (RFC §4.6)
 
 

@@ -16,14 +16,14 @@ from carter.cli import main
 from carter.guard import hooks
 from carter.guard.state import GuardState, load, save
 from carter.install.paths import carter_gitconfig_path, guard_state_path
-from guard.helpers import debug_config
+from guard.helpers import debug_config, verbose
 
 PENDING = "the commit checks need your confirmation (`hooks` revision 2)"
 FOUR = {"pre-push", "prepare-commit-msg", "commit-msg", "post-commit"}
 
 
 def guard(*args: str, **kw):
-    return CliRunner().invoke(main, ["guard", *args], catch_exceptions=False, **kw)
+    return CliRunner().invoke(main, ["guard", *verbose(args)], catch_exceptions=False, **kw)
 
 
 def written_events() -> set[str]:
@@ -104,10 +104,10 @@ class TestUpgradeFromRevision1:
         downgrade_to_rev1(stack)
         human_tty(True)
         stack.fake(before=debug_config(stack.live))
-        res = guard("install", input="y\n" * 6)
+        res = guard("install", input="y\n")
         assert res.exit_code == 0, res.output
         out = res.output
-        assert out.index("hooks now also checks agent commits") < out.index("Install this group?")
+        assert out.index("hooks now also checks agent commits") < out.index("Install?")
         assert (
             written_events() == FOUR and load(guard_state_path(None)).consents["hooks"]["rev"] == 2
         )
@@ -125,7 +125,7 @@ class TestUpgradeFromRevision1:
         downgrade_to_rev1(stack)
         human_tty(True)
         stack.fake(before=debug_config(stack.live))
-        res = guard("install", input="n\n" * 6)
+        res = guard("install", input="n\n")
         assert res.exit_code == 0, res.output
         state = load(guard_state_path(None))
         assert state.consents["hooks"]["rev"] == 1 and written_events() == {"pre-push"}

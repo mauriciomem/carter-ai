@@ -108,7 +108,7 @@ class UnlockResult:
 
 
 def unlock(setup: Setup, run_with_terminal: Runner, *, extend: bool = False) -> UnlockResult:
-    """Make sure the dedicated agent runs and holds the key for ``setup.ttl``.
+    """Make sure the dedicated agent runs and holds the key (for ``setup.ttl`` when set).
 
     ``run_with_terminal(argv, env)`` runs ``ssh-add`` attached to the user's terminal and returns
     its exit code. A key that is already loaded is not asked for again unless ``extend`` (one
@@ -131,7 +131,8 @@ def unlock(setup: Setup, run_with_terminal: Runner, *, extend: bool = False) -> 
             started, state = True, _probe(setup)
         if state.state == "ok" and not extend:
             return UnlockResult("already-unlocked")
-        argv = [os.path.join(setup.ssh_bin_dir, "ssh-add"), "-t", setup.ttl, setup.private_key]
+        lifetime = ["-t", setup.ttl] if setup.ttl else []  # D68 e: no lifetime by default
+        argv = [os.path.join(setup.ssh_bin_dir, "ssh-add"), *lifetime, setup.private_key]
         code = run_with_terminal(argv, child_env(setup.home, sock))
         after = _probe(setup)
         if code == 0 and after.state == "ok":

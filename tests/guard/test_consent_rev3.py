@@ -23,13 +23,13 @@ from carter.install.paths import (
     isolation_path,
     plugin_dir,
 )
-from guard.helpers import debug_config
+from guard.helpers import debug_config, verbose
 
 PENDING = "need your confirmation"
 
 
 def guard(*args: str, **kw):
-    return CliRunner().invoke(main, ["guard", *args], catch_exceptions=False, **kw)
+    return CliRunner().invoke(main, ["guard", *verbose(args)], catch_exceptions=False, **kw)
 
 
 def rev2(stack) -> None:
@@ -128,10 +128,10 @@ class TestConfirming:
         rev2(stack)
         human_tty(True)
         stack.fake(before=debug_config(stack.live), after=debug_config(stack.live))
-        res = guard("install", input="y\n" * 6)
+        res = guard("install", input="y\n")
         out = res.output
         assert res.exit_code == 0, out
-        assert out.index("`carter_push` and `carter_pr`") < out.index("Install this group?")
+        assert out.index("`carter_push` and `carter_pr`") < out.index("Install?")
         assert "approve" in out and "your SSH agent is used only for that approved push" in out
         assert "carter guard remove --only broker" in out
         assert state_g2()["rev"] == 3 and iso_plugin()["b_enabled"] is True
@@ -142,7 +142,7 @@ class TestConfirming:
         rev2(stack)
         human_tty(True)
         stack.fake(before=debug_config(stack.live), after=debug_config(stack.live))
-        res = guard("install", input="n\n" * 6)
+        res = guard("install", input="n\n")
         assert res.exit_code == 0
         state = load(guard_state_path(None))
         assert state.consents["g2"]["rev"] == 2
@@ -153,8 +153,8 @@ class TestConfirming:
         }
         assert iso_plugin()["b_enabled"] is False and not headless_profile_path(None).exists()
         stack.fake(before=debug_config(stack.live), after=debug_config(stack.live))
-        again = guard("install", input="y\n" * 6)
-        assert "Install this group?" not in again.output and state_g2()["rev"] == 2
+        again = guard("install", input="y\n")
+        assert "g2 r3" not in again.output.split("Install?")[0] and state_g2()["rev"] == 2
         # the human can still change their mind, explicitly
         stack.fake(before=debug_config(stack.live), after=debug_config(stack.live))
         assert guard("install", "--yes", "--only", "g2").exit_code == 0 and state_g2()["rev"] == 3

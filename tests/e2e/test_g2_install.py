@@ -52,7 +52,7 @@ def test_install_isolate_gate_and_restore(rig_factory, opencode_bin) -> None:
     dry = carter(rig, "guard", "install", "--dry-run")
     assert dry.returncode == 0, dry.stdout + dry.stderr
     assert "would write" in dry.stdout and not (home / ".carter/isolation.json").exists()
-    res = carter(rig, "guard", "install", "--yes")
+    res = carter(rig, "guard", "install", "-v", "--yes")
     assert res.returncode == 0, res.stdout + res.stderr
     assert "plugin installed:" in res.stdout and "restart the OpenCode server" in res.stdout
     assert state(rig)["consents"]["g2"]["rev"] == 3  # slice B: revision 3 carries the B tools
@@ -96,9 +96,9 @@ def test_install_isolate_gate_and_restore(rig_factory, opencode_bin) -> None:
     assert not human & {"CARTER_AGENT_SHELL", "GH_TOKEN", "GIT_CONFIG_COUNT", "AGENT"}
 
     # 6. check --host sees a loaded, passing plugin (run from the rig, which has the server)
-    check = carter(rig, "check", "--host")
+    check = carter(rig, "check", "--host", "-v")
     assert "plugin and isolation.json match (hash)" in check.stdout, check.stdout
-    assert "self-test passed" in check.stdout and "RED" not in check.stdout.replace("0 RED", ""), (
+    assert "self-test passed" in check.stdout and "\u2717" not in check.stdout + check.stderr, (
         check.stdout
     )
 
@@ -126,7 +126,10 @@ def test_install_isolate_gate_and_restore(rig_factory, opencode_bin) -> None:
 
     # 9. a bare --yes does not bring the plugin back; --yes --only g2 does
     res = carter(rig, "guard", "install", "--yes")
-    assert "need your confirmation" in res.stdout and not (home / ".carter/isolation.json").exists()
+    assert (
+        "need your confirmation" in res.stdout + res.stderr
+        and not (home / ".carter/isolation.json").exists()
+    )
     res = carter(rig, "guard", "install", "--yes", "--only", "g2")
     assert res.returncode == 0 and (home / ".carter/isolation.json").exists(), res.stdout
     assert state(rig)["consents"]["g2"]["rev"] == 3  # slice B: revision 3 carries the B tools

@@ -72,8 +72,8 @@ def gh(fake_gh) -> Callable[..., object]:
     return script
 
 
-def pr_cli(*, input: str | None = "y\n") -> Result:
-    return CliRunner().invoke(main, ["pr"], input=input)
+def pr_cli(*args: str, env: dict[str, str] | None = None) -> Result:
+    return CliRunner().invoke(main, ["pr", *args], env=env)
 
 
 def created(fake) -> list[list[str]]:
@@ -88,16 +88,25 @@ class TestRefusals:
         path = put(ws)
         monkeypatch.setenv("OPENCODE_SESSION_ID", "s1")
         res = pr_cli()
-        assert res.exit_code == 1 and f"Error: {E_HUMAN_TERMINAL}" in res.output
+        assert res.exit_code == 1 and E_HUMAN_TERMINAL in res.output
         assert fake.calls() == [] and path.exists()
 
-    def test_no_tty_covers_the_bang_shell(self, ws: Path, gh, human_tty) -> None:
+    def test_no_terminal_is_needed_for_the_human_tagged_bang_shell(
+        self, ws: Path, gh, human_tty
+    ) -> None:
+        fake = gh()
+        put(ws)
+        human_tty(False)  # D68 g: OpenCode's `!` shell has no TTY
+        bang = {"OPENCODE_SESSION_ID": "s1", "CARTER_HUMAN_SHELL": "1"}
+        res = pr_cli(env=bang)
+        assert res.exit_code == 0, res.output
+        assert len(created(fake)) == 1
+
+    def test_the_strong_agent_marker_beats_the_human_tag(self, ws: Path, gh) -> None:
         fake = gh()
         path = put(ws)
-        human_tty(False)
-        res = pr_cli()
+        res = pr_cli(env={"CARTER_HUMAN_SHELL": "1", "CARTER_AGENT_SHELL": "1"})
         assert res.exit_code == 1 and E_HUMAN_TERMINAL in res.output
-        assert "your own terminal" in res.output and "!carter" not in res.output
         assert fake.calls() == [] and path.exists()
 
     def test_arguments_are_refused(self, ws: Path, gh) -> None:
@@ -111,7 +120,7 @@ class TestRefusals:
     def test_a_missing_handoff_names_the_expected_path(self, ws: Path, gh) -> None:
         fake = gh()
         res = pr_cli()
-        assert res.exit_code == 1 and f"Error: {E_HANDOFF}" in res.output
+        assert res.exit_code == 1 and E_HANDOFF in res.output
         assert ".carter/state/handoff/feat%2Fx.md" in res.output
         assert fake.calls() == []
 
@@ -182,35 +191,34 @@ class TestSecretScan:
         fake = gh()
         path = put(ws, **{field: value})
         res = pr_cli()
-        assert res.exit_code == 1 and f"Error: {E_SECRET_SCAN}" in res.output
+        assert res.exit_code == 1 and E_SECRET_SCAN in res.output
         assert fake.calls() == [] and path.exists()
         assert value.strip()[-12:] not in res.output  # the text itself is never echoed
 
 
-class TestPreviewAndConfirm:
-    def test_it_shows_title_target_base_and_the_first_40_body_lines(self, ws: Path, gh) -> None:
+class TestPreview:
+    def test_verbose_shows_title_target_base_and_the_first_40_body_lines(
+        self, ws: Path, gh
+    ) -> None:
         gh()
         body = "\n".join(f"line {i}" for i in range(1, 61)) + "\n"
         put(ws, body=body, title="feat: preview", draft=True)
-        res = pr_cli(input="n\n")
-        out = res.output
-        assert "Title:  feat: preview" in out and "Target: o/r" in out and "Base: main" in out
-        assert "Draft:  yes" in out and "line 40" in out and "line 41" not in out
+        out = pr_cli("-v").output
+        assert "title: feat: preview" in out and "target: o/r" in out and "base: main" in out
+        assert "draft: yes" in out and "line 40" in out and "line 41" not in out
         assert "(20 more line(s) not shown)" in out
 
-    @pytest.mark.parametrize("answer", ["n\n", "\n", "", "yes\n", "no\n"])
-    def test_anything_but_y_creates_nothing(self, ws: Path, gh, answer: str) -> None:
+    def test_a_normal_run_asks_nothing_and_prints_no_preview(self, ws: Path, gh) -> None:
         fake = gh()
-        path = put(ws)
-        res = pr_cli(input=answer)
-        assert res.exit_code == 1 and "no pull request was created" in res.output
-        assert created(fake) == [] and path.exists()
-        assert fake.bodies() == []
+        put(ws, title="feat: quiet")
+        res = pr_cli()
+        assert res.exit_code == 0 and len(created(fake)) == 1
+        assert "feat: quiet" not in res.output and "[y/N]" not in res.output
 
     def test_control_characters_in_the_preview_are_defused(self, ws: Path, gh) -> None:
         gh()
         put(ws, body="evil \x1b]0;pwned\x07 end\n")
-        out = pr_cli(input="n\n").output
+        out = pr_cli("-v").output
         assert "\x1b" not in out and "\x07" not in out
 
 
@@ -288,7 +296,7 @@ class TestArgv:
         gh()
         put(ws)
         monkeypatch.setenv("GITHUB_TOKEN", "github_pat_STALESENTINEL")
-        out = pr_cli(input="n\n").output
+        out = pr_cli().output
         assert "GITHUB_TOKEN is set, so gh uses it" in out and "STALESENTINEL" not in out
 
     def test_gh_is_run_by_absolute_path(self, gh) -> None:
@@ -357,50 +365,55 @@ class TestFork:
         git("remote", "set-url", "origin", "https://github.com/O/R.git", cwd=ws)
         put(ws)
         item = handoff.read_handoff(ws, "feat/x")
-        out: list[str] = []
-        from carter.aplus.push import Io
-
-        target, head_ = pr._target(ws, item, "feat/x", Io(out.append, lambda _p: ""))
-        assert (target, head_) == ("o/r", "feat/x") and out == []
+        target, head_ = pr._target(ws, item, "feat/x")
+        assert (target, head_) == ("o/r", "feat/x")
 
     def test_a_non_github_origin_is_noted_not_trusted_silently(self, ws: Path, gh) -> None:
         gh()
         put(ws)
-        assert "was not cross-checked" in pr_cli(input="n\n").output
+        assert "was not cross-checked" in pr_cli("-v").output
 
 
 class TestPushFirst:
-    def test_a_branch_missing_on_origin_offers_the_push_then_continues(self, ws: Path, gh) -> None:
+    def test_a_branch_missing_on_origin_is_pushed_first_then_the_pr_is_opened(
+        self, ws: Path, gh
+    ) -> None:
         fake = gh()
         git("push", "-q", "origin", "--delete", "feat/x", cwd=ws)
         put(ws)
-        res = pr_cli(input="y\ny\n")  # push confirmation, then the PR confirmation
+        res = pr_cli()
         assert res.exit_code == 0, res.output
-        assert "not on origin at HEAD" in res.output and "Pushed feat/x to origin" in res.output
+        assert "feat/x → origin" in res.output and "PR #7 opened" in res.output
         assert "refs/heads/feat/x" in git("ls-remote", "--heads", "origin", cwd=ws).stdout
         assert len(created(fake)) == 1
-        assert res.output.index("Pushed feat/x") < res.output.index("Create this pull request")
+        assert res.output.index("feat/x → origin") < res.output.index("PR #7")
+        assert "[y/N]" not in res.output
 
     def test_a_branch_behind_the_local_head_is_pushed_too(self, ws: Path, gh) -> None:
         fake = gh()
         commit_file(ws, "newer.txt")
         put(ws)
-        res = pr_cli(input="y\ny\n")
-        assert res.exit_code == 0 and "Pushed feat/x" in res.output and len(created(fake)) == 1
+        res = pr_cli()
+        assert res.exit_code == 0 and "feat/x → origin" in res.output and len(created(fake)) == 1
 
-    def test_declining_the_push_creates_nothing_and_keeps_the_file(self, ws: Path, gh) -> None:
+    def test_a_failed_push_creates_nothing_and_keeps_the_file(
+        self, ws: Path, gh, tmp_path: Path
+    ) -> None:
         fake = gh()
         git("push", "-q", "origin", "--delete", "feat/x", cwd=ws)
         path = put(ws)
-        res = pr_cli(input="n\n")
+        hook = tmp_path / "origin.git" / "hooks" / "pre-receive"
+        hook.write_text("#!/bin/sh\necho nope >&2\nexit 1\n")
+        hook.chmod(0o755)
+        res = pr_cli()
         assert res.exit_code == 1 and created(fake) == [] and path.exists()
-        assert "refs/heads/feat/x" not in git("ls-remote", "--heads", "origin", cwd=ws).stdout
+        assert "no pull request was created" in res.output and "handoff is kept" in res.output
 
     def test_a_branch_already_on_origin_at_head_does_not_push(self, ws: Path, gh) -> None:
         gh()
         put(ws)
         res = pr_cli()
-        assert res.exit_code == 0 and "Pushed" not in res.output
+        assert res.exit_code == 0 and "→ origin" not in res.output
 
 
 class TestResult:
@@ -409,7 +422,7 @@ class TestResult:
         path = put(ws)
         res = pr_cli()
         assert res.exit_code == 0, res.output
-        assert f"Created: {URL}" in res.output and not path.exists()
+        assert res.output == f"✓ PR #7 opened · {URL}\n" and not path.exists()  # one line
 
     def test_only_this_branchs_handoff_is_deleted(self, ws: Path, gh) -> None:
         gh()
@@ -425,8 +438,8 @@ class TestResult:
         res = pr_cli()
         assert res.exit_code == 1 and path.exists()
         failure = [ln for ln in res.output.splitlines() if "gh pr create failed" in ln]
-        assert failure and "not allowed" in failure[0] and "SECRETBODYSENTINEL" not in failure[0]
-        assert "kept" in failure[0]
+        assert failure and "not allowed" in failure[0] and "SECRETBODYSENTINEL" not in res.output
+        assert "handoff is kept" in res.output
 
     def test_urls_with_credentials_in_gh_output_are_masked(self, ws: Path, fake_gh) -> None:
         fake_gh(

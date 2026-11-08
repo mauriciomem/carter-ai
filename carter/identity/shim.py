@@ -68,9 +68,12 @@ class ShimParams:
     keygen: str
     run_dir: str
     signer: str = ""
+    file_key: str = (
+        ""  # D68 d: a passphrase-less private key; the shim signs from exactly this path
+    )
 
     def checked(self) -> ShimParams:
-        for name in ("sock", "false_path", "keygen", "run_dir", "signer"):
+        for name in ("sock", "false_path", "keygen", "run_dir", "signer", "file_key"):
             value = getattr(self, name)
             if value and not os.path.isabs(value):
                 raise ValueError(f"{name} must be an absolute path")
@@ -92,6 +95,7 @@ def render(params: ShimParams) -> bytes:
         "KEYGEN": p.keygen,
         "SIGNER": p.signer or p.keygen,
         "RUN_DIR": p.run_dir,
+        "FILE_KEY": p.file_key,
         "REFUSAL": refusal,
     }
     for name, value in values.items():

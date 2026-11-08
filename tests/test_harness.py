@@ -295,7 +295,7 @@ class TestCheckCli:
         fake_opencode(agents_output=_loaded(ws))
         result = CliRunner().invoke(main, ["check", str(ws)])
         assert result.exit_code == 0, result.output
-        assert "OpenCode loaded" in result.output
+        assert "loaded by OpenCode" in result.output
 
     def test_fails_naming_dropped_agent(self, tmp_path, fake_opencode, no_sleep):
         ws = _init(tmp_path)

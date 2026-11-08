@@ -55,7 +55,7 @@ A shell command refused by the Carter command gate (`Refused by the Carter comma
 1. Read `.carter/knowledge/tools.md` — infrastructure toolchain
 2. Read `.carter/knowledge/patterns.md` — deployment conventions
 
-**Language & commits:** Commit messages, branch names, PR/issue text and pipeline comments in English. Commits follow the `carter-ops` skill: never pass `--author`, `-S`, `-s` or `--no-verify`; the user is the author and the trailer is the `coauthor_trailer` from `carter ops config --emit`. In role b (`author` is `llm`) the trailer is the user's line from the emit; never set an author yourself. A commit that fails on a locked signing key is not retried: leave the changes staged and ask the user to run `carter identity unlock` in their own terminal.
+**Language & commits:** Commit messages, branch names, PR/issue text and pipeline comments in English. Commits follow the `carter-ops` skill: never pass `--author`, `-S`, `-s` or `--no-verify`; the user is the author and the trailer is the `coauthor_trailer` (`carter ops config --emit --field coauthor_trailer`); report a commit in one line, `Committed <sha>: <subject>`. In role b (`author` is `llm`) the trailer is the user's line from the emit; never set an author yourself. A commit that fails on a locked signing key is not retried: leave the changes staged and ask the user to run `carter identity unlock` in their own terminal.
 
 </boundaries>
 {% endblock %}

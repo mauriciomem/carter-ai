@@ -90,15 +90,13 @@ def refresh_from_update(
     *,
     home: str,
     backup_root: Path,
-    assume_yes: bool,
     dry_run: bool,
-    interactive: bool,
     agent: bool,
-    confirm: Callable[[str], bool],
     echo: Echo,
     reader: Reader | None = None,
 ) -> None:
-    """The D52 step of ``carter update``. Silent unless something would change."""
+    """The D52 step of ``carter update``. Silent unless something would change; it asks nothing
+    (D68 h): the statements come from the user's own ``config.toml`` and the consent on record."""
     read = load_or_empty_readonly(state_path)
     if read.status in ("corrupt", "newer"):
         echo(
@@ -130,13 +128,6 @@ def refresh_from_update(
     if agent:
         echo("Policies are applied only from your own terminal (agent shell detected); skipped.")
         return
-    if preview.added and not assume_yes:
-        if not interactive:
-            echo("Not applied: run `carter update` in a terminal, or pass --yes.")
-            return
-        if not confirm("Apply these policy changes to the OpenCode config?"):
-            echo("Not applied.")
-            return
     result = policies.apply(base_dir, state, wanted, backup_root=backup_root, reader=reader)
     save(state, state_path)
     echo(f"Policies updated in {result.target}.")

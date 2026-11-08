@@ -25,7 +25,7 @@ from carter.identity.policyset import policy_statements
 from carter.install.mcp import config_target
 from carter.install.paths import backups_dir, carter_gitconfig_path, guard_state_path
 from guard.conftest import REAL_GIT
-from guard.helpers import STAND_IN, agents_json, debug_config, tree_hash
+from guard.helpers import STAND_IN, agents_json, debug_config, decline, tree_hash, verbose
 
 BUILTINS = ["build", "plan", "general", "explore"]
 PAT_MESSAGE = (
@@ -44,7 +44,7 @@ SYNTHETIC = Path(__file__).resolve().parents[1] / "data" / "opencode-config-shap
 
 
 def guard(*args: str, input: str | None = None) -> Result:
-    return CliRunner().invoke(main, ["guard", *args], input=input, catch_exceptions=False)
+    return CliRunner().invoke(main, ["guard", *verbose(args)], input=input, catch_exceptions=False)
 
 
 def install_all(stack) -> Result:
@@ -69,7 +69,7 @@ class TestWhoMayRun:
         before = tree_hash(stack.home)
         res = guard(cmd, "--yes")
         assert res.exit_code == 1
-        assert f"Error: {E_HUMAN_TERMINAL}: " in res.output
+        assert E_HUMAN_TERMINAL in res.output
         assert registry()[E_HUMAN_TERMINAL].message in res.output
         assert tree_hash(stack.home) == before
 
@@ -95,12 +95,13 @@ class TestWhoMayRun:
         assert not guard_state_path(None).exists() and not config_target(None).exists()
         assert not backups_dir(None).exists()
 
-    def test_a_non_tty_remove_without_yes_is_refused(self, stack, human_tty) -> None:
-        human_tty(False)
+    def test_remove_needs_no_terminal_and_asks_nothing(self, stack, human_tty) -> None:
+        human_tty(False)  # D68 h: we have backups, so there is nothing to confirm
         install_all(stack)
+        stack.fake(before=debug_config(stack.live), after=debug_config())
         res = guard("remove")
-        assert res.exit_code == 1 and E_HUMAN_TERMINAL in res.output
-        assert guard_state_path(None).exists()
+        assert res.exit_code == 0, res.output
+        assert not guard_state_path(None).exists()
 
     def test_yes_is_the_scripted_path_without_a_tty(self, stack, human_tty) -> None:
         human_tty(False)
@@ -143,7 +144,8 @@ class TestDryRun:
     def test_a_declined_group_stays_declined_in_the_preview(self, stack, human_tty) -> None:
         human_tty(True)
         stack.fake()
-        guard("install", input="y\ny\nn\ny\ny\nn\n")
+        decline("sudo-docker")
+        guard("install", "--yes")
         out = guard("install", "--dry-run").output
         assert "sudo-docker" in out and "declined earlier" in out
 
@@ -230,23 +232,50 @@ class TestInstall:
         assert res.exit_code == 0 and "already up to date" in res.output
         assert (config_target(None).read_bytes(), guard_state_path(None).read_bytes()) == files
 
-    def test_a_tty_asks_per_group_with_the_effect_line(self, stack, human_tty) -> None:
+    def test_a_tty_gets_one_question_with_a_short_summary(self, stack, human_tty) -> None:
         human_tty(True)
         stack.fake()
-        res = guard("install", input="y\ny\nn\ny\ny\nn\n")
+        res = CliRunner().invoke(main, ["guard", "install"], input="y\n")  # no -v
         assert res.exit_code == 0, res.output
-        assert "g2: agents can't push or write to GitHub" in res.output
-        assert "hooks: agent pushes are blocked and agent commits are checked" in res.output
-        assert "your own commits and pushes are unaffected" in res.output
-        assert (
-            "sudo-docker: agents can't run sudo/docker; Packer docker builds must be typed"
-            in res.output
+        assert res.output.count("Install?") == 1 and "[Y/n]" in res.output  # D68 h
+        assert "Install this group?" not in res.output
+        head = res.output.split("Install?")[0]
+        assert len([ln for ln in head.splitlines() if ln.strip()]) <= 6  # a short summary
+        assert "Carter will set up: g2 r3, hooks r2, sudo-docker" in head
+        state = load(guard_state_path(None))
+        assert {"g2", "hooks", "sudo-docker", "read-edit-denies", "config-edit"} <= set(
+            state.consents
         )
+        assert all(r["decision"] == "accepted" for r in state.consents.values())
+        assert "alias" not in state.consents  # optional: only --only brings it
+        assert res.output.splitlines()[-1].startswith("✓ guards installed")
+
+    def test_enter_is_yes_and_no_installs_nothing(self, stack, human_tty) -> None:
+        human_tty(True)
+        stack.fake()
+        before = tree_hash(stack.home)
+        no = guard("install", input="n\n")
+        assert no.exit_code == 0 and "Nothing installed" in no.output
+        assert tree_hash(stack.home) == before and not guard_state_path(None).exists()
+        assert guard("install", input="\n").exit_code == 0
+        assert load(guard_state_path(None)).consents
+
+    def test_yes_skips_the_question(self, stack, human_tty) -> None:
+        human_tty(True)
+        stack.fake()
+        res = guard("install", "--yes")  # no input: a question would abort
+        assert res.exit_code == 0 and "Install?" not in res.output
+
+    def test_a_declined_group_stays_declined_and_is_not_asked_again(self, stack, human_tty) -> None:
+        human_tty(True)
+        stack.fake()
+        decline("sudo-docker")
+        res = guard("install", input="y\n")
+        assert res.exit_code == 0, res.output
         state = load(guard_state_path(None))
         assert state.consents["sudo-docker"]["decision"] == "declined"
         assert "deny-sudo" not in [p["id"] for p in state.opencode_policies]
-        assert "Declined: sudo-docker" in res.output
-        assert not [p for p in config_data()["policies"] if p["resource"].startswith("shell:sudo")]
+        assert "sudo-docker" not in res.output.split("Install?")[0].split("up: ")[1].split("\n")[0]
 
     def test_only_installs_just_those_groups(self, stack) -> None:
         stack.fake(after=debug_config(policy_statements(("sudo-docker",), home=str(stack.home))))
@@ -320,7 +349,7 @@ class TestInstall:
         stack.fake(after=debug_config(stack.live[1:]))  # OpenCode dropped the first statement
         res = guard("install", "--yes")
         assert res.exit_code == 1
-        assert f"Error: {E_POLICIES_MISSING}" in res.output and "deny-git-push" in res.output
+        assert E_POLICIES_MISSING in res.output and "deny-git-push" in res.output
         assert target.read_bytes() == original and not guard_state_path(None).exists()
         assert "sk-SENTINEL" not in res.output  # provider settings never reach the terminal
 
@@ -364,15 +393,18 @@ class TestStateGuards:
         assert len(moved) == 1 and moved[0].read_text() == "{broken"
         assert load(path).consents
 
-    def test_a_corrupt_state_stays_when_the_human_says_no(self, stack, human_tty) -> None:
+    def test_a_corrupt_state_is_moved_aside_without_a_second_question(
+        self, stack, human_tty
+    ) -> None:
         human_tty(True)
         path = guard_state_path(None)
         path.parent.mkdir(parents=True)
         path.write_text("{broken")
         stack.fake()
-        res = guard("install", input="n\n")
-        assert res.exit_code == 1 and path.read_text() == "{broken"
-        assert not list(path.parent.glob("*.corrupt-*")) and not config_target(None).exists()
+        res = guard("install", input="y\n")  # the one question; moving a file aside asks nothing
+        assert res.exit_code == 0 and res.output.count("Install?") == 1
+        moved = list(path.parent.glob("guard-state.json.corrupt-*"))
+        assert len(moved) == 1 and moved[0].read_text() == "{broken"
 
     def test_a_newer_schema_is_refused_and_never_rewritten(self, stack) -> None:
         path = guard_state_path(None)
@@ -380,7 +412,7 @@ class TestStateGuards:
         path.write_text('{"schema": 2}')
         stack.fake()
         res = guard("install", "--yes")
-        assert res.exit_code == 1 and f"Error: {E_STATE_INVALID}" in res.output
+        assert res.exit_code == 1 and E_STATE_INVALID in res.output
         assert path.read_text() == '{"schema": 2}' and not config_target(None).exists()
 
 
@@ -463,21 +495,22 @@ class TestD52:
         ]
         assert len(allows) == 3
 
-    def test_a_no_to_the_question_skips_only_the_opt_outs(
+    def test_opt_outs_come_with_the_one_question_not_a_second_one(
         self, stack, home: Path, tmp_path: Path, human_tty
     ) -> None:
         human_tty(True)
         ws = tmp_path / "proj"
         ws.mkdir()
         self.write_toml(home, ws)
+        from carter.guard import optout
+
+        extra = optout.optout_statements([str(ws.resolve())])
+        stack.live = stack.live + extra
         stack.fake()
-        res = guard("install", input="y\ny\ny\ny\ny\nn\nn\n")
+        res = guard("install", input="y\n")
         assert res.exit_code == 0, res.output
+        assert res.output.count("Install?") == 1 and "Apply these opt-outs" not in res.output
         assert "Active D52 opt-outs" in res.output and str(ws.resolve()) in res.output
-        assert "Opt-outs not applied." in res.output
-        assert not [
-            p for p in config_data()["policies"] if p["resource"].startswith(f"edit:{ws.resolve()}")
-        ]
 
 
 class TestStatus:
@@ -513,9 +546,9 @@ class TestStatus:
         assert "re-run `carter guard install`" in out
 
     def test_declined_groups_are_residuals(self, stack, human_tty) -> None:
-        human_tty(True)
         stack.fake()
-        guard("install", input="y\ny\nn\ny\ny\nn\n")
+        decline("sudo-docker")
+        guard("install", "--yes")
         out = guard("status").output
         assert "sudo-docker" in out and "declined" in out and "residual" in out
 
@@ -562,7 +595,7 @@ class TestRemove:
         human_tty(True)
         install_all(stack)
         stack.fake(before=debug_config(stack.live), after=debug_config())
-        res = guard("remove", input="y\n")
+        res = guard("remove")  # no input: it asks nothing
         assert res.exit_code == 0, res.output
         assert config_data() == {}
         assert not guard_state_path(None).exists()
@@ -622,13 +655,15 @@ class TestRemove:
         assert res.exit_code == 0 and "dry run" in res.output and "- deny-git-push" in res.output
         assert tree_hash(stack.home) == before
 
-    def test_a_no_answer_removes_nothing_and_exits_1(self, stack, human_tty) -> None:
+    def test_a_normal_run_is_one_line(self, stack, human_tty) -> None:
         human_tty(True)
         install_all(stack)
-        before = tree_hash(stack.home)
-        res = guard("remove", input="n\n")
-        assert res.exit_code == 1 and "Nothing was removed" in res.output
-        assert tree_hash(stack.home) == before
+        stack.fake(before=debug_config(stack.live), after=debug_config())
+        from carter import ui
+
+        ui.configure(verbose=False)  # install_all() above ran with -v
+        res = CliRunner().invoke(main, ["guard", "remove"], catch_exceptions=False)
+        assert res.exit_code == 0 and res.output == "✓ guards removed\n"
 
     def test_only_removes_one_group_and_its_consent(self, stack) -> None:
         install_all(stack)

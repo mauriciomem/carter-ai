@@ -43,7 +43,7 @@ What that means in practice:
 
 - **Nobody pushes.** `git push` and the `gh` write commands are denied to every agent,
   DevOps included; you push with `carter push` and open the pull request with
-  `carter pr`, in your own terminal ([Write operations](write-operations.md#pushing-and-pull-requests-the-handoff)).
+  `carter pr`, in your terminal or as `!carter push` in OpenCode ([Write operations](write-operations.md#pushing-and-pull-requests-the-handoff)).
   A finished branch is handed over as a file. **One optional exception:** if you confirm it,
   DevOps alone gets two tools, `carter_push` and `carter_pr`, that *ask you to approve each use*
   in OpenCode; see [Push and PR tools](push-and-pr-tools.md).

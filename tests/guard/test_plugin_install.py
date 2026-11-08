@@ -22,11 +22,11 @@ from carter.identity.errors import E_FALSE_MISSING, IdentityError
 from carter.identity.isolation_schema import validate
 from carter.identity.rules import load_rules
 from carter.install.paths import guard_state_path, isolation_path, plugin_dir, run_dir
-from guard.helpers import debug_config
+from guard.helpers import debug_config, decline, verbose
 
 
 def guard(*args: str, **kw):
-    return CliRunner().invoke(main, ["guard", *args], catch_exceptions=False, **kw)
+    return CliRunner().invoke(main, ["guard", *verbose(args)], catch_exceptions=False, **kw)
 
 
 def installed(stack) -> None:
@@ -63,9 +63,9 @@ class TestRender:
         assert doc["env"]["set"]["GH_CONFIG_DIR"] == f"{Path.home()}/.carter/run/gh-empty"
 
     def test_declined_groups_follow_the_state(self, stack, human_tty) -> None:
-        human_tty(True)
         stack.fake()
-        guard("install", input="y\ny\nn\ny\ny\nn\n")  # g2, hooks, sudo-docker=no, ...
+        decline("sudo-docker")
+        guard("install", "--yes")
         doc = json.loads(isolation_path(None).read_bytes())
         assert doc["plugin"]["declined_groups"] == ["sudo-docker"]
 

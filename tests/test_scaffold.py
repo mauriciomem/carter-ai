@@ -1177,7 +1177,7 @@ class TestWorkspacePushRule:
         text = render_instructions(default_config, env)["AGENTS.md"]
         (rule,) = [ln for ln in text.splitlines() if ln.startswith("- **Pushing**")]
         assert OWN_TERMINAL in rule and "human-only" in rule and "`carter-ops`" in rule
-        assert "!" not in rule.replace("!=", "")  # never suggests a `!` shell
+        assert "`!carter push`" in rule  # D68 g: the human may run it in OpenCode's `!` shell
 
     def test_the_global_rule_carries_the_same_sentence_once(self):
         from carter.aplus.handoff import OWN_TERMINAL

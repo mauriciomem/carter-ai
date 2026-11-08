@@ -10,7 +10,8 @@ saves the result. Rules, from the plan-003 freeze (F3):
   on git >= 2.54: the other one does the job). The caller says so with ``unavailable``; it is
   treated like a reserved group (no prompt, nothing recorded), with its own reason as notice.
 - No TTY and no ``--yes``: nothing is decided and nothing is written (``skipped``).
-- ``--yes`` accepts every live group in scope; a TTY asks per group with its one-line effect.
+- ``--yes`` accepts every live group in scope; a TTY gets one question for all of them (D68 h,
+  ``to_offer`` says which), and its yes is the consent for each group, revisions included.
 - A recorded decision stands unless the group is named in ``--only``, which asks again.
 - **Revisions (D65, freeze G11).** A group whose content grew (``g2`` rev 2: the plugin) is
   *stale* when accepted at a lower revision. A stale group is upgraded only by a TTY "yes" (the
@@ -158,6 +159,9 @@ def resolve_consents(
             continue
         elif assume_yes:
             decision = "accepted"
+        elif ask is None and groups[name].optional and not explicit:
+            plan.optional_skipped.append(name)  # the one question never covers an optional group
+            continue
         else:
             if ask is None:
                 raise ValueError("an interactive decision needs an `ask` callable")
@@ -166,6 +170,29 @@ def resolve_consents(
             plan.asked.append(name)
         (plan.accepted if decision == "accepted" else plan.declined).append(name)
     return plan
+
+
+def to_offer(
+    state: GuardState, *, only: Sequence[str] | None, unavailable: Mapping[str, str] | None = None
+) -> list[str]:
+    """The live groups the single install question covers (D68 h): the ones in scope that are
+    undecided, named in ``--only``, or accepted at an older revision and not refused (D65).
+    A group declined earlier stays declined, and an optional group needs ``--only``."""
+    groups = {g.id: g for g in consent_groups()}
+    scope = list(only) if only is not None else [g.id for g in groups.values() if g.live]
+    out = []
+    for name in scope:
+        group = groups[name]
+        if not group.live or name in (unavailable or {}):
+            continue
+        rec = state.consents.get(name, {})
+        prior = rec.get("decision")
+        stale = prior == "accepted" and int(rec.get("rev", 1)) < group.rev
+        refused = (state.offer(name) or {}).get("rev", 0) >= group.rev
+        explicit = only is not None and name in only
+        if explicit or (prior is None and not group.optional) or (stale and not refused):
+            out.append(name)
+    return out
 
 
 def record(state: GuardState, plan: ConsentPlan, *, today: str | None = None) -> None:

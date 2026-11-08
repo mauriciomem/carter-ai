@@ -27,11 +27,12 @@ from carter.install.paths import (
     plugin_dir,
     run_dir,
 )
-from guard.helpers import debug_config, tree_hash
+from guard.helpers import debug_config, decline, tree_hash, verbose
+from rows import check_host
 
 
 def guard(*args: str):
-    return CliRunner().invoke(main, ["guard", *args], catch_exceptions=False)
+    return CliRunner().invoke(main, ["guard", *verbose(args)], catch_exceptions=False)
 
 
 def installed(stack) -> None:
@@ -98,7 +99,7 @@ class TestGitconfigFirst:
     def test_the_cli_exit_is_1_and_still_prints_the_rest(self, stack) -> None:
         installed(stack)
         carter_gitconfig_path(None).write_text("[hook\n\tbroken =\n")
-        res = CliRunner().invoke(main, ["check", "--host"], catch_exceptions=False)
+        res = check_host()
         assert res.exit_code == 1 and "git cannot parse" in res.output
         assert "policies:" in res.output and "Host: 1 RED" in res.output or "RED" in res.output
 
@@ -234,11 +235,9 @@ class TestG2States:
         assert find(check(), "g2 rev 3 declined on 2026-11-03", "info")
 
     def test_declined_groups_are_listed_and_match_isolation_json(self, stack, human_tty) -> None:
-        human_tty(True)
         stack.fake()
-        guard_in = CliRunner().invoke(
-            main, ["guard", "install"], input="y\ny\nn\ny\ny\nn\n", catch_exceptions=False
-        )
+        decline("sudo-docker")
+        guard_in = CliRunner().invoke(main, ["guard", "install", "--yes"], catch_exceptions=False)
         assert guard_in.exit_code == 0, guard_in.output
         stack.fake(before=debug_config(stack.live))
         items = check()
@@ -294,12 +293,12 @@ class TestOutputRules:
     def test_it_is_read_only_and_exit_1_only_on_red(self, stack, home: Path) -> None:
         installed(stack)
         before = tree_hash(home)
-        res = CliRunner().invoke(main, ["check", "--host"], catch_exceptions=False)
+        res = check_host()
         assert res.exit_code == 0 and tree_hash(home) == before
 
     def test_no_value_leaks(self, stack, monkeypatch: pytest.MonkeyPatch) -> None:
         installed(stack)
         monkeypatch.setenv("SSH_AUTH_SOCK", "/tmp/SECRET-SOCKET-xyz/agent.1")
         monkeypatch.setenv("GITHUB_TOKEN", "SECRET-TOKEN-VALUE-123")
-        res = CliRunner().invoke(main, ["check", "--host"], catch_exceptions=False)
+        res = check_host()
         assert "SECRET" not in res.output

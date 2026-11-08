@@ -17,7 +17,7 @@ Exit codes:
 Usage (via the ``carter`` CLI):
   carter ops audit --operation git-flow --params '{"branch":"x"}' --result success
   carter ops policy-override --category remote-write --action "vault read x" --tier native-ask
-  carter ops config --emit
+  carter ops config --emit [--field NAME]
 """
 
 from __future__ import annotations
@@ -128,8 +128,7 @@ def _handle_audit(params: dict[str, Any]) -> int:
         except (json.JSONDecodeError, TypeError):
             entry["identifiers"] = {"raw": str(identifiers_json)}
 
-    _audit(entry)
-    emit({"status": "logged", "operation": operation, "result": result_status})
+    _audit(entry)  # silent on success: the agent does not echo a record nobody reads (D68 i)
     return 0
 
 
@@ -249,28 +248,37 @@ def _handle_policy_override(params: dict[str, Any]) -> int:
     return 0
 
 
-def _handle_config_emit() -> int:
-    """Print config values for model consumption."""
+def _handle_config_emit(field: str | None = None) -> int:
+    """Print config values for model consumption (``field``: just that one, as plain text)."""
     cfg = Config.load()
     for warning in (cfg.footer_warning, *cfg.warnings):
         if warning:
             emit_error(warning)
-    emit(
-        {
-            "tier": cfg.tier,
-            "role": cfg.role,
-            "role_source": cfg.role_source,
-            "mode": cfg.mode,
-            "author": cfg.author,
-            "committer": cfg.committer,
-            "signer_fpr": cfg.signer_fpr,
-            "coauthor_trailer": cfg.coauthor_trailer,
-            "coauthor_linked": cfg.coauthor_linked,
-            "commits": cfg.commits,
-            "refusal_reason": cfg.refusal_reason,
-            "footer": cfg.footer,
-            "has_github_token": bool(cfg.github_token),
-        }
+    data = {
+        "tier": cfg.tier,
+        "role": cfg.role,
+        "role_source": cfg.role_source,
+        "mode": cfg.mode,
+        "author": cfg.author,
+        "committer": cfg.committer,
+        "signer_fpr": cfg.signer_fpr,
+        "coauthor_trailer": cfg.coauthor_trailer,
+        "coauthor_linked": cfg.coauthor_linked,
+        "commits": cfg.commits,
+        "refusal_reason": cfg.refusal_reason,
+        "footer": cfg.footer,
+        "has_github_token": bool(cfg.github_token),
+    }
+    if field is None:
+        emit(data)
+        return 0
+    if field not in data:
+        emit_error(f"--field must be one of: {', '.join(data)}")
+        return 1
+    value = data[field]
+    # one value, no JSON: the agent reads it without printing the whole record (D68 i)
+    print(
+        "true" if value is True else "false" if value is False else "" if value is None else value
     )
     return 0
 
@@ -294,8 +302,13 @@ def main(argv: list[str] | None = None) -> int:
 
     if command == "config":
         if "--emit" in rest:
-            return _handle_config_emit()
-        emit_error("Usage: carter ops config --emit")
+            flags = _parse_flags([a for a in rest if a != "--emit"])
+            field = flags.get("field")
+            if "field" in flags and not isinstance(field, str):
+                emit_error("--field needs a name")
+                return 1
+            return _handle_config_emit(field)
+        emit_error("Usage: carter ops config --emit [--field NAME]")
         return 1
 
     emit_error(f"Unknown subcommand: {command}" if command else "Missing subcommand")

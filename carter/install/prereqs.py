@@ -117,7 +117,7 @@ def detect_environment() -> None:
     log_step("Detecting environment...")
     uv_ver = _cmd_version("uv", "--version")
     uv = uv_ver.replace("uv ", "") if uv_ver else "not found"
-    _log(f"  OS: {platform.system()} | Python: {platform.python_version()} | uv: {uv}")
+    _log(f"OS: {platform.system()} | Python: {platform.python_version()} | uv: {uv}", level=2)
 
 
 def check_credentials(base_dir: Path | None = None) -> None:

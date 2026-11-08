@@ -21,11 +21,12 @@ from carter.broker import audit, counter
 from carter.cli import main
 from carter.guard.state import load, save
 from carter.install.paths import guard_state_path, headless_profile_path, isolation_path
-from guard.helpers import debug_config
+from guard.helpers import debug_config, verbose
+from rows import check_host
 
 
 def guard(*args: str):
-    return CliRunner().invoke(main, ["guard", *args], catch_exceptions=False)
+    return CliRunner().invoke(main, ["guard", *verbose(args)], catch_exceptions=False)
 
 
 def installed(stack) -> None:
@@ -243,5 +244,5 @@ class TestOriginAndTools:
 
 def test_exit_code_is_only_red_driven(stack) -> None:
     installed(stack)
-    res = CliRunner().invoke(main, ["check", "--host"], catch_exceptions=False)
+    res = check_host()
     assert "B tools" in res.output

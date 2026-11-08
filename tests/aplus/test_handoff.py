@@ -258,10 +258,9 @@ class TestDelete:
 
 
 class TestWording:
-    def test_the_own_terminal_sentence_is_one_constant_without_a_leading_bang(self) -> None:
-        assert "own terminal" in h.OWN_TERMINAL
+    def test_the_own_terminal_sentence_is_one_constant_that_names_the_bang_shell(self) -> None:
         assert "carter push" in h.OWN_TERMINAL and "carter pr" in h.OWN_TERMINAL
-        assert "`!" not in h.OWN_TERMINAL and not h.OWN_TERMINAL.lstrip().startswith("!")
+        assert "`!carter push`" in h.OWN_TERMINAL and "not through an agent" in h.OWN_TERMINAL
 
     def test_the_agent_facing_handoff_template_round_trips_through_the_parser(self) -> None:
         template = h.handoff_template("feat/x", "o/r", SHA)

@@ -44,9 +44,9 @@ class TestCarterOpsSkillContent:
         assert "--author=" not in ops_skill and "--author '" not in ops_skill
 
     def test_recipe_never_signs_and_verifies_the_commit(self, ops_skill: str) -> None:
-        """No `git commit -S`; the recipe checks author, committer and signature status."""
+        """No `git commit -S`; the recipe checks the signature with one quiet exit code."""
         assert "git commit -S" not in ops_skill
-        assert "git log -1 --format='%an|%cn|%G?'" in ops_skill
+        assert "carter identity verify --commit HEAD --quiet" in ops_skill
 
     def test_recipe_stages_explicit_paths(self, ops_skill: str) -> None:
         assert "git add <file1> <file2>" in ops_skill
@@ -98,7 +98,7 @@ class TestCarterOpsSkillContent:
     def test_has_footer_for_github(self, ops_skill: str) -> None:
         """Must teach appending the emitted footer to GitHub body fields."""
         assert "footer" in ops_skill.lower()
-        assert "`footer` from `carter ops config --emit`" in ops_skill
+        assert "carter ops config --emit --field footer" in ops_skill
 
     def test_has_jira_operations(self, ops_skill: str) -> None:
         """Jira goes through the carter-atlassian MCP server, never curl/REST."""

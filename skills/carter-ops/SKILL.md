@@ -38,8 +38,10 @@ tool for you**: a push or PR goes through the handoff file below, and `carter_pu
 
 ## Attribution: read it at runtime
 
-Before any commit or outward text, run `carter ops config --emit` and use what it prints.
-Never use remembered, typed or example values. The JSON has these keys:
+Before any commit or outward text, read the fields you need with
+`carter ops config --emit --field <key>` (it prints just that value; `carter ops config --emit`
+alone prints the whole JSON, which you never paste to the user). Never use remembered, typed or
+example values. The keys:
 
 | Key | What to do with it |
 |-----|--------------------|
@@ -126,13 +128,13 @@ Never run any of these (generated from `g2_rules.json`):
 | `E-GUARD-TRAILER` | commit-msg | Co-authored-by trailer missing | `prepare-commit-msg` adds it; re-run without editing it out. |
 | `E-GUARD-T01SIGN` | prepare-commit-msg (T0/T1, capped) | Signing attempted below T2: agent commits here are unsigned [D51]. Don't pass `-S` or override `commit.gpgsign`. If you just changed `max_tier`, run `carter update`. | — |
 | `E-GUARD-UNSIGNED` | post-commit (warn only) | carter-guard(post-commit): HEAD <sha> is unsigned or not signed by the LLM key | Warning, never undone; re-commit without `--no-gpg-sign`; A+/B will refuse the push otherwise. |
-| `E-PUSH-GUARD` | pre-push | carter-guard: agent push blocked (<reason>) | Pushes are human-only: write the handoff and tell the user: Run `carter push` and then `carter pr` in your own terminal, not through an agent. |
+| `E-PUSH-GUARD` | pre-push | carter-guard: agent push blocked (<reason>) | Pushes are human-only: write the handoff and tell the user: Run `carter push` and then `carter pr` yourself, in your terminal or as `!carter push` in OpenCode, not through an agent. |
 | `E-PUSH-ISOLATED` | agent `git push origin` | fatal: 'no_push' does not appear to be a git repository | Same: pushes are human-only. |
 | `E-POLICY` | OpenCode policy | permission.rejected: Blocked by configuration policy | Same; for gh, use an allowlisted read verb: `gh pr\|issue\|run <verb> -R <owner>/<repo>` (put `-R` after the subcommand), and `gh repo view <owner>/<repo>` or `gh search repos <query>` positionally, with no `-R`. |
-| `E-GATE` | `execute.before` gate | `<verb>` is human-only (rule `<id>`). Hand off: ask the human to run `carter push` / `carter pr` in their own terminal. | Commands shown without a leading `!`. |
+| `E-GATE` | `execute.before` gate | `<verb>` is human-only (rule `<id>`). Hand off: ask the human to run `carter push` / `carter pr` themselves (their terminal, or `!carter push` in OpenCode). | Commands shown without a leading `!`. |
 | `E-GATE-FAIL` | gate crash / timeout | Command gate unavailable; command refused (fail closed). Run `carter check --host`. | — |
-| `E-GH-READONLY` | gh or git write with the read-only PAT | GitHub refused the write: the read-only token has no write access (`Resource not accessible by personal access token`, HTTP 403). | Writes are human-only. Run `carter push` and then `carter pr` in your own terminal, not through an agent. |
-| `E-PAT-TYPE` | `github-token set` / plugin / check | Only fine-grained `github_pat_` tokens are accepted (what was found is named by its type or at most a 4-character prefix, never quoted). | Create a read-only fine-grained token on the repositories Carter works on, then pipe it to `carter github-token set` in your own terminal. |
+| `E-GH-READONLY` | gh or git write with the read-only PAT | GitHub refused the write: the read-only token has no write access (`Resource not accessible by personal access token`, HTTP 403). | Writes are human-only. Run `carter push` and then `carter pr` yourself, in your terminal or as `!carter push` in OpenCode, not through an agent. |
+| `E-PAT-TYPE` | `github-token set` / plugin / check | Only fine-grained `github_pat_` tokens are accepted. | Create a read-only fine-grained token on the repositories Carter works on, then pipe it to `carter github-token set` in your own terminal. |
 | `E-PAT-PERM` | `github-token set` / plugin / check | Token file must be 0600, yours, not a symlink, outside any repo. | Fix the mode or location (the secrets directory must be 0700), or run `carter github-token set` again. |
 | `E-SSH-ISOLATED` | agent `ssh -T git@github.com` | Permission denied (publickey). | Expected; agent fetch uses HTTPS + PAT. |
 | `E-B-CALLER` | B | `carter_push` is devops-only. | — |
@@ -145,7 +147,7 @@ Never run any of these (generated from `g2_rules.json`):
 | `E-B-HTTPS` | B | `origin` is HTTPS; B pushes over SSH only. Use `carter push`. | — |
 | `E-B-MOVED` | B `--exec` | HEAD moved after approval (`<pinned>` → `<now>`); refused. | — |
 | `E-B-UNSIGNED` | B, A+ | Commits `<shas>` have the LLM as committer but no valid LLM signature; refused. | — |
-| `E-B-DEFAULT` | B | `<branch>` is the remote default branch; B never pushes it. Run `carter push` and then `carter pr` in your own terminal, not through an agent; `carter push` asks you to type the branch name. | — |
+| `E-B-DEFAULT` | B | `<branch>` is the remote default branch; B never pushes it. Run `carter push` and then `carter pr` yourself, in your terminal or as `!carter push` in OpenCode, not through an agent; `carter push` pushes it for you. | — |
 | `E-B-ARGS` | B | Only fast-forward of the current non-default branch to `origin` is allowed. | — |
 | `E-B-REJECTED` | B | B refused: 3 rejections in this session family. Start a new session or run `carter guard status --reset-b`. | — |
 | `E-SECRET-SCAN` | `carter pr`, `carter_pr` | PR text matches a secret pattern (`<rule>`); refused. | — |
@@ -157,9 +159,9 @@ Never run any of these (generated from `g2_rules.json`):
 | `E-TIER-CAPPED` | plugin / `carter commit` / commit-msg | This workspace caps the tier at `<t>` (`max_tier`): agent commits are unsigned human/human with the `<t>` trailer. | A stale mirror in either direction rejects the agent commit with "run `carter update`". |
 | `E-TIER-REQUIRED` | plugin (agent commit blocked) / `carter commit`, below the pinned `require_tier` | This workspace requires tier `<t>`; configure the LLM identity. | — |
 | `E-POLICIES-MISSING` | `carter check --host`, `carter guard install` (verify and rollback) | Policy `<statement>` not loaded — a broken OpenCode config drops all of them and your providers. | — |
-| `E-APLUS-ARGS` | `carter push` (added beyond Appendix B, plan 003 step 6 F10) | `carter push` pushes only the current branch to `origin`: no detached HEAD, no other remote. | Check out the branch you want to push; there are no flags for force, tags or other remotes. |
-| `E-HUMAN-TERMINAL` | `carter guard install\|remove`, `github-token set\|check`, `push`, `pr` (added beyond Appendix B, plan 003 step 6 F10) | This command runs only in your own terminal: this shell looks like an agent's, or it has no TTY. If you are not an agent, this shell inherited agent variables; restart the app from a clean terminal. | Open a terminal that OpenCode did not start and run the command there. |
-| `E-STATE-INVALID` | `carter guard *` (added beyond Appendix B, plan 003 step 6 F10) | ~/.carter/guard-state.json is unreadable or from a newer Carter; nothing was changed. | Run `carter guard status` to see the problem; fix or move the file yourself. Carter never rebuilds it. |
+| `E-APLUS-ARGS` | `carter push` (added beyond Appendix B, plan 003 step 6 F10) | `carter push` pushes only the current branch to `origin`. | Check out the branch you want to push; there are no flags for force, tags or other remotes. |
+| `E-HUMAN-TERMINAL` | `carter guard install\|remove`, `github-token set\|check`, `push`, `pr` (added beyond Appendix B, plan 003 step 6 F10) | This command is for you, not an agent: run it in your own terminal. | Open a terminal that OpenCode did not start and run the command there. |
+| `E-STATE-INVALID` | `carter guard *` (added beyond Appendix B, plan 003 step 6 F10) | ~/.carter/guard-state.json is unreadable or from a newer Carter. | Run `carter guard status` to see the problem; fix or move the file yourself. Carter never rebuilds it. |
 | `E-OPENCODE-VERSION` | install / check | G2 untested on OpenCode <v>; relying on the plugin self-test. | < 2.1: hard fail; 2.1.0–2.1.3 or above tested: warn. |
 | `E-GIT-OLD` | install / check | Global guards need git ≥ 2.54 (`brew upgrade git`); per-repo hooks offered. LLM signing (T2) needs git ≥ 2.40 (`-U` for `key::` literals). | Unguarded repo while T2 is set: FAIL in `check --host`. Below 2.40 `carter identity add` refuses and writes nothing. |
 | `E-PROBE-SCOPE` | `carter check --probe` (added beyond Appendix B, plan 004 step 8 G14) | `carter check --probe` runs only inside an agent shell: ask your agent to run it. | `E-HUMAN-TERMINAL` means the opposite (a human-only command run by an agent), so it is not reused. |
@@ -237,11 +239,11 @@ the hooks. With `E-ROLE-B-TIER` (role `author` needs T2), `E-HUMAN-IDENTITY`, `E
 ## Required Workflow
 
 1. **ASSESS** — Run read commands to understand current state (`git status`, `git diff`, `git log --oneline -5`, etc.)
-2. **PLAN** — Run `carter ops config --emit`, then show the user a structured plan with the exact commands you will run, including the `coauthor_trailer`
+2. **PLAN** — Read `commits` and `coauthor_trailer` (`carter ops config --emit --field <key>`), then show the user a short plan with the exact commands you will run, including the `coauthor_trailer`
 3. **APPROVE** — Wait for user confirmation before executing any write command
 4. **EXECUTE** — Run commands in terminal (the `coauthor_trailer` on every commit)
-5. **AUDIT** — Run: `carter ops audit --operation <name> --params '<json>' --result <success|failure> --identifiers '<json>'`
-6. **REPORT** — Tell the user what happened (branch name, commit SHA, PR URL, etc.)
+5. **AUDIT** — Run: `carter ops audit --operation <name> --params '<json>' --result <success|failure> --identifiers '<json>'` (it prints nothing; do not mention it)
+6. **REPORT** — One line: `Committed <sha>: <subject>` (or the branch, PR URL...). Add detail only when something failed.
 
 **NEVER execute write commands without showing the plan and getting approval first.**
 
@@ -262,17 +264,16 @@ git checkout <base> && git pull origin <base> && git checkout -b <branch-name>
 ```bash
 git add <file1> <file2> ...
 git commit -m "<subject>" -m "<body>" --trailer "<coauthor_trailer>"
-git log -1 --format='%an|%cn|%G?'
+carter identity verify --commit HEAD --quiet   # T2 only; exit 0 = signed by the LLM key
+git log -1 --format='%h %s'
 ```
 
-Replace `<coauthor_trailer>` with the value from `carter ops config --emit`. Stage named
-files only. Verify the commit with the last command. Below T2 (`committer` is `human`): `%an`
-and `%cn` must both equal `git config user.name`, and `%G?` must be `N` (unsigned). At T2
-(`committer` is `llm`): `%an` equals `git config user.name`, `%cn` is the LLM committer, and `%G?`
-is `G` or `E` (a signature exists; `E` only means this shell has no allowed-signers file), never
-`N`. In role `author` (`author` is `llm`): `%an` and `%cn` are both the LLM and `%G?` is `G` or
-`E`, and the last paragraph of the message is the user's `coauthor_trailer`. If it does not match,
-stop and report; never fix it with `--author`, `--reset-author` or a signing flag.
+Replace `<coauthor_trailer>` with `carter ops config --emit --field coauthor_trailer`. Stage named
+files only. At T2 (`committer` is `llm`) the verify line must exit 0; it checks Carter's own
+allowed signers, so a missing `allowedSignersFile` setting or a bogus `N` never shows up. Below T2
+there is no signature to check. If the verify fails, or the commit is not what the emit said,
+stop and report; never fix it with `--author`, `--reset-author` or a signing flag. **Report one
+line**, `Committed <sha>: <subject>`: no list of who is author, committer or signer, no notes.
 
 Commit messages, branch names and PR text are always in English, whatever language the user
 chats in. If `--trailer` is unavailable (git < 2.32), put the `coauthor_trailer` line as the
@@ -284,7 +285,7 @@ last paragraph of the message.
 git checkout <base> && git pull origin <base> && git checkout -b <branch-name>
 git add <file1> <file2> ...
 git commit -m "<subject>" -m "<body>" --trailer "<coauthor_trailer>"
-git log -1 --format='%an|%cn|%G?'
+carter identity verify --commit HEAD --quiet   # T2 only
 ```
 
 Then stop at the commit: pushing is the human's step (next section).
@@ -316,7 +317,7 @@ head_sha: <40 lowercase hex characters: git rev-parse HEAD>
 repo: <owner/name>
 ---
 
-PR description in Markdown. Append the `footer` from `carter ops config --emit` after a `---`.
+PR description in Markdown. Append the `footer` (`carter ops config --emit --field footer`) after a `---`.
 ```
 
 Write the description in the `carter-code-review` register when it is a code review (default
@@ -324,16 +325,17 @@ Standard); otherwise use the **Brief register** (defined in `carter-docs`): lead
 concise, scoped.
 
 The file is untrusted input to the human's `carter pr`: it reads only these keys, scans the
-title, branch and body for secrets, shows everything and asks. Put no tokens, keys, internal
+title, branch and body for secrets, then opens the PR without asking. Put no tokens, keys, internal
 URLs or credentials paths in it (the narrator's redaction pass comes first).
 
 Then tell the user, in these words:
 
-Run `carter push` and then `carter pr` in your own terminal, not through an agent.
+Run `carter push` and then `carter pr` yourself, in your terminal or as `!carter push` in OpenCode, not through an agent.
 
-Rules: never prefix the commands with `!` and never ask the user to paste them into the TUI;
-never pass `--force` or any flag to a push; never write the handoff for a branch you did not
-finish or whose commits you did not verify with `git log -1 --format='%an|%cn|%G?'`. For an
+Rules: you never run them yourself, not even with a `!` prefix (that shell is the user's, and the
+gate refuses them from you); never pass `--force` or any flag to a push; never write the handoff
+for a branch you did not finish or whose commits you did not verify (`carter identity verify
+--commit HEAD --quiet` at T2). For an
 issue, a PR comment, a review or a release there is no agent path in this version: give the
 user the drafted text (with the footer) to post themselves.
 
@@ -347,8 +349,8 @@ user the drafted text (with the footer) to post themselves.
 them (`carter guard install`, group `g2` revision 3). A subagent of devops does not have them.
 The human-run `carter push` / `carter pr` stays the default path: if you do not see the tools, or one is refused, hand off.
 
-- **Use them only when the work is finished**: committed and verified (`git log -1
-  --format='%an|%cn|%G?'`), for a PR after you wrote the handoff file (it is the only input of
+- **Use them only when the work is finished**: committed and verified (`carter identity verify
+  --commit HEAD --quiet` at T2), for a PR after you wrote the handoff file (it is the only input of
   `carter_pr`; the tool takes no arguments, and the branch is the current one).
 - **Every use opens a prompt for the human** in OpenCode (Once or Reject; never "Always"). Say so
   before you call it: "I am asking you to approve pushing `<branch>`". Wait for the answer.
@@ -378,7 +380,7 @@ OAuth — no API tokens). Load the `carter-atlassian` skill for ticket conventio
 Jira writes are remote steps: carter-devops performs them, after the narrator's
 redaction pass on the body.
 
-Append the `footer` from `carter ops config --emit` to ALL body text.
+Append the `footer` (`carter ops config --emit --field footer`) to ALL body text.
 
 </jira-operations>
 
@@ -394,7 +396,7 @@ Append the `footer` from `carter ops config --emit` to ALL body text.
 | Jira auth error | Re-authenticate the `carter-atlassian` MCP server (OAuth) in your client |
 | `gh` not found | Reads only: suggest installing the GitHub CLI (`gh`) |
 | A push or `gh` write is denied (`E-POLICY`, "Blocked by configuration policy") | Expected: write the handoff file; never retry another way |
-| `coauthor_trailer` missing or wrong | Re-run `carter ops config --emit` and use its value |
+| `coauthor_trailer` missing or wrong | Re-read it with `carter ops config --emit --field coauthor_trailer` |
 
 </error-recovery>
 
@@ -419,14 +421,12 @@ repository, put `-R <owner>/<repo>` **after** the subcommand (`gh pr view 3 -R o
 
 ## Plan Display Format
 
-When showing the plan to the user, use this structure:
+Keep the plan short, in this structure. Do not add a block about who is the author, committer
+or signer, and no notes: the trailer is already in the commit command.
 
 ```
-**Operation:** <type> (e.g., git-flow, gh-issue, jira-comment)
-**Branch:** <name> (if applicable)
-**Files:** <list> (if applicable)
+**Operation:** <type> (e.g., git-flow, gh-issue, jira-comment) · <branch> · <files>
 **Message:** <commit message or body text>
-**Attribution:** role=<role> (source: <role_source>) · author: <you|the LLM> · committer+signer: <you, unsigned|the LLM, signed> · trailer: `<coauthor_trailer>` · linked: <coauthor_linked>
 
 Commands:
 1. <exact command 1>

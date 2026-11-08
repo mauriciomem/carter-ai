@@ -543,3 +543,13 @@ def _no_real_verify_waits(monkeypatch: pytest.MonkeyPatch) -> None:
     from carter.guard import configwrite
 
     monkeypatch.setattr(configwrite, "_sleep", lambda _seconds: None)
+
+
+@pytest.fixture(autouse=True)
+def _reset_ui() -> None:
+    """``-v`` and ``--no-color`` set process-wide switches; one test must not leak them."""
+    from carter import ui
+    from carter.install.console import set_verbosity
+
+    ui.configure(verbose=False, color=True)
+    set_verbosity(1)

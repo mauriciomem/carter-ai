@@ -373,13 +373,13 @@ class TestCheckCliIntegration:
         config = load_config(cfg_path)
         config["policy"]["level"] = "strict"
         write_config(cfg_path, config)
-        assert runner.invoke(main, ["update", str(tmp_path)]).exit_code == 0
+        assert runner.invoke(main, ["update", "-v", str(tmp_path)]).exit_code == 0
         result = runner.invoke(main, ["check", str(tmp_path)])
         assert result.exit_code == 0, result.output
 
     def test_init_surfaces_guarded_policy_notice(self, tmp_path):
         runner, main = self._init(tmp_path)
-        result = runner.invoke(main, ["update", str(tmp_path)])
+        result = runner.invoke(main, ["update", "-v", str(tmp_path)])
         assert "Strictness policy is 'guarded'" in result.output
 
     def test_stale_loose_resolves_guarded_on_update(self, tmp_path):
@@ -387,7 +387,7 @@ class TestCheckCliIntegration:
         cfg_path = tmp_path / ".carter" / "carter.yaml"
         raw = cfg_path.read_text().replace("level: guarded", "level: loose")
         cfg_path.write_text(raw)
-        result = runner.invoke(main, ["update", str(tmp_path)])
+        result = runner.invoke(main, ["update", "-v", str(tmp_path)])
         assert result.exit_code == 0, result.output
         assert "Strictness policy is 'guarded'" in result.output
         assert load_config(cfg_path)["policy"]["level"] == "guarded"

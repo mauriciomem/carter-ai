@@ -129,6 +129,42 @@ def _shape(
     return items
 
 
+def verify_commit(
+    rev: str, cfg: IdentityConfig, home: Path, base_env: Mapping[str, str], cwd: Path | None = None
+) -> tuple[bool, str]:
+    """Is ``rev`` signed by the configured LLM key? Checked against Carter's own ``allowed_signers``
+    (not the user's git config), so no ``allowedSignersFile`` error and no bogus ``N`` (D68 i).
+    Returns ``(good, reason)``; ``reason`` is empty when good."""
+    if not cfg.signing.public_key:
+        return False, "no LLM signing key is configured"
+    if not rev or rev.startswith("-"):
+        return False, "not a commit"
+    signers = home / ".carter" / "hooks" / "allowed_signers"
+    if not signers.is_file():
+        return False, "allowed_signers is missing; run `carter identity add` again"
+    env = {
+        "PATH": base_env.get("PATH", "/usr/bin:/bin"),
+        "HOME": str(home),
+        "LC_ALL": "C",
+        "GIT_CONFIG_NOSYSTEM": "1",
+        "GIT_CONFIG_GLOBAL": os.devnull,
+    }
+    flags = [
+        "-c", "gpg.format=ssh",
+        "-c", f"gpg.ssh.allowedSignersFile={signers}",
+        "-c", f"gpg.ssh.program={shim_path(home)}",
+    ]  # fmt: skip
+    done = _git(cwd or Path.cwd(), env, *flags, "log", "-1", "--format=%G?|%GF", rev, "--")
+    status, _, fpr = done.stdout.strip().partition("|")
+    if done.returncode != 0:
+        return False, f"{rev} is not a commit here"
+    if status != "G":
+        return False, f"{rev} is not signed by the LLM key (signature `{status or '?'}`)"
+    if fpr != cfg.signing.fingerprint:
+        return False, f"{rev} is signed by another key"
+    return True, ""
+
+
 def verify_local(
     cfg: IdentityConfig, home: Path, base_env: Mapping[str, str], config_path: Path
 ) -> list[Item]:
@@ -154,7 +190,11 @@ def verify_local(
     if any(i.level == "red" for i in items):
         return items
     setup = setup_from_config(cfg, home)
-    if not cfg.signing.program and (state := probe_setup(setup, cfg).state) != "ok":
+    if (
+        not cfg.signing.program
+        and not setup.file_mode
+        and (state := probe_setup(setup, cfg).state) != "ok"
+    ):
         locked = registry()[E_SIGN_LOCKED]
         return [
             *items,

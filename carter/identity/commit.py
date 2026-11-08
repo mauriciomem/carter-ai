@@ -153,8 +153,8 @@ def _short_cluster(tok: str, bad: list[str], notes: list[str]) -> tuple[str, boo
 
 def key_state(cfg: IdentityConfig, home: Path, env: Mapping[str, str] | None = None) -> str:
     """``ok`` or the probe state (``none``, ``empty``, ``wrong-key``, ``stale``, ``bad``)."""
-    if cfg.signing.program:
-        return "ok"  # the program brings its own agent; the shim reports a locked key when signing
+    if cfg.signing.program or cfg.signing.mode == "file":
+        return "ok"  # own agent (the shim reports a locked key) or D68 d: signs from the key file
     setup = setup_from_config(cfg, home, env)
     sock = Path(cfg.signing.agent_socket) if cfg.signing.agent_socket else setup.sock
     return probe(sock, setup.ssh_bin_dir, setup.fingerprint, home=home).state

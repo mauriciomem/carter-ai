@@ -19,6 +19,7 @@ from carter.identity.schema import Workspace
 from carter.identity.writer import write_config
 from gh_api import FakeGitHub, Reply
 from guard.test_hostcheck_2b import fake, find, home, key, levels, make, run  # noqa: F401 - fixtures
+from rows import check_host
 from ssh_rig import KeyPair
 
 HUMAN = ("Hu Man", "human@example.invalid")
@@ -232,14 +233,11 @@ class TestRoleItems:
     def test_the_command_is_names_only_and_exits_1_on_a_red_role_item(
         self, home: Path, fake: FakeGitHub, key: KeyPair, tmp_path: Path
     ) -> None:
-        from click.testing import CliRunner
-
-        from carter.cli import main
 
         make(fake, key)
         set_role(home, "author")
         git_user("", "")
-        done = CliRunner().invoke(main, ["check", "--host", str(tmp_path)], catch_exceptions=False)
+        done = check_host(str(tmp_path))
         assert done.exit_code == 1 and "RED   human identity: E-HUMAN-IDENTITY" in done.output
         assert HUMAN[1] not in done.output
 

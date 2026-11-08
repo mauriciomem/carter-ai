@@ -9,7 +9,9 @@ from pathlib import Path
 import click
 from jinja2 import Environment
 
+from carter import ui
 from carter.aplus.handoff import OWN_TERMINAL
+from carter.cliguard import CarterGroup, verbose_option
 from carter.config import (
     PROFILES,
     ConfigError,
@@ -40,42 +42,44 @@ from carter.state import (
 )
 
 
-@click.group()
+@click.group(cls=CarterGroup)
 @click.version_option(package_name="carter-ai")
+@click.option(
+    "--no-color",
+    is_flag=True,
+    expose_value=False,
+    hidden=True,
+    callback=lambda _c, _p, v: ui.configure(color=False) if v else None,
+)
+@verbose_option
 def main() -> None:
-    """Carter AI — workspace scaffolding and management."""
+    """Carter AI: agents, guards and the LLM identity for OpenCode."""
 
 
 @main.command()
-@click.option("--mcp", is_flag=True, help="Install and configure MCP servers.")
+@click.option("--mcp", is_flag=True, help="Also set up MCP servers.")
 @click.option(
     "--mcp-servers",
     "mcp_servers",
     default=None,
-    help="Comma-separated subset of MCP servers to install (e.g. 'github,terraform'). "
-    "Default: all. Only meaningful with --mcp.",
+    help="MCP servers to set up, comma-separated (default: all).",
 )
 @click.option(
     "--bot-name",
     default=None,
-    help="Deprecated and ignored. Attribution is configured with the LLM identity.",
+    hidden=True,
+    help="Ignored (deprecated).",
 )
 @click.option(
     "--base-dir",
     type=click.Path(file_okay=False, path_type=Path),
     default=None,
-    help="Override install base directory (for testing).",
+    hidden=True,
+    help="Install elsewhere (testing).",
 )
-@click.option(
-    "--yes",
-    "-y",
-    "assume_yes",
-    is_flag=True,
-    help="Also install the policy guards without asking. Without a terminal and without "
-    "--yes they are skipped with a notice.",
-)
+@click.option("--yes", "-y", "assume_yes", is_flag=True, help="Install the guards without asking.")
 @click.option("-q", "--quiet", is_flag=True, help="Errors only.")
-@click.option("-v", "--verbose", is_flag=True, help="Detailed output.")
+@click.option("-v", "--verbose", is_flag=True, help="More detail.")
 @click.option("--debug", is_flag=True, help="Debug output.")
 def install(
     mcp: bool,
@@ -87,21 +91,16 @@ def install(
     verbose: bool,
     debug: bool,
 ) -> None:
-    """Install Carter agents, skills, and MCP servers for OpenCode (>= 2.1).
-
-    Then offers the policy guards (`carter guard install`). A guard problem exits 1 but
-    never undoes the rest."""
+    """Install the Carter agents, skills and guards for OpenCode."""
     from carter.install.mcp import MCP_SERVERS
     from carter.install.orchestrator import run as run_install
     from carter.install.prereqs import PrerequisiteError
 
     if bot_name is not None:
-        click.echo(
-            "⚠  --bot-name is deprecated and ignored: attribution now comes from the LLM "
-            "identity in ~/.carter/config.toml.",
-            err=True,
-        )
+        ui.warn("--bot-name is ignored: attribution comes from the LLM identity (config.toml)")
 
+    if verbose:
+        ui.configure(verbose=True)  # the guard step prints its details too
     if quiet:
         verbosity = 0
     elif debug:
@@ -143,13 +142,14 @@ def install(
     "--base-dir",
     type=click.Path(file_okay=False, path_type=Path),
     default=None,
-    help="Override install base directory (for testing).",
+    hidden=True,
+    help="Uninstall from elsewhere (testing).",
 )
-@click.option("--keep-guards", is_flag=True, help="Leave policies, include line and guard state.")
-@click.option("--yes", "-y", "assume_yes", is_flag=True, help="Remove the guards without asking.")
+@click.option("--keep-guards", is_flag=True, help="Leave the guards in place.")
+@click.option("--yes", "-y", "assume_yes", is_flag=True, hidden=True)
+@verbose_option
 def uninstall(base_dir: Path | None, keep_guards: bool, assume_yes: bool) -> None:
-    """Remove the Carter OpenCode install and, unless --keep-guards, the policy guards
-    (only where unchanged since Carter wrote them; kept without a terminal or --yes)."""
+    """Remove the Carter agents and skills, and the guards."""
     from carter.install.uninstall import uninstall as run_uninstall
 
     code = run_uninstall(base_dir, keep_guards=keep_guards, assume_yes=assume_yes)
@@ -159,27 +159,25 @@ def uninstall(base_dir: Path | None, keep_guards: bool, assume_yes: bool) -> Non
 
 @main.command()
 @click.argument("target_dir", default=".", type=click.Path(exists=True, file_okay=False))
-@click.option("--single", is_flag=True, help="Single-repo mode (default: umbrella)")
-@click.option("--no-git-state", is_flag=True, help="Skip git init for state dirs")
-@click.option("--name", default=None, help="Workspace name (default: directory name)")
+@click.option("--single", is_flag=True, help="One repo (default: umbrella).")
+@click.option("--no-git-state", is_flag=True, help="Skip git init for the state dir.")
+@click.option("--name", default=None, help="Workspace name (default: the directory).")
 @click.option(
     "--agent-suffix",
     default=None,
-    help="Suffix for scaffolded agent names (default: local; '' for none).",
+    help="Agent name suffix (default: local).",
 )
 @click.option(
     "--profile",
     "profile",
     type=click.Choice(sorted(PROFILES)),
     default=None,
-    help="Cost profile: 'quality' (all agents on Opus) or 'budget' (Sonnet where safe). "
-    "Default: the shipped per-agent tiers.",
+    help="quality (all Opus) or budget (Sonnet where safe).",
 )
 @click.option(
     "--docs-language",
     default=None,
-    help="Language for Carter's internal docs (ADRs, RFCs, .carter/ plans and knowledge), "
-    "e.g. 'es' or 'pt-BR' (default: en). Repository output is always English.",
+    help="Language of internal docs, e.g. es (default: en).",
 )
 def init(
     target_dir: str,
@@ -221,34 +219,36 @@ def init(
         config=config,
         git_state=not no_git_state,
     )
-    click.echo(f"Initialized .carter/ in {target}")
+    ui.detail(f"initialized .carter/ in {target}")
 
     # In single-repo mode, add .carter/ to .gitignore
     if single:
         add_to_gitignore(target)
-        click.echo("Added .carter/ to .gitignore")
+        ui.detail("added .carter/ to .gitignore")
 
     # Render templates
     env = create_env()
     _render_and_write(target, config, env)
 
-    click.echo(f"ℹ  {policy_notice(config)}")
+    ui.detail(policy_notice(config))
 
-    click.echo(f"Workspace '{workspace_name}' initialized ({mode} mode)")
-
-
-def _stdin_is_tty() -> bool:
-    import sys
-
-    return sys.stdin.isatty()
+    ui.ok(f"workspace '{workspace_name}' initialized", f"{mode} mode")
 
 
-def _pin_identity_policy(target: Path, config: dict, *, dry_run: bool, assume_yes: bool) -> None:
+def _detail(line: str) -> None:
+    """Lines of the update steps: warnings surface, the rest shows with ``-v``."""
+    text = line.strip()
+    (ui.warn if text.startswith(("⚠", "ℹ", "Not ", "Policies are")) else ui.detail)(
+        text.lstrip("⚠ℹ ")
+    )
+
+
+def _pin_identity_policy(target: Path, config: dict, *, dry_run: bool) -> None:
     """Copy ``identity.role``/``require_tier`` from carter.yaml into config.toml (D62).
 
-    Shows the change and its source first, and writes only after a human confirms
-    (``--yes`` or a TTY prompt). Raises ``click.ClickException`` when pinning is wanted
-    but refused (cap below ``require_tier``, unmodelled keys, a broken or schema-1 file).
+    Asks nothing (D68 h); an agent shell never pins. Raises ``click.ClickException`` when
+    pinning is wanted but refused (cap below ``require_tier``, unmodelled keys, a broken or
+    schema-1 file).
     """
     from carter.identity import ConfigError, load_identity
     from carter.identity.pin import apply_pin, plan_pin
@@ -279,38 +279,36 @@ def _pin_identity_policy(target: Path, config: dict, *, dry_run: bool, assume_ye
         raise click.ClickException(f"Identity policy not pinned: {plan.refusal}.")
     if not plan.changes:
         if role or tier:
-            click.echo("Identity policy already pinned (no change).")
+            ui.detail("identity policy already pinned")
         return
 
-    click.echo(f"Identity policy for {key} (source: .carter/carter.yaml)")
+    ui.detail(f"identity policy for {key} (source: .carter/carter.yaml)")
     for change in plan.changes:
-        click.echo(f"  {change.field:<13} {change.old} -> {change.new}")
+        ui.detail(f"{change.field:<13} {change.old} -> {change.new}")
     if plan.max_tier:
-        click.echo(
-            f"  max_tier      {plan.max_tier} (hand-edited in config.toml; not changed here)"
-        )
+        ui.detail(f"max_tier      {plan.max_tier} (hand-edited in config.toml; not changed here)")
+    what = ", ".join(f"{c.field} {c.new}" for c in plan.changes)
     if dry_run:
-        click.echo("Would pin into ~/.carter/config.toml [workspaces] (dry run: nothing written).")
+        ui.info(f"would pin {what} (dry run: nothing written)")
         return
-    if not assume_yes:
-        if not _stdin_is_tty():
-            click.echo("Not pinned: run `carter update` in a terminal, or pass --yes.")
-            return
-        if not click.confirm("Pin this policy into ~/.carter/config.toml?"):
-            click.echo("Not pinned.")
-            return
+    from carter.terminal import is_agent_shell
+
+    if is_agent_shell():
+        ui.warn("identity policy not pinned: agent shells never pin it", "run `carter update`")
+        return
     try:
         apply_pin(cfg, plan)
     except (WriterError, ConfigError) as exc:
         raise click.ClickException(str(exc)) from exc
-    click.echo("Pinned into ~/.carter/config.toml.")
+    unpinned = all(c.new == "(unset)" for c in plan.changes)
+    ui.ok("identity policy unpinned" if unpinned else "identity policy pinned", what)
 
 
-def _sync_mirror(*, dry_run: bool, assume_yes: bool) -> None:
+def _sync_mirror(*, dry_run: bool) -> None:
     """D64: regenerate ``carter.tier`` and the cap fragments in ``~/.carter/gitconfig``.
 
-    Shows the diff first and writes only after a human confirms (``--yes`` or a TTY prompt).
-    Never fails ``update`` for a config problem; a cap below ``require_tier`` is refused."""
+    Asks nothing (D68 h); an agent shell never writes it. Never fails ``update`` for a config
+    problem; a cap below ``require_tier`` is refused."""
     from carter.guard import update_mirror
     from carter.identity import ConfigError, load_identity
     from carter.terminal import is_agent_shell
@@ -318,7 +316,7 @@ def _sync_mirror(*, dry_run: bool, assume_yes: bool) -> None:
     try:
         cfg = load_identity()
     except ConfigError:
-        click.echo("ℹ  config.toml is invalid; the tier mirror was not refreshed.")
+        ui.warn("config.toml is invalid; the tier mirror was not refreshed")
         return
     if cfg.needs_migration:
         return
@@ -327,22 +325,14 @@ def _sync_mirror(*, dry_run: bool, assume_yes: bool) -> None:
         raise click.ClickException(f"Tier mirror not written: {plan.refusal}.")
     if not plan.changes:
         return
-    click.echo("Tier mirror (~/.carter/gitconfig, D64):")
     for line in plan.lines():
-        click.echo(line)
+        ui.detail(line.strip())
     if dry_run:
-        click.echo("Would write the tier mirror (dry run: nothing written).")
+        ui.info("would write the tier mirror (dry run: nothing written)")
         return
     if is_agent_shell():
-        click.echo("Not written: agent shells never change the tier mirror. Run `carter update`.")
+        ui.warn("tier mirror not written: agent shells never change it", "run `carter update`")
         return
-    if not assume_yes:
-        if not _stdin_is_tty():
-            click.echo("Mirror not written: run `carter update` in a terminal, or pass --yes.")
-            return
-        if not click.confirm("Write the tier mirror?"):
-            click.echo("Mirror not written.")
-            return
     try:
         update_mirror.apply(None, cfg)
     except Exception as exc:  # GitError, MirrorError, IdentityError (E-STATE-INVALID)
@@ -350,13 +340,13 @@ def _sync_mirror(*, dry_run: bool, assume_yes: bool) -> None:
 
         text = format_error(exc) or str(exc)
         raise click.ClickException(f"Tier mirror not written: {text}") from exc
-    click.echo("Wrote the tier mirror.")
+    ui.ok("tier mirror written")
     hint = update_mirror.include_hint(None)
     if hint:
-        click.echo(f"Add Carter's include line to your git config yourself:\n    {hint}")
+        ui.warn("add Carter's include line to your git config yourself", hint)
 
 
-def _refresh_policies(*, dry_run: bool, assume_yes: bool) -> None:
+def _refresh_policies(*, dry_run: bool) -> None:
     """D52 (RFC-0007 C.6.2): turn ``allow_project_opencode_edit`` into policy statements.
 
     Only where policies were installed with consent; only from a human's shell. Everything
@@ -371,7 +361,7 @@ def _refresh_policies(*, dry_run: bool, assume_yes: bool) -> None:
     try:
         cfg = load_identity()
     except ConfigError:
-        click.echo("ℹ  config.toml is invalid; D52 opt-outs not refreshed.")
+        ui.warn("config.toml is invalid; D52 opt-outs not refreshed")
         return
     stamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%S")
     refresh_from_update(
@@ -380,12 +370,9 @@ def _refresh_policies(*, dry_run: bool, assume_yes: bool) -> None:
         cfg,
         home=str(Path.home()),
         backup_root=backups_dir(None) / stamp,
-        assume_yes=assume_yes,
         dry_run=dry_run,
-        interactive=_stdin_is_tty(),
         agent=is_agent_shell(),
-        confirm=click.confirm,
-        echo=click.echo,
+        echo=_detail,
     )
 
 
@@ -409,22 +396,21 @@ def _note_stale_workspace_rules(target: Path, config: dict, env: Environment) ->
     ]
     if missing:
         rules = "\n   ".join(missing)
-        click.echo(
-            f"ℹ  {instructions.relative_to(target)} was not rewritten (it may hold your edits) and "
-            f"its rules are out of date. Current rules:\n   {rules}"
+        ui.warn(
+            f"{instructions.relative_to(target)} has rules that are out of date "
+            "(not rewritten: it may hold your edits)",
+            rules,
         )
 
 
 @main.command()
 @click.argument("target_dir", default=".", type=click.Path(exists=True, file_okay=False))
-@click.option("--dry-run", is_flag=True, help="Preview changes without writing")
-@click.option("--yes", "-y", "assume_yes", is_flag=True, help="Pin identity policy without asking.")
+@click.option("--dry-run", is_flag=True, help="Show what would change; write nothing.")
+@click.option("--yes", "-y", "assume_yes", is_flag=True, hidden=True)
+@verbose_option
 def update(target_dir: str, dry_run: bool, assume_yes: bool) -> None:
-    """Re-render templated files from carter.yaml and pin its identity policy.
-
-    `identity.role` and `identity.require_tier` in carter.yaml take effect only here:
-    update shows them, asks, and pins them in ~/.carter/config.toml.
-    """
+    """Re-render the agents and apply carter.yaml."""
+    del assume_yes  # accepted and ignored: update asks nothing (D68 h)
     target = Path(target_dir).resolve()
     config_path = target / ".carter" / "carter.yaml"
 
@@ -434,27 +420,26 @@ def update(target_dir: str, dry_run: bool, assume_yes: bool) -> None:
         raise click.ClickException(str(e)) from e
 
     for warning in identity_warnings(config):
-        click.echo(f"⚠  {warning}")
-    _pin_identity_policy(target, config, dry_run=dry_run, assume_yes=assume_yes)
-    _sync_mirror(dry_run=dry_run, assume_yes=assume_yes)
-    _refresh_policies(dry_run=dry_run, assume_yes=assume_yes)
+        ui.warn(warning)
+    _pin_identity_policy(target, config, dry_run=dry_run)
+    _sync_mirror(dry_run=dry_run)
+    _refresh_policies(dry_run=dry_run)
 
     env = create_env()
 
     if dry_run:
         agents = render_agents(config, env)
-        click.echo("Would render:")
         agents_dir = _agents_dir(target)
         for name in sorted(agents):
-            click.echo(f"  {(agents_dir / name).relative_to(target)}")
+            ui.detail(str((agents_dir / name).relative_to(target)))
         instr = _instructions_path(target)
         note = " (skipped: exists)" if instr.exists() else ""
-        click.echo(f"  {instr.relative_to(target)}{note}")
+        ui.info(f"would render {len(agents)} agents and {instr.relative_to(target)}{note}")
         return
 
     _render_and_write(target, config, env)
-    click.echo(f"ℹ  {policy_notice(config)}")
-    click.echo("Templates re-rendered from carter.yaml")
+    ui.detail(policy_notice(config))
+    ui.ok("updated", f"{len(render_agents(config, env))} agents from carter.yaml")
     _note_stale_workspace_rules(target, config, env)
 
 
@@ -463,20 +448,21 @@ def update(target_dir: str, dry_run: bool, assume_yes: bool) -> None:
 @click.option(
     "--no-harness",
     is_flag=True,
-    help="Skip the `opencode debug agents` harness validation step.",
+    help="Skip the OpenCode agent check.",
 )
 @click.option(
     "--host",
     is_flag=True,
-    help="Check this machine instead (policies, plugin, hooks, server environment); read-only.",
+    help="Check this machine instead (read-only).",
 )
 @click.option(
     "--probe",
     is_flag=True,
-    help="Probe this agent shell's isolation (run it inside an agent shell: ask your agent).",
+    help="Probe an agent shell's isolation (the agent runs it).",
 )
+@verbose_option
 def check(target_dir: str, no_harness: bool, host: bool, probe: bool) -> None:
-    """Validate workspace integrity and that OpenCode loads the Carter agents."""
+    """Check the workspace, or this machine with --host."""
     if probe:
         if host:
             raise click.UsageError("--probe and --host cannot be used together.")
@@ -491,15 +477,15 @@ def check(target_dir: str, no_harness: bool, host: bool, probe: bool) -> None:
         click.echo("\n".join(r.line() for r in results))
         raise SystemExit(probes.exit_code(results))
     if host:
-        from carter.hostcheck import exit_code, live_readers, render, run_host_checks
+        from carter.hostcheck import live_readers, run_host_checks
 
         items = run_host_checks(cwd=Path(target_dir).resolve(), **live_readers())
-        click.echo("\n".join(render(items)))
-        raise SystemExit(exit_code(items))
+        raise SystemExit(ui.items(items, "host"))
     target = Path(target_dir).resolve()
     config_path = target / ".carter" / "carter.yaml"
     errors: list[str] = []
     warnings: list[str] = []  # reported, never change the exit code
+    loaded = False
 
     # Check config exists
     if not config_path.exists():
@@ -573,38 +559,34 @@ def check(target_dir: str, no_harness: bool, host: bool, probe: bool) -> None:
             target, expected, newest_change=max(mtimes) if mtimes else None
         )
         if harness_result.warning:
-            click.echo(f"⚠  {harness_result.warning}", err=True)
+            ui.warn(harness_result.warning)
         errors.extend(harness_result.errors)
-        if harness_result.status == "ok":
-            click.echo(f"OpenCode loaded all {len(expected)} Carter agents")
+        loaded = harness_result.status == "ok"
 
-    if warnings:
-        click.echo("Workspace warnings:", err=True)
-        for warning in warnings:
-            click.echo(f"  ⚠ {warning}", err=True)
+    for warning in warnings:
+        ui.warn(warning)
 
     if errors:
-        click.echo("Workspace issues found:", err=True)
         for error in errors:
-            click.echo(f"  ✗ {error}", err=True)
+            ui.fail(error)
         raise SystemExit(1)
 
-    # Required unverifiable-model advisory — always printed.
-    click.echo(f"ℹ  {model_advisory(config)}")
+    # Required unverifiable-model advisory: always printed, dimmed.
+    ui.info(model_advisory(config))
 
-    click.echo("Workspace OK")
+    ui.ok(
+        "Workspace OK",
+        f"{len(config['agents'])} agents"
+        + (" · loaded by OpenCode" if loaded else "")
+        + (f" · {len(warnings)} warnings" if warnings else ""),
+    )
 
 
 @main.command()
 @click.argument("target_dir", default=".", type=click.Path(exists=True, file_okay=False))
-@click.option("--message", "-m", default=None, help="Commit message for the state snapshot.")
+@click.option("--message", "-m", default=None, help="Commit message.")
 def save(target_dir: str, message: str | None) -> None:
-    """Commit the .carter/ workspace state (recovery checkpoint).
-
-    Snapshots plans, sessions, and knowledge into the nested .carter/.git so a
-    deleted plan or session is recoverable. No-op if there is nothing to commit
-    or the workspace was initialized with --no-git-state.
-    """
+    """Commit the .carter/ workspace state (a recovery checkpoint)."""
     from datetime import datetime
 
     target = Path(target_dir).resolve()
@@ -621,9 +603,9 @@ def save(target_dir: str, message: str | None) -> None:
     except StateError as e:
         raise click.ClickException(str(e)) from e
     if saved:
-        click.echo("Saved .carter/ state")
+        ui.ok("saved .carter/ state")
     else:
-        click.echo("Nothing to save (no changes or git state disabled)")
+        ui.info("nothing to save (no changes, or git state is off)")
 
 
 # OpenCode discovery paths (relative to the workspace root): agents in
@@ -677,13 +659,12 @@ def _render_and_write(target: Path, config: dict, env: Environment) -> None:
 )
 @click.argument("args", nargs=-1, type=click.UNPROCESSED)
 def ops(args: tuple[str, ...]) -> None:
-    """Carter-ops audit ledger and config helper (used by the carter-ops skill).
+    """Audit and config helper used by the carter-ops skill.
 
-    All arguments are passed through to the carter-ops CLI, e.g.:
-
-        carter ops audit --operation git-flow --result success
-        carter ops policy-override --category remote-write --action "vault read x" --tier native-ask
-        carter ops config --emit
+    \b
+    carter ops audit --operation git-flow --result success
+    carter ops config --emit [--field NAME]
+    carter ops policy-override --category remote-write --action "vault read x" --tier native-ask
     """
     from carter.ops.carter_ops import main as ops_main
 

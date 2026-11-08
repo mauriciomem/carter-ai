@@ -23,11 +23,11 @@ from carter.guard.state import load
 from carter.identity.errors import E_GIT_OLD, registry
 from carter.install.paths import carter_gitconfig_path, guard_script_path, guard_state_path
 from guard.conftest import REAL_GIT
-from guard.helpers import debug_config, install_old_git
+from guard.helpers import debug_config, decline, install_old_git, verbose
 
 
 def guard(*args: str, **kw):
-    return CliRunner().invoke(main, ["guard", *args], catch_exceptions=False, **kw)
+    return CliRunner().invoke(main, ["guard", *verbose(args)], catch_exceptions=False, **kw)
 
 
 def global_cfg() -> Path:
@@ -117,11 +117,9 @@ class TestInstall:
     def test_declined_hooks_write_nothing_and_are_listed(self, stack, human_tty) -> None:
         human_tty(True)
         stack.fake()
-        res = guard(
-            "install", input="y\nn\ny\ny\ny\nn\n"
-        )  # g2, hooks, sudo, read-edit, config-edit
+        decline("hooks")
+        res = guard("install", input="y\n")  # a group declined earlier is not asked again
         assert res.exit_code == 0, res.output
-        assert "Declined: hooks" in res.output
         assert not guard_script_path(None).exists() and not carter_gitconfig_path(None).exists()
         assert "include" not in global_cfg().read_text()
         out = guard("status").output
@@ -130,9 +128,10 @@ class TestInstall:
     def test_the_consent_prompt_shows_the_effect_line(self, stack, human_tty) -> None:
         human_tty(True)
         stack.fake()
-        res = guard("install", input="y\ny\ny\ny\ny\nn\n")
-        assert "agent pushes are blocked and agent commits are checked" in res.output
-        assert "your own commits and pushes are unaffected" in res.output
+        res = guard("install", input="y\n")
+        question = res.output.split("Install?")[0]
+        assert "git hooks check agent commits and block agent pushes in every repo" in question
+        assert "not yours" in question
 
     def test_remove_takes_back_the_script_the_file_and_the_line(self, stack) -> None:
         before = global_cfg().read_bytes()

@@ -203,15 +203,9 @@ class UpdateEnv:
 
 
 def _update(ws: Path, args: tuple[str, ...], human_tty: bool) -> tuple[int, str]:
-    import carter.cli as cli
-
-    runner = CliRunner()
-    orig = cli._stdin_is_tty
-    cli._stdin_is_tty = lambda: human_tty  # type: ignore[assignment]
-    try:
-        res = runner.invoke(main, ["update", str(ws), *args], catch_exceptions=False)
-    finally:
-        cli._stdin_is_tty = orig  # type: ignore[assignment]
+    """``carter update`` asks nothing (D68 h), so the terminal makes no difference."""
+    del human_tty
+    res = CliRunner().invoke(main, ["update", "-v", str(ws), *args], catch_exceptions=False)
     return res.exit_code, res.output
 
 
@@ -269,26 +263,29 @@ class TestCarterUpdate:
             == 3
         )
 
-    def test_without_yes_a_tty_is_asked_and_a_no_applies_nothing(
-        self, env: UpdateEnv, monkeypatch
+    def test_update_asks_nothing_and_applies_without_a_terminal_or_yes(
+        self, env: UpdateEnv
     ) -> None:
         env.install_base()
         write_toml(env.home, {str(env.ws): True})
-        before = config_target(None).read_bytes()
-        env.fake()
-        monkeypatch.setattr("click.confirm", lambda *_a, **_k: False)
-        code, out = env.update(human_tty=True)
-        assert code == 0 and "Not applied." in out
-        assert config_target(None).read_bytes() == before
-
-    def test_without_yes_and_without_a_tty_nothing_is_applied(self, env: UpdateEnv) -> None:
-        env.install_base()
-        write_toml(env.home, {str(env.ws): True})
-        before = config_target(None).read_bytes()
-        env.fake()
-        code, out = env.update(human_tty=False)
-        assert code == 0 and "Active opt-outs" in out and "Not applied" in out
-        assert config_target(None).read_bytes() == before
+        wanted = consent.desired_statements(
+            env.state,
+            home=str(env.home),
+            optouts=optout.active_optouts(load_identity()).statements(),
+        )
+        env.fake(config_sequence=[dbg(env.base), dbg(wanted)])
+        code, out = env.update(human_tty=False)  # no --yes, no TTY, no question
+        assert code == 0 and "[y/N]" not in out and "Not applied" not in out
+        assert (
+            len(
+                [
+                    r
+                    for r in load(guard_state_path(None)).owned_policies()
+                    if r["id"].startswith("optout-")
+                ]
+            )
+            == 3
+        )
 
     def test_an_agent_shell_never_applies_even_with_yes(self, env: UpdateEnv, monkeypatch) -> None:
         env.install_base()

@@ -26,7 +26,7 @@ from carter.guard.state import load, save
 from carter.identity.schema import Workspace
 from carter.install.paths import carter_gitconfig_path, guard_state_path
 from gh_api import FakeGitHub, Reply
-from guard.helpers import debug_config
+from guard.helpers import debug_config, verbose
 from guard.test_never_blocks_human import git, human_commit_and_push, repo  # noqa: F401
 from ssh_rig import KeyPair
 
@@ -34,7 +34,7 @@ LOGIN, UID = "octocat", 583231
 
 
 def guard(*args: str, **kw):
-    return CliRunner().invoke(main, ["guard", *args], catch_exceptions=False, **kw)
+    return CliRunner().invoke(main, ["guard", *verbose(args)], catch_exceptions=False, **kw)
 
 
 def global_cfg() -> Path:
@@ -164,13 +164,17 @@ class TestRoundTrip:
         assert not (stack.home / ".carter" / "bin" / "carter-ssh-sign").exists()
         assert not carter_gitconfig_path(None).exists()
 
-    def test_uninstall_keeps_the_identity_without_a_terminal_or_yes(
-        self, stack, identity: KeyPair, human_tty
+    def test_uninstall_asks_nothing_but_an_agent_shell_keeps_the_identity(
+        self, stack, identity: KeyPair, human_tty, monkeypatch
     ) -> None:  # type: ignore[no-untyped-def]
         human_tty(False)
+        shim = stack.home / ".carter" / "bin" / "carter-ssh-sign"
+        monkeypatch.setenv("AGENT", "1")
+        agent = CliRunner().invoke(main, ["uninstall"], catch_exceptions=False)
+        assert "LLM identity kept: agent shell" in agent.output and shim.exists()
+        monkeypatch.delenv("AGENT")
         done = CliRunner().invoke(main, ["uninstall"], catch_exceptions=False)
-        assert "kept: no terminal and no --yes. Run `carter identity remove`" in done.output
-        assert (stack.home / ".carter" / "bin" / "carter-ssh-sign").exists()
+        assert done.exit_code == 0 and not shim.exists()
 
 
 def human_ok(repo: Path, name: str) -> None:

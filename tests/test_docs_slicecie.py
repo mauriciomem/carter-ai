@@ -84,7 +84,9 @@ class TestReferenceEqualsCode:
     def test_the_install_options_are_documented_exactly(self) -> None:
         block = section(text("reference/cli.md"), "carter ci install", "###")
         assert (
-            documented(block) == help_of("ci", "install") == {"--comment", "--dry-run", "--force"}
+            documented(block)
+            == help_of("ci", "install")
+            == {"--comment", "--dry-run", "--force", "--verbose"}
         )
 
     def test_the_review_options_are_documented_exactly(self) -> None:

@@ -11,6 +11,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import shlex
 import stat
 from collections.abc import Callable, Iterator
 from pathlib import Path
@@ -278,13 +279,10 @@ class TestChecksWriteNothing:
         )
         self.refused(home, request(key), E_IDENTITY_CHECK, "your own signing key")
 
-    def test_a_private_key_passed_as_the_public_key(
+    def test_a_private_key_literal_is_refused(
         self, fake: FakeGitHub, home: Path, key: KeyPair
     ) -> None:
         register(fake, key.blob)
-        self.refused(
-            home, request(key, ssh_public_key=str(key.path)), E_IDENTITY_CHECK, "PRIVATE key"
-        )
         self.refused(
             home,
             request(key, ssh_public_key="key::-----BEGIN OPENSSH PRIVATE KEY-----"),
@@ -311,11 +309,27 @@ class TestChecksWriteNothing:
     ) -> None:
         self.refused(home, request(key, ssh_public_key=value), E_IDENTITY_CHECK, "")
 
-    def test_no_private_key_and_no_password_manager_is_refused(
+    def test_a_key_literal_without_a_private_path_or_password_manager_is_refused(
         self, fake: FakeGitHub, home: Path, key: KeyPair
     ) -> None:
         register(fake, key.blob)
-        self.refused(home, request(key, private_key=None), E_IDENTITY_CHECK, "--private-key")
+        req = request(key, ssh_public_key=f"key::{key.blob}", private_key=None)
+        self.refused(home, req, E_IDENTITY_CHECK, "--private-key")
+
+    @pytest.mark.parametrize("missing", ["file", "directory", "loose"])
+    def test_a_bad_private_key_file_is_named_before_anything_is_written(
+        self, fake: FakeGitHub, home: Path, key: KeyPair, missing: str
+    ) -> None:
+        register(fake, key.blob)
+        if missing == "file":
+            key.path.unlink()
+        elif missing == "directory":
+            key.path.unlink()
+            key.path.mkdir()
+        else:
+            key.path.chmod(0o644)
+        word = {"file": "does not exist", "directory": "not a regular file", "loose": "chmod 600"}
+        self.refused(home, request(key), E_IDENTITY_CHECK, word[missing])
 
     def test_account_problems(self, fake: FakeGitHub, home: Path, key: KeyPair) -> None:
         fake.on("GET", f"/users/{LOGIN}", Reply(404, fixture("err-404.json")))
@@ -439,6 +453,7 @@ class TestCommand:
             "--signing-program",
             "--role",
             "--dry-run",
+            "-v",
         }
 
     def test_dry_run_prints_the_plan_and_writes_nothing_even_in_an_agent_shell(
@@ -451,14 +466,13 @@ class TestCommand:
             LOGIN,
             "--ssh-public-key",
             str(key.pub_path),
-            "--private-key",
-            str(key.path),
             "--dry-run",
+            "-v",
             env={"AGENT": "1"},
         )
         assert done.exit_code == 0, done.output
-        assert f"Identity: {LOGIN} (id {UID}), T2" in done.output and key.fingerprint in done.output
-        assert "Dry run: nothing was written." in done.output and "carter-ssh-sign" in done.output
+        assert f"{LOGIN} · T2 · {key.fingerprint[:19]}" in done.output
+        assert "dry run, nothing written" in done.output and "carter-ssh-sign" in done.output
         assert tree(home) == before
 
     def test_writing_is_refused_in_an_agent_shell_and_without_a_terminal(
@@ -468,34 +482,61 @@ class TestCommand:
         assert agent.exit_code == 1 and E_HUMAN_TERMINAL in agent.output
         assert not (home / ".carter" / "config.toml").exists()
 
-    def test_no_terminal_is_refused(self, fake: FakeGitHub, home: Path) -> None:
-        done = cli("--login", LOGIN)
-        assert done.exit_code == 1 and E_HUMAN_TERMINAL in done.output and fake.requests == []
-
-    def test_confirmation_yes_writes_and_no_does_not(
-        self, fake: FakeGitHub, home: Path, human: None, key: KeyPair
+    def test_it_asks_nothing_and_needs_no_terminal(
+        self, fake: FakeGitHub, home: Path, key: KeyPair
     ) -> None:
         register(fake, key.blob)
-        args = [
-            "--login",
-            LOGIN,
-            "--ssh-public-key",
-            str(key.pub_path),
-            "--private-key",
-            str(key.path),
-        ]
-        no = cli(*args, input="n\n")
-        assert (
-            no.exit_code == 1
-            and "Nothing was written." in no.output
-            and not (home / ".carter" / "config.toml").exists()
-        )
-        yes = cli(*args, input="y\n")
-        assert yes.exit_code == 0, yes.output
-        assert (
-            "Done. Next: `carter identity unlock`" in yes.output and key.fingerprint in yes.output
-        )
-        assert str(key.path) not in yes.output  # names and ids only
+        done = cli("--login", LOGIN, "--ssh-public-key", str(key.pub_path))  # no input, no tty
+        assert done.exit_code == 0, done.output
+        assert done.output.splitlines()[0] == f"✓ {LOGIN} · T2 · {key.fingerprint[:19]}…"
+        assert "carter identity unlock" in done.output  # the key has a passphrase: one next step
+        assert len(done.output.splitlines()) <= 2
+        assert str(key.path) not in done.output  # names and ids only
+        cfg = load_identity(home / ".carter" / "config.toml")
+        assert cfg.signing.private_key_path == str(key.path) and cfg.signing.mode == "agent"
+
+    @pytest.mark.parametrize("which", ["pub", "private"])
+    def test_either_path_of_the_pair_is_enough(
+        self, fake: FakeGitHub, home: Path, key: KeyPair, which: str
+    ) -> None:
+        register(fake, key.blob)
+        given = key.pub_path if which == "pub" else key.path
+        done = cli("--login", LOGIN, "--ssh-public-key", str(given))
+        assert done.exit_code == 0, done.output
+        cfg = load_identity(home / ".carter" / "config.toml")
+        assert cfg.signing.public_key == key.blob
+        assert cfg.signing.private_key_path == str(key.path)
+
+    def test_a_key_without_a_passphrase_is_accepted_silently_and_signs_from_its_file(
+        self, fake: FakeGitHub, home: Path, throwaway_key: Callable[..., KeyPair]
+    ) -> None:
+        plain = throwaway_key("ed25519")
+        register(fake, plain.blob)
+        done = cli("--login", LOGIN, "--ssh-public-key", str(plain.pub_path))
+        assert done.exit_code == 0, done.output
+        assert "no passphrase" in done.output and "unlock" not in done.output
+        assert "warn" not in done.output.lower() and "!" not in done.output
+        cfg = load_identity(home / ".carter" / "config.toml")
+        assert cfg.signing.mode == "file"
+        script = shim_path(home).read_text()
+        assert f"FILE_KEY={shlex.quote(str(plain.path))}" in script
+
+    def test_the_removed_flag_is_gone(self, fake: FakeGitHub, home: Path) -> None:
+        from carter.cli import main as top
+
+        done = CliRunner().invoke(top, ["identity", "unlock", "--allow-no-passphrase"])
+        assert done.exit_code == 2
+
+    def test_an_unregistered_key_says_the_cause_and_the_fix_in_two_lines(
+        self, fake: FakeGitHub, home: Path, key: KeyPair
+    ) -> None:
+        register(fake)  # the account has no signing key at all
+        done = cli("--login", LOGIN, "--ssh-public-key", str(key.pub_path))
+        lines = done.output.splitlines()
+        assert done.exit_code == 1 and len(lines) == 2, done.output
+        assert lines[0] == "✗ not registered as an SSH signing key on the account"
+        assert lines[1].startswith("→ on GitHub: Settings") and lines[1].endswith(E_IDENTITY_CHECK)
+        assert not (home / ".carter" / "config.toml").exists()
 
     def test_the_two_password_manager_options_exclude_each_other(self) -> None:
         done = cli("--login", LOGIN, "--agent-socket", "/a", "--signing-program", "/b", "--dry-run")
@@ -505,12 +546,9 @@ class TestCommand:
         self, fake: FakeGitHub, home: Path, human: None
     ) -> None:
         fake.on("GET", f"/users/{LOGIN}", Reply(404, fixture("err-404.json")))
-        done = cli("--login", LOGIN, input="y\n")
-        assert (
-            done.exit_code == 1
-            and f"Error: {E_IDENTITY_CHECK}" in done.output
-            and "Nothing was written" in done.output
-        )
+        done = cli("--login", LOGIN)
+        assert done.exit_code == 1 and E_IDENTITY_CHECK in done.output
+        assert "Nothing was written" not in done.output  # the cause, not a list of reassurances
         bad = cli("--login", "not a login!", "--dry-run")
         assert bad.exit_code == 2
 

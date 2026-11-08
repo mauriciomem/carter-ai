@@ -95,7 +95,8 @@ class TestRegistry:
                 first = row.split("|")[1]
                 in_rfc.update(re.findall(r"E-[A-Z0-9-]+", first))
         # Codes the 1G architect gate added beyond Appendix B (plan 003 step 6, F10).
-        assert set(registry()) - ADDED_BEYOND_APPENDIX_B == in_rfc
+        # E-UNLOCK-NOPASS left with D50 (D68 d): the RFC table still lists it.
+        assert (set(registry()) | {"E-UNLOCK-NOPASS"}) - ADDED_BEYOND_APPENDIX_B == in_rfc
 
 
 class TestUsedByCode:
@@ -215,7 +216,6 @@ class TestRenderErrorTable:
         human = {
             "E-UNLOCK-TTY",
             "E-UNLOCK-OPENCODE",
-            "E-UNLOCK-NOPASS",
             "E-UNLOCK-PATH",
             "E-UNLOCK-BADPASS",
             "E-SIGN-HUMAN-FALLBACK",
@@ -265,7 +265,7 @@ class TestObservedTexts:
         )
         assert "Resource not accessible by personal access token" in entry.message
         assert "unverified" not in entry.message
-        assert "carter push" in entry.remediation and "own terminal" in entry.remediation
+        assert "carter push" in entry.remediation and "!carter push" in entry.remediation
 
     def test_observed_is_data_only_and_empty_elsewhere(self):
         assert all(e.observed == () for c, e in registry().items() if c != "E-GH-READONLY")
@@ -284,5 +284,5 @@ class TestPatCodes:
         assert (
             "carter github-token set" in type_.remediation and "own terminal" in type_.remediation
         )
-        assert "this looks like" not in type_.message and "4-character prefix" in type_.message
+        assert "this looks like" not in type_.message and "github_pat_" in type_.message
         assert "0700" in perm.remediation and "carter github-token set" in perm.remediation

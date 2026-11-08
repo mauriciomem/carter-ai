@@ -96,7 +96,7 @@ class TestCommitState:
         )
         result = runner.invoke(main, ["save", str(tmp_path)])  # no -m
         assert result.exit_code == 0, result.output
-        assert "Saved" in result.output
+        assert "saved .carter/ state" in result.output
 
 
 class TestSaveCommand:
@@ -114,14 +114,14 @@ class TestSaveCommand:
         cp.write_text("---\nupdated: 2026-06-09\n---\n", encoding="utf-8")
         result = runner.invoke(main, ["save", str(tmp_path), "-m", "test: cp"])
         assert result.exit_code == 0, result.output
-        assert "Saved" in result.output
+        assert "saved .carter/ state" in result.output
 
     def test_save_nothing_to_commit(self, tmp_path):
         runner, main = self._runner()
         runner.invoke(main, ["init", str(tmp_path)])
         result = runner.invoke(main, ["save", str(tmp_path)])
         assert result.exit_code == 0, result.output
-        assert "Nothing to save" in result.output
+        assert "nothing to save" in result.output
 
     def test_save_not_a_workspace(self, tmp_path):
         runner, main = self._runner()

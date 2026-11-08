@@ -166,7 +166,10 @@ class TestSetupHelpers:
     def test_ttl_accepts_what_ssh_add_accepts(self, good: str) -> None:
         assert agent.parse_ttl(good) == good
 
-    @pytest.mark.parametrize("bad", ["", "0", "-5", "8 h", "h", "1.5h", "forever", "8hh", "0h"])
+    def test_an_empty_ttl_means_no_lifetime(self) -> None:
+        assert agent.parse_ttl("") == ""
+
+    @pytest.mark.parametrize("bad", ["0", "-5", "8 h", "h", "1.5h", "forever", "8hh", "0h"])
     def test_ttl_rejects_the_rest(self, bad: str) -> None:
         with pytest.raises(ValueError):
             agent.parse_ttl(bad)
@@ -324,6 +327,11 @@ class TestUnlock:
         assert stat.S_IMODE(pidfile.parent.stat().st_mode) == 0o700
         assert agent_proc.verified_agent(pidfile, sock) == pidfile_pid(ctx)
         assert probe(sock, "/usr/bin", ctx.key.fingerprint).state == "ok"
+
+    def test_no_ttl_means_no_lifetime_option(self, ctx: Ctx) -> None:
+        agent.unlock(ctx.with_ttl(""), ctx.runner)  # D68 e
+        ((argv, _env),) = ctx.calls
+        assert argv == ["/usr/bin/ssh-add", str(ctx.key.path)]
 
     def test_ssh_add_gets_a_scrubbed_environment_and_the_ttl(self, ctx: Ctx) -> None:
         agent.unlock(ctx.setup, ctx.runner)

@@ -21,9 +21,10 @@ want commits that GitHub can show as signed by the agent's own account.
   *signed* with the LLM's own SSH key.
 - GitHub then shows "you and the LLM" on the commit and, when the key is registered, the
   green **Verified** badge.
-- The LLM's key sits behind a **passphrase**. You *unlock* it in your own terminal for a few
-  hours. While it is locked, agent commits **fail** (they never fall back to unsigned) and
-  your changes stay staged.
+- The LLM's key can sit behind a **passphrase**. Then you *unlock* it in your own terminal
+  once. While it is locked, agent commits **fail** (they never fall back to unsigned) and
+  your changes stay staged. A key without a passphrase is signed from its file and needs no
+  unlock.
 - Your own key is never used for any of this.
 
 ## Roles
@@ -147,7 +148,8 @@ role is `author`.
 
 1. **Make the LLM account.** A normal, separate GitHub *user* account (not an organization,
    not a bot app) that you own. Note its login.
-2. **Make a key just for it**, with a passphrase:
+2. **Make a key just for it** (a passphrase is optional; with one you `unlock` it each day,
+   without one the signing shim signs straight from the key file):
 
    ```bash
    ssh-keygen -t ed25519 -f ~/.ssh/carter_llm -C "carter llm key"
@@ -169,13 +171,12 @@ scopes. `carter check --host` reports what it can see.
 
 ## Set it up: `carter identity add`
 
-Run it in your own terminal (it refuses inside an agent shell). First look without writing:
+Run it in your terminal (it refuses inside an agent shell). One path is enough: give the `.pub`
+file or the private key and Carter derives the other by adding or removing `.pub`. First look
+without writing:
 
 ```bash
-carter identity add --login my-llm-account \
-  --ssh-public-key ~/.ssh/carter_llm.pub \
-  --private-key ~/.ssh/carter_llm \
-  --dry-run
+carter identity add --login my-llm-account --ssh-public-key ~/.ssh/carter_llm --dry-run
 ```
 
 It asks GitHub (no token, only public data) and checks that:
@@ -183,12 +184,13 @@ It asks GitHub (no token, only public data) and checks that:
 - the account exists, is a normal **User**, and has the id Carter will store;
 - the key is on the account as a **signing** key and is **not** an authentication key
   (the public page `https://github.com/<login>.keys` lists authentication keys);
-- the key is not your own signing key, and what you passed as the "public key" is not a
-  private key (if it is, Carter says so without printing a byte of it).
+- the key is not your own signing key, and the private file exists, is yours and mode 0600, and
+  matches the public key (checked with `stat` and OpenSSH only: Carter never reads its bytes).
 
-If any check fails, **nothing is written** (`E-IDENTITY-CHECK`, or `E-GITHUB-UNREACHABLE` if
-GitHub could not be reached). When everything passes, drop `--dry-run`; Carter shows the
-plan and asks once. It then writes:
+If any check fails, **nothing is written** (`E-IDENTITY-CHECK` names the real cause, or
+`E-GITHUB-UNREACHABLE` if GitHub could not be reached). When everything passes, drop
+`--dry-run`. Carter asks nothing and prints one line, `✓ my-llm-account · T2 · SHA256:2hx1K1j22SYE…`
+(with `→ next: carter identity unlock` only if the key has a passphrase). It writes:
 
 | What | Where |
 |------|-------|
@@ -206,18 +208,22 @@ With only `--login` you get **T1**. Running `add` again with a different key is 
 
 ## Every day: unlock, work, lock
 
+A key **without** a passphrase needs none of this: `identity add` saw that it opens without
+one, and the signing shim signs straight from the key file (`identity show` says "no
+passphrase"). `unlock` is for keys that have a passphrase, and for password-manager setups.
+
 ```bash
 carter identity unlock          # in your OWN terminal; it asks for the key's passphrase
 ```
 
-- Carter starts its own small `ssh-agent` and loads the key into it for **8 hours** (change
-  it with `--ttl 2h`, or `[identity.signing] ttl`). Run `unlock --extend` to renew the clock.
+- Carter starts its own small `ssh-agent` and loads the key into it. It stays loaded until you
+  lock it; ask for a lifetime with `--ttl 2h` (or `[identity.signing] ttl`). Run
+  `unlock --extend` to renew the clock.
 - The passphrase goes straight to OpenSSH's `ssh-add` on your terminal. Carter never sees it.
 - `unlock` refuses inside OpenCode, on purpose: in an agent shell, in the `!` prompt and
   in the integrated terminal (`E-UNLOCK-OPENCODE`). Open a terminal OpenCode did not start.
-- A key **without** a passphrase is refused (`E-UNLOCK-NOPASS`): any program of yours could
-  then sign as the LLM without asking. `--allow-no-passphrase` accepts the risk knowingly;
-  use it only for a throwaway key.
+- A key without a passphrase can be used by any program of yours that can read the file:
+  give the LLM its own key, with no other use, and keep it mode 0600.
 - `carter identity lock` removes the key from the agent and stops the agent.
   `lock --all` also stops a leftover agent. Locking an already locked key is fine.
 
@@ -338,7 +344,7 @@ that says "run `carter update`" instead of silently doing the wrong thing.
 > outside it is **not** capped, and the other way round. `carter check --host` lists such
 > worktrees by path.
 
-A change of `max_tier`, `role` or `require_tier` always needs `carter update` (it asks first).
+A change of `max_tier`, `role` or `require_tier` always needs `carter update` (it asks nothing).
 
 ## Where the guards watch, and the paths no hook sees
 
@@ -388,8 +394,9 @@ deleted the same way), and deleting `~/.carter/bin/carter-ssh-sign` makes agent 
 
 ## Type, never paste
 
-A line that starts with `!` in OpenCode runs in *your* shell. Type such lines yourself; never
-paste one from anywhere, because a pasted line is sent to the model instead. In the same
+A line that starts with `!` in OpenCode runs in *your* shell. Type such lines yourself (`!carter
+push` and `!carter pr` work there once the plugin has tagged the shell as yours); never paste
+one from anywhere, because a pasted line is sent to the model instead. In the same
 spirit, keep `.github/workflows/` under `CODEOWNERS` (a required review): an LLM-signed pull
 request that changes a workflow file should always get a human look.
 
@@ -406,7 +413,7 @@ Honest limits, so you can judge what you are getting:
 - **The read-only GitHub token** is visible to the model, as it sits in the agent's
   environment. Give it the fewest repositories and no write permission.
 - **`--signing-program` mode** has no shim check: Carter cannot see what the program signs.
-- **The private key file** is protected only by its passphrase and its file mode (0600).
+- **The private key file** is protected only by its file mode (0600) and, if it has one, its passphrase. Without a passphrase, anything that runs as you and can read the file can sign as the LLM.
 - **A squash merge** removes the LLM's signature from `main`.
 - **The hooks do not know the role.** They check that the commit is consistent (the committer is the LLM; when the author is the LLM the trailer is yours, otherwise the LLM's). A shell that carries the LLM as author in a workspace pinned to `co-author` would still produce an honest role-`author` commit; the plugin never builds that, and the command gate forbids setting `GIT_AUTHOR_*`.
 - **`--author` on a brand new commit** is stopped only by the command gate, not by the hook.

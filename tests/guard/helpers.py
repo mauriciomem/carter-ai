@@ -74,3 +74,26 @@ def STAND_IN(*_a: object, **_k: object) -> list[tuple[str, str]]:  # noqa: N802
     """A stand-in for ``carter_git_entries``: one Carter-owned git key that is not a ``carter.*``
     mirror key (those belong to the tier mirror and survive ``guard remove``)."""
     return [("alias.ai-commit", "!true")]
+
+
+def verbose(args: tuple[str, ...]) -> tuple[str, ...]:
+    """``guard install, remove, status`` show details with ``-v`` (D68 a); these tests read them."""
+    if args and args[0] in ("install", "remove", "status"):
+        return (args[0], "-v", *args[1:])
+    return tuple(args)
+
+
+def decline(*groups: str) -> None:
+    """Record these groups as declined in the guard state (a TTY could once decline one by one;
+    D68 h made the install one question, so the state is the way to get a declined group)."""
+    from carter.guard.state import load_or_empty_readonly, save
+    from carter.identity.policyset import consent_groups
+    from carter.install.paths import guard_state_path
+
+    path = guard_state_path(None)
+    state = load_or_empty_readonly(path).state
+    revs = {g.id: g.rev for g in consent_groups()}
+    for name in groups:
+        state.consent(name, "declined", "2026-01-01", revs[name])
+    path.parent.mkdir(parents=True, exist_ok=True)
+    save(state, path)

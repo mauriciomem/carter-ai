@@ -55,7 +55,7 @@ git pull
 # Create branch, make changes and commit — use the carter-ops skill (`ops:` prefix):
 # ops: create branch feature/PROJ-123-add-auth, commit src/auth.py with "feat: ..."
 # Pushing and opening the pull request are human-only: write the handoff file
-# (`carter-ops` skill) and tell the user: Run `carter push` and then `carter pr` in your own terminal, not through an agent.
+# (`carter-ops` skill) and tell the user: Run `carter push` and then `carter pr` yourself, in your terminal or as `!carter push` in OpenCode, not through an agent.
 
 # Stay current with main (read operation — run directly)
 git fetch origin

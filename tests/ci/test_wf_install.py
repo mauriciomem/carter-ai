@@ -27,7 +27,10 @@ def repo(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
 
 
 def ci(*args: str):
-    return CliRunner().invoke(main, ["ci", "install", "review", *args], catch_exceptions=False)
+    """``-v`` shows the steps that follow; a normal run is a result line and one next step."""
+    return CliRunner().invoke(
+        main, ["ci", "install", "review", "-v", *args], catch_exceptions=False
+    )
 
 
 def target(repo: Path) -> Path:
@@ -69,6 +72,11 @@ class TestWrite:
                        "Fork pull requests are skipped"):  # fmt: skip
             assert needle in out, needle
         assert "WIDENS" not in out
+        from carter import ui
+
+        ui.configure(verbose=False)  # the helper above ran with -v
+        quiet = CliRunner().invoke(main, ["ci", "install", "review", "--force"]).output
+        assert len(quiet.splitlines()) <= 3 and "CODEOWNERS" not in quiet  # steps are -v
 
     def test_the_comment_opt_in_says_it_widens_the_scope(
         self, repo: Path, human_tty: Callable[[bool], None]

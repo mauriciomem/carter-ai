@@ -20,16 +20,17 @@ from carter.guard.state import load, save
 from carter.identity.errors import E_POLICIES_MISSING, E_STATE_INVALID
 from carter.install.mcp import config_target
 from carter.install.paths import carter_gitconfig_path, guard_state_path
-from guard.helpers import STAND_IN, debug_config, tree_hash
+from guard.helpers import STAND_IN, debug_config, decline, tree_hash, verbose
+from rows import check_host
 from sentinels import fine_grained, prefixed
 
 
 def guard(*args: str):
-    return CliRunner().invoke(main, ["guard", *args], catch_exceptions=False)
+    return CliRunner().invoke(main, ["guard", *verbose(args)], catch_exceptions=False)
 
 
 def host(*extra: str):
-    return CliRunner().invoke(main, ["check", "--host", *extra], catch_exceptions=False)
+    return check_host(*extra)
 
 
 def installed(stack) -> None:
@@ -59,7 +60,7 @@ class TestHealthyInstall:
         assert "not loaded yet: start OpenCode" in warns  # installed, no server has loaded it
         assert "not provisioned" in warns  # no token yet: a WARN, never a failure
         assert "plugin and isolation.json match (hash)" in " ".join(found["OK"])
-        assert res.output.rstrip().endswith("Host OK (2 WARN).")
+        assert res.output.rstrip().endswith("✓ host  2 warnings")
 
     def test_a_pre_2a_user_keeps_the_1g_wording_and_sees_rev_2_pending(self, stack) -> None:
         installed(stack)
@@ -153,11 +154,9 @@ class TestRedItems:
     def test_a_declined_group_is_listed_not_failed(self, stack, human_tty) -> None:
         from carter.identity.policyset import policy_statements
 
-        human_tty(True)
         stack.fake()
-        res = CliRunner().invoke(
-            main, ["guard", "install"], input="y\ny\nn\ny\ny\nn\n", catch_exceptions=False
-        )
+        decline("sudo-docker")
+        res = CliRunner().invoke(main, ["guard", "install", "--yes"], catch_exceptions=False)
         assert res.exit_code == 0, res.output
         accepted = policy_statements(
             ("g2", "read-edit-denies", "config-edit"), home=str(stack.home)
@@ -263,7 +262,7 @@ class TestWarnsAndLists:
             json.dumps({"plugins": ["x"], "mcp": {"servers": {"s": {"command": ["SECRETCMD"]}}}})
         )
         stack.fake()
-        res = CliRunner().invoke(main, ["check", "--host", str(proj)], catch_exceptions=False)
+        res = check_host(str(proj))
         assert "project-scope OpenCode config can run code" in res.output
         assert "opencode.json (mcp, plugins)" in res.output and ".opencode/plugins/" in res.output
         assert "SECRETCMD" not in res.output and res.exit_code == 0
@@ -278,7 +277,7 @@ class TestWarnsAndLists:
         yaml_path = ws / ".carter" / "carter.yaml"
         yaml_path.write_text(yaml_path.read_text() + "identity:\n  require_tier: t1\n")
         stack.fake()
-        res = runner.invoke(main, ["check", "--host", str(ws)], catch_exceptions=False)
+        res = check_host(str(ws))
         assert "carter.yaml and config.toml differ on: require_tier" in res.output
         assert "carter update" in res.output and res.exit_code == 0
 
@@ -309,7 +308,7 @@ class TestReadOnlyAndQuiet:
         monkeypatch.setenv("GH_TOKEN", prefixed("ghp_", "ENVSENTINEL"))
         monkeypatch.setenv("GITHUB_TOKEN", fine_grained("ENVSENTINEL"))
         stack.fake(before=debug_config(stack.live[1:]))  # provider settings carry sk-SENTINEL
-        res = CliRunner().invoke(main, ["check", "--host"], catch_exceptions=False)
+        res = check_host()
         assert "SENTINEL" not in res.output and "SENTINEL" not in (res.stderr_bytes or b"").decode()
 
     def test_no_provider_settings_in_the_debug_config_path(self) -> None:
@@ -354,7 +353,7 @@ class TestToken:
         assert res.exit_code == 0 and "RED" not in found
         oks = " ".join(found["OK"])
         assert "gh-read.token" in oks and "the token is read-only" in oks
-        assert res.output.rstrip().endswith("Host OK (1 WARN).")  # only the plugin line
+        assert res.output.rstrip().endswith("✓ host  1 warning")  # only the plugin line
         assert "HOSTSENTINEL" not in res.output
 
     def test_a_writable_token_is_red(self, stack, github_api) -> None:

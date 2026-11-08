@@ -207,7 +207,8 @@ probe_repo = ""           # optional "owner/name" for the token's write probe (n
 public_key = ""           # "ssh-ed25519 AAAA..." (no private key is ever stored here)
 fingerprint = ""
 private_key_path = ""     # a path only; Carter never opens the file
-ttl = "8h"                # how long `carter identity unlock` keeps the key loaded
+                          # optional: ttl = "8h" (lifetime for unlock; unset = until locked)
+                          # set by `identity add`: mode = "file" (no passphrase) or "agent"
 
 [broker]                  # optional; written only when you set something
 min_dwell_ms = 500        # how long an approval must take; 500 is the floor, 10000 the cap
@@ -221,7 +222,7 @@ require_tier = "t2"       # pinned by `carter update`
 | Table | Keys |
 |-------|------|
 | `[identity]` | `role`, `login`, `id`, `name`, `email`, `mode` (`auto`, `interactive` or `review`; `CARTER_IDENTITY_MODE` wins; in a detected CI `auto` is `review`, which refuses commits. See [Review-only CI](../guides/ci-review.md#modes)) |
-| `[identity.signing]` | The LLM's signing key, written by `carter identity add`: `public_key`, `fingerprint`, `private_key_path` (a path, never read), `previous_public_keys` (kept after a rotation so old commits verify), `ssh_bin_dir` (default `/usr/bin`; where `ssh-keygen`, `ssh-agent` and `ssh-add` come from), `ttl` (how long `identity unlock` keeps the key, default `8h`), `agent_socket` or `program` (a password manager instead of Carter's own agent) |
+| `[identity.signing]` | The LLM's signing key, written by `carter identity add`: `public_key`, `fingerprint`, `private_key_path` (a path, never read), `previous_public_keys` (kept after a rotation so old commits verify), `ssh_bin_dir` (default `/usr/bin`; where `ssh-keygen`, `ssh-agent` and `ssh-add` come from), `ttl` (how long `identity unlock` keeps the key; none by default), `mode` (`file` for a key without a passphrase, signed straight from `private_key_path`; `agent` otherwise; set by `identity add`), `agent_socket` or `program` (a password manager instead of Carter's own agent) |
 | `[identity.disclosure]` | Reserved for a later release; read and kept, not used yet |
 | `[github]` | `read_token_file`: where `carter github-token set` stored the read-only token (a path only, never the token itself). `probe_repo`: optional `owner/name` that `github-token check` uses for its refused write attempt instead of a repository you own |
 | `[broker]` | Optional, for the [B tools](../guides/push-and-pr-tools.md). `min_dwell_ms`: the shortest an approval may take before B refuses it as automatic; the effective value is never below 500 and never above 10000. B always uses the home in your system account entry (what OpenSSH reads) for its git and ssh calls and for the `~/.ssh/config` scan; there is no setting for it |

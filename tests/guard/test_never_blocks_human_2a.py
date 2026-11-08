@@ -24,7 +24,7 @@ from carter.install.paths import (
     isolation_path,
     plugin_dir,
 )
-from guard.helpers import debug_config
+from guard.helpers import debug_config, verbose
 
 
 def git(*args: str, cwd: Path | None = None, env: dict[str, str] | None = None):
@@ -34,7 +34,7 @@ def git(*args: str, cwd: Path | None = None, env: dict[str, str] | None = None):
 
 
 def guard(*args: str):
-    return CliRunner().invoke(main, ["guard", *args], catch_exceptions=False)
+    return CliRunner().invoke(main, ["guard", *verbose(args)], catch_exceptions=False)
 
 
 @pytest.fixture

@@ -57,7 +57,7 @@ class Lab:
     # --- the user's own commands (pty or plain subprocess, the rig's HOME, no agent signals) ---
     def env(self, **extra: str) -> dict[str, str]:
         env = {k: v for k, v in self.rig.env().items() if k != "OPENCODE_SERVER_PASSWORD"}
-        env.update({"GITHUB_API_URL": self.fake.url, "PYTHONPATH": "", **extra})
+        env.update({"GITHUB_API_URL": self.fake.url, "PYTHONPATH": "", "NO_COLOR": "1", **extra})
         return env
 
     def carter(self, *args: str, answers: tuple[str, ...] = (), timeout: float = 60):  # type: ignore[no-untyped-def]
@@ -96,7 +96,7 @@ class Lab:
 
     def unlock(self, *flags: str) -> None:
         done = self.carter("identity", "unlock", *flags, answers=(self.passphrase,))
-        assert done.rc == 0 and "Unlocked the LLM signing key" in done.output, done.output
+        assert done.rc == 0 and "unlocked" in done.output, done.output
 
     def lock(self, *flags: str) -> None:
         done = self.carter_plain("identity", "lock", *flags)
@@ -221,12 +221,10 @@ def lab(rig_factory, opencode_bin, throwaway_key: Callable[..., KeyPair]) -> Ite
         "--login",
         LOGIN,
         "--ssh-public-key",
-        str(key.pub_path),
-        "--private-key",
-        str(key.path),
+        str(key.path),  # the private key: the .pub is derived (D68 c)
         "--dry-run",
     )
-    assert dry.rc == 0 and "Dry run: nothing was written." in dry.output, dry.output
+    assert dry.rc == 0 and "dry run, nothing written" in dry.output, dry.output
     added = state.carter(
         "identity",
         "add",
@@ -234,11 +232,8 @@ def lab(rig_factory, opencode_bin, throwaway_key: Callable[..., KeyPair]) -> Ite
         LOGIN,
         "--ssh-public-key",
         str(key.pub_path),
-        "--private-key",
-        str(key.path),
-        answers=("y",),
-    )
-    assert added.rc == 0 and key.fingerprint in added.output, added.output
+    )  # nothing is asked
+    assert added.rc == 0 and key.fingerprint[:19] in added.output, added.output
     state.unlock()
     # `carter update` needs a Carter workspace. `init` writes more than the folder it is given, so it
     # runs in a scratch HOME: the rig's OpenCode and the agent's repo must see none of it.
@@ -293,9 +288,7 @@ class TestK1AndTheTiers:
         assert "rc=0" not in stale and "carter update" in stale and lab.count() == before, stale
         assert "f.txt" in lab.staged()  # nothing lost
         upd = lab.carter_plain("update", str(lab.rig.base / "proj"), "--yes")
-        assert upd.returncode == 0 and "Wrote the tier mirror" in upd.stdout, (
-            upd.stdout + upd.stderr
-        )
+        assert upd.returncode == 0 and "tier mirror written" in upd.stdout, upd.stdout + upd.stderr
         capped = lab.agent_commit("capped")
         assert "rc=0" in capped, capped
         who = lab.show().split("|")
@@ -521,8 +514,10 @@ class TestRemove:
         self, lab: Lab
     ) -> None:
         assert "rc=0" in lab.agent_commit("before removal")
-        done = lab.carter_plain("identity", "remove", "--yes")
-        assert done.returncode == 0 and "What stays" in done.stdout, done.stdout + done.stderr
+        done = lab.carter_plain("identity", "remove")
+        assert done.returncode == 0 and "your key file stay" in done.stdout, (
+            done.stdout + done.stderr
+        )
         home = lab.rig.home
         assert not (home / ".carter" / "bin" / "carter-ssh-sign").exists()
         assert not agent_proc.agents_under(home / ".carter" / "run")

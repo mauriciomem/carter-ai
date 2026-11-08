@@ -51,9 +51,10 @@ class TestCliReference:
 
     def test_guard_status_has_only_the_reset_b_option(self) -> None:
         """Slice B (plan 007 step 14): `--reset-b` clears the rejection counters."""
-        assert help_options("guard", "status") == {"--reset-b"}
+        assert help_options("guard", "status") == {"--reset-b", "--verbose"}
         block = section(text("reference/cli.md"), "carter guard status", "###")
-        assert "carter guard status [--reset-b]" in block and documented(block) == {"--reset-b"}
+        assert "carter guard status [--reset-b] [-v]" in block
+        assert documented(block) == {"--reset-b", "--verbose"}
 
     def test_every_guard_command_is_listed(self) -> None:
         out = CliRunner().invoke(main, ["guard", "--help"]).output
@@ -195,13 +196,14 @@ def all_user_docs() -> dict[str, str]:
 class TestNewCommandsInTheCliReference:
     def test_push_options_equal_help(self) -> None:
         block = section(text("reference/cli.md"), "carter push")
-        assert documented(block) == help_options("push") == {"--dry-run", "--set-upstream"}
+        expected = {"--dry-run", "--set-upstream", "--verbose"}
+        assert documented(block) == help_options("push") == expected
 
     @pytest.mark.parametrize(
         "command", [["pr"], ["github-token", "set"], ["github-token", "check"]]
     )
     def test_commands_without_options_say_so(self, command: list[str]) -> None:
-        assert help_options(*command) == set()
+        assert help_options(*command) <= {"--verbose"}  # nothing but -v (D68 a)
 
     def test_every_new_command_is_in_the_table_and_has_a_heading(self) -> None:
         doc = text("reference/cli.md")
@@ -214,10 +216,13 @@ class TestNewCommandsInTheCliReference:
         for name in ("github-token", "push", "pr"):
             assert name in out
 
-    def test_push_and_pr_are_documented_as_own_terminal_only_without_a_bang_shell(self) -> None:
+    def test_push_and_pr_are_documented_for_a_human_in_the_terminal_or_the_bang_shell(
+        self,
+    ) -> None:
         doc = " ".join(text("reference/cli.md").split())
-        assert doc.count("Own terminal only") >= 2
-        assert "including OpenCode's `!` shell" in doc
+        assert doc.count("For a human only") >= 2  # D68 g
+        assert "`!carter push`" in doc and "no terminal is needed" in doc
+        assert "asks nothing" in doc
 
     def test_github_token_set_takes_the_token_from_stdin_only(self) -> None:
         block = " ".join(
@@ -269,7 +274,7 @@ class TestWriteOperationsAPlusFlow:
             "`feat/x` becomes `feat%2Fx.md`",
             "Only these five keys are accepted",
             "carter push --dry-run",
-            "On the default branch you type the branch name",
+            "the default branch too: nothing to type",
             "deleted only after the pull request exists",
             "There are no options for forcing",
         ):
@@ -287,16 +292,15 @@ class TestWriteOperationsAPlusFlow:
         assert item.base == "main" and item.repo == "owner/name" and item.draft is False
         assert item.title == "feat(auth): add token refresh" and "## Summary" in item.body
 
-    def test_it_says_own_terminal_and_never_suggests_a_bang_carter(self) -> None:
-        raw = text("guides/write-operations.md")
-        assert "Run both in your own terminal" in self.doc()
-        for forbidden in ("!carter push", "!carter pr", "! carter push", "! carter pr"):
-            assert forbidden not in raw
+    def test_it_says_they_are_for_the_human_in_a_terminal_or_the_tagged_bang_shell(self) -> None:
+        doc = self.doc()
+        assert "They are for you, not an agent" in doc and "`!carter push`" in doc
+        assert "once the plugin has tagged it" in doc  # D68 g
 
     def test_the_typed_bang_fallback_is_unvalidated_and_must_be_typed(self) -> None:
         doc = self.doc()
         assert "unvalidated fallback" in doc
-        assert "It must be **typed**; never paste a line that starts with `!`" in doc
+        assert "Type such lines yourself; never paste a line that starts with `!`" in doc
         assert "a pasted one is sent to the model" in doc
 
     def test_issues_comments_and_releases_have_no_agent_path(self) -> None:
@@ -398,12 +402,12 @@ class TestTroubleshootingHandoffRows:
         ["E-HANDOFF", "E-SECRET-SCAN", "E-B-UNSIGNED", "E-APLUS-ARGS", "E-PAT-TYPE", "E-PAT-PERM"],
     )
     def test_each_code_has_a_row(self, code: str) -> None:
-        assert f"`Error: {code}`" in section(text("troubleshooting.md"), "Guards")
+        assert f"`{code}`" in section(text("troubleshooting.md"), "Guards")
 
     def test_every_documented_code_exists_in_the_registry(self) -> None:
         from carter.identity.errors import registry
 
-        for code in set(re.findall(r"`Error: (E-[A-Z0-9-]+)", text("troubleshooting.md"))):
+        for code in set(re.findall(r"\| `(E-[A-Z0-9-]+)`", text("troubleshooting.md"))):
             assert code in registry(), code
 
 

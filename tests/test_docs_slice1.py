@@ -48,23 +48,16 @@ class TestCliReferenceMatchesHelp:
         block = section(text("reference/cli.md"), "carter install")
         assert documented_options(block) == help_options("install")
 
-    def test_bot_name_is_documented_as_deprecated_and_ignored(self) -> None:
-        row = next(
-            ln for ln in text("reference/cli.md").splitlines() if ln.startswith("| `--bot-name")
-        )
-        assert "deprecated" in row.lower() and "ignored" in row.lower()
-        assert "carter-bot" not in row
-
     def test_update_synopsis_and_options(self) -> None:
         block = section(text("reference/cli.md"), "carter update")
         for opt in help_options("update"):
             assert opt in block, opt
-        assert "--yes" in block and "identity" in block and "config.toml" in block
+        assert "identity" in block and "config.toml" in block and "asks nothing" in block
 
     def test_update_synopsis_line_matches_the_real_options(self) -> None:
         block = section(text("reference/cli.md"), "carter update")
         synopsis = re.search(r"```text\n(carter update[^\n]*)\n```", block)
-        assert synopsis and "[--yes]" in synopsis.group(1) and "[--dry-run]" in synopsis.group(1)
+        assert synopsis and "[-v]" in synopsis.group(1) and "[--dry-run]" in synopsis.group(1)
 
     def test_ops_config_emit_lists_the_real_keys(self) -> None:
         block = section(text("reference/cli.md"), "carter ops")
@@ -130,12 +123,6 @@ class TestInstallAndFiles:
         assert "migrated" in doc and "config.toml.schema1.bak" in doc
         assert "upgrade-notes" in doc
         assert "never uses your signing key" in doc.lower() or "never reads your signing key" in doc
-
-    def test_install_guide_marks_bot_name_deprecated(self) -> None:
-        row = next(
-            ln for ln in text("guides/install.md").splitlines() if ln.startswith("| `--bot-name")
-        )
-        assert "deprecated" in row.lower()
 
 
 class TestInterimShapeIsStatedPlainly:

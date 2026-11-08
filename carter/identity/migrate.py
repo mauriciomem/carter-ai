@@ -16,7 +16,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Literal
 
-from carter.identity.config import default_path, parse_identity, read_document
+from carter.identity.config import OLD_DEFAULT_FOOTER, default_path, parse_identity, read_document
 from carter.identity.resolve import is_noreply_email
 from carter.identity.schema import Attribution, Identity, IdentityConfig
 from carter.identity.writer import write_config
@@ -90,7 +90,9 @@ def map_schema1(doc: dict[str, Any]) -> tuple[IdentityConfig, tuple[str, ...]]:
 
     cfg = IdentityConfig(
         identity=identity,
-        attribution=Attribution(footer) if footer is not None else Attribution(),
+        attribution=Attribution(footer)
+        if footer not in (None, OLD_DEFAULT_FOOTER)  # the old default is "unset" (D68)
+        else Attribution(),
         state="current",
     )
     return cfg, tuple(warnings)

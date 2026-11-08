@@ -16,15 +16,14 @@ from dataclasses import replace
 from pathlib import Path
 
 import pytest
-from click.testing import CliRunner
 
 from carter import identity_add, identity_show, identity_verify
-from carter.cli import main
 from carter.identity.agent_probe import Probe
 from carter.identity.config import load_identity
 from carter.identity.schema import Identity, IdentityConfig, Signing, Workspace
 from carter.identity.writer import write_config
 from gh_api import FakeGitHub, Reply
+from rows import Out, invoke
 from sentinels import fine_grained
 from ssh_rig import KeyPair, real_ssh
 
@@ -46,8 +45,9 @@ def fake(monkeypatch: pytest.MonkeyPatch) -> Iterator[FakeGitHub]:
     server.stop()
 
 
-def run(*args: str, env: dict[str, str] | None = None):  # type: ignore[no-untyped-def]
-    return CliRunner().invoke(main, ["identity", *args], env=env, catch_exceptions=False)
+def run(*args: str, env: dict[str, str] | None = None) -> Out:
+    extra = ["-v"] if args and args[0] == "verify" else []
+    return invoke("identity", *args, *extra, env=env)
 
 
 def tree(root: Path) -> dict[str, str]:

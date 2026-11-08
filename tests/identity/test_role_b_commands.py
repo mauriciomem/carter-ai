@@ -71,14 +71,12 @@ class TestAddRole:
             str(key.path),
             "--role",
             "author",
-            input="y\n",
+            "-v",
         )
         assert done.exit_code == 0, done.output
         assert role_of(home) == "author"
-        assert "Role: author" in done.output
-        assert (
-            "OK    human identity" in done.output and "WARN  co-author link" in done.output
-        )  # unlinked: a warning
+        assert "· author" in done.output
+        assert "human identity: " in done.output and "! co-author link" in done.output  # a warning
         assert HUMAN[1] not in done.output and HUMAN[0] not in done.output  # names only
 
     def test_role_author_without_a_key_is_e_role_b_tier_and_nothing_is_written(
@@ -113,16 +111,14 @@ class TestAddRole:
             "--role",
             "author",
             "--dry-run",
+            "-v",
         )
         assert (
             done.exit_code == 0
-            and "Role: author" in done.output
-            and "Dry run: nothing was written." in done.output
+            and "· author" in done.output
+            and "dry run, nothing written" in done.output
         )
-        assert (
-            "OK    co-author link: your address is linked to a GitHub account (noreply)"
-            in done.output
-        )
+        assert "co-author link: your address is linked to a GitHub account (noreply)" in done.output
         assert tree(home) == before and not coauthor.cache_path(home).exists()
 
     def test_a_real_run_caches_a_positive_link_as_a_hash(
@@ -159,7 +155,7 @@ class TestAddRole:
         add_t2(fake, key, str(real_ssh_agent.sock))
         shim_before = (home / ".carter" / "bin" / "carter-ssh-sign").read_bytes()
         before_cfg = load_identity(home / ".carter" / "config.toml")
-        done = cli("--login", LOGIN, "--role", "author", input="y\n")
+        done = cli("--login", LOGIN, "--role", "author", "-v")
         assert done.exit_code == 0, done.output
         after = load_identity(home / ".carter" / "config.toml")
         assert after.identity.role == "author" and after.signing == before_cfg.signing
@@ -216,7 +212,7 @@ class TestAddRole:
             "author",
             "--dry-run",
         )
-        assert "WARN  dco: this repository has .github/dco.yml" in done.output
+        assert "! dco: this repository has .github/dco.yml" in done.output
 
 
 class TestShow:

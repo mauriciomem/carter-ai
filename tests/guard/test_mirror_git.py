@@ -269,9 +269,9 @@ class TestUpdateCommand:
     def test_yes_writes_the_mirror_and_never_the_global_config(self, world: Path) -> None:
         glob = Path(os.environ["GIT_CONFIG_GLOBAL"])
         before = glob.read_bytes()
-        done = CliRunner().invoke(main, ["update", str(world), "--yes"])
+        done = CliRunner().invoke(main, ["update", "-v", str(world)])  # asks nothing (D68 h)
         assert done.exit_code == 0, done.output
-        assert "+ carter.tier = t2" in done.output and "Wrote the tier mirror" in done.output
+        assert "+ carter.tier = t2" in done.output and "tier mirror written" in done.output
         assert glob.read_bytes() == before
         home = Path(os.environ["HOME"])
         assert mirror_io.read_entries(home / ".carter" / "gitconfig")[0] == ("carter.tier", "t2")
@@ -279,17 +279,18 @@ class TestUpdateCommand:
         assert any(f["path"].endswith("/gitconfig") for f in recorded.files)
         assert len(list((home / ".carter" / "gitconfig.d").iterdir())) == 1
 
-    def test_dry_run_and_a_non_tty_without_yes_write_nothing(self, world: Path) -> None:
+    def test_dry_run_writes_nothing_and_an_agent_shell_never_writes(self, world: Path) -> None:
         home = Path(os.environ["HOME"])
         dry = CliRunner().invoke(main, ["update", str(world), "--dry-run"])
         assert "dry run" in dry.output and not (home / ".carter" / "gitconfig").exists()
-        plain = CliRunner().invoke(main, ["update", str(world)])
-        assert "pass --yes" in plain.output and not (home / ".carter" / "gitconfig").exists()
+        agent = CliRunner().invoke(main, ["update", str(world)], env={"AGENT": "1"})
+        assert "agent shells never change it" in agent.output
+        assert not (home / ".carter" / "gitconfig").exists()
 
     def test_a_second_update_changes_nothing_and_prints_no_diff(self, world: Path) -> None:
         CliRunner().invoke(main, ["update", str(world), "--yes"])
-        again = CliRunner().invoke(main, ["update", str(world), "--yes"])
-        assert "Tier mirror" not in again.output
+        again = CliRunner().invoke(main, ["update", "-v", str(world), "--yes"])
+        assert "carter.tier" not in again.output
 
     def test_a_cap_below_the_pinned_require_tier_is_refused(self, world: Path) -> None:
         home = Path(os.environ["HOME"])

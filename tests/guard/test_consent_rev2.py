@@ -22,13 +22,13 @@ from carter.guard import consent
 from carter.guard.state import GuardState, load
 from carter.identity.errors import E_STATE_INVALID
 from carter.install.paths import guard_state_path, isolation_path, plugin_dir
-from guard.helpers import debug_config
+from guard.helpers import debug_config, verbose
 
 PENDING = "need your confirmation"
 
 
 def guard(*args: str, **kw):
-    return CliRunner().invoke(main, ["guard", *args], catch_exceptions=False, **kw)
+    return CliRunner().invoke(main, ["guard", *verbose(args)], catch_exceptions=False, **kw)
 
 
 def rev1(stack) -> None:
@@ -165,17 +165,17 @@ class TestNoSilentUpgrade:
         rev1(stack)
         human_tty(True)
         stack.fake(before=debug_config(stack.live), after=debug_config(stack.live))
-        res = guard("install", input="y\n" * 6)
+        res = guard("install", input="y\n")
         out = res.output
         assert res.exit_code == 0, out
-        assert out.index("no SSH agent") < out.index("Install this group?")
+        assert out.index("no SSH agent") < out.index("Install?")
         assert load(guard_state_path(None)).consents["g2"]["rev"] == 3 and plugin_present()
 
     def test_a_tty_no_keeps_the_denies_and_installs_nothing(self, stack, human_tty) -> None:
         rev1(stack)
         human_tty(True)
         stack.fake(before=debug_config(stack.live), after=debug_config(stack.live))
-        res = guard("install", input="n\n" * 6)
+        res = guard("install", input="n\n")
         state = load(guard_state_path(None))
         assert res.exit_code == 0 and not plugin_present()
         assert state.consents["g2"] == {"decision": "accepted", "date": "2026-11-01", "rev": 1}

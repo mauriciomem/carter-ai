@@ -5,9 +5,10 @@ from __future__ import annotations
 import shutil
 from pathlib import Path
 
+from carter import ui
 from carter.home import tilde
 from carter.install.components import read_manifest
-from carter.install.console import _log, bold, green, log_ok, log_step, log_warn
+from carter.install.console import log_ok, log_step, log_warn
 from carter.install.mcp import global_config_files, remove_carter_servers
 from carter.install.ownership import _hash_matches, _within
 from carter.install.paths import (
@@ -101,5 +102,5 @@ def uninstall(base_dir: Path | None, *, keep_guards: bool = False, assume_yes: b
         path.unlink()
         log_ok("Removed manifest")
 
-    _log(f"\n{green('✓')} {bold('Uninstall complete')}")
+    ui.ok("uninstalled")
     return guard_code

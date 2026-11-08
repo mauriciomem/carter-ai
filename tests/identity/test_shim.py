@@ -65,7 +65,9 @@ exit "${FAKE_RC-0}"
 class Lab:
     """A shim generated into a temp home, with fake signer and keygen recording their calls."""
 
-    def __init__(self, root: Path, *, sock: str = "", program: bool = False) -> None:
+    def __init__(
+        self, root: Path, *, sock: str = "", program: bool = False, file_key: str = ""
+    ) -> None:
         self.root = root
         self.run_dir = root / "run dir with 'quote'"
         self.run_dir.mkdir(parents=True, mode=0o700)
@@ -80,6 +82,7 @@ class Lab:
             keygen=str(self.keygen),
             run_dir=str(self.run_dir),
             signer=str(self.program or ""),
+            file_key=file_key,
         )
         self.path = root / "bin dir" / "carter-ssh-sign"
         shim.write(self.path, shim.render(self.params))
@@ -335,6 +338,55 @@ class TestContract:
         shutil.rmtree(lab.run_dir)
         done = lab.call(shell, *lab.sign_argv(lab.key_file()))
         assert done.returncode == 1 and E_SHIM_REFUSED in done.stderr and lab.recorded() == []
+
+
+@pytest.mark.parametrize("shell", SHELLS)
+class TestFileMode:
+    """D68 d: a key without a passphrase is signed from its configured file, and from no other."""
+
+    @pytest.fixture
+    def file_lab(self, tmp_path: Path) -> Lab:
+        private = tmp_path / "keys" / "id_llm"
+        private.parent.mkdir()
+        private.write_text("not read by the shim\n")
+        return Lab(tmp_path, file_key=str(private))
+
+    def test_it_signs_from_the_configured_file_without_an_agent_or_a_copy(
+        self, file_lab: Lab, shell: list[str]
+    ) -> None:
+        done = file_lab.call(shell, *file_lab.sign_argv(file_lab.key_file()))
+        assert done.returncode == 0 and done.stderr == ""
+        seen = file_lab.recorded()
+        assert seen[:7] == [
+            "ARGC=7", "ARG=-Y", "ARG=sign", "ARG=-n", "ARG=git", "ARG=-f",
+            f"ARG={file_lab.params.file_key}",
+        ]  # fmt: skip
+        assert seen[7] == f"ARG={file_lab.root / 'buf'}" and "ARG=-U" not in seen
+        assert not list(file_lab.run_dir.iterdir())  # nothing was copied
+
+    def test_the_key_git_names_must_still_be_the_configured_one(
+        self, file_lab: Lab, shell: list[str]
+    ) -> None:
+        done = file_lab.call(shell, *file_lab.sign_argv(file_lab.key_file(OTHER + "\n")))
+        assert done.returncode == 1 and file_lab.recorded() == []
+        done = file_lab.call(shell, *file_lab.sign_argv(file_lab.key_file()), "extra")
+        assert done.returncode == 1 and file_lab.recorded() == []
+
+    def test_a_vanished_key_file_is_refused(self, file_lab: Lab, shell: list[str]) -> None:
+        Path(file_lab.params.file_key).unlink()
+        done = file_lab.call(shell, *file_lab.sign_argv(file_lab.key_file()))
+        assert done.returncode == 1 and file_lab.recorded() == [] and "missing" in done.stderr
+
+    def test_verification_still_passes_through(self, file_lab: Lab, shell: list[str]) -> None:
+        done = file_lab.call(shell, "-Y", "check-novalidate", "-n", "git", "-s", "x.sig")
+        assert done.returncode == 0 and file_lab.recorded()[1:3] == [
+            "ARG=-Y",
+            "ARG=check-novalidate",
+        ]
+
+    def test_the_path_must_be_absolute(self, tmp_path: Path, shell: list[str]) -> None:
+        with pytest.raises(ValueError):
+            Lab(tmp_path, file_key="relative/key")
 
 
 @pytest.mark.parametrize("shell", SHELLS)
@@ -619,3 +671,30 @@ class TestRoundTrip:
         assert real.commit(env=env).returncode == 0
         shown = real.git("log", "-1", "--format=%GF", env=env).stdout.strip()
         assert shown == real.key.fingerprint
+
+
+@real_ssh
+@needs_git
+def test_a_passphrase_free_key_signs_with_no_agent_at_all(
+    rig: Rig, real_ssh_agent: Any, throwaway_key: Any, tmp_path: Path
+) -> None:
+    key: KeyPair = throwaway_key("ed25519")  # nothing is added to any agent
+    real = Real(rig, real_ssh_agent, key, tmp_path)
+    shim.write(
+        real.shim,
+        shim.render(
+            shim.ShimParams(
+                key=key.blob,
+                sock=str(tmp_path / "no-agent.sock"),
+                false_path=shim.resolve_false(),
+                keygen="/usr/bin/ssh-keygen",
+                run_dir=str(real.run_dir),
+                file_key=str(key.path),
+            )
+        ),
+    )
+    real.stage()
+    done = real.commit()
+    assert done.returncode == 0, done.stderr
+    shown = real.git("log", "-1", "--format=%G?|%GF", env=real.signing_env).stdout.strip()
+    assert shown == f"G|{key.fingerprint}"

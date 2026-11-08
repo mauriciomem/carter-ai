@@ -3,7 +3,8 @@
 # the hash recorded in ~/.carter/guard-state.json, and the plugin refuses to sign without it.
 #
 # git calls this as gpg.ssh.program (RFC-0007 App C.3). It signs only the configured LLM key, through
-# the configured agent, and it never asks for a passphrase. Everything else is refused.
+# the configured agent (or, for a key without passphrase, the configured key file), and it never asks
+# for a passphrase. Everything else is refused.
 # POSIX sh only; the environment of the caller is not trusted and PATH is not used for the tools.
 KEY=@@KEY@@
 AGENT_SOCK=@@SOCK@@
@@ -11,6 +12,7 @@ NO_ASKPASS=@@FALSE@@
 KEYGEN=@@KEYGEN@@
 SIGNER=@@SIGNER@@
 RUN_DIR=@@RUN_DIR@@
+FILE_KEY=@@FILE_KEY@@
 
 refuse() {
   printf '%s\n' @@REFUSAL@@ >&2
@@ -53,6 +55,14 @@ line2=
 set -f
 set -- $line1
 [ $# -ge 2 ] && [ "$1 $2" = "$KEY" ] || refuse 'the key is not the configured LLM key'
+
+# A key without a passphrase (D68 d): sign straight from the configured private key file, and from no
+# other path. No agent and no copy; ssh-keygen itself refuses a key file that others can read.
+if [ -n "$FILE_KEY" ]; then
+  [ -f "$FILE_KEY" ] || refuse 'the configured key file is missing'
+  "$KEYGEN" -Y sign -n git -f "$FILE_KEY" "$buffer" < /dev/null
+  exit $?
+fi
 
 # Sign with a copy that this script wrote: the file git left in a shared temp directory is not
 # trusted after the check above.

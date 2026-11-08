@@ -23,7 +23,7 @@ from pathlib import Path
 
 from carter.guard import gitconfig, mirror_io
 from carter.guard.state import GuardState, load_or_empty_readonly, save
-from carter.identity import agent_paths, github, shim
+from carter.identity import agent_paths, agent_setup, github, shim
 from carter.identity.config import ConfigError, load_identity
 from carter.identity.errors import (
     E_CONFIG,
@@ -44,11 +44,11 @@ PRIVATE_MARK = b"-----BEGIN"
 MAX_PUB_BYTES = 16 * 1024
 
 
-def fail(code: str, reason: str) -> IdentityError:
-    """An error whose registry text carries ``reason`` where it has ``<reason>``."""
-    return IdentityError(
-        code, registry()[code].message.replace("<reason>", reason).replace("<detail>", reason)
-    )
+def fail(code: str, reason: str, fix: str = "") -> IdentityError:
+    """An error whose registry text carries ``reason`` where it has ``<reason>``; ``fix`` is the
+    one line that says what to do about this reason (the registry has only a general one)."""
+    message = registry()[code].message.replace("<reason>", reason).replace("<detail>", reason)
+    return IdentityError(code, message, fix=fix)
 
 
 @dataclass(frozen=True)
@@ -72,9 +72,35 @@ class AddPlan:
     notes: list[str] = field(default_factory=list)
     shim_data: bytes = b""
     allowed: str = ""
+    mode: str = ""  # "file" (no passphrase), "agent", or "" (T1, password manager)
 
 
 # -- reading the key ---------------------------------------------------------------------------
+
+
+def key_paths(value: str, private_override: str | None = None) -> tuple[str, str]:
+    """``(public value, private path)`` from what ``--ssh-public-key`` was given (D68 c).
+
+    A ``key::`` literal stays a literal (the private path is then ``private_override`` or empty).
+    A path may be the ``.pub`` file or the private key: the other is the same name with ``.pub``
+    added or removed. ``private_override`` wins for the private path."""
+    if value.startswith("key::"):
+        return value, _abs(private_override) if private_override else ""
+    path = _abs(value)
+    pub, priv = (path, path[: -len(".pub")]) if path.endswith(".pub") else (path + ".pub", path)
+    return pub, _abs(private_override) if private_override else priv
+
+
+def _abs(value: str) -> str:
+    return os.path.abspath(os.path.expanduser(value))
+
+
+_PRIVATE_PROBLEMS = {
+    "missing": "the private key file does not exist: {path}",
+    "not-a-file": "the private key is not a regular file: {path}",
+    "too-open": "the private key file is readable by others; run `chmod 600 {path}`",
+    "other-key": "the private key does not match the public key",
+}
 
 
 def read_public_key(value: str) -> str:
@@ -227,20 +253,28 @@ def plan_add(
     bin_dir = old.ssh_bin_dir
     shim.check_git()
     shim.check_openssh(bin_dir)
-    blob = read_public_key(req.ssh_public_key)
+    pub_value, private = key_paths(req.ssh_public_key, req.private_key)
+    blob = read_public_key(pub_value)
     fingerprint = ssh_fingerprint(blob, bin_dir)
     if blob in human_key_blobs(env):
-        raise fail(E_IDENTITY_CHECK, "that is your own signing key; the LLM needs its own key")
+        raise fail(
+            E_IDENTITY_CHECK,
+            "that is your own signing key; the LLM needs its own key",
+            "make one for it: ssh-keygen -t ed25519 -f ~/.ssh/carter_llm",
+        )
     if blob not in [k.blob for k in _github(github.get_signing_keys, user.login, env)]:
-        raise fail(E_IDENTITY_CHECK, "not registered as an SSH signing key on the account")
+        raise fail(
+            E_IDENTITY_CHECK,
+            "not registered as an SSH signing key on the account",
+            "on GitHub: Settings → SSH and GPG keys → New SSH key → Key type: Signing Key",
+        )
     if blob in _github(github.get_auth_keys, user.login, env):
         raise fail(
-            E_IDENTITY_CHECK, "registered as an authentication key; register a signing-only key"
+            E_IDENTITY_CHECK,
+            "registered as an authentication key; register a signing-only key",
+            "remove it from the account's authentication keys and add it as a Signing Key",
         )
     notes = list(api_notes)
-    private = os.path.abspath(os.path.expanduser(req.private_key)) if req.private_key else ""
-    if private and not os.path.isfile(private):
-        notes.append("the private key file does not exist yet (checked with stat only)")
     previous = tuple(
         dict.fromkeys(
             [
@@ -263,10 +297,20 @@ def plan_add(
         if has_old and public_blob(old.public_key) != blob
         else ""
     )
-    if not managed and not private:
-        raise fail(
-            E_IDENTITY_CHECK, "pass --private-key (a path), or --agent-socket / --signing-program"
-        )
+    mode = ""
+    if managed:
+        private = ""
+    else:
+        if not private:
+            raise fail(
+                E_IDENTITY_CHECK,
+                "a key:: literal needs --private-key PATH (or --agent-socket / --signing-program)",
+            )
+        problem, passphrase_free = agent_setup.key_file_problem(private, bin_dir, blob)
+        if problem:
+            raise fail(E_IDENTITY_CHECK, _PRIVATE_PROBLEMS[problem].format(path=private))
+        mode = "file" if passphrase_free else "agent"
+    signing = replace(signing, private_key_path=private, mode=mode)
     plan = AddPlan(
         replace(current, identity=new_ident, signing=signing, state="current"),
         user.login,
@@ -274,6 +318,7 @@ def plan_add(
         fingerprint,
         rotated,
         notes=notes,
+        mode=mode,
     )
     return _finish(plan, home)
 
@@ -292,6 +337,7 @@ def _finish(plan: AddPlan, home: Path) -> AddPlan:
                 keygen=os.path.join(s.ssh_bin_dir, "ssh-keygen"),
                 run_dir=str(carter / "run"),
                 signer=s.program,
+                file_key=s.private_key_path if s.mode == "file" else "",
             )
         )
         keys = [public_blob(k) for k in (s.public_key, *s.previous_public_keys)]

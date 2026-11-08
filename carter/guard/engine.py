@@ -34,7 +34,7 @@ from carter.guard import (
 from carter.guard.state import GuardState, load_or_empty_readonly, quarantine_corrupt, save
 from carter.identity import ConfigError, load_identity
 from carter.identity.errors import E_GIT_OLD, E_STATE_INVALID, IdentityError, registry
-from carter.identity.policyset import ConsentGroup, Statement, consent_groups, policy_statements
+from carter.identity.policyset import Statement, consent_groups, policy_statements
 from carter.install.atomic import atomic_write_bytes
 from carter.install.paths import backups_dir, carter_gitconfig_path, guard_state_path
 
@@ -57,11 +57,15 @@ class GuardAbort(Exception):
     """The human said no (or a precondition failed); nothing was changed. Exit code 1."""
 
 
-def format_error(exc: BaseException) -> str | None:
-    """``Error:`` text for the failures guard commands expect (F9); ``None`` for anything else."""
+def describe_error(exc: BaseException) -> tuple[str, str, str] | None:
+    """``(cause, fix, code)`` for the failures commands expect (F9, D68 a); ``None`` otherwise.
+
+    The cause is the registry message plus the technical detail when there is one; the fix is the
+    registry's one-line ``fix`` (empty when the cause already says what to do)."""
     if isinstance(exc, IdentityError):
+        entry = registry().get(exc.code)
         extra = f" ({exc.detail})" if exc.detail else ""
-        return f"{exc.code}: {exc}{extra}"
+        return f"{exc}{extra}", exc.fix or (entry.fix if entry else ""), exc.code
     expected = (
         policies.PolicyWriteError,
         GuardAbort,
@@ -69,7 +73,16 @@ def format_error(exc: BaseException) -> str | None:
         harness.DebugConfigError,
         plugin.PluginInstallError,
     )
-    return str(exc) if isinstance(exc, expected) else None
+    return (str(exc), "", "") if isinstance(exc, expected) else None
+
+
+def format_error(exc: BaseException) -> str | None:
+    """One-line text of ``describe_error`` (``CODE: cause``), or ``None`` for anything else."""
+    found = describe_error(exc)
+    if found is None:
+        return None
+    cause, _fix, code = found
+    return f"{code}: {cause}" if code else cause
 
 
 def _stamp(now: datetime | None = None) -> str:
@@ -87,23 +100,17 @@ def builtin_agents() -> list[str]:
     return [i for i in ids if not i.startswith("carter-")]
 
 
-def _load_state(
-    base_dir: Path | None, *, dry_run: bool, assume_yes: bool, confirm: Confirm, echo: Echo
-) -> GuardState:
+def _load_state(base_dir: Path | None, *, dry_run: bool, echo: Echo) -> GuardState:
     path = guard_state_path(base_dir)
     read = load_or_empty_readonly(path)
     if read.status == "newer":
         raise IdentityError(E_STATE_INVALID, detail=read.detail)
     if read.status == "corrupt":
-        echo(f"guard state {path} is unreadable ({read.detail}).")
+        echo(f"⚠ guard state {path} is unreadable ({read.detail}).")
         if dry_run:
             echo("A real install would move it aside and start fresh (nothing is written now).")
-        elif assume_yes or confirm(
-            "Move it aside and start a new one? Carter forgets what it owns."
-        ):
+        else:  # moved, not deleted: nothing to ask (D68 h)
             echo(f"Moved to {quarantine_corrupt(path, now=_stamp())}")
-        else:
-            raise GuardAbort("Left the unreadable guard state alone; nothing was changed.")
     return read.state
 
 
@@ -111,10 +118,9 @@ def _live_ids() -> list[str]:
     return [g.id for g in consent_groups() if g.live]
 
 
-def _active_optouts(
-    state: GuardState, *, assume_yes: bool, interactive: bool, confirm: Confirm, echo: Echo
-) -> list[Statement]:
-    """D52: list every active opt-out; ask unless ``--yes`` (which skips only the question)."""
+def _active_optouts(state: GuardState, *, echo: Echo) -> list[Statement]:
+    """D52: apply and list every active opt-out. They come from the user's own ``config.toml``,
+    so nothing is asked (D68 h)."""
     if consent.CONFIG_EDIT not in consent.accepted_groups(state):
         return []
     try:
@@ -126,12 +132,7 @@ def _active_optouts(
         echo("Active D52 opt-outs (agents may edit these project files):")
         for line in optout.describe(found):
             echo(line)
-    if not found.workspaces:
-        return []
-    if not assume_yes and (not interactive or not confirm("Apply these opt-outs?")):
-        echo("Opt-outs not applied.")
-        return []
-    return found.statements()
+    return found.statements() if found.workspaces else []
 
 
 def _show_diff(res: policies.ApplyResult, wanted: list[Statement], echo: Echo) -> None:
@@ -358,6 +359,64 @@ def _apply_entries(
         echo(f"⚠ {key}: git < 2.54 needs the per-repo fallback (`repo_hooks`)")
 
 
+SUMMARY = {
+    "g2": "a plugin and command gate isolate agent shells; devops asks you to approve a push",
+    "hooks": "git hooks check agent commits and block agent pushes in every repo, not yours",
+    "repo_hooks": "git hooks in your repos check agent commits and block agent pushes",
+}
+DENIES = {
+    "sudo-docker": "sudo and docker",
+    "read-edit-denies": "reading SSH keys and tokens",
+    "config-edit": "editing OpenCode, git and Carter config",
+}
+
+
+NEWS = {
+    ("g2", 2): "the Carter plugin isolates every agent shell (no SSH agent, no push)",
+    ("g2", 3): "carter_push and carter_pr for devops (you approve each use)",
+    ("hooks", 2): "agent commits are checked (identity, signature, trailer) in every repo",
+    ("repo_hooks", 2): "the commit hooks, next to pre-push, where Carter owns the hook files",
+}
+
+
+def _summary(offer: Sequence[str], state: GuardState) -> list[str]:
+    """The 3-4 lines above the one install question (D68 h). A group accepted earlier at an
+    older revision says what the new revision adds: the yes is the D65 consent for it."""
+    revs = {g.id: g.rev for g in consent_groups()}
+    head = ", ".join(f"{g} r{revs[g]}" if revs[g] > 1 else g for g in offer)
+    lines = [f"Carter will set up: {head}"]
+    news = []
+    for name in offer:
+        rec = state.consents.get(name)
+        if rec and rec.get("decision") == "accepted":  # an upgrade: say what the revision adds
+            old = int(rec.get("rev", 1))
+            news += [t for (g, rev), t in NEWS.items() if g == name and old < rev <= revs[name]]
+    if news:
+        lines.append(f"  new: {'; '.join(news)}")
+    denied = [DENIES[g] for g in offer if g in DENIES]
+    if denied:
+        lines.append(f"  agents can't push, write to GitHub, or use {' / '.join(denied)}")
+    lines += [f"  {SUMMARY[g]}" for g in offer if g in SUMMARY and not news]
+    lines.append("  undo: carter guard remove")
+    return lines
+
+
+def _remember_refusals(
+    state: GuardState, offer: Sequence[str], only: Sequence[str] | None, base_dir: Path | None
+) -> None:
+    """A no to a revision upgrade keeps the old consent and is not asked again (D65)."""
+    stale = [
+        g
+        for g in offer
+        if state.consents.get(g, {}).get("decision") == "accepted"
+        and not (only is not None and g in only)
+    ]
+    if stale:
+        path = guard_state_path(base_dir)
+        consent.record(state, consent.ConsentPlan(refused_offers=stale))
+        save(state, path)
+
+
 def install(
     *,
     base_dir: Path | None,
@@ -381,24 +440,31 @@ def install(
         echo(policies.render_snippet(sts).rstrip("\n"))
         return 0
 
-    state = _load_state(
-        base_dir, dry_run=dry_run, assume_yes=assume_yes, confirm=confirm, echo=echo
-    )
+    state = _load_state(base_dir, dry_run=dry_run, echo=echo)
     today = datetime.now(UTC).date().isoformat()
     if dry_run:
         return _dry_run(base_dir, state, only, home, echo, today, *_availability(echo))
 
-    def ask(group: ConsentGroup) -> bool:
-        for line in group.explain:
-            echo(line)
-        question = f"{group.id}: {group.effect}\n  Install this group?"
-        return confirm(question, default=True) if group.id == "repo_hooks" else confirm(question)
-
     mode, unavailable = _availability(echo)
+    if interactive and not assume_yes:
+        offer = consent.to_offer(state, only=only, unavailable=unavailable)
+        if offer:
+            groups_by_id = {g.id: g for g in consent_groups()}
+            for name in offer:
+                if groups_by_id[name].rev > 1:  # what a revision adds, in full, with -v
+                    for line in groups_by_id[name].explain:
+                        echo(line)
+            question = "\n".join([*_summary(offer, state), "Install?"])
+            if not confirm(question, default=True):
+                _remember_refusals(state, offer, only, base_dir)
+                echo("Nothing installed.")
+                return 0
+            # the one yes is the consent for every group it listed, revisions included (D65)
+            assume_yes = True
+            only = [*offer, *(g for g in (only or []) if g not in offer)]
     plan = consent.resolve_consents(
-        state, only=only, assume_yes=assume_yes, interactive=interactive, ask=ask,
-        unavailable=unavailable,
-    )  # fmt: skip
+        state, only=only, assume_yes=assume_yes, interactive=interactive, unavailable=unavailable
+    )
     for note in plan.notices():
         echo(note)
     if plan.skipped:
@@ -422,9 +488,7 @@ def install(
         )
     if consent.plugin_wanted(state):
         plugin.plan(base_dir, state)  # preflight: E-FALSE-MISSING, bad paths... before any write
-    optouts = _active_optouts(
-        state, assume_yes=assume_yes, interactive=interactive, confirm=confirm, echo=echo
-    )
+    optouts = _active_optouts(state, echo=echo)
     wanted = consent.desired_statements(state, home=home, optouts=optouts)
     agents = builtin_agents() if "g2" in consent.accepted_groups(state) else []
     before = copy.deepcopy(state)
@@ -599,14 +663,12 @@ def remove(
     *,
     base_dir: Path | None,
     only: list[str] | None,
-    assume_yes: bool,
-    interactive: bool,
     dry_run: bool,
     echo: Echo,
-    confirm: Confirm,
     reader: configwrite.Reader | None = None,
 ) -> int:
-    """Run ``carter guard remove``: policies and permissions, then git config, then state."""
+    """Run ``carter guard remove``: policies and permissions, then git config, then state.
+    It asks nothing: backups are kept (D68 h)."""
     path = guard_state_path(base_dir)
     read = load_or_empty_readonly(path)
     if read.status == "newer":
@@ -620,8 +682,6 @@ def remove(
     scoped = only is not None
     if dry_run:
         echo("carter guard remove (dry run: nothing is written)")
-    elif not assume_yes and not (interactive and confirm("Remove what Carter installed?")):
-        raise GuardAbort("Nothing was removed.")
     home = str(Path.home())
     root = backups_dir(base_dir) / _stamp()
     if scoped:

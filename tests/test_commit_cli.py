@@ -69,9 +69,7 @@ class TestRegistration:
     def test_the_command_is_registered_and_help_describes_it(self) -> None:
         assert main.commands["commit"] is commit_cmd
         done = CliRunner().invoke(main, ["commit", "--help"])
-        assert (
-            done.exit_code == 0 and "Commit the staged changes as the LLM identity" in done.output
-        )
+        assert done.exit_code == 0 and "Commit as the LLM identity" in done.output
         for flag in ("--no-verify", "--no-gpg-sign", "--signoff", "--author"):
             assert flag in done.output
 
@@ -146,7 +144,10 @@ class TestFidelity:
         ).stdout.strip() in ("0", "")
 
     def test_t1_warns_on_stderr_and_commits_human_human_unsigned(self, repo: Path) -> None:
+        from carter import ui
+
         stage(repo)
+        ui.configure(verbose=True)  # the note about the dropped -S is a detail
         done = carter("-S", "-m", "t1")
         assert (
             done.exit_code == 0

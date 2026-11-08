@@ -35,9 +35,11 @@ MAX_NAME_BYTES = 200  # encoded branch, leaving room for ".md" under every files
 MAX_TITLE = 256
 
 # The one place the "run it yourself" sentence lives (steps 19, 20, 23 and the skill use it).
-# Spike 2 (does `!` give a TTY?) is still open, so per C.6.6 it names only the human's own
-# terminal and never suggests a leading `!`.
-OWN_TERMINAL = "Run `carter push` and then `carter pr` in your own terminal, not through an agent."
+# D68 g: the human may also run it in OpenCode's `!` shell (no TTY needed), never through an agent.
+OWN_TERMINAL = (
+    "Run `carter push` and then `carter pr` yourself, in your terminal or as `!carter push` "
+    "in OpenCode, not through an agent."
+)
 
 _SHA = re.compile(r"[0-9a-f]{40}")
 _REPO = re.compile(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+")

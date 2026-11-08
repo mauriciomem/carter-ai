@@ -19,11 +19,11 @@ from carter.guard import mirror_io
 from carter.guard.alias import ALIAS_KEY, ALIAS_VALUE, plan_alias
 from carter.guard.state import load
 from carter.install.paths import carter_gitconfig_path, guard_state_path
-from guard.helpers import debug_config
+from guard.helpers import debug_config, verbose
 
 
 def guard(*args: str, **kw):
-    return CliRunner().invoke(main, ["guard", *args], catch_exceptions=False, **kw)
+    return CliRunner().invoke(main, ["guard", *verbose(args)], catch_exceptions=False, **kw)
 
 
 def git(*args: str, cwd: Path | None = None, env: dict[str, str] | None = None):
@@ -60,14 +60,19 @@ class TestConsent:
             == ALIAS_VALUE
         )
 
-    def test_the_terminal_default_is_no(self, stack, human_tty) -> None:
+    def test_naming_it_makes_the_one_question_about_it(self, stack, human_tty) -> None:
         human_tty(True)
         stack.fake()
-        res = guard("install", "--only", "alias", input="\n")
-        assert "Install this group? [y/N]" in res.output
+        res = guard("install", "--only", "alias", input="n\n")  # D68 h: Y/n, and no is no
+        assert "Install? [Y/n]" in res.output and "Nothing installed" in res.output
         assert ALIAS_KEY not in carter_entries()
-        assert load(guard_state_path(None)).consents["alias"]["decision"] == "declined"
-        assert "(optional: no residual)" in guard("status").output
+        assert (
+            "alias" not in load(guard_state_path(None)).consents
+            if guard_state_path(None).exists()
+            else True
+        )
+        assert guard("install", "--only", "alias", input="\n").exit_code == 0  # Enter is yes
+        assert carter_entries()[ALIAS_KEY] == ALIAS_VALUE
 
     def test_a_terminal_yes_installs_it(self, stack, human_tty) -> None:
         human_tty(True)

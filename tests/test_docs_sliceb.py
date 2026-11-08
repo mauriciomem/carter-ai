@@ -71,9 +71,10 @@ class TestGuide:
 
 class TestReferenceEqualsCode:
     def test_guard_status_documents_exactly_its_option(self) -> None:
-        assert help_options("guard", "status") == {"--reset-b"}
+        assert help_options("guard", "status") == {"--reset-b", "--verbose"}
         assert documented(section(text("reference/cli.md"), "carter guard status", "###")) == {
-            "--reset-b"
+            "--reset-b",
+            "--verbose",
         }
 
     def test_guard_remove_documents_broker_and_the_plugin(self) -> None:

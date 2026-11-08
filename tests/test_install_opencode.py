@@ -331,7 +331,7 @@ class TestBotNameFlagIsDeprecated:
         result = _install(base_dir, "--bot-name", "acme-bot")
 
         assert result.exit_code == 0, result.output
-        assert "--bot-name is deprecated" in result.output
+        assert "--bot-name is ignored" in result.output
         config = (base_dir / "carter" / "config.toml").read_text()
         assert "acme-bot" not in config
         assert "schema = 2" in config
@@ -350,9 +350,9 @@ class TestBotNameFlagIsDeprecated:
         assert result.exit_code == 0, result.output
         assert "deprecated" not in result.output
 
-    def test_help_marks_the_flag_deprecated(self) -> None:
+    def test_the_flag_is_hidden_from_help_but_still_accepted(self) -> None:
         result = CliRunner().invoke(main, ["install", "--help"])
-        assert "deprecated" in result.output.lower()
+        assert "--bot-name" not in result.output
 
 
 class TestUpgradeNoteThroughTheCli:

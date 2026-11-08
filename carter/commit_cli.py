@@ -15,7 +15,7 @@ from pathlib import Path
 
 import click
 
-from carter import terminal
+from carter import terminal, ui
 from carter.cliguard import guarded
 from carter.identity import commit as core
 from carter.identity.config import ConfigError, default_path, load_identity
@@ -37,29 +37,20 @@ def _offer_unlock() -> bool:
     """Ask once whether to unlock now; any refusal or failure means "no" (the fallback follows)."""
     from carter import identity_cli
 
-    if not click.confirm("The LLM signing key is locked. Unlock now?", default=False, err=True):
+    if not click.confirm("The LLM signing key is locked. Unlock now?", default=True, err=True):
         return False
     try:
-        return identity_cli.perform_unlock(None, False, False) == 0
+        return identity_cli.perform_unlock(None, False) == 0
     except (IdentityError, click.ClickException) as exc:
-        click.echo(f"Not unlocked: {getattr(exc, 'message', None) or exc}", err=True)
+        ui.warn(f"not unlocked: {getattr(exc, 'message', None) or exc}")
         return False
 
 
 @click.command("commit", cls=_PassThrough, context_settings={"ignore_unknown_options": True})
 def commit_cmd() -> None:
-    """Commit the staged changes as the LLM identity: `git commit` with Carter's identity.
+    """Commit as the LLM identity (git commit arguments).
 
-    Usage: carter commit [GIT COMMIT ARGUMENTS...]
-
-    At T2 the LLM signs (committer and signer), you stay the author; the Co-authored-by trailer
-    is always added once. With the key locked in your own terminal you are asked once whether to
-    unlock; on no it commits unsigned with the trailer. In an agent shell a locked key is refused
-    and the changes stay staged. T1 commits unsigned with the trailer, T0 with Assisted-by.
-
-    Refused: --no-verify, -n, --no-gpg-sign, -S<key>, --gpg-sign=<key>, -s, --signoff, --author
-    (use plain `git commit` for those). A bare -S is dropped; -a and --reset-author pass. Your own
-    signing key is never used. Exit codes are git's."""
+    Refuses --no-verify, --no-gpg-sign, --gpg-sign=<key>, --signoff and --author."""
     args = click.get_current_context().meta.get("carter.git_args", [])
 
     def run() -> int:
@@ -82,9 +73,9 @@ def commit_cmd() -> None:
         except core.CommitRefused as exc:
             raise click.UsageError(str(exc)) from exc
         for note in plan.notes:
-            click.echo(f"Note: {note}", err=True)
+            ui.detail(note)
         for warning in plan.warnings:
-            click.echo(f"Warning: {warning}", err=True)
+            ui.warn(warning)
         sys.stdout.flush()
         return core.run_git(plan)
 

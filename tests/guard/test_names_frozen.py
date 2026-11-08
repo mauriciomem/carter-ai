@@ -424,7 +424,7 @@ H2_PATHS = {
     "lock": ".carter/run/unlock.lock",
     "guard_log": ".carter/run/guard.log",
 }
-H2_SIGNING_DEFAULTS = {"ttl": "8h", "ssh_bin_dir": "/usr/bin"}
+H2_SIGNING_DEFAULTS = {"ttl": "", "ssh_bin_dir": "/usr/bin"}
 H2_SOCKET_LIMITS = {"darwin": 104, "linux": 108}
 
 # H3: `identity env`, additive `signing` object (present only at effective t2 with reason null).
@@ -452,7 +452,7 @@ MIN_OPENSSH = (8, 4)
 
 # H10/H12: the unlock and lock commands (the rest of the identity group arrives in 13-17).
 IDENTITY_SUBCOMMANDS = ("add", "show", "verify", "unlock", "lock", "remove", "env")
-UNLOCK_OPTIONS = ("--allow-no-passphrase", "--extend", "--ttl")
+UNLOCK_OPTIONS = ("--extend", "--ttl")
 LOCK_OPTIONS = ("--all",)
 
 # H14: the flags `carter commit` refuses (step 21).
@@ -508,7 +508,6 @@ ERRORS_LIVE_2B = (
     "E-SSH-OLD",
     "E-UNLOCK-TTY",
     "E-UNLOCK-OPENCODE",
-    "E-UNLOCK-NOPASS",
     "E-UNLOCK-PATH",
     "E-UNLOCK-BADPASS",
     "E-IDENTITY-CHECK",

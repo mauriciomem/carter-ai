@@ -26,6 +26,7 @@ from carter.identity.schema import Workspace
 from carter.identity.writer import write_config
 from carter.install.paths import guard_state_path
 from gh_api import FakeGitHub, Reply
+from rows import check_host
 from ssh_rig import KeyPair, real_ssh
 
 LOGIN, UID = "octocat", 583231
@@ -397,11 +398,8 @@ class TestGuardsAndGroups:
 
 class TestTheCommand:
     def host(self, cwd: Path) -> tuple[int, str]:
-        from click.testing import CliRunner
 
-        from carter.cli import main
-
-        done = CliRunner().invoke(main, ["check", "--host", str(cwd)], catch_exceptions=False)
+        done = check_host(str(cwd))
         return done.exit_code, done.output
 
     def test_it_is_read_only_prints_names_only_and_exits_1_on_red(

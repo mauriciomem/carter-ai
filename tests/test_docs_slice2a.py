@@ -72,7 +72,10 @@ class TestNothingRecommendsTheForbidden:
         for line in body.splitlines():
             if "--no-verify" in line:
                 assert any(w in line.lower() for w in ("skip", "never", "not ", "forbidden")), line
-        assert "!carter push" not in body and "! carter push" not in body
+        # D68 g: `!carter push` is the human's own shell, named as such; never a way for an agent
+        for line in body.splitlines():
+            if "!carter push" in line or "! carter push" in line:
+                assert any(w in line.lower() for w in ("opencode", "plugin", "tagged", "you")), line
         assert "equivalent of `carter push`" not in body
 
     @pytest.mark.parametrize("doc", USER_DOCS, ids=lambda p: str(p.relative_to(DOCS)))

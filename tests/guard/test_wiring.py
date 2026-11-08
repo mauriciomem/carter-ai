@@ -24,9 +24,12 @@ from guard.helpers import STAND_IN, debug_config, tree_hash
 
 
 def carter(base: Path, *args: str, input: str | None = None) -> Result:
+    """``install`` and ``uninstall`` run with ``-v``: these tests read the details."""
+    more = ["-v"] if args and args[0] in ("install", "uninstall") else []
     return CliRunner().invoke(
-        main, [*args, "--base-dir", str(base)], input=input, catch_exceptions=False
-    )
+        main, [args[0], *more, *args[1:], "--base-dir", str(base)], input=input,
+        catch_exceptions=False,
+    )  # fmt: skip
 
 
 def cfg(base: Path) -> dict:
@@ -43,7 +46,6 @@ class TestInstallCallsGuard:
         res = carter(base_dir, "install", "--yes")
         assert res.exit_code == 0, res.output
         assert agents_installed(base_dir) and read_manifest(base_dir)
-        assert "Guards (carter guard install)" in res.output
         state = load(guard_state_path(base_dir))
         assert len(state.owned_policies()) == len(stack.live)
         assert len(cfg(base_dir)["policies"]) == len(stack.live)
@@ -61,13 +63,14 @@ class TestInstallCallsGuard:
         assert not guard_state_path(base_dir).exists()
         assert not config_target(base_dir).exists()
 
-    def test_a_terminal_prompts_per_group(self, stack, base_dir: Path, human_tty) -> None:
+    def test_a_terminal_gets_the_one_question(self, stack, base_dir: Path, human_tty) -> None:
         human_tty(True)
         stack.fake()
-        res = carter(base_dir, "install", input="y\ny\nn\ny\ny\nn\n")
+        res = carter(base_dir, "install", input="y\n")
         assert res.exit_code == 0, res.output
+        assert res.output.count("Install?") == 1
         state = load(guard_state_path(base_dir))
-        assert state.consents["sudo-docker"]["decision"] == "declined"
+        assert state.consents["sudo-docker"]["decision"] == "accepted"
 
     def test_a_guard_failure_exits_1_but_the_rest_of_the_install_stands(
         self, stack, base_dir: Path
@@ -75,10 +78,10 @@ class TestInstallCallsGuard:
         stack.fake(after=debug_config(stack.live[1:]))  # OpenCode drops a statement
         res = carter(base_dir, "install", "--yes")
         assert res.exit_code == 1
-        assert "guards: install failed: E-POLICIES-MISSING" in res.output
+        assert "guards: install failed" in res.output and "E-POLICIES-MISSING" in res.output
         assert agents_installed(base_dir) and read_manifest(base_dir)
         assert not config_target(base_dir).exists() and not guard_state_path(base_dir).exists()
-        assert "Installation complete" in res.output
+        assert "✓ installed" in res.output
 
     def test_an_agent_shell_never_changes_guards(
         self, stack, base_dir: Path, monkeypatch: pytest.MonkeyPatch
@@ -143,7 +146,7 @@ class TestUninstallRemovesGuards:
         assert res.exit_code == 0, res.output
         assert cfg(base_dir) == {}
         assert not guard_state_path(base_dir).exists() and not agents_installed(base_dir)
-        assert res.output.index("Removed guard state") < res.output.index("Uninstall complete")
+        assert res.output.index("Removed guard state") < res.output.index("✓ uninstalled")
 
     def test_keep_guards_leaves_policies_permissions_and_state(self, stack, base_dir: Path) -> None:
         self.installed(stack, base_dir)
@@ -156,15 +159,15 @@ class TestUninstallRemovesGuards:
         ) == before
         assert not agents_installed(base_dir)
 
-    def test_without_a_terminal_and_without_yes_the_guards_are_kept(
+    def test_it_asks_nothing_so_no_terminal_and_no_yes_are_needed(
         self, stack, base_dir: Path, human_tty
     ) -> None:
         self.installed(stack, base_dir)
         human_tty(False)
-        before = guard_state_path(base_dir).read_bytes()
+        self.finish(stack)
         res = carter(base_dir, "uninstall")
-        assert res.exit_code == 0 and "kept: no terminal and no --yes" in res.output
-        assert guard_state_path(base_dir).read_bytes() == before and not agents_installed(base_dir)
+        assert res.exit_code == 0 and "[y/N]" not in res.output
+        assert not guard_state_path(base_dir).exists() and not agents_installed(base_dir)
 
     def test_an_agent_shell_cannot_remove_guards(
         self, stack, base_dir: Path, monkeypatch: pytest.MonkeyPatch
@@ -172,7 +175,7 @@ class TestUninstallRemovesGuards:
         self.installed(stack, base_dir)
         monkeypatch.setenv("OPENCODE_SESSION_ID", "ses_1")
         res = carter(base_dir, "uninstall", "--yes")
-        assert res.exit_code == 0 and "kept: agent shell" in res.output
+        assert res.exit_code == 0 and "guards kept: agent shell" in res.output
         assert guard_state_path(base_dir).exists()
 
     def test_edited_items_are_kept_and_reported_unedited_ones_removed(
@@ -223,7 +226,7 @@ class TestUninstallRemovesGuards:
         fake_opencode(config_output="boom", config_exit=1)  # cannot verify: nothing is written
         res = carter(base_dir, "uninstall", "--yes")
         assert res.exit_code == 1 and "guards: removal failed" in res.output
-        assert not agents_installed(base_dir) and "Uninstall complete" in res.output
+        assert not agents_installed(base_dir) and "✓ uninstalled" in res.output
         assert guard_state_path(base_dir).exists()  # still owned, so a later remove can finish
 
     def test_without_guard_state_or_manifest_nothing_outside_carters_roots_is_removed(

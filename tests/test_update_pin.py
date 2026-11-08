@@ -48,8 +48,9 @@ def set_policy(ws: Path, **identity) -> None:
     yml.write_text(yaml.dump(data))
 
 
-def update(ws: Path, *args: str, input: str | None = None):
-    return CliRunner().invoke(main, ["update", str(ws), *args], input=input)
+def update(ws: Path, *args: str, env: dict[str, str] | None = None):
+    """``carter update`` asks nothing (D68 h); ``-v`` shows the details these tests read."""
+    return CliRunner().invoke(main, ["update", "-v", str(ws), *args], env=env)
 
 
 def pinned(cfg_path: Path, ws: Path) -> dict:
@@ -204,37 +205,26 @@ class TestConfirmation:
         update(ws, "--dry-run", "--yes")
         assert not cfg_path.exists()
 
-    def test_non_tty_without_yes_skips_pinning_with_a_notice(self, ws, cfg_path):
+    def test_it_asks_nothing_so_no_terminal_and_no_yes_are_needed(self, ws, cfg_path):
         set_policy(ws, role="author")
 
-        result = update(ws)
+        result = update(ws)  # no --yes, no TTY, no question
 
-        assert result.exit_code == 0
-        assert not cfg_path.exists()
-        assert "not pinned" in result.output.lower()
-        assert "--yes" in result.output
-        assert "Templates re-rendered" in result.output  # the rest of update still runs
-
-    def test_tty_prompt_accept(self, ws, cfg_path, monkeypatch):
-        monkeypatch.setattr("carter.cli._stdin_is_tty", lambda: True)
-        set_policy(ws, role="author")
-        result = update(ws, input="y\n")
         assert result.exit_code == 0, result.output
         assert pinned(cfg_path, ws)["role"] == "author"
+        assert "[y/N]" not in result.output
+        assert "✓ updated" in result.output  # the rest of update runs too
 
-    def test_tty_prompt_decline(self, ws, cfg_path, monkeypatch):
-        monkeypatch.setattr("carter.cli._stdin_is_tty", lambda: True)
+    def test_an_agent_shell_never_pins(self, ws, cfg_path):
         set_policy(ws, role="author")
-        result = update(ws, input="n\n")
+        result = update(ws, env={"AGENT": "1"})
         assert result.exit_code == 0
-        assert not cfg_path.exists()
-        assert "not pinned" in result.output.lower()
+        assert not cfg_path.exists() and "agent shells never pin" in result.output
 
-    def test_no_prompt_when_nothing_changes(self, ws, cfg_path, monkeypatch):
-        monkeypatch.setattr("carter.cli._stdin_is_tty", lambda: True)
+    def test_nothing_is_asked_when_nothing_changes(self, ws, cfg_path):
         set_policy(ws, role="author")
-        update(ws, "--yes")
-        result = update(ws, input="")  # a prompt would hit EOF and abort
+        update(ws)
+        result = update(ws)
         assert result.exit_code == 0 and "already pinned" in result.output.lower()
 
 

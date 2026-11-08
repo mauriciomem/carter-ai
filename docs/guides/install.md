@@ -58,8 +58,7 @@ Useful options:
 |--------|--------|
 | `--mcp` | Also configure the MCP servers. See [MCP servers](mcp-servers.md) |
 | `--mcp-servers github,terraform` | Only these MCP servers (with `--mcp`) |
-| `-y`, `--yes` | Also install the policy guards without asking |
-| `--bot-name NAME` | Deprecated and ignored (prints a warning). See [Attribution](write-operations.md#attribution) |
+| `-y`, `--yes` | Install the policy guards without asking |
 | `-q` / `-v` / `--debug` | Less or more output |
 
 The full list is in the [CLI reference](../reference/cli.md#carter-install).
@@ -67,7 +66,8 @@ The full list is in the [CLI reference](../reference/cli.md#carter-install).
 ## Guards
 
 After the agents are installed, `carter install` offers the guards (the same as running
-`carter guard install`). In a terminal it asks about each group, with a one-line effect:
+`carter guard install`). In a terminal it asks **one** question, `Install? [Y/n]`, under a summary of
+three or four lines; your yes is the consent for all of these groups:
 
 | Group | What it does |
 |-------|--------------|
@@ -76,13 +76,13 @@ After the agents are installed, `carter install` offers the guards (the same as 
 | `sudo-docker` | Agents can't run `sudo` or `docker`; Packer docker builds must be typed in your terminal. |
 | `read-edit-denies` | Agents can't read SSH keys, `gh`/git credentials or the read-only token, and can't edit `~/.ssh`. |
 | `config-edit` | Agents can't edit OpenCode config, git hooks and config, or Carter's own config and control files. |
-| `alias` | **Optional.** Adds the git alias `git ai-commit` (`carter commit`) to Carter's git config, unless you already have an `alias.ai-commit`. A bare `--yes` never installs it: use `carter guard install --only alias` or answer yes in a terminal. |
-| `repo_hooks` | Git older than 2.54 only: the same push guard as a `pre-push` hook file in your repos (the current one and your workspaces), and in `init.templateDir` if you have none. A hook or `core.hooksPath` you or your tools own (husky, pre-commit) is never edited: Carter reports the repo as unguarded and prints a line to chain. Asked with Enter = yes. |
+| `alias` | **Optional.** Adds the git alias `git ai-commit` (`carter commit`) to Carter's git config, unless you already have an `alias.ai-commit`. A bare `--yes` and the one question never install it: use `carter guard install --only alias`. |
+| `repo_hooks` | Git older than 2.54 only: the same push guard as a `pre-push` hook file in your repos (the current one and your workspaces), and in `init.templateDir` if you have none. A hook or `core.hooksPath` you or your tools own (husky, pre-commit) is never edited: Carter reports the repo as unguarded and prints a line to chain. Part of the one question. |
 
-Nothing is written without your yes. With no terminal (CI, a script) and without `--yes`,
-the agents and skills are installed as before and the guards are skipped with a notice;
-`carter install --yes` accepts every group on a fresh machine. Declined groups are remembered
-and listed by `carter guard status` and `carter check --host` as residuals.
+Nothing is written without your yes (Enter is yes). With no terminal (CI, a script) and without
+`--yes`, the agents and skills are installed as before and the guards are skipped with a notice;
+`carter install --yes` accepts every group on a fresh machine. Groups you declined in an earlier
+version stay declined and are listed by `carter guard status` and `carter check --host` as residuals.
 
 The policies go into your OpenCode config in one atomic write. Carter keeps a backup,
 asks OpenCode for the resolved config before and after, and restores the backup if a
@@ -101,8 +101,9 @@ there; nothing is registered in your config), with `~/.carter/isolation.json` an
 **It changes every agent shell, so an existing install is never upgraded silently.** If you
 had the guards before the plugin existed (`g2` at revision 1), `carter install --yes`,
 `carter guard install --yes` and any run without a terminal print "plugin and isolation need
-your confirmation" and change nothing. Only a yes in your own terminal, or
-`carter guard install --yes --only g2`, confirms. The question comes with this explanation:
+your confirmation" and change nothing. Only a yes to the question in your terminal, or
+`carter guard install --yes --only g2`, confirms. The summary names what the new revision adds, and
+`-v` prints this explanation:
 what changes in agent shells, what does not (your own terminal and the `!` shell are not touched), where it is
 recorded, how to undo it, and that the OpenCode server must be restarted. A no is remembered
 and not asked again; `carter guard install --only g2` reconsiders.

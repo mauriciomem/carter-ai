@@ -25,11 +25,11 @@ from carter.install.paths import (
     run_dir,
     token_path,
 )
-from guard.helpers import debug_config, tree_hash
+from guard.helpers import debug_config, tree_hash, verbose
 
 
 def guard(*args: str, **kw):
-    return CliRunner().invoke(main, ["guard", *args], catch_exceptions=False, **kw)
+    return CliRunner().invoke(main, ["guard", *verbose(args)], catch_exceptions=False, **kw)
 
 
 def install(stack) -> None:
@@ -133,11 +133,11 @@ class TestOnlyPlugin:
         assert res.exit_code == 0 and "would remove" in res.output
         assert tree_hash(home, skip=("backups",)) == before
 
-    def test_it_needs_a_terminal_or_yes(self, stack, human_tty) -> None:
+    def test_it_asks_nothing_and_needs_no_terminal(self, stack, human_tty) -> None:
         install(stack)
-        human_tty(False)
+        human_tty(False)  # D68 h
         res = guard("remove", "--only", "plugin")
-        assert res.exit_code == 1 and all(p.exists() for p in plugin_files())
+        assert res.exit_code == 0 and not any(p.exists() for p in plugin_files())
 
     def test_an_agent_shell_is_refused(self, stack, monkeypatch: pytest.MonkeyPatch) -> None:
         install(stack)

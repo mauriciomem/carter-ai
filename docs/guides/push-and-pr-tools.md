@@ -1,7 +1,7 @@
 # Push and PR tools (B): let devops ask you to push
 
 By default **nobody but you pushes**. When a branch is ready the agent writes a handoff file and
-you run `carter push` and then `carter pr` in your own terminal ([Write operations](write-operations.md)).
+you run `carter push` and then `carter pr` yourself, in your terminal or as `!carter push` in OpenCode ([Write operations](write-operations.md)).
 That path is called **A+** and it stays the default.
 
 This guide covers the optional second path, **B**: two tools, `carter_push` and `carter_pr`, that
@@ -19,10 +19,10 @@ prompt. Nothing is pushed until you click.
 
 | | A+ (`carter push`, `carter pr`) | B (`carter_push`, `carter_pr`) |
 |---|---|---|
-| Who runs it | You, in your terminal | devops asks; you click **Once** in OpenCode |
-| Pushes | The current branch, with a typed confirmation on the default branch | A fast-forward of the commit you were shown, to the current **non-default** branch, over **SSH** |
-| Default branch, HTTPS `origin` | Allowed (you confirm) | Refused: use A+ |
-| Unsigned LLM commits, repo or SSH config that could run code | Shown in red, you decide (unsigned LLM commits are refused) | Refused |
+| Who runs it | You, in your terminal or the `!` shell | devops asks; you click **Once** in OpenCode |
+| Pushes | The current branch, with nothing to confirm | A fast-forward of the commit you were shown, to the current **non-default** branch, over **SSH** |
+| Default branch, HTTPS `origin` | Allowed | Refused: use A+ |
+| Unsigned LLM commits, repo or SSH config that could run code | Config: one warning line, the push goes on. Unsigned LLM commits: refused | Refused |
 | Needs | Nothing | Revision 3 of the `g2` consent, an SSH `origin`, your SSH agent running |
 
 B never forces, never pushes tags, never deletes a branch, never pushes another branch or
@@ -93,9 +93,9 @@ Against a running service the controls are the auto-reject and the dwell floor a
 | Code | Meaning | What to do |
 |------|---------|------------|
 | `E-B-CALLER` | Not devops (a subagent is `general`) | Only devops asks; other agents hand off |
-| `E-B-DEFAULT` | The remote default branch (or `main` / `master`) | `carter push` in your terminal; it asks you to type the branch name |
+| `E-B-DEFAULT` | The remote default branch (or `main` / `master`) | `carter push` yourself; it pushes the default branch too |
 | `E-B-HTTPS` | `origin` is HTTPS | `carter push`; B pushes over SSH only |
-| `E-B-REPOCFG` | Repo config, a hook, or your SSH config could run code with your credentials | Review it; `carter push` shows the same findings and lets you decide |
+| `E-B-REPOCFG` | Repo config, a hook, or your SSH config could run code with your credentials | Review it; `carter push` names the same findings in a warning and goes on |
 | `E-B-UNSIGNED` | An LLM-committed commit without a valid LLM signature | Unlock the key and recommit, or push it yourself after review |
 | `E-B-NOAGENT` | `SSH_AUTH_SOCK` of the OpenCode server is missing, stale or not yours | Restart OpenCode from a terminal with your agent |
 | `E-B-POLLUTED` | The server was started from an agent shell or already carries Carter's isolation | Restart OpenCode from a clean terminal; Carter never scrubs this |

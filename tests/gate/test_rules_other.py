@@ -166,11 +166,16 @@ class TestHumanOnlyCarter:
             "python3 -m carter push",
             "/home/u/.local/bin/carter push",
             "env CARTER_X=1 carter push",
+            # D68 g: the human tag lets the user's `!` shell push, so an agent must never forge it
+            "CARTER_HUMAN_SHELL=1 carter push",
+            "env CARTER_HUMAN_SHELL=1 carter pr",
+            "export CARTER_HUMAN_SHELL=1 && carter push",
+            "unset CARTER_AGENT_SHELL && carter pr",
         ],
     )
     def test_refused(self, cmd: str) -> None:
         assert rule_of(cmd) in ("human-only-carter", "env-overrides"), cmd
-        if "CARTER_X" not in cmd:
+        if "CARTER_" not in cmd:
             assert rule_of(cmd) == "human-only-carter", cmd
 
     @pytest.mark.parametrize(

@@ -134,7 +134,7 @@ class TestSchema2Parses:
         assert cfg.state == "current"
         assert cfg.identity == Identity()
         assert cfg.identity.role == "co-author"
-        assert cfg.signing.ttl == "8h"
+        assert cfg.signing.ttl == ""  # D68 e: no lifetime by default
         assert cfg.signing.format == "ssh"
         assert cfg.signing.ssh_bin_dir == "/usr/bin"  # RFC §4.6 default (Apple OpenSSH)
         assert cfg.workspaces == {}

@@ -70,6 +70,8 @@ def _stop_key(
     if s.agent_socket or s.program:
         report.notes.append("the key is managed by your password manager; nothing to lock")
         return
+    if s.mode == "file":
+        return  # signs from its file: there is no agent to stop
     if dry:
         report.notes.append("would remove the key from Carter's agent and stop it")
         return

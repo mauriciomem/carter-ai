@@ -202,27 +202,20 @@ class TestRemoval:
 
 
 class TestCommand:
-    def test_it_asks_then_removes_and_prints_what_stays(
-        self, home: Path, fake: FakeGitHub, key: KeyPair, human: None
+    def test_it_asks_nothing_and_says_it_in_one_line(
+        self, home: Path, fake: FakeGitHub, key: KeyPair
     ) -> None:
         t2(fake, key)
-        no = remove(input="n\n")
-        assert (
-            no.exit_code == 1
-            and "Nothing was removed." in no.output
-            and (home / ".carter" / "bin" / "carter-ssh-sign").exists()
-        )
-        done = remove(input="y\n")
+        done = remove()  # no input, no terminal: D68 h, we have backups
         assert done.exit_code == 0, done.output
-        assert "Removed:" in done.output and "What stays" in done.output
-        for stay in (
-            "guards, hooks and policies",
-            "read-only GitHub token",
-            "registered signing key on GitHub",
-            "private key file",
-        ):
-            assert stay in done.output
+        assert len(done.output.splitlines()) == 1 and "removed the LLM identity" in done.output
+        assert "your key file stay" in done.output
         assert not (home / ".carter" / "bin" / "carter-ssh-sign").exists()
+
+    def test_verbose_lists_what_went(self, home: Path, fake: FakeGitHub, key: KeyPair) -> None:
+        t2(fake, key)
+        done = remove("-v")
+        assert done.exit_code == 0 and "carter-ssh-sign" in done.output
 
     def test_yes_needs_no_terminal_but_an_agent_shell_is_always_refused(
         self, home: Path, fake: FakeGitHub, key: KeyPair
@@ -239,9 +232,9 @@ class TestCommand:
         t2(fake, key)
         before = tree(home)
         done = remove("--dry-run", env={"AGENT": "1"})
-        assert done.exit_code == 0 and "Would remove:" in done.output
+        assert done.exit_code == 0 and "would remove the LLM identity" in done.output
         assert tree(home) == before
 
     def test_nothing_installed_says_so(self, home: Path) -> None:
         done = remove("--yes")
-        assert done.exit_code == 0 and "Nothing to remove" in done.output
+        assert done.exit_code == 0 and "no LLM identity here" in done.output

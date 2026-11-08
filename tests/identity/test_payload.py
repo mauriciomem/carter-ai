@@ -106,8 +106,9 @@ class TestBlock:
             {"agent_socket": "/home/test/.1password/agent.sock"},
             {"program": "/opt/vault/sign"},
             {"private_key_path": "/home/test/.ssh/llm", "ttl": "2h"},
+            {"private_key_path": "/home/test/.ssh/llm", "mode": "file"},  # D68 d: no passphrase
         ],
-        ids=["agent socket", "program", "private key and ttl"],
+        ids=["agent socket", "program", "private key and ttl", "file mode"],
     )
     def test_password_manager_and_key_file_setups_keep_the_same_block(self, signing: dict) -> None:
         base = cfg()

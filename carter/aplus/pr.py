@@ -1,17 +1,17 @@
 """``carter pr``: open a pull request from the agent's handoff file (RFC-0007 C.6.6, App B).
 
-Human terminal only (the click layer enforces it before this module runs). The input is the
-one file ``.carter/state/handoff/<encoded-branch>.md`` for the current branch, which is
-**untrusted** (an agent wrote it): ``carter.aplus.handoff`` returns a typed model, and Carter
-builds the ``gh`` command line itself. Every value goes in as ``--flag=value`` (one argv
+For a human only (the click layer enforces it before this module runs; D68 g); it asks nothing.
+The input is the one file ``.carter/state/handoff/<encoded-branch>.md`` for the current branch,
+which is **untrusted** (an agent wrote it): ``carter.aplus.handoff`` returns a typed model, and
+Carter builds the ``gh`` command line itself. Every value goes in as ``--flag=value`` (one argv
 element), so a title like ``--web`` or a body that starts with ``-`` cannot become an option;
 the body travels in a 0600 temporary file, never on the command line.
 
 Order: read the handoff (``head_sha`` must be an ancestor of HEAD) → secret scan of title,
 branch and body → find the PR target (the parent if origin is a fork) → check the branch is on
-origin at HEAD, offering ``carter push`` if not → show title, target, base and the first 40
-body lines → ``y/N`` → ``gh pr create``. The handoff file is deleted only after ``gh``
-succeeded; on any failure it stays.
+origin at HEAD, running the ``carter push`` checks if not → ``gh pr create`` (``-v`` first shows
+the title, target, base and the first 40 body lines). The handoff file is deleted only after
+``gh`` succeeded; on any failure it stays.
 """
 
 from __future__ import annotations
@@ -23,6 +23,7 @@ import shutil
 import tempfile
 from pathlib import Path
 
+from carter import ui
 from carter.aplus import handoff, protection, push, run, secretscan
 from carter.aplus.findings import mask_userinfo
 from carter.identity.errors import E_APLUS_ARGS, E_HANDOFF, IdentityError
@@ -68,13 +69,13 @@ def _gh_lines(stderr: str, limit: int = 5) -> str:
     return " | ".join(push.clean(line, 200) for line in text.splitlines()[:limit])
 
 
-def _target(repo: Path, item: handoff.Handoff, branch: str, io: push.Io) -> tuple[str, str]:
+def _target(repo: Path, item: handoff.Handoff, branch: str) -> tuple[str, str]:
     """``(target repo, --head value)``: the parent and ``owner:branch`` for a fork."""
     url = _out(repo, ["remote", "get-url", push.REMOTE]) or ""
     slug = protection.github_slug(url)
     owner = item.repo.split("/")[0]
     if slug is None:
-        io.echo("notice: origin is not on github.com, so the handoff's repo was not cross-checked")
+        ui.detail("origin is not on github.com, so the handoff's repo was not cross-checked")
     elif f"{slug[0]}/{slug[1]}".lower() != item.repo.lower():
         raise IdentityError(E_HANDOFF, detail="repo in the handoff is not the repo of origin")
     view = run.gh(["repo", "view", item.repo, "--json", "parent"], repo)
@@ -93,16 +94,15 @@ def _on_origin(repo: Path, branch: str) -> bool:
     return bool(head) and proc.stdout.split()[:1] == [head]
 
 
-def _preview(item: handoff.Handoff, target: str, head: str, io: push.Io) -> None:
+def _preview(item: handoff.Handoff, target: str, head: str) -> None:
     lines = item.body.rstrip("\n").splitlines()
-    io.echo(f"Title:  {push.clean(item.title, 256)}")
-    io.echo(f"Target: {target}   Base: {push.clean(item.base)}   Head: {push.clean(head)}")
-    io.echo(f"Draft:  {'yes' if item.draft else 'no'}")
-    io.echo("Body:")
+    ui.detail(f"title: {push.clean(item.title, 256)}")
+    ui.detail(f"target: {target}  base: {push.clean(item.base)}  head: {push.clean(head)}")
+    ui.detail(f"draft: {'yes' if item.draft else 'no'}")
     for line in lines[:BODY_PREVIEW_LINES]:
-        io.echo(f"  {push.clean(line, 200)}")
+        ui.detail(f"  {push.clean(line, 200)}")
     if len(lines) > BODY_PREVIEW_LINES:
-        io.echo(f"  ... ({len(lines) - BODY_PREVIEW_LINES} more line(s) not shown)")
+        ui.detail(f"  ... ({len(lines) - BODY_PREVIEW_LINES} more line(s) not shown)")
 
 
 def build_argv(item: handoff.Handoff, target: str, head: str, body_file: Path) -> list[str]:
@@ -134,15 +134,15 @@ def _create(repo: Path, item: handoff.Handoff, target: str, head: str) -> tuple[
     return True, proc.stdout.strip().splitlines()[-1] if proc.stdout.strip() else ""
 
 
-def run_pr(repo: Path, io: push.Io, *, base_dir: Path | None = None) -> int:
-    """0 = created, 1 = declined or failed. Raises ``IdentityError`` for the expected refusals."""
+def run_pr(repo: Path, *, base_dir: Path | None = None) -> int:
+    """0 = created, 1 = failed. Raises ``IdentityError`` for the expected refusals."""
     try:
-        return _flow(repo, io, base_dir)
+        return _flow(repo, base_dir)
     except run.RunError as exc:
         raise _args(str(exc)) from exc
 
 
-def _flow(repo: Path, io: push.Io, base_dir: Path | None) -> int:
+def _flow(repo: Path, base_dir: Path | None) -> int:
     workspace = _out(repo, ["rev-parse", "--show-toplevel"])
     branch = _out(repo, ["symbolic-ref", "--short", "-q", "HEAD"])
     if workspace is None:
@@ -158,34 +158,27 @@ def _flow(repo: Path, io: push.Io, base_dir: Path | None) -> int:
         raise error  # before any gh call; the file stays
     leaked = [v for v in run.GH_TOKEN_VARS if v in os.environ]
     if leaked:
-        io.echo(
-            f"notice: {', '.join(leaked)} is set, so gh uses it instead of your `gh auth login`"
-        )
-    target, head = _target(root, item, branch, io)
+        ui.warn(f"{', '.join(leaked)} is set, so gh uses it instead of your `gh auth login`")
+    target, head = _target(root, item, branch)
     url = _out(root, ["remote", "get-url", "--push", push.REMOTE])
     if url is None:
         raise _args(f"no remote named {push.REMOTE}")
     home = Path.home()
-    _cfg, stop = push.vet_local(root, url, io, base_dir=base_dir, home=home)
+    _cfg, stop = push.vet_local(root, url, base_dir=base_dir, home=home)
     if stop is not None:
         return stop
-    if not _on_origin(root, branch):
-        io.echo(
-            f"{branch} is not on {push.REMOTE} at HEAD: running the `carter push` checks first."
-        )
-        if push.run_push(root, push.Options(), io, base_dir=base_dir) != 0:
-            io.echo("Aborted: no pull request was created; the handoff is kept.")
-            return 1
-    _preview(item, target, head, io)
-    if not push.confirmed(io, "Create this pull request? [y/N] "):
-        io.echo("Aborted: no pull request was created; the handoff is kept.")
+    if not _on_origin(root, branch) and push.run_push(root, push.Options(), base_dir=base_dir):
+        ui.fail("no pull request was created", "the handoff is kept")
         return 1
-    ok, detail = _create(root, item, target, head)
-    if not ok:
-        io.echo(f"gh pr create failed ({detail}). The handoff is kept.")
+    _preview(item, target, head)
+    created, detail = _create(root, item, target, head)
+    if not created:
+        ui.fail(f"gh pr create failed: {detail}", "the handoff is kept")
         return 1
     handoff.delete_after_success(root, branch, success=True)
-    io.echo(f"Created: {mask_userinfo(push.clean(detail, 300))}")
+    link = mask_userinfo(push.clean(detail, 300))
+    number = re.search(r"/pull/(\d+)", link)
+    ui.summary(f"PR #{number[1]} opened" if number else "PR opened", link)
     return 0
 
 

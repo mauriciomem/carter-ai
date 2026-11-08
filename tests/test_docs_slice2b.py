@@ -30,7 +30,7 @@ class TestIdentityReference:
 
     def test_the_unlock_refusals_are_documented(self) -> None:
         block = " ".join(section(text("reference/cli.md"), "carter identity unlock", "###").split())
-        for needle in ("OPENCODE_TERMINAL", "E-UNLOCK-OPENCODE", "E-UNLOCK-TTY", "E-UNLOCK-NOPASS"):
+        for needle in ("OPENCODE_TERMINAL", "E-UNLOCK-OPENCODE", "E-UNLOCK-TTY"):
             assert needle in block
 
 
@@ -59,7 +59,7 @@ class TestCommitReference:
 GUIDE = "guides/identity-and-signing.md"
 CODES_WITH_ROWS = (
     "E-SIGN-LOCKED", "E-SIGN-NOAGENT", "E-SIGN-UNAVAILABLE", "E-SHIM-REFUSED",
-    "E-SIGN-HUMAN-FALLBACK", "E-UNLOCK-OPENCODE", "E-UNLOCK-TTY", "E-UNLOCK-NOPASS",
+    "E-SIGN-HUMAN-FALLBACK", "E-UNLOCK-OPENCODE", "E-UNLOCK-TTY",
     "E-UNLOCK-PATH", "E-UNLOCK-BADPASS", "E-GUARD-NOIDENT", "E-GUARD-COMMITTER",
     "E-GUARD-SIGNCFG", "E-GUARD-TRAILER", "E-GUARD-T01SIGN", "E-GUARD-UNSIGNED",
     "E-TIER-CAPPED", "E-TIER-REQUIRED", "E-IDENTITY-CHECK", "E-GITHUB-UNREACHABLE",
@@ -78,7 +78,7 @@ class TestTroubleshootingRows2b:
     def test_every_2b_user_facing_code_has_a_row(self) -> None:
         body = text("troubleshooting.md")
         for code in CODES_WITH_ROWS:
-            assert re.search(rf"`(?:Error: )?{code}\b", body), code
+            assert re.search(rf"`{code}\b", body), code
 
     def test_the_locked_key_row_has_the_raw_git_strings_and_the_one_fix(self) -> None:
         body = " ".join(self.table().split())
@@ -110,7 +110,6 @@ class TestIdentityGuide:
             "carter identity add",
             "carter identity unlock",
             "--extend",
-            "--allow-no-passphrase",
             "carter commit",
             "git ai-commit",
             "CODEOWNERS",
@@ -160,14 +159,9 @@ class TestNoDocTeachesABypass:
             if not skip & set(p.parts)
         ]
 
-    def test_allow_no_passphrase_always_comes_with_its_warning(self) -> None:
+    def test_the_removed_passphrase_flag_is_not_documented(self) -> None:
         for name, body in self.docs():
-            for para in body.split("\n\n"):
-                if "--allow-no-passphrase" in para and not para.startswith("```"):
-                    assert any(
-                        w in para.lower()
-                        for w in ("risk", "refused", "throwaway", "any process", "without the flag")
-                    ), (name, para[:80])
+            assert "--allow-no-passphrase" not in body, name  # D68 d reversed D50
 
     def test_edit_automatically_only_appears_as_a_warning(self) -> None:
         for name, body in self.docs():

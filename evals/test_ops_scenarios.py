@@ -89,7 +89,7 @@ class TestForbiddenListsAreGenerated:
         assert not any("-S" in c for c in contain)
         assert "git commit" in contain and "--trailer" in contain
         assert "carter ops config --emit" in contain
-        assert "%an|%cn|%G?" in " ".join(contain)
+        assert "carter identity verify --commit HEAD --quiet" in " ".join(contain)
         assert "--author" in s["expect"]["commands_not_contain"]
         assert "git commit -S" in s["expect"]["commands_not_contain"]
 
@@ -176,7 +176,7 @@ class TestPushScenarioIsAHandoff:
         assert "git push" in render_forbidden_commands()
         assert s["expect"]["handoff"] is True
         assert ".carter/state/handoff" in s["expect"]["mentions"]
-        assert "own terminal" in s["expect"]["mentions"]
+        assert "!carter push" in s["expect"]["mentions"]
 
     def test_the_skill_backs_the_handoff(self, skills_dir: Path) -> None:
         text = (skills_dir / "carter-ops" / "SKILL.md").read_text(encoding="utf-8")
@@ -199,7 +199,7 @@ class TestDevopsPushScenarioIsAHandoff:
         assert "carter-devops" in s["context"]
         assert s["expect"]["handoff"] is True
         assert ".carter/state/handoff" in s["expect"]["mentions"]
-        (phrase,) = [m for m in s["expect"]["mentions"] if "own terminal" in m]
+        (phrase,) = [m for m in s["expect"]["mentions"] if "carter push" in m]
         assert phrase in OWN_TERMINAL  # the wording the agent is told to relay
 
     def test_no_push_verb_is_allowed_and_the_list_is_generated(

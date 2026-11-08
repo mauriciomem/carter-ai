@@ -21,7 +21,7 @@ from carter.guard import hooks, repohooks
 from carter.guard.state import GuardState, load
 from carter.install.paths import carter_gitconfig_path, guard_script_path, guard_state_path
 from guard.conftest import REAL_GIT
-from guard.helpers import install_old_git
+from guard.helpers import install_old_git, verbose
 
 pytestmark = pytest.mark.gitold
 
@@ -33,7 +33,7 @@ def git(*args: str, cwd: Path | None = None):
 
 
 def guard(*args: str, **kw):
-    return CliRunner().invoke(main, ["guard", *args], catch_exceptions=False, **kw)
+    return CliRunner().invoke(main, ["guard", *verbose(args)], catch_exceptions=False, **kw)
 
 
 @pytest.fixture

@@ -54,7 +54,6 @@ E_SHIM_REFUSED = "E-SHIM-REFUSED"
 E_SSH_OLD = "E-SSH-OLD"
 E_UNLOCK_TTY = "E-UNLOCK-TTY"
 E_UNLOCK_OPENCODE = "E-UNLOCK-OPENCODE"
-E_UNLOCK_NOPASS = "E-UNLOCK-NOPASS"
 E_UNLOCK_PATH = "E-UNLOCK-PATH"
 E_IDENTITY_CHECK = "E-IDENTITY-CHECK"
 E_GITHUB_UNREACHABLE = "E-GITHUB-UNREACHABLE"
@@ -90,6 +89,7 @@ class ErrorEntry:
     where: str
     message: str
     remediation: str = ""
+    fix: str = ""  # the one line a human command prints after the cause (D68 a)
     observed: tuple[str, ...] = ()  # raw strings seen in the wild (data only, spike transcripts)
 
 
@@ -116,17 +116,20 @@ class IdentityError(Exception):
     cannot leak through an error.
     """
 
-    def __init__(self, code: str, message: str | None = None, detail: str = "") -> None:
+    def __init__(
+        self, code: str, message: str | None = None, detail: str = "", fix: str = ""
+    ) -> None:
         super().__init__(message if message is not None else registry()[code].message)
         self.code = code
         self.detail = detail
+        self.fix = fix  # the raising site may know a better fix than the registry's one line
 
 
 # 2b (plan 005 step 6 rule): the agent table lists what an agent can meet; these are shown to the
 # human at a terminal and live in the docs and `carter` output instead.
 HUMAN_FACING = frozenset(
     {
-        "E-UNLOCK-TTY", "E-UNLOCK-OPENCODE", "E-UNLOCK-NOPASS", "E-UNLOCK-PATH", "E-UNLOCK-BADPASS",
+        "E-UNLOCK-TTY", "E-UNLOCK-OPENCODE", "E-UNLOCK-PATH", "E-UNLOCK-BADPASS",
         "E-SIGN-HUMAN-FALLBACK", "E-SSH-OLD", "E-IDENTITY-CHECK", "E-GITHUB-UNREACHABLE",
     }
 )  # fmt: skip

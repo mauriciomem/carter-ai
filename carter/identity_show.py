@@ -110,6 +110,8 @@ def key_items(cfg: IdentityConfig, home: Path) -> list[Item]:
         ]
     if cfg.signing.program:
         out.append(Item("info", "agent", "managed by the signing program; not probed"))
+    elif setup.file_mode:
+        out.append(Item("ok", "agent", "no passphrase: the shim signs from the key file"))
     else:
         level, text, fix = PROBE_TEXT[probe_setup(setup, cfg).state]
         out.append(Item(level, "agent", text, fix))  # type: ignore[arg-type]

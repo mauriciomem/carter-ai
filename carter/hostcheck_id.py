@@ -147,6 +147,8 @@ def key_items(cfg: IdentityConfig, home: Path) -> list[Item]:
         out.append(
             Item("info", "agent", "managed by the signing program; not probed, no shim check")
         )
+    elif setup.file_mode:
+        out.append(Item("ok", "agent", "no passphrase: the shim signs from the key file"))
     else:
         state = probe_setup(setup, cfg).state
         _, text, fix = PROBE_TEXT[state]

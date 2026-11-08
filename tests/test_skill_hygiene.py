@@ -129,9 +129,9 @@ class TestCarterOpsRecipe:
 
     def test_recipe_verifies_the_commit_shape(self) -> None:
         text = _ops_text()
-        assert "git log -1 --format='%an|%cn|%G?'" in text
-        assert "git config user.name" in text
-        assert "`N`" in text  # unsigned is the expected status in this release
+        assert "carter identity verify --commit HEAD --quiet" in text  # D68 i: one exit code
+        assert "Committed <sha>: <subject>" in text  # one line, details only on failure
+        assert "%G?" not in text  # no raw status letters: no bogus `N`
 
     def test_trailer_comes_from_the_runtime_emit_not_from_the_file(self) -> None:
         text = _ops_text()
@@ -157,7 +157,14 @@ class TestCarterOpsRecipe:
 
     def test_the_verify_step_is_tier_aware_and_never_accepts_n_at_t2(self) -> None:
         text = " ".join(_ops_text().split())
-        assert "`%G?` is `G` or `E`" in text and "never `N`" in text
+        assert "(`committer` is `llm`) the verify line must exit 0" in text
+        assert "Below T2 there is no signature to check" in text
+
+    def test_the_plan_has_no_attribution_block_and_the_emit_is_read_by_field(self) -> None:
+        text = _ops_text()
+        assert "**Attribution:**" not in text and "committer+signer" not in text
+        assert "carter ops config --emit --field coauthor_trailer" in text
+        assert "(it prints nothing; do not mention it)" in text  # the audit is silent
 
     def test_footer_is_the_emitted_one(self) -> None:
         text = _ops_text()
@@ -204,7 +211,7 @@ class TestCarterOpsPushAndPr:
         from carter.aplus.handoff import OWN_TERMINAL
 
         assert OWN_TERMINAL in _section("push-and-pr")
-        assert _section("push-and-pr").count("in your own terminal") == 1
+        assert "as `!carter push` in OpenCode" in _section("push-and-pr")  # D68 g
 
     def test_no_command_is_shown_with_a_leading_bang_or_a_force_flag(self) -> None:
         for fence in _code_fences(_ops_text()):
@@ -212,7 +219,7 @@ class TestCarterOpsPushAndPr:
                 assert not line.lstrip().startswith("!"), line
                 assert "--force" not in line and "--force-with-lease" not in line, line
         section = " ".join(_section("push-and-pr").split())
-        assert "never prefix the commands with `!`" in section
+        assert "you never run them yourself, not even with a `!` prefix" in section
         assert "never pass `--force`" in section
 
     def test_no_code_fence_pushes_or_writes_to_github(self) -> None:
@@ -329,9 +336,9 @@ class TestOwnTerminalWordingHasOneHome:
         from carter.aplus.handoff import OWN_TERMINAL
 
         assert OWN_TERMINAL == (
-            "Run `carter push` and then `carter pr` in your own terminal, not through an agent."
-        )
-        assert "!" not in OWN_TERMINAL  # spike 2: `!` has no TTY, so it is never suggested
+            "Run `carter push` and then `carter pr` yourself, in your terminal or as "
+            "`!carter push` in OpenCode, not through an agent."
+        )  # D68 g: the `!` shell is the human's when the plugin tagged it
 
     def test_no_file_words_the_instruction_differently(self) -> None:
         from carter.aplus.handoff import OWN_TERMINAL
@@ -341,7 +348,7 @@ class TestOwnTerminalWordingHasOneHome:
             if not path.is_file() or path.suffix not in {".md", ".j2", ".py", ".yaml"}:
                 continue
             text = " ".join(path.read_text(encoding="utf-8").split())
-            for match in re.finditer(r"[^.\n]*\bin your own terminal\b[^.\n]*", text):
+            for match in re.finditer(r"[^.\n]*\b(?:in your (?:own )?terminal)\b[^.\n]*", text):
                 sentence = match.group(0)
                 if "carter push" in sentence and OWN_TERMINAL.removesuffix(".") not in sentence:
                     drift.append((str(path.relative_to(REPO)), sentence.strip()))
@@ -361,13 +368,6 @@ class TestOwnTerminalWordingHasOneHome:
         assert (
             OWN_TERMINAL in skill and OWN_TERMINAL in pipeline and OWN_TERMINAL in _ATTRIBUTION_RULE
         )
-
-    def test_nothing_agent_facing_suggests_a_bang_shell(self) -> None:
-        for path in self._files():
-            if path.is_file() and path.suffix in {".md", ".j2"}:
-                text = path.read_text(encoding="utf-8")
-                assert "!carter push" not in text and "! carter push" not in text, path.name
-                assert "!carter pr" not in text and "!git push" not in text, path.name
 
 
 # ─── Plan 004 step 34: what the agent meets once the gate and isolation are live ───

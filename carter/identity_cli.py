@@ -20,17 +20,12 @@ from dataclasses import replace
 
 import click
 
+from carter import ui
 from carter.checkitems import Item
-from carter.cliguard import guarded
+from carter.cliguard import guarded, verbose_option
 from carter.identity import agent
 from carter.identity.agent_setup import Setup
-from carter.identity.errors import (
-    E_UNLOCK_NOPASS,
-    E_UNLOCK_OPENCODE,
-    E_UNLOCK_TTY,
-    IdentityError,
-    registry,
-)
+from carter.identity.errors import E_UNLOCK_OPENCODE, E_UNLOCK_TTY, IdentityError
 from carter.identity.rules import is_agent, load_rules
 from carter.terminal import stdin_is_tty
 
@@ -82,15 +77,18 @@ def _setup() -> tuple[Setup, str]:
 
 @click.group("identity")
 def identity() -> None:
-    """The LLM identity: signing key custody and (in later steps) setup and checks."""
+    """The LLM identity: set it up, check it, unlock its key."""
 
 
-def perform_unlock(ttl: str | None, extend: bool, allow_no_passphrase: bool) -> int:
+def perform_unlock(ttl: str | None, extend: bool) -> int:
     """The body of ``identity unlock``; ``carter commit`` calls it for its one unlock offer."""
     require_unlock_terminal()
-    setup, login = _setup()
+    setup, _login = _setup()
     if setup.managed_externally:
-        click.echo(MANAGED.format(verb="unlock"))
+        ui.ok(MANAGED.format(verb="unlock"))
+        return 0
+    if setup.file_mode:
+        ui.ok("nothing to unlock", "the key has no passphrase")
         return 0
     if ttl is not None:
         try:
@@ -99,116 +97,82 @@ def perform_unlock(ttl: str | None, extend: bool, allow_no_passphrase: bool) -> 
             raise click.BadParameter(str(exc), param_hint="--ttl") from exc
     problem = agent.check_key_file(setup.private_key)
     if problem:
-        raise click.ClickException(
-            f"The private key file is {problem.replace('-', ' ')} "
-            "(it must be a regular file readable only by you); nothing was started."
-        )
-    if agent.no_passphrase(setup):
-        if not allow_no_passphrase:
-            message = registry()[E_UNLOCK_NOPASS].message.replace("<llm-login>", login)
-            raise click.ClickException(f"{E_UNLOCK_NOPASS}: {message}")
-        click.echo(
-            f"Warning: this key has no passphrase: any process of yours can sign as {login} "
-            "while it is loaded.",
-            err=True,
-        )
-    result = agent.unlock(setup, _terminal_runner, extend=extend)
-    if result.status == "already-unlocked":
-        click.echo("The LLM signing key is already unlocked (use --extend to renew it).")
-        return 0
-    if result.status == "failed":
-        click.echo(
-            f"Unlock failed: ssh-add exited {result.returncode}; no key was loaded.", err=True
+        ui.fail(
+            f"the private key file is {problem.replace('-', ' ')}",
+            "it must be a regular file readable only by you",
         )
         return 1
-    click.echo(f"Unlocked the LLM signing key for {setup.ttl} ({setup.fingerprint}).")
+    result = agent.unlock(setup, _terminal_runner, extend=extend)
+    if result.status == "already-unlocked":
+        ui.ok("already unlocked", "use --extend to renew")
+        return 0
+    if result.status == "failed":
+        ui.fail(f"ssh-add exited {result.returncode}; no key was loaded")
+        return 1
+    ui.ok("unlocked", setup.fingerprint[:19] + "…" + (f" · {setup.ttl}" if setup.ttl else ""))
     return 0
 
 
 @identity.command("unlock")
 @click.option(
-    "--ttl",
-    default=None,
-    metavar="DURATION",
-    help="Key lifetime, e.g. 8h or 30m (default: [identity.signing] ttl, 8h).",
+    "--ttl", default=None, metavar="TIME", help="Keep the key loaded this long (8h, 30m)."
 )
-@click.option("--extend", is_flag=True, help="Ask again and replace the lifetime of a loaded key.")
-@click.option(
-    "--allow-no-passphrase",
-    is_flag=True,
-    help="Accept a key without a passphrase (any process of yours can then sign as the LLM).",
-)
-def unlock_cmd(ttl: str | None, extend: bool, allow_no_passphrase: bool) -> None:
-    """Load the LLM signing key into Carter's dedicated ssh-agent for a while.
+@click.option("--extend", is_flag=True, help="Renew a loaded key's lifetime.")
+def unlock_cmd(ttl: str | None, extend: bool) -> None:
+    """Load the LLM key (one with a passphrase) into Carter's agent."""
 
-    Run it in your own terminal (not in OpenCode's): it asks for the key's passphrase there and
-    nowhere else. Agent commits are signed only while the key is loaded."""
-
-    guarded(lambda: perform_unlock(ttl, extend, allow_no_passphrase))
+    guarded(lambda: perform_unlock(ttl, extend))
 
 
 @identity.command("lock")
-@click.option(
-    "--all", "stop_all", is_flag=True, help="Also stop Carter's agent and any leftover one."
-)
+@click.option("--all", "stop_all", is_flag=True, help="Also stop the agent.")
 def lock_cmd(stop_all: bool) -> None:
-    """Remove the LLM signing key from Carter's agent (idempotent).
-
-    Only that key is removed; the agent is stopped when it is empty. Agent commits fail until the
-    next `carter identity unlock`."""
+    """Unload the LLM key from Carter's agent."""
 
     def run() -> int:
         require_unlock_terminal(need_tty=False)  # a script or a logout hook may lock
         raw, _login = _setup()
         if raw.managed_externally:
-            click.echo(MANAGED.format(verb="lock"))
+            ui.ok(MANAGED.format(verb="lock"))
+            return 0
+        if raw.file_mode:
+            ui.ok("nothing to lock", "the key has no passphrase")
             return 0
         result = agent.lock(raw, stop_all=stop_all)
         if result.status == "failed":
-            click.echo(f"Lock failed: ssh-add exited {result.returncode}.", err=True)
+            ui.fail(f"ssh-add exited {result.returncode}")
             return 1
-        word = "Locked" if result.status == "locked" else "Already locked"
-        stopped = "; the agent was stopped" if result.agent_stopped else ""
-        click.echo(f"{word}: the LLM signing key is not loaded{stopped}.")
+        ui.ok("locked" if result.status == "locked" else "already locked")
         return 0
 
     guarded(run)
 
 
 @identity.command("add")
-@click.option("--login", required=True, help="The LLM's GitHub login (a User account).")
+@click.option("--login", required=True, help="The LLM's GitHub login.")
 @click.option(
     "--ssh-public-key",
     default=None,
-    metavar="PATH|key::...",
-    help="Its signing key: a .pub file or a key:: literal (T2).",
+    metavar="PATH",
+    help="Key file: the .pub or the private key (the other is derived).",
 )
 @click.option(
-    "--private-key",
-    default=None,
-    metavar="PATH",
-    help="Path to its private key (stored as a path, never read).",
+    "--private-key", default=None, metavar="PATH", help="Private key, if not next to the .pub."
 )
 @click.option(
-    "--agent-socket",
-    default=None,
-    metavar="PATH",
-    help="A password manager's agent socket (instead of Carter's agent).",
+    "--agent-socket", default=None, metavar="PATH", help="A password manager's agent socket."
 )
 @click.option(
-    "--signing-program",
-    default=None,
-    metavar="PATH",
-    help="A signing program such as op-ssh-sign (kept behind the shim).",
+    "--signing-program", default=None, metavar="PATH", help="A signing program (password manager)."
 )
 @click.option(
     "--role",
     type=click.Choice(["co-author", "author"]),
     default=None,
-    help="co-author (default): you author, the LLM commits. author: the LLM authors and you are "
-    "credited by a trailer (needs T2; not for DCO repositories).",
+    help="author: the LLM is the author (needs a key).",
 )
-@click.option("--dry-run", is_flag=True, help="Check everything and show the plan; write nothing.")
+@click.option("--dry-run", is_flag=True, help="Check only; write nothing.")
+@verbose_option
 def add_cmd(
     login: str,
     ssh_public_key: str | None,
@@ -218,11 +182,7 @@ def add_cmd(
     role: str | None,
     dry_run: bool,
 ) -> None:
-    """Set up the LLM identity: T1 with --login, T2 with a public key too.
-
-    Checks the account and the key on GitHub without a token (the key must be a signing key and
-    not an authentication key), then writes config.toml, the signing shim, allowed_signers and the
-    tier mirror. Writes nothing if any check fails. Registering the key on GitHub is yours."""
+    """Set up the LLM identity (--login alone, or with a key)."""
     if agent_socket and signing_program:
         raise click.UsageError("--agent-socket and --signing-program exclude each other")
 
@@ -231,7 +191,7 @@ def add_cmd(
         from carter.terminal import require_human_terminal
 
         if not dry_run:
-            require_human_terminal("carter identity add")
+            require_human_terminal("carter identity add", need_tty=False)
         try:
             plan = identity_add.plan_add(
                 identity_add.AddRequest(
@@ -241,55 +201,54 @@ def add_cmd(
         except ValueError as exc:
             raise click.BadParameter(str(exc), param_hint="--login") from exc
         tier = "T2" if plan.fingerprint else "T1"
-        click.echo(f"Identity: {plan.login} (id {plan.uid}), {tier}")
+        parts = [plan.login, tier]
         if plan.fingerprint:
-            click.echo(f"Signing key: {plan.fingerprint}")
+            parts.append(plan.fingerprint[:19] + "…")
+        if plan.cfg.identity.role == "author":
+            parts.append("author")
+        if plan.mode == "file":
+            parts.append("no passphrase")
         if plan.rotated_from:
-            click.echo(f"Rotation: {plan.rotated_from} moves to previous_public_keys")
+            ui.detail(f"rotated: {plan.rotated_from} moves to previous_public_keys")
         for note in plan.notes:
-            click.echo(f"Note: {note}")
+            ui.detail(note)
         if plan.cfg.identity.role == "author":
             from pathlib import Path
 
             from carter.human_items import dco_items, human_items
 
-            click.echo("Role: author (the LLM authors; you are credited by Co-authored-by)")
-            for item in [
+            found = [
                 *human_items(plan.cfg, Path.cwd(), refresh=True, record=not dry_run),
                 *dco_items(Path.cwd()),
-            ]:
-                click.echo(item.render())
-        click.echo("Files:")
+            ]
+            for item in found:
+                if item.level in ("warn", "red"):
+                    ui.warn(f"{item.area}: {item.text}", item.fix)
+                else:
+                    ui.detail(f"{item.area}: {item.text}")
         for name in plan.files:
-            click.echo(f"  {name}")
+            ui.detail(name)
         if dry_run:
-            click.echo("Dry run: nothing was written.")
+            ui.ok(" · ".join(parts), "dry run, nothing written")
             return 0
-        if not click.confirm("Write these files?"):
-            click.echo("Nothing was written.")
-            return 1
         for notice in identity_add.apply_add(plan):
-            click.echo(notice)
-        click.echo(f"Done. Next: `carter identity unlock` ({tier} signing needs the key loaded).")
+            ui.detail(notice)
+        ui.ok(" · ".join(parts))
+        if plan.mode == "agent":
+            ui.info("→ next: carter identity unlock")
         return 0
 
     guarded(run)
 
 
-def _print_items(items: list[Item], head: str, noun: str) -> int:
-    from carter.checkitems import exit_code, render
-
-    for line in render(items, head, noun):
-        click.echo(line)
-    return exit_code(items)
+def _print_items(items: list[Item], noun: str, *, everything: bool = False) -> int:
+    return ui.items(items, noun, all_items=True if everything else None)
 
 
 @identity.command("show")
+@verbose_option
 def show_cmd() -> None:
-    """Show the LLM identity: role, tier, key custody, shim, tier mirror and guard coverage.
-
-    Read-only and allowed anywhere (an agent shell too); it prints names, ids and fingerprints,
-    never a key or a token. A defect in config.toml is E-CONFIG, never a silent default."""
+    """Show the LLM identity and its checks."""
 
     def run() -> int:
         from pathlib import Path
@@ -297,19 +256,23 @@ def show_cmd() -> None:
         from carter import identity_show
 
         items, _res = identity_show.show_items(Path.cwd(), os.environ)
-        return _print_items(items, "carter identity show", "Identity")
+        return _print_items(items, "identity", everything=True)
 
     guarded(run)
 
 
 @identity.command("verify")
-@click.option("--remote", default=None, metavar="OWNER/REPO", help="Ask GitHub about one commit.")
-@click.option("--sha", default=None, metavar="SHA", help="The commit to ask about (with --remote).")
-def verify_cmd(remote: str | None, sha: str | None) -> None:
-    """Check that the LLM identity can sign: a test commit in a temporary repository.
-
-    Needs the key unlocked (`carter identity unlock`); no network. With --remote OWNER/REPO --sha
-    SHA it asks GitHub whether that commit shows as Verified (an unreachable GitHub is an error)."""
+@click.option(
+    "--remote", default=None, metavar="OWNER/REPO", help="Ask GitHub about a commit in this repo."
+)
+@click.option("--sha", default=None, metavar="SHA", help="The commit (with --remote).")
+@click.option(
+    "--commit", "rev", default=None, metavar="REV", help="Check a local commit's signature."
+)
+@click.option("--quiet", "-q", is_flag=True, help="Print nothing; the exit code says it.")
+@verbose_option
+def verify_cmd(remote: str | None, sha: str | None, rev: str | None, quiet: bool) -> None:
+    """Check that the LLM can sign, or that a commit is signed by it."""
     if (remote is None) != (sha is None):
         raise click.UsageError("--remote and --sha go together")
 
@@ -320,50 +283,51 @@ def verify_cmd(remote: str | None, sha: str | None) -> None:
         from carter.identity.config import default_path
         from carter.identity_show import load_config
 
+        if rev is not None:
+            good, why = identity_verify.verify_commit(rev, load_config(), Path.home(), os.environ)
+            if not quiet:
+                ui.ok(f"{rev} is signed by the LLM key") if good else ui.fail(why)
+            return 0 if good else 1
         if remote is not None and sha is not None:
             try:
                 items = identity_verify.verify_remote(remote, sha)
             except ValueError as exc:
                 raise click.BadParameter(str(exc), param_hint="--remote/--sha") from exc
-            return _print_items(items, "carter identity verify --remote", "Remote verification")
+            return _print_items(items, "remote verification")
         items = identity_verify.verify_local(load_config(), Path.home(), os.environ, default_path())
-        return _print_items(items, "carter identity verify", "Verification")
+        return _print_items(items, "verified")
 
     guarded(run)
 
 
 @identity.command("remove")
-@click.option("--yes", "-y", "assume_yes", is_flag=True, help="Do not ask for confirmation.")
-@click.option("--dry-run", is_flag=True, help="Show what would be removed; change nothing.")
+@click.option("--yes", "-y", "assume_yes", is_flag=True, hidden=True)
+@click.option("--dry-run", is_flag=True, help="Show what would be removed.")
+@verbose_option
 def remove_cmd(assume_yes: bool, dry_run: bool) -> None:
-    """Remove the LLM identity Carter set up, and only what is still unchanged.
-
-    Takes the key out of Carter's agent and stops it, the identity part of config.toml (backed
-    up), the signing shim, allowed_signers, the socket directory and the tier mirror. Guards,
-    hooks, policies and the `git ai-commit` alias stay (`carter guard remove`), and so does
-    everything on GitHub and your private key file."""
+    """Remove the LLM identity (your key file stays)."""
+    del assume_yes  # accepted and ignored: nothing is asked any more (D68 h)
 
     def run() -> int:
         from carter import identity_remove
         from carter.terminal import require_human_terminal
 
         if not dry_run:
-            require_human_terminal("carter identity remove", need_tty=not assume_yes)
-            if not assume_yes and not click.confirm("Remove the LLM identity files?"):
-                click.echo("Nothing was removed.")
-                return 1
+            require_human_terminal("carter identity remove", need_tty=False)
         report = identity_remove.remove_identity(None, dry_run=dry_run)
         for line in report.removed:
-            click.echo(f"  {report.verb}: {line}")
+            ui.detail(f"{report.verb.lower()}: {line}")
         for line in report.kept:
-            click.echo(f"  Kept: {line}")
+            ui.warn(f"kept {line}")
         for line in report.notes:
-            click.echo(f"  {line}")
+            ui.detail(line)
         if not (report.removed or report.kept):
-            click.echo("Nothing to remove: no LLM identity files here.")
-        click.echo("What stays (not this command's):")
-        for line in identity_remove.STAYS:
-            click.echo(f"  - {line}")
+            ui.ok("no LLM identity here")
+        else:
+            ui.ok(
+                f"{report.verb.lower()} the LLM identity",
+                f"{len(report.removed)} file(s) · guards and your key file stay",
+            )
         return 0
 
     guarded(run)

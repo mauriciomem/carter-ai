@@ -22,7 +22,7 @@ from carter.guard.state import GuardState, load
 from carter.identity.errors import E_GIT_OLD, registry
 from carter.install.paths import carter_gitconfig_path, guard_script_path, guard_state_path
 from guard.conftest import REAL_GIT
-from guard.helpers import debug_config, install_old_git
+from guard.helpers import debug_config, install_old_git, verbose
 
 pytestmark = pytest.mark.gitold  # CI: `pytest -m gitold` on Debian bookworm (git 2.39)
 
@@ -43,7 +43,7 @@ def git(*args: str, cwd: Path | None = None, env: dict[str, str] | None = None):
 
 
 def guard(*args: str, **kw):
-    return CliRunner().invoke(main, ["guard", *args], catch_exceptions=False, **kw)
+    return CliRunner().invoke(main, ["guard", *verbose(args)], catch_exceptions=False, **kw)
 
 
 def make_repo(root: Path, name: str = "work") -> Path:
@@ -275,17 +275,15 @@ class TestInstallOnOldGit:
 
     def test_the_tty_offer_defaults_to_yes(self, old: Path, repo: Path, human_tty) -> None:
         human_tty(True)
-        res = guard(
-            "install", input="y\ny\ny\ny\nn\n\n"
-        )  # g2, sudo, read-edit, config-edit, alias=no, repo_hooks=Enter
+        res = guard("install", input="\n")  # Enter is yes
         assert res.exit_code == 0, res.output
-        assert "repo_hooks: git older than 2.54 only" in res.output
+        assert "git hooks in your repos check agent commits" in res.output.split("Install?")[0]
         assert load(guard_state_path(None)).consents["repo_hooks"]["decision"] == "accepted"
         assert (repo / ".git" / "hooks" / "pre-push").exists()
 
     def test_a_no_installs_nothing_for_the_group(self, old: Path, repo: Path, human_tty) -> None:
         human_tty(True)
-        guard("install", input="y\ny\ny\ny\nn\nn\n")
+        guard("install", input="n\n")
         assert not (repo / ".git" / "hooks" / "pre-push").exists()
         assert not guard_script_path(None).exists()
 

@@ -237,7 +237,7 @@ class TestSetCommand:
         assert res.exit_code == 0, res.output
         assert token_path(tmp_path).read_text() == TOKEN
         assert str(token_path(tmp_path)) in res.output
-        assert "not printed" in res.output and "not injected into agent shells yet" in res.output
+        assert "token stored" in res.output and "carter github-token check" in res.output
         assert leaks(TOKEN[11:], res.output) == []
 
     def test_a_terminal_on_stdin_uses_a_hidden_prompt(
@@ -257,7 +257,7 @@ class TestSetCommand:
         human_tty(True)
         classic = "ghp_" + "Z" * 36
         res = self.run("--base-dir", str(tmp_path), input=classic)
-        assert res.exit_code == 1 and "Error: E-PAT-TYPE" in res.output and "`ghp_`" in res.output
+        assert res.exit_code == 1 and "E-PAT-TYPE" in res.output and "`ghp_`" in res.output
         assert "ZZZZZ" not in res.output
         assert not token_path(tmp_path).exists()
 
@@ -267,7 +267,7 @@ class TestSetCommand:
         human_tty(True)
         monkeypatch.setenv("AGENT", "x")
         res = self.run("--base-dir", str(tmp_path), input=TOKEN)
-        assert res.exit_code == 1 and f"Error: {E_HUMAN_TERMINAL}" in res.output
+        assert res.exit_code == 1 and E_HUMAN_TERMINAL in res.output
         assert not token_path(tmp_path).exists() and TAIL not in res.output
 
     def test_it_needs_a_terminal_on_stderr(self, human_tty, tmp_path) -> None:
@@ -558,7 +558,7 @@ class TestCheckCommand:
         github_api.readonly_token_world(expiry="2027-01-31 15:17:13 UTC")
         res = self.run(tmp_path)
         assert res.exit_code == 0, res.output
-        assert "Token OK" in res.output and leaks(TOKEN[11:], res.output) == []
+        assert "✓ token" in res.output and leaks(TOKEN[11:], res.output) == []
 
     def test_a_writable_token_exits_1(self, tmp_path, github_api, human_tty) -> None:
         human_tty(True)
@@ -748,7 +748,7 @@ class TestProbeRepository:
         human_tty(True)
         github_api.readonly_token_world()
         res = CliRunner().invoke(
-            main, ["github-token", "check", "--base-dir", str(stored)], catch_exceptions=False
+            main, ["github-token", "check", "-v", "--base-dir", str(stored)], catch_exceptions=False
         )
         assert res.exit_code == 0 and "a repository you own" in res.output
         assert "zz-probe-repo" not in res.output and "carter-llm" not in res.output

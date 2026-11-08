@@ -35,6 +35,7 @@ class Setup:
     private_key: str  # "" for a password-manager setup
     managed_externally: bool
     sock: Path
+    file_mode: bool = False  # D68 d: no passphrase; the shim signs from `private_key` directly
 
 
 def setup_from_config(
@@ -51,12 +52,15 @@ def setup_from_config(
         raise ValueError("no private_key_path configured")
     return Setup(
         base, s.ssh_bin_dir, parse_ttl(s.ttl), blob, s.fingerprint, s.private_key_path, external,
-        socket_path(base, env),
+        socket_path(base, env), file_mode=s.mode == "file" and not external,
     )  # fmt: skip
 
 
 def parse_ttl(text: str) -> str:
-    """A lifetime ``ssh-add -t`` accepts: seconds or ``<n>[smhdw]``. ``ValueError`` otherwise."""
+    """A lifetime ``ssh-add -t`` accepts: seconds or ``<n>[smhdw]``; empty means none.
+    ``ValueError`` otherwise."""
+    if not text.strip():
+        return ""
     if not _TTL.fullmatch(text.strip()):
         raise ValueError("a lifetime like 8h, 30m or 3600")
     return text.strip()
@@ -74,6 +78,31 @@ def check_key_file(path: str) -> str | None:
     if info.st_mode & 0o077:
         return "too-open"
     return None
+
+
+def key_file_problem(path: str, ssh_bin_dir: str, blob: str) -> tuple[str, bool]:
+    """Check a private key file with ``stat`` and OpenSSH only (Carter never reads its bytes).
+
+    Returns ``(problem, passphrase_free)``. ``problem`` is empty when the file is usable:
+    ``missing``/``not-a-file``/``too-open`` from ``stat``, ``other-key`` when a key without
+    passphrase turns out to be another key than ``blob``. ``passphrase_free`` is True when
+    ``ssh-keygen -y -P ''`` opens it (exit code, and its public half compared with ``blob``)."""
+    problem = check_key_file(path)
+    if problem:
+        return problem, False
+    done = subprocess.run(
+        [os.path.join(ssh_bin_dir, "ssh-keygen"), "-y", "-P", "", "-f", path],
+        env=child_env(Path.home()),
+        stdin=subprocess.DEVNULL,
+        capture_output=True,
+        text=True,
+        start_new_session=True,
+        timeout=15,
+        check=False,
+    )
+    if done.returncode != 0:
+        return "", False
+    return ("" if public_blob(done.stdout.strip()) == blob else "other-key"), True
 
 
 def no_passphrase(setup: Setup) -> bool:

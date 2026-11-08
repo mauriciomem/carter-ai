@@ -23,7 +23,7 @@ from carter.guard import gitconfig as gc
 from carter.guard.state import load
 from carter.install.mcp import config_target
 from carter.install.paths import carter_gitconfig_path, guard_state_path
-from guard.helpers import debug_config
+from guard.helpers import debug_config, verbose
 
 
 def git(*args: str, cwd: Path | None = None) -> subprocess.CompletedProcess[str]:
@@ -31,7 +31,7 @@ def git(*args: str, cwd: Path | None = None) -> subprocess.CompletedProcess[str]
 
 
 def guard(*args: str):
-    return CliRunner().invoke(main, ["guard", *args], catch_exceptions=False)
+    return CliRunner().invoke(main, ["guard", *verbose(args)], catch_exceptions=False)
 
 
 @pytest.fixture

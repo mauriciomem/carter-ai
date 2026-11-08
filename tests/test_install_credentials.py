@@ -44,6 +44,9 @@ def test_an_exported_github_token_is_not_asked_for_and_not_praised(
 def test_a_stored_token_file_is_reported_without_its_value(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
+    from carter.install.console import set_verbosity
+
+    set_verbosity(2)  # the ok lines show with -v
     ghtoken.store_token(PAT, tmp_path)
     out = run(capsys, tmp_path)
     assert "GitHub read-only token" in out and "gh-read.token" in out

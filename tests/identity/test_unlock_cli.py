@@ -24,7 +24,6 @@ from carter.cli import main
 from carter.identity import agent_paths, agent_proc
 from carter.identity.errors import (
     E_CONFIG,
-    E_UNLOCK_NOPASS,
     E_UNLOCK_OPENCODE,
     E_UNLOCK_PATH,
     E_UNLOCK_TTY,
@@ -128,13 +127,13 @@ class TestRegistration:
         group = identity_cli.identity
         assert {"unlock", "lock"} <= set(group.commands)
         unlock = {o.opts[0] for o in group.commands["unlock"].params} - {"--help"}
-        assert unlock == {"--ttl", "--extend", "--allow-no-passphrase"}
+        assert unlock == {"--ttl", "--extend"}
         assert {o.opts[0] for o in group.commands["lock"].params} == {"--all"}
         assert "identity" in main.commands
 
     def test_help_mentions_the_terminal_and_does_not_start_anything(self) -> None:
         out = invoke("unlock", "--help").output
-        assert "your own terminal" in out and "--allow-no-passphrase" in out
+        assert "passphrase" in out and "--allow-no-passphrase" not in out
 
 
 class TestRefusals:
@@ -156,7 +155,7 @@ class TestRefusals:
     ) -> None:
         done = invoke("unlock", env={variable: "1"})
         assert done.exit_code == 1
-        assert done.output.startswith(f"Error: {E_UNLOCK_OPENCODE}: ")
+        assert E_UNLOCK_OPENCODE in done.output
         assert registry()[E_UNLOCK_OPENCODE].message in done.output
         assert variable in done.output  # names only, never values
 
@@ -167,7 +166,7 @@ class TestRefusals:
     def test_no_terminal_is_refused(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setattr(identity_cli, "stdin_is_tty", lambda: False)
         done = invoke("unlock")
-        assert done.exit_code == 1 and f"Error: {E_UNLOCK_TTY}: " in done.output
+        assert done.exit_code == 1 and E_UNLOCK_TTY in done.output
         monkeypatch.setattr(identity_cli, "stdin_is_tty", lambda: True)
         monkeypatch.setattr(identity_cli, "_stderr_is_tty", lambda: False)
         assert E_UNLOCK_TTY in invoke("unlock").output
@@ -200,7 +199,7 @@ class TestRefusals:
     ) -> None:
         monkeypatch.setenv("HOME", str(plain_env.home))
         for bad in ("forever", "0", "8 hours", "-1h"):
-            done = invoke("unlock", "--ttl", bad, "--allow-no-passphrase")
+            done = invoke("unlock", "--ttl", bad)
             assert done.exit_code == 2 and "--ttl" in done.output, bad
         assert not plain_env.agents
 
@@ -220,7 +219,7 @@ class TestConfigNeeds:
         (tmp_path / ".carter" / "config.toml").write_text("schema = 2\nnot toml [[[")
         monkeypatch.setenv("HOME", str(tmp_path))
         done = invoke("unlock")
-        assert done.exit_code == 1 and f"Error: {E_CONFIG}" in done.output
+        assert done.exit_code == 1 and E_CONFIG in done.output
 
     @pytest.mark.parametrize(
         "extra", [{"agent_socket": "/run/pm/agent.sock"}, {"program": "/opt/pm/sign"}]
@@ -251,10 +250,8 @@ class TestUnlockFlows:
         assert pw
         first = cli_env.run("unlock", answers=[pw])
         assert first.rc == 0, first.output
-        assert (
-            "Unlocked the LLM signing key for 8h" in first.output
-            and cli_env.key.fingerprint in first.output
-        )
+        assert "unlocked" in first.output and cli_env.key.fingerprint[:19] in first.output
+        assert "8h" not in first.output  # D68 e: no lifetime unless --ttl
         assert pw not in first.output
         second = cli_env.run("unlock")  # nothing typed: a prompt would time out
         assert second.rc == 0 and "already unlocked" in second.output
@@ -266,7 +263,7 @@ class TestUnlockFlows:
         assert pw
         assert cli_env.run("unlock", "--ttl", "30m", answers=[pw]).rc == 0
         again = cli_env.run("unlock", "--extend", "--ttl", "2h", answers=[pw])
-        assert again.rc == 0 and "for 2h" in again.output and "Enter passphrase" in again.output
+        assert again.rc == 0 and "2h" in again.output and "Enter passphrase" in again.output
 
     def test_a_wrong_passphrase_is_ssh_adds_own_retry_and_a_blank_line_ends_it(
         self, cli_env: Env
@@ -274,21 +271,20 @@ class TestUnlockFlows:
         done = cli_env.run("unlock", answers=["wrong-" + "x" * 6, ""])
         assert done.rc == 1
         assert "Bad passphrase, try again" in done.output  # passed through, not wrapped
-        assert "Unlock failed" in done.output and "no key was loaded" in done.output
+        assert "ssh-add exited" in done.output and "no key was loaded" in done.output
         assert not cli_env.agents  # the agent it started was not left behind
 
-    def test_a_key_without_a_passphrase_is_refused_without_the_flag(self, plain_env: Env) -> None:
-        done = plain_env.run("unlock")
-        assert done.rc == 1
-        assert E_UNLOCK_NOPASS in done.output and LOGIN in done.output
-        assert "<llm-login>" not in done.output
-        assert not plain_env.agents  # nothing was started
-
-    def test_with_the_flag_it_unlocks_and_warns(self, plain_env: Env) -> None:
-        done = plain_env.run("unlock", "--allow-no-passphrase")
+    def test_a_key_without_a_passphrase_in_agent_mode_just_loads(self, plain_env: Env) -> None:
+        done = plain_env.run("unlock")  # D68 d: no flag, no warning
         assert done.rc == 0, done.output
-        assert f"any process of yours can sign as {LOGIN}" in done.output
-        assert "Unlocked the LLM signing key" in done.output
+        assert "unlocked" in done.output and "any process" not in done.output
+
+    def test_a_file_mode_key_has_nothing_to_unlock_or_lock(self, plain_env: Env) -> None:
+        plain_env.write(mode="file")
+        for verb in ("unlock", "lock"):
+            done = plain_env.run(verb)
+            assert done.rc == 0 and f"nothing to {verb}" in done.output
+        assert not plain_env.agents
 
     @pytest.mark.parametrize(
         ("setup", "word"),
@@ -305,12 +301,12 @@ class TestUnlockFlows:
             key.path.mkdir()
         else:
             key.path.chmod(0o644)
-        done = plain_env.run("unlock", "--allow-no-passphrase")
-        assert done.rc == 1 and word in done.output and "nothing was started" in done.output
+        done = plain_env.run("unlock")
+        assert done.rc == 1 and word in done.output
         assert str(key.path) not in done.output
         assert not plain_env.agents
 
-    def test_it_uses_the_configured_ssh_bin_dir_for_all_three_tools(
+    def test_it_uses_the_configured_ssh_bin_dir_for_the_agent_tools(
         self, plain_env: Env, tmp_path: Path
     ) -> None:
         wrappers = plain_env.rig.root / "wrap"
@@ -321,14 +317,14 @@ class TestUnlockFlows:
             script.write_text(f'#!/bin/sh\necho {tool} >> {log}\nexec /usr/bin/{tool} "$@"\n')
             script.chmod(0o755)
         plain_env.write(ssh_bin_dir=str(wrappers))
-        assert plain_env.run("unlock", "--allow-no-passphrase").rc == 0
+        assert plain_env.run("unlock").rc == 0
         assert plain_env.run("lock").rc == 0
         used = set(log.read_text().split())
-        assert {"ssh-keygen", "ssh-agent", "ssh-add"} <= used
+        assert {"ssh-agent", "ssh-add"} <= used
 
     def test_it_writes_no_config_and_no_guard_state(self, plain_env: Env) -> None:
         before = hashlib.sha256(plain_env.config.read_bytes()).hexdigest()
-        assert plain_env.run("unlock", "--allow-no-passphrase").rc == 0
+        assert plain_env.run("unlock").rc == 0
         assert plain_env.run("lock").rc == 0
         assert hashlib.sha256(plain_env.config.read_bytes()).hexdigest() == before
         carter = plain_env.home / ".carter"
@@ -338,11 +334,11 @@ class TestUnlockFlows:
     def test_output_holds_names_and_states_only(self, cli_env: Env) -> None:
         pw = cli_env.key.passphrase
         assert pw
-        done = cli_env.run("unlock", answers=[pw])
+        done = cli_env.run("unlock", answers=[pw], NO_COLOR="1")
         mine = done.output.strip().splitlines()[
             -1
         ]  # ssh-add's own lines above name the key it adds
-        assert mine.startswith("Unlocked the LLM signing key")
+        assert mine.startswith("✓ unlocked")
         assert str(cli_env.key.path) not in mine and str(cli_env.home) not in mine
         assert pw not in done.output
 
@@ -354,7 +350,7 @@ class TestUnlockFlows:
         env = plain_env.child_env()
         env["HOME"] = str(long_home)
         out = pty_run(
-            [sys.executable, "-m", "carter.cli", "identity", "unlock", "--allow-no-passphrase"],
+            [sys.executable, "-m", "carter.cli", "identity", "unlock"],
             env,
             [],
             timeout=40,
@@ -368,22 +364,21 @@ class TestLockFlows:
     def test_lock_removes_the_key_and_a_second_lock_is_a_quiet_success(
         self, plain_env: Env
     ) -> None:
-        plain_env.run("unlock", "--allow-no-passphrase")
+        plain_env.run("unlock")
         assert plain_env.agents
         first = plain_env.run("lock")
-        assert first.rc == 0 and "Locked: the LLM signing key is not loaded" in first.output
-        assert "agent was stopped" in first.output and not plain_env.agents
+        assert first.rc == 0 and "locked" in first.output and not plain_env.agents
         second = plain_env.run("lock")
-        assert second.rc == 0 and "Already locked" in second.output
+        assert second.rc == 0 and "already locked" in second.output
 
     def test_lock_without_ever_unlocking_is_already_locked(self, plain_env: Env) -> None:
         done = plain_env.run("lock")
-        assert done.rc == 0 and "Already locked" in done.output
+        assert done.rc == 0 and "already locked" in done.output
 
     def test_lock_all_stops_a_leftover_agent_under_the_socket_directory(
         self, plain_env: Env
     ) -> None:
-        plain_env.run("unlock", "--allow-no-passphrase")
+        plain_env.run("unlock")
         run_dir = agent_paths.run_dir(plain_env.home)
         leftover = plain_env.rig.run("ssh-agent", "-a", str(run_dir / "old.sock"), "-s")
         pid = int(leftover.stdout.split("SSH_AGENT_PID=")[1].split(";")[0])
@@ -395,5 +390,5 @@ class TestLockFlows:
 
 def test_the_registry_texts_the_cli_prints_exist() -> None:
     reg: Any = registry()
-    for code in (E_UNLOCK_TTY, E_UNLOCK_OPENCODE, E_UNLOCK_NOPASS, E_UNLOCK_PATH):
+    for code in (E_UNLOCK_TTY, E_UNLOCK_OPENCODE, E_UNLOCK_PATH):
         assert reg[code].slice == "2b"

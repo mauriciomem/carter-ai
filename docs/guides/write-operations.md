@@ -29,7 +29,7 @@ flowchart LR
 4. **Execute.** It runs the commands in the terminal, as you would.
 5. **Audit.** It records the result with `carter ops audit`.
 6. **Report.** It tells you what happened: branch, commit SHA and, for a finished
-   branch, the handoff file and the commands to run in your own terminal.
+   branch, the handoff file and the commands to run (`carter push`, `carter pr`).
 
 Reads such as `git log` or `gh pr list` don't need `ops:`.
 
@@ -38,7 +38,7 @@ Reads such as `git log` or `gh pr list` don't need `ops:`.
 | Step | Who |
 |------|-----|
 | Local: branch, `git add`, `git commit` | The agent that received `ops:`. Maestro, Architect and Learner hold no local-write permission, so OpenCode asks you first |
-| Push, pull requests, issues, comments, reviews, releases, merges | **You**, in your own terminal. No agent has a path to them, DevOps included |
+| Push, pull requests, issues, comments, reviews, releases, merges | **You**, in your terminal or OpenCode's `!` shell. No agent has a path to them, DevOps included |
 | The handoff file for a finished branch | DevOps (or the agent you asked), with its file tools |
 | Jira writes (through the `carter-atlassian` MCP server) | DevOps, by the skill's routing. OpenCode asks you before every MCP call, in any agent |
 | Text that leaves your machine (PR bodies, Jira comments, release notes) | Drafted by the Narrator, which removes secrets and internal details; Jira text is then sent by DevOps, GitHub text goes in the handoff or comes to you as a draft |
@@ -73,35 +73,36 @@ workspace, then tells you what to run:
    Only these five keys are accepted. The file is untrusted input from a model and never
    becomes a command line; it must hold no secrets. It is not part of the workspace's
    saved history.
-2. **You run `carter push`** in your own terminal, from the repository:
+2. **You run `carter push`** from the repository, in your terminal or as `!carter push` in
+   OpenCode:
 
    ```bash
-   carter push --dry-run     # show what would be pushed and asked; push nothing
-   carter push               # show it, then ask
+   carter push --dry-run     # check and show; push nothing
+   carter push               # push
+   # ✓ feat/auth → origin · 1 commit (signed)
    ```
 
-   It fetches the target ref, lists the commits, the files and any hook or CI paths
-   (`.husky/`, `.github/workflows/` and similar) in red, notes GitHub's branch
-   protection when your read-only token can see it, and asks `y`. On the default branch
-   you type the branch name instead. It pushes only `HEAD` to the same-named branch on
-   `origin`. Commits whose committer is the LLM must carry a valid LLM signature, or it
-   refuses. Repository or SSH settings that could run code with your credentials are shown
-   first and you decide.
-3. **You run `carter pr`** in your own terminal:
+   It asks nothing. It fetches the target ref, counts the commits, checks the files and any
+   hook or CI paths (`.husky/`, `.github/workflows/` and similar), and pushes only `HEAD` to the
+   same-named branch on `origin` (the default branch too: nothing to type). Commits whose
+   committer is the LLM must carry a valid LLM signature, or it refuses. Repository or SSH
+   settings that could run code with your credentials, and risky paths, are named in one
+   warning line; the push goes on. `-v` lists the commits and files.
+3. **You run `carter pr`** the same way:
 
    ```bash
    carter pr
+   # ✓ PR #12 opened · https://github.com/owner/name/pull/12
    ```
 
    It reads only the handoff for the current branch, scans it for secrets, finds the
-   target (the parent repository if `origin` is a fork), shows the title, base and the
-   first 40 lines of the body, asks `y/N`, then runs `gh pr create` with your own `gh`
-   login. If the branch is not on `origin` yet it offers the push first. The handoff is
-   deleted only after the pull request exists.
+   target (the parent repository if `origin` is a fork), runs `gh pr create` with your own `gh`
+   login, and asks nothing. If the branch is not on `origin` yet it pushes it first. The
+   handoff is deleted only after the pull request exists.
 
 There are no options for forcing, pushing tags, naming another remote or passing git
-flags. **Run both in your own terminal.** They refuse in an agent shell and in any shell
-without a terminal, including OpenCode's `!` shell, and say so. Errors you may meet:
+flags. **They are for you, not an agent.** They refuse in an agent shell and say so. OpenCode's
+`!` shell is yours once the plugin has tagged it (no terminal is needed there). Errors you may meet:
 `E-HUMAN-TERMINAL`, `E-HANDOFF` (no valid file, or `head_sha` is not part of the branch),
 `E-SECRET-SCAN` (the title, branch or body looks like a credential), `E-B-UNSIGNED`.
 See [Troubleshooting](../troubleshooting.md#guards).
@@ -114,9 +115,9 @@ use. Everything else on this page stays as it is.
 
 > [!WARNING]
 > **A plain `git push` typed into OpenCode's `!` prompt is an unvalidated fallback.** It
-> runs with your credentials but none of the checks above. It must be **typed**; never
-> paste a line that starts with `!`, because a pasted one is sent to the model instead of
-> your shell.
+> runs with your credentials but none of the checks above; use `!carter push` instead. Type
+> such lines yourself; never paste a line that starts with `!`, because a pasted one is sent
+> to the model instead of your shell.
 
 ## Attribution
 
@@ -141,17 +142,17 @@ asks git to sign with *your* key. Setting this up is described in
   ```bash
   git add src/auth.py
   git commit -m "feat(auth): add token refresh" --trailer "Assisted-by: Carter"
-  git log -1 --format='%an|%cn|%G?'    # you|you|N
   ```
 
-  In the opt-in role `author` (T2 only) the LLM is also the author, the trailer is **your**
-  `Co-authored-by: <user.name> <user.email>`, and the last line reads `LLM|LLM|G`; see
+  At T2 the agent then runs `carter identity verify --commit HEAD --quiet` (exit 0 means the
+  commit is signed by the LLM key) and tells you one line: `Committed 4f9c2ab: feat(auth): add
+  token refresh`. In the opt-in role `author` (T2 only) the LLM is also the author, the trailer
+  is **your** `Co-authored-by: <user.name> <user.email>`; see
   [Identity and signing](identity-and-signing.md#role-author-the-llm-is-the-author). It is refused
   (never downgraded) below T2 or when your own git identity is unusable (`E-HUMAN-IDENTITY`).
 
-  The agent checks that last line. Below T2 the author and committer are you and the
-  signature status is `N` (unsigned). At T2 the committer is the LLM identity and the status
-  is `G` or `E` (a signature exists), never `N`. If the emit says `commits: refused`, the agent
+  Below T2 the author and committer are you and the commit is unsigned. At T2 the committer
+  is the LLM identity and the commit is signed. If the emit says `commits: refused`, the agent
   stops and tells you why instead of committing. If the LLM key is locked, the commit fails,
   your changes stay staged, and the agent asks you to run `carter identity unlock`.
 - **GitHub** pull requests are created by `carter pr` with your own `gh` login. There is

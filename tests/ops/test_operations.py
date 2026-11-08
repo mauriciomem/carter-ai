@@ -117,6 +117,15 @@ class TestAuditSubcommand:
         assert entry["identifiers"]["commit_sha"] == "abc1234"
         assert entry["params"]["branch"] == "feature/x"
 
+    def test_audit_prints_nothing_on_success(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
+    ) -> None:
+        from carter.ops import carter_ops
+
+        monkeypatch.setattr(carter_ops, "AUDIT_LOG", tmp_path / "audit.log")
+        assert carter_ops.main(["audit", "--operation", "git-flow", "--result", "success"]) == 0
+        assert capsys.readouterr().out == ""  # D68 i: no JSON echo for the agent to repeat
+
     def test_audit_missing_operation(self, capsys: pytest.CaptureFixture) -> None:
         from carter.ops import carter_ops
 
@@ -440,7 +449,7 @@ class TestPolicyOverrideRefusesGithubWrites:
     ) -> None:
         assert self.run(action, tmp_path, monkeypatch, tier=tier) == 1
         err = capsys.readouterr().err
-        assert "carter push" in err and "carter pr" in err and "own terminal" in err
+        assert "carter push" in err and "carter pr" in err and "!carter push" in err
 
     @pytest.mark.parametrize("category", ["read", "local-write", "remote-write", "dangerous"])
     def test_the_category_does_not_matter(self, category: str, tmp_path, monkeypatch) -> None:
