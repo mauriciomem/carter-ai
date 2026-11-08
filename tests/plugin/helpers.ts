@@ -108,6 +108,7 @@ export function rig(over: Partial<Deps> = {}, isoEdit: (iso: Iso) => void = () =
     })(),
     euid: process.geteuid?.(),
     sessionDir: async () => undefined,
+    sessionParent: async () => null,
     log: (line) => logs.push(line),
     ...over,
   }

@@ -407,18 +407,17 @@ class TestPolicyOverrideRefusesGithubWrites:
         "git push --force origin main",
         "git send-pack origin main",
         "git -C repo push",
-        "gh pr create --title x",
         "gh pr merge 3",
-        "gh pr comment 3",
+        "gh pr close 3",
         "gh pr review 3",
-        "gh pr edit 3",
+        "gh pr ready 3",
         "gh issue create",
         "gh issue comment 4",
         "gh issue edit 4",
         "gh release create v1",
         "gh api repos/o/r/issues",
         "gh api -X POST /x",
-        "GH PR CREATE",
+        "GH PR MERGE",
         "  git   push  ",
         "run: git push && echo done",
     ]
@@ -428,6 +427,9 @@ class TestPolicyOverrideRefusesGithubWrites:
         "post release notes in Slack",
         "add a Jira comment",
         "gh pr view 3",
+        "gh pr create --title x",  # D72: opening, editing and commenting are allowed
+        "gh pr edit 3",
+        "gh pr comment 3",
         "gh issue list",
         "git pull origin main",
         "git status",
@@ -449,7 +451,7 @@ class TestPolicyOverrideRefusesGithubWrites:
     ) -> None:
         assert self.run(action, tmp_path, monkeypatch, tier=tier) == 1
         err = capsys.readouterr().err
-        assert "carter push" in err and "carter pr" in err and "!carter push" in err
+        assert "carter push" in err and "!carter push" in err and "carter pr" not in err
 
     @pytest.mark.parametrize("category", ["read", "local-write", "remote-write", "dangerous"])
     def test_the_category_does_not_matter(self, category: str, tmp_path, monkeypatch) -> None:
@@ -470,11 +472,13 @@ class TestPolicyOverrideRefusesGithubWrites:
         assert entry["category"] == "remote-write"
 
     def test_a_refusal_prints_nothing_on_stdout(self, tmp_path, monkeypatch, capsys) -> None:
-        self.run("gh pr create", tmp_path, monkeypatch)
+        self.run("gh pr merge 3", tmp_path, monkeypatch)
         assert capsys.readouterr().out == ""
 
-    def test_the_refusal_text_is_the_handoff_constant(self, tmp_path, monkeypatch, capsys) -> None:
-        from carter.aplus.handoff import OWN_TERMINAL
+    def test_the_refusal_text_is_the_own_terminal_constant(
+        self, tmp_path, monkeypatch, capsys
+    ) -> None:
+        from carter.aplus.push import OWN_TERMINAL
 
         self.run("git push", tmp_path, monkeypatch)
         assert OWN_TERMINAL in capsys.readouterr().err

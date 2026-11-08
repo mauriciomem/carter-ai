@@ -96,10 +96,9 @@ def _missing_for_t2(cfg: IdentityConfig) -> tuple[str, ...]:
 def configured_tier(cfg: IdentityConfig) -> str:
     """T0 nothing usable, T1 a consistent login/id/noreply identity, T2 plus a signing key.
 
-    A broken signing setup is not T1: ``resolve`` refuses it (E-CONFIG). A schema-1 file
-    (``needs_migration``) carries no identity, so it is T0.
+    A broken signing setup is not T1: ``resolve`` refuses it (E-CONFIG).
     """
-    if cfg.needs_migration or not _has_identity(cfg):
+    if not _has_identity(cfg):
         return "t0"
     if _has_signing_material(cfg):
         return "t2" if _has_signing_key(cfg) else "t0"
@@ -164,7 +163,6 @@ class Resolution:
     commits: Literal["allowed", "refused"]
     refusal_reason: str  # an error code, "" when allowed
     require_tier: str  # pinned minimum; enforced by the plugin and `carter commit` (2a/2b)
-    migration_needed: bool
     warnings: tuple[str, ...] = ()
     refusal_detail: str = ""  # key names only, never values
     mode: str = (
@@ -208,7 +206,7 @@ def resolve(
     if chosen.error:  # an invalid mode never falls back to anything that may commit
         reason, detail = E_CONFIG, chosen.error
         warnings.append(detail)
-    elif not cfg.needs_migration and _has_signing_material(cfg) and missing:
+    elif _has_signing_material(cfg) and missing:
         reason = E_CONFIG
         detail = "signing is configured but incomplete; missing or inconsistent: " + ", ".join(
             missing
@@ -229,7 +227,6 @@ def resolve(
         commits="refused" if reason else "allowed",
         refusal_reason=reason,
         require_tier=ws.require_tier,
-        migration_needed=cfg.needs_migration,
         warnings=tuple(warnings),
         refusal_detail=detail,
         mode=chosen.mode,

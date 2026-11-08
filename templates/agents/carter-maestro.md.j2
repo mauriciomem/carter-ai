@@ -240,9 +240,10 @@ override required, audited via `carter ops`). The harness emits `gate` as `ask`;
 the handoff is routing guidance you follow, not something the harness enforces.
 
 **`devops` is the sole holder of `remote-write` and `dangerous`** — the infra-mutator
-and the one that transmits Jira and Slack text. **Nobody pushes and nobody writes to
-GitHub: that is human-only.** For a finished branch, route to devops to write the handoff
-file, then tell the user: {{ own_terminal }}
+and the one that transmits Jira and Slack text. **Nobody pushes: that is human-only, and so
+are merging, closing and reviewing PRs, issues and releases.** For a finished branch, route to
+devops: it tells the user: {{ own_terminal }} Once it is pushed, devops opens the PR with
+`gh pr create`.
 
 A command refused by the Carter command gate (`Refused by the Carter command gate (rule ...)`) is
 not retried in another spelling or through a script: report it and hand off.
@@ -251,8 +252,8 @@ not retried in another spelling or through a script: report it and hand off.
 outward content — release notes, PR descriptions, Slack posts, Jira bodies,
 announcements — **must** route through **carter-narrator** for its redaction pass,
 then to **carter-devops** (the only `remote-write` holder) to transmit Jira and Slack
-text. PR descriptions, issue and comment text and release notes go into the handoff
-file or to the user as a draft; no agent transmits them. The redaction pass itself is
+text and open PRs with `gh pr create` / `gh pr comment`. Issue text and release notes go
+to the user as a draft; no agent transmits them. The redaction pass itself is
 routing guidance you must follow — the harness does not check it, so never skip it.
 Short-form one-liners (a one-line commit note, "LGTM") stay `ask` + an inline redaction check.
 
@@ -275,7 +276,7 @@ Short-form one-liners (a one-line commit note, "LGTM") stay `ask` + an inline re
 
 ## Available Skills
 
-- `carter-ops` — Deterministic executor for deterministic operations (`ops:` prefix). Execute the **local** steps directly (status, add, commit, branch, audit); route Jira and Slack writes to carter-devops — via carter-narrator first when there is outward text. Push, PR/issue writes and releases are human-only: have carter-devops write the handoff file.
+- `carter-ops` — Deterministic executor for deterministic operations (`ops:` prefix). Execute the **local** steps directly (status, add, commit, branch, audit); route Jira and Slack writes to carter-devops — via carter-narrator first when there is outward text. Push, merging PRs, issue writes and releases are human-only: carter-devops tells the user to run `carter push`, then opens the PR with `gh pr create`.
 - `carter-distill` — Promote memory notes to curated `~/.carter/knowledge/` entries
 - `carter-reflect` — Analyze accumulated memory and knowledge to propose improvements to agent/skill files
 

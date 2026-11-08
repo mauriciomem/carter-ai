@@ -17,15 +17,12 @@ import sys
 import time
 from collections.abc import Iterator
 from pathlib import Path
-from typing import Any
 
 import pytest
 
-from carter.aplus import handoff
 from carter.broker import counter
 from e2e.btools import (
     DEVOPS,
-    FORCE_PR,
     FORCE_PUSH,
     HUMAN_PAUSE,
     LLM_EMAIL,
@@ -279,9 +276,7 @@ class TestHeadless:
         base = devops_rules([])
         profiled = devops_rules([f"OPENCODE_CONFIG={lab.carter_dir / 'opencode-headless.json'}"])
         rig.stop_service()
-        deny = [
-            {"action": a, "resource": "*", "effect": "deny"} for a in ("carter_push", "carter_pr")
-        ]
+        deny = [{"action": a, "resource": "*", "effect": "deny"} for a in ("carter_push",)]
         assert [r for r in base if r in deny] == [], "devops itself has no deny rule for B"
         assert profiled[-len(deny) - 1 :][:-1] == deny or all(d in profiled for d in deny)
         assert len(profiled) > len(deny), "devops lost its own rules"
@@ -432,64 +427,6 @@ class TestRefusals:
         )
 
 
-class TestPr:
-    def handoff(self, lab: BLab, **over: Any) -> Path:
-        fields = {
-            "title": "Add a",
-            "base": "main",
-            "draft": False,
-            "head_sha": lab.head(),
-            "repo": "o/r",
-            "body": "Why\n",
-        }
-        fields.update(over)
-        return handoff.write_handoff(lab.ws, "feat/x", handoff.Handoff(**fields))
-
-    def test_the_handoff_in_the_fake_gh_argv_out_and_the_handoff_deleted_on_success(
-        self, lab: BLab
-    ) -> None:
-        lab.commit("a.txt")
-        lab.publish()
-        path = self.handoff(lab, title="--web")
-        sid = lab.session()
-        before = lab.say(sid, FORCE_PR)
-        ask = lab.wait_ask()
-        assert ask["action"] == "carter_pr" and not ask.get("save")
-        assert any("title: --web" in r for r in ask["resources"])
-        lab.reply(ask, "once")
-        assert "Created pull request https://github.com/o/r/pull/7" in lab.result(before)
-        (call,) = [c for c in lab.gh.calls() if c["argv"][:2] == ["pr", "create"]]
-        assert (
-            "--title=--web" in call["argv"]
-            and "--repo=o/r" in call["argv"]
-            and "--head=feat/x" in call["argv"]
-        )
-        assert call["bodies"][0]["mode"] == "0o600" and call["bodies"][0]["text"] == "Why\n"
-        assert not path.exists()
-        assert not {"OPENCODE_SERVER_PASSWORD", "SSH_AUTH_SOCK", "GH_TOKEN"} & set(
-            call["env_names"]
-        )
-
-    def test_a_secret_in_the_body_is_refused_before_any_prompt_and_the_handoff_stays(
-        self, lab: BLab
-    ) -> None:
-        lab.commit("a.txt")
-        lab.publish()
-        path = self.handoff(lab, body="token ghp_" + "A1b2C3d4" * 5 + "\n")
-        sid = lab.session()
-        before = lab.say(sid, FORCE_PR)
-        text = lab.result(before)
-        assert "E-SECRET-SCAN" in text and not lab.pending() and path.exists()
-        assert [c for c in lab.gh.calls() if c["argv"][:2] == ["pr", "create"]] == []
-
-    def test_a_branch_that_is_not_pushed_points_at_the_push(self, lab: BLab) -> None:
-        lab.commit("a.txt")
-        self.handoff(lab)
-        sid = lab.session()
-        text = lab.result(lab.say(sid, FORCE_PR))
-        assert "carter_push" in text and not lab.pending()
-
-
 class TestSelfTestAndInstall:
     def test_the_tools_and_the_hook_exist_only_for_devops_in_the_model_requests(
         self, lab: BLab
@@ -503,7 +440,7 @@ class TestSelfTestAndInstall:
                 json.loads(x) for x in (lab.rig.logs / "requests.jsonl").read_text().splitlines()
             ]
             tools = next(r["tools"] for r in reversed(requests) if r["tools"])
-            assert ("carter_push" in tools and "carter_pr" in tools) is expected, (agent, tools)
+            assert ("carter_push" in tools) is expected, (agent, tools)
             del before
 
     def test_install_wrote_schema_2_with_the_broker_keys_and_the_profile(self, lab: BLab) -> None:

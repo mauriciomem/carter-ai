@@ -1,7 +1,7 @@
 """D65 for the B tools: ``g2`` revision 3 (plan 007 step 17, freeze B9).
 
 A user at revision 2 has the plugin and its shell isolation; the B tools (``carter_push``,
-``carter_pr`` for devops) are new content that needs its own yes. Until then ``isolation.json``
+for devops) are new content that needs its own yes. Until then ``isolation.json``
 says ``b_enabled: false`` and the plugin registers nothing. Bare ``--yes``, ``carter install``
 and every non-TTY run leave revision 2 alone.
 """
@@ -81,7 +81,7 @@ class TestRevisionTwoUserKeepsB_Off:
         assert (isolation_path(None).read_bytes(), state_g2()) == before
         assert iso_plugin()["b_enabled"] is False and not headless_profile_path(None).exists()
         if args == ("install", "--yes"):
-            assert PENDING in res.output and "B tools" in res.output
+            assert PENDING in res.output and "B tool" in res.output
 
     def test_a_yes_in_a_terminal_without_the_group_named_still_waits(
         self, stack, human_tty
@@ -122,7 +122,7 @@ class TestConfirming:
         assert (plugin_dir(None) / "broker.ts").exists() and headless_profile_path(None).exists()
         assert "restart the OpenCode server" in res.output
         assert "convenience, not a security boundary" in res.output
-        assert "B tools: carter_push and carter_pr are enabled for devops" in res.output
+        assert "B tool: carter_push is enabled for devops" in res.output
 
     def test_a_tty_yes_shows_what_b_is_before_the_question(self, stack, human_tty) -> None:
         rev2(stack)
@@ -131,7 +131,7 @@ class TestConfirming:
         res = guard("install", input="y\n")
         out = res.output
         assert res.exit_code == 0, out
-        assert out.index("`carter_push` and `carter_pr`") < out.index("Install?")
+        assert out.index("`carter_push`") < out.index("Install?")
         assert "approve" in out and "your SSH agent is used only for that approved push" in out
         assert "carter guard remove --only broker" in out
         assert state_g2()["rev"] == 3 and iso_plugin()["b_enabled"] is True

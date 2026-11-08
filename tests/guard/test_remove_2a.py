@@ -6,6 +6,7 @@ The escape hatch of the live install: a precise, human-run rollback of the plugi
 
 from __future__ import annotations
 
+import json
 import os
 import subprocess
 from pathlib import Path
@@ -69,7 +70,7 @@ class TestRoundTrip:
         reload(stack, after=debug_config())
         out = guard("remove", "--yes").output
         marks = [
-            "- deny-git-push",
+            "- build:carter_push",
             f"removed {plugin_dir(None) / 'index.ts'}",
             "removed",
             "Removed guard state",
@@ -186,14 +187,15 @@ class TestEdited:
         for path in edited:
             assert path.exists() and f"kept {path}" in out, path
 
-    def test_a_user_edit_of_a_recorded_statement_is_kept(self, stack) -> None:
+    def test_a_user_edit_of_a_recorded_deny_is_kept(self, stack) -> None:
         install(stack)
         config = config_target(None)
-        text = config.read_text().replace("shell:git push *", "shell:git push --force *", 1)
-        config.write_text(text)
+        data = json.loads(config.read_text())
+        data["agents"]["build"]["permissions"][0]["effect"] = "allow"
+        config.write_text(json.dumps(data))
         reload(stack, after=debug_config())
         out = guard("remove", "--yes").output
-        assert "kept deny-git-push" in out and "--force" in config.read_text()
+        assert "kept build:carter_push" in out and '"allow"' in config.read_text()
 
 
 class TestUninstallWiring:

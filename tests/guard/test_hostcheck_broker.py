@@ -70,7 +70,7 @@ def test_g2_at_revision_2_says_b_is_off_and_pending(stack) -> None:
     isolation_path(None).write_text(json.dumps(doc))
     items = check()
     assert find(items, "off: confirm g2 revision 3", "info")
-    assert find(items, "g2 rev 3 pending: the B tools", "info")
+    assert find(items, "g2 rev 3 pending: the B tool", "info")
     assert not find(items, "headless profile")
 
 

@@ -153,10 +153,11 @@ class TestKilledInstall:
         )
         assert proc.returncode == -signal.SIGKILL, proc.stdout + proc.stderr
 
-        # Policies are in the config AND recorded as Carter's: no orphans.
-        assert json.loads(config_target(None).read_text())["policies"]
+        # The per-agent denies are in the config AND recorded as Carter's: no orphans (D71).
+        written = json.loads(config_target(None).read_text())
+        assert "policies" not in written and written["agents"]
         state = load(guard_state_path(None))
-        assert len(state.owned_policies()) == len(stack.live)
+        assert len(state.agent_permissions) == len(written["agents"])
         assert state.gitconfig is None and not carter_gitconfig_path(None).exists()
 
         human_commit_and_push(repo, "e")

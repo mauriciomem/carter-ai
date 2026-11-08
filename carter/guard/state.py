@@ -31,7 +31,7 @@ STATE_KEYS = (
 CONSENT_FIELDS = ("decision", "date", "rev")
 FILE_FIELDS = ("path", "sha256")
 POLICY_FIELDS = ("id", "action", "resource", "effect", "preexisting")
-PERMISSION_FIELDS = ("agent", "key", "value", "preexisting", "form")
+PERMISSION_FIELDS = ("agent", "key", "value", "preexisting")
 GITCONFIG_FIELDS = ("file", "key", "value")
 GIT_CONFIG_FIELDS = ("file", "key", "value", "scope")
 REPO_HOOK_FIELDS = ("path", "sha256")
@@ -133,10 +133,8 @@ class GuardState:
     def owned_policies(self) -> list[dict[str, Any]]:
         return [p for p in self.opencode_policies if not p["preexisting"]]
 
-    def record_permission(
-        self, agent: str, key: str, value: str, *, preexisting: bool, form: str = "v2"
-    ) -> None:
-        entry = dict(zip(PERMISSION_FIELDS, (agent, key, value, preexisting, form), strict=True))
+    def record_permission(self, agent: str, key: str, value: str, *, preexisting: bool) -> None:
+        entry = dict(zip(PERMISSION_FIELDS, (agent, key, value, preexisting), strict=True))
         _upsert(self.agent_permissions, entry, "agent", "key")
 
     def owned_permissions(self) -> list[dict[str, Any]]:

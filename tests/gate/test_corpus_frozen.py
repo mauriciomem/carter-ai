@@ -17,8 +17,11 @@ from gate import corpus
 # the security review (step 22) added the audit store as a control path: +1 deny (a forged line),
 # +1 allow (reading the audit).
 # Slice CI-E (plan 008): +1 deny (`carter ci install` is human-only), +1 allow (`carter ci review`).
-FROZEN_SHA256 = "559ea380275fec1f3ae3d847dfec522ca50a451de696a4e082d5a95d4b11b9f4"
-FROZEN_COUNTS = {"deny": 239, "allow": 137}
+# D72 (PRs are allowed): `carter pr` is gone (-1 deny); `gh pr create` stops being a deny
+# example, so `gh pr merge` takes its place; +2 deny (`gh pr close`, `gh pr review`) and +3 allow
+# (`gh pr create`, `gh pr edit`, `gh pr comment`).
+FROZEN_SHA256 = "c0f7f305e1d4a3bc4dce8e0d92dfbd28806496eda7fa81c0dd0dc262456998f9"
+FROZEN_COUNTS = {"deny": 240, "allow": 140}
 
 
 def test_the_corpus_hash_is_the_reviewed_one() -> None:

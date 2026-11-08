@@ -3,7 +3,7 @@
 ``carter check`` runs ``opencode debug agents`` in the workspace. On OpenCode 2.1.4
 that prints a JSON list of agents (``id``, ``permissions`` as ``{action, resource,
 effect}`` rules, ...). OpenCode silently drops an agent file it rejects (malformed
-YAML, a V1 ``tools:`` list, ...), so a missing id is the signal.
+YAML, an unknown key, ...), so a missing id is the signal.
 
 Behaviour notes:
 
@@ -139,7 +139,7 @@ def _diff(
         if loaded is None:
             missing.append(
                 f"{name}: not loaded by OpenCode — its agent file is likely malformed "
-                "or uses a key OpenCode rejects (e.g. a V1 `tools:` list). "
+                "or uses a key OpenCode rejects. "
                 "Run `carter update` to re-render it."
             )
             continue
@@ -321,7 +321,7 @@ def _resolve(data: Any) -> dict[str, Any]:
         info = source.get("info")
         if not isinstance(info, dict):
             raise _bad("a config document has no info object")
-        for block in ("policies", "providers", "provider"):
+        for block in ("policies", "providers"):
             kind = list if block == "policies" else dict
             if block in info and not isinstance(info[block], kind):
                 raise _bad(f"`{block}` has an unexpected type")
@@ -330,29 +330,15 @@ def _resolve(data: Any) -> dict[str, Any]:
 
 
 def provider_ids(debug_config: Mapping[str, Any]) -> set[str]:
-    """Provider ids in a resolved config (V2 ``providers``; V1's ``provider`` is accepted)."""
-    ids: set[str] = set()
-    for key in ("providers", "provider"):
-        block = debug_config.get(key)
-        if isinstance(block, dict):
-            ids |= {str(k) for k in block}
-    return ids
+    """Provider ids in a resolved config (``providers``)."""
+    block = debug_config.get("providers")
+    return {str(k) for k in block} if isinstance(block, dict) else set()
 
 
 def policy_statements(debug_config: Mapping[str, Any]) -> list[dict[str, Any]]:
-    """The ``{action, resource, effect}`` statements OpenCode resolved, in order.
-
-    Reads ``policies`` and the older ``experimental.policies`` spelling."""
-    found: list[dict[str, Any]] = []
-    experimental = debug_config.get("experimental")
-    sources = [
-        debug_config.get("policies"),
-        experimental.get("policies") if isinstance(experimental, dict) else None,
-    ]
-    for block in sources:
-        if isinstance(block, list):
-            found += [s for s in block if isinstance(s, dict)]
-    return found
+    """The ``{action, resource, effect}`` statements OpenCode resolved, in order."""
+    block = debug_config.get("policies")
+    return [s for s in block if isinstance(s, dict)] if isinstance(block, list) else []
 
 
 def read_agents(
@@ -394,7 +380,7 @@ def read_agent_ids(**kwargs: Any) -> list[str]:
     return [str(a["id"]) for a in read_agents(**kwargs) if isinstance(a.get("id"), str)]
 
 
-DENIED_ACTIONS = ("carter_push", "carter_pr")
+DENIED_ACTIONS = ("carter_push",)
 EXEMPT_AGENTS = ("carter-devops", "devops")
 
 

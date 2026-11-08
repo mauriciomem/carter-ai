@@ -71,8 +71,8 @@ three or four lines; your yes is the consent for all of these groups:
 
 | Group | What it does |
 |-------|--------------|
-| `g2` | Agents can't push or write to GitHub from their shell; `gh` is read-only; per-agent denies for the push and PR tools. At revision 2 it also installs the Carter **plugin**: every agent shell is isolated and a command **gate** screens each command (see below). |
-| `hooks` | Pushes by agent shells are blocked, and at revision 2 agent commits are checked (committer, signing settings, `Co-authored-by`/`Assisted-by` trailer) in every repo on this machine: git `pre-push`, `prepare-commit-msg`, `commit-msg` and `post-commit` hooks calling `~/.carter/hooks/carter-guard` (re-run `carter guard install` after upgrading Carter so the script is re-rendered), pulled in by one `include.path` line. Your own commits and pushes are unaffected and run no extra command. Needs git 2.54 or newer. A revision-1 install keeps only `pre-push` until you confirm revision 2 (`carter guard install` in a terminal). |
+| `g2` | Carter agents can't push from their shell; `gh` can read and open, edit or comment on pull requests, nothing else; per-agent denies for the push tool. At revision 2 it also installs the Carter **plugin**: every Carter agent shell is isolated and a command **gate** screens each command (see below). |
+| `hooks` | Pushes by Carter agent shells are blocked (they act only on the plugin's `CARTER_AGENT_SHELL=1` tag), and at revision 2 agent commits are checked (committer, signing settings, `Co-authored-by`/`Assisted-by` trailer) in every repo on this machine: git `pre-push`, `prepare-commit-msg`, `commit-msg` and `post-commit` hooks calling `~/.carter/hooks/carter-guard` (re-run `carter guard install` after upgrading Carter so the script is re-rendered), pulled in by one `include.path` line. Your own commits and pushes are unaffected and run no extra command. Needs git 2.54 or newer. A revision-1 install keeps only `pre-push` until you confirm revision 2 (`carter guard install` in a terminal). |
 | `sudo-docker` | Agents can't run `sudo` or `docker`; Packer docker builds must be typed in your terminal. |
 | `read-edit-denies` | Agents can't read SSH keys, `gh`/git credentials or the read-only token, and can't edit `~/.ssh`. |
 | `config-edit` | Agents can't edit OpenCode config, git hooks and config, or Carter's own config and control files. |
@@ -84,21 +84,42 @@ Nothing is written without your yes (Enter is yes). With no terminal (CI, a scri
 `carter install --yes` accepts every group on a fresh machine. Groups you declined in an earlier
 version stay declined and are listed by `carter guard status` and `carter check --host` as residuals.
 
-The policies go into your OpenCode config in one atomic write. Carter keeps a backup,
-asks OpenCode for the resolved config before and after, and restores the backup if a
-provider or a statement was lost. Preview with `carter guard install --dry-run` (it lists
-every file it would write and writes nothing). If the config has comments, rewriting drops
-them: the original is kept as `<name>.carter-backup`, or use `--print-policies` and paste the
-block yourself.
+### Scope: only Carter agents and Carter workspaces
+
+The guards bind **Carter's agents** (`carter-*`, and the subagents they start) and shells
+opened in a **Carter workspace** (a directory with `.carter/carter.yaml` and
+`.opencode/agents/carter-*.md`). Another agent, such as `build` or `plan`, in another directory
+is left alone: no gate, no isolation, and its `git push` is not blocked by Carter's hooks. The
+plugin stays installed globally; only its scope test is narrower.
+
+The deny set (push, `gh`, `sudo`/`docker`, reads of credentials, edits of OpenCode, git and
+Carter config) is written into each Carter agent's own `permissions:` in
+`~/.config/opencode/agents/carter-*.md`, and into the workspace agents on `carter update`. Carter
+writes **no** global OpenCode `policies`. The one global write left is the per-agent
+`carter_push` deny for OpenCode's own agents, which only hides Carter's tool from them. If an
+earlier Carter wrote global policies, `carter guard install` takes them out (only the ones it
+recorded, and never one that was already yours) and prints one line: `✓ G2 now applies only to
+Carter agents and Carter workspaces; global OpenCode policies removed.` Nothing is asked again.
+
+Outside Carter there is no G2: a non-Carter agent can edit the plugin or `isolation.json`
+(`carter check --host` goes RED when it does) and, if the plugin is not loaded, push without a
+hook stopping it: OpenCode sets `AGENT=1`, not the agent's name, so a hook cannot tell a Carter
+agent without the plugin's tag. Carter's agents keep their literal `git push *` deny.
+
+Carter keeps a backup of the OpenCode config before it writes the per-agent denies, asks
+OpenCode for the resolved config before and after, and restores the backup if a provider was
+lost. Preview with `carter guard install --dry-run` (it lists every file it would write and
+writes nothing). If the config has comments, rewriting drops them: the original is kept as
+`<name>.carter-backup`.
 
 ### The plugin (`g2`, revision 2)
 
-The policies alone are literal command matches: a speed bump, not a boundary. The plugin
+The deny rules alone are literal command matches: a speed bump, not a boundary. The plugin
 makes them one. It is installed as `~/.config/opencode/plugins/carter/` (OpenCode finds it
 there; nothing is registered in your config), with `~/.carter/isolation.json` and
 `~/.carter/run/`.
 
-**It changes every agent shell, so an existing install is never upgraded silently.** If you
+**It changes every Carter agent shell, so an existing install is never upgraded silently.** If you
 had the guards before the plugin existed (`g2` at revision 1), `carter install --yes`,
 `carter guard install --yes` and any run without a terminal print "plugin and isolation need
 your confirmation" and change nothing. Only a yes to the question in your terminal, or
@@ -113,12 +134,12 @@ did not start and that has no agent variables), so that it loads the plugin and 
 environment is clean. The first agent command then runs a short self-test; until it passes,
 `carter check --host` shows the plugin as `unproven`.
 
-What changes in an agent's shell (no SSH agent, a read-only token, no push, unsigned commits):
+What changes in a Carter agent's shell (no SSH agent, a read-only token, no push, unsigned commits):
 
 | | Before the plugin | With the plugin |
 |---|---|---|
 | SSH agent | Inherited: agents can use your SSH keys | None. `git fetch`/`pull`/`clone` go over HTTPS with the read-only token, which works for public repositories and for repositories that token covers only |
-| GitHub CLI | Your `gh` login | The read-only token only: reads work, `gh api` and writes do not |
+| GitHub CLI | Your `gh` login | The token only: reads, and `gh pr create|edit|comment` if the token has `Pull requests: write`; `gh api`, merges and pushes do not work |
 | Pushing | Denied by literal matches (`git push`) | Also denied in any spelling (`git -C . push`, `sh -c`, aliases, interpreters) and by `no_push` |
 | Commits | Your git config (signed if it signs) | Your name and email, **unsigned**, with the `Assisted-by` trailer |
 | Commands | Literal deny lists | A gate rejects the rejected forms with a message that names a rule |
@@ -144,7 +165,7 @@ really isolated, ask an agent to run `carter check --probe`.
 ### Undo
 
 - `carter guard remove --only plugin` removes only the plugin, `isolation.json` and `run/`.
-  The policies, hooks and token stay, and a bare `--yes` never brings the plugin back.
+  The deny rules, hooks and token stay, and a bare `--yes` never brings the plugin back.
 - `carter guard remove` (or `carter uninstall`) removes everything Carter wrote and you have
   not changed; the read-only token file and `~/.carter/state/audit/` stay.
   `carter uninstall --keep-guards` leaves the guards in place.
@@ -176,17 +197,17 @@ file it replaces to `~/.carter/backups/<timestamp>/`, and never overwrites your
 knowledge files or an `AGENTS.md` you edited. Skills that Carter no longer ships are
 removed unless you changed them.
 
-`~/.carter/config.toml` is created on a first install. An older (schema 1) file is
-migrated once to schema 2, explicitly and only by `carter install`: the original is copied
-to `~/.carter/config.toml.schema1.bak` first and never overwritten, your footer is kept,
-and the old `[git] signing_key` and a `carter-bot@` email are dropped. If the file can't
-be migrated (for example, invalid TOML), install says so and leaves it untouched.
+`~/.carter/config.toml` is created on a first install and never rewritten by `install`. A key
+Carter does not know any more (an old `[attribution] name`, `[git] signing_key`, `identity.bot_name`,
+a `push_policy` in a plan) is not migrated: `carter install`, `carter update`, `carter check` and
+`carter check --host` name it once with its file, for example
+``⚠ unknown key `attribution.name` in /home/you/.carter/config.toml → delete it``; delete it yourself.
 
 Carter never uses your signing key: it doesn't read `user.signingkey` or your SSH keys.
 
-If your global `~/.config/opencode/AGENTS.md` has your own edits, `carter install` can't
-update its commit rule. It prints the new rule and saves it to
-`~/.carter/upgrade-notes/<version>.md`; merge it by hand.
+If your global `~/.config/opencode/AGENTS.md` has your own edits, `carter install` leaves it
+alone and says it is user-modified; merge the Communication and Git & Language sections by hand.
+A file Carter wrote and you did not edit is updated in place.
 
 If you use workspaces, run `carter update` in each one afterwards to pick up the new
 templates.

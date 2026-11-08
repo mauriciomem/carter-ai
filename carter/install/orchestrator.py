@@ -9,7 +9,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from pathlib import Path
 
-from carter import __version__, ui
+from carter import __version__, ui, unknownkeys
 from carter.home import tilde
 from carter.install.components import (
     install_agents,
@@ -107,7 +107,7 @@ def run(
 
     if verbosity >= 1:
         ui.ok("installed", f"{total_agents} agents · {skill_stats['skills']} skills")
-    _log(f"Ops config: {'created or migrated' if ops_created else 'kept'}", level=2)
+    _log(f"Ops config: {'created' if ops_created else 'kept'}", level=2)
     _log(f"MCP servers: {mcp_count}", level=2)
     _log(f"Knowledge files: {knowledge_count} new · memory dirs: {memory_count} new", level=2)
     _log(f"Manifest: {tilde(manifest_path)}", level=2)
@@ -121,8 +121,11 @@ def run(
             level=2,
         )
 
-    if not guards:
-        return 0
-    from carter.guard.wiring import install_guards
+    code = 0
+    if guards:
+        from carter.guard.wiring import install_guards
 
-    return install_guards(base_dir, assume_yes=assume_yes)
+        code = install_guards(base_dir, assume_yes=assume_yes)
+    # D70: leftover keys Carter no longer reads, once per key, after everything else
+    unknownkeys.report(unknownkeys.once_per_key(unknownkeys.host(base_dir)))
+    return code

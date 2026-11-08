@@ -71,7 +71,7 @@ class Disclosure:
 
 @dataclass(frozen=True)
 class Attribution:
-    """``[attribution]``: non-identity text, kept from schema 1."""
+    """``[attribution]``: non-identity text."""
 
     footer: str = "_This comment was generated with Carter._"
 
@@ -119,7 +119,7 @@ SECTIONS: tuple[tuple[str, tuple[str, ...], type], ...] = (
 TABLE_WORKSPACES = "workspaces"
 WORKSPACE_PLACEHOLDER = '"<abs path>"'
 
-State = Literal["absent", "current", "needs_migration"]
+State = Literal["absent", "current"]
 
 
 @dataclass(frozen=True)
@@ -136,11 +136,6 @@ class IdentityConfig:
     schema: int = SCHEMA_VERSION
     state: State = "absent"
     unknown_keys: tuple[str, ...] = ()  # dotted paths the writer does not model
-
-    @property
-    def needs_migration(self) -> bool:
-        """True for a schema-1 file: nothing in it is interpreted as identity."""
-        return self.state == "needs_migration"
 
 
 def schema_names() -> dict[str, tuple[str, ...]]:

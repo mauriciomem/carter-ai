@@ -204,6 +204,7 @@ def lab(rig_factory, opencode_bin, throwaway_key: Callable[..., KeyPair]) -> Ite
     fake = FakeGitHub().start()
     rig = rig_factory(
         opencode=opencode_bin,
+        carter_agent=True,
         server_env_extra={"SSH_AUTH_SOCK": "/tmp/fake-agent.sock", "GITHUB_TOKEN": "not-a-token"},
     )
     key = throwaway_key("ed25519", True)

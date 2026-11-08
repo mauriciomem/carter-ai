@@ -86,8 +86,6 @@ these two values, asks, and pins them in `~/.carter/config.toml` (see
 |-----|---------|-------------|
 | `role` | not set | `co-author` (the default role) or `author`. `author` makes the LLM the author and credits you by a trailer. It needs a signing key (T2); below that tier or under a `max_tier` cap commits are refused, never downgraded, and `carter update` refuses to pin it next to a cap |
 | `require_tier` | not set | The lowest tier this workspace accepts: `t0`, `t1` or `t2` |
-| `git_account` | not set | Deprecated and ignored. `carter check` and `carter update` warn if it is present |
-| `bot_name` | not set | Deprecated and ignored, with the same warning. The co-author comes from `~/.carter/config.toml` |
 
 `allow_project_opencode_edit` and other settings that loosen a control are not accepted
 here. Edit-denied settings live only in `~/.carter/config.toml`.
@@ -180,11 +178,14 @@ English.
 
 ## User config: `~/.carter/config.toml`
 
-`carter install` creates it (schema 2) and migrates an older file once, saving the
-original as `config.toml.schema1.bak` (never overwritten). The migration drops the old
-`[git] signing_key` (Carter never uses your key) and an email that is not
-`<id>+<login>@users.noreply.github.com`; it keeps your footer exactly as written. Loading
-the file never writes to it.
+`carter install` creates it (schema 2) if it is missing and never rewrites it. A missing
+`schema` key reads as 2. A key Carter does not know (an old `[attribution] name`/`email`, `[git]
+signing_key`, `identity.bot_name`, `identity.git_account`) is not read and not migrated:
+`carter check --host`, `carter install` and `carter update` name it with its file, for example
+``⚠ unknown key `git.signing_key` in /home/you/.carter/config.toml → delete it``, and
+`carter identity add` refuses to rewrite the file until you delete it. Loading the file never
+writes to it. `carter check` reports the retired `identity.git_account` and `identity.bot_name`
+in `.carter/carter.yaml` the same way.
 
 ```toml
 schema = 2
@@ -224,8 +225,8 @@ require_tier = "t2"       # pinned by `carter update`
 | `[identity]` | `role`, `login`, `id`, `name`, `email`, `mode` (`auto`, `interactive` or `review`; `CARTER_IDENTITY_MODE` wins; in a detected CI `auto` is `review`, which refuses commits. See [Review-only CI](../guides/ci-review.md#modes)) |
 | `[identity.signing]` | The LLM's signing key, written by `carter identity add`: `public_key`, `fingerprint`, `private_key_path` (a path, never read), `previous_public_keys` (kept after a rotation so old commits verify), `ssh_bin_dir` (default `/usr/bin`; where `ssh-keygen`, `ssh-agent` and `ssh-add` come from), `ttl` (how long `identity unlock` keeps the key; none by default), `mode` (`file` for a key without a passphrase, signed straight from `private_key_path`; `agent` otherwise; set by `identity add`), `agent_socket` or `program` (a password manager instead of Carter's own agent) |
 | `[identity.disclosure]` | Reserved for a later release; read and kept, not used yet |
-| `[github]` | `read_token_file`: where `carter github-token set` stored the read-only token (a path only, never the token itself). `probe_repo`: optional `owner/name` that `github-token check` uses for its refused write attempt instead of a repository you own |
-| `[broker]` | Optional, for the [B tools](../guides/push-and-pr-tools.md). `min_dwell_ms`: the shortest an approval may take before B refuses it as automatic; the effective value is never below 500 and never above 10000. B always uses the home in your system account entry (what OpenSSH reads) for its git and ssh calls and for the `~/.ssh/config` scan; there is no setting for it |
+| `[github]` | `read_token_file`: where `carter github-token set` stored the GitHub token (a path only, never the token itself). `probe_repo`: optional `owner/name` that `github-token check` uses for its refused push attempt and its pull-request probe instead of a repository you own |
+| `[broker]` | Optional, for the [B tool](../guides/push-and-pr-tools.md). `min_dwell_ms`: the shortest an approval may take before B refuses it as automatic; the effective value is never below 500 and never above 10000. B always uses the home in your system account entry (what OpenSSH reads) for its git and ssh calls and for the `~/.ssh/config` scan; there is no setting for it |
 | `[attribution]` | `footer`: appended to GitHub and Jira bodies |
 | `[workspaces."<path>"]` | `max_tier`, `role`, `require_tier`, `allow_project_opencode_edit`. The path is the resolved absolute path of the workspace |
 
@@ -240,8 +241,10 @@ in your own terminal:
 allow_project_opencode_edit = true
 ```
 
-It takes effect only when a human runs `carter guard install` or `carter update`: both list
-every active opt-out and ask (`--yes` skips only the question). `carter check --host` lists
+It takes effect only when a human runs `carter guard install` or `carter update`: they write
+three exact-path `allow` rules (`opencode.json`, `opencode.jsonc` and `.opencode/*` of that
+workspace) after the denies in the Carter agents' permissions (D71: not a global policy), and
+`guard install` lists every active opt-out. It asks nothing. `carter check --host` lists
 them too. A path that no longer exists or contains `*` or `?` is skipped with a message.
 
 Tiers: T0 is nothing configured (commits carry `Assisted-by: Carter`), T1 is an LLM

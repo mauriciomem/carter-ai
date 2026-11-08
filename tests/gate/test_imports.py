@@ -170,7 +170,7 @@ class TestLazyPackages:
 
     def test_the_public_names_still_resolve_and_resolve_is_the_function(self) -> None:
         out = run_python(
-            "import carter.identity.migrate, carter.identity.resolve as m; "
+            "import carter.identity.config, carter.identity.resolve as m; "
             "import carter.identity as p; "
             "from carter.identity import resolve, IdentityConfig, load_identity, ConfigError; "
             "print(callable(resolve) and not hasattr(resolve, 'configured_tier'), "

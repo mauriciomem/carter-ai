@@ -84,6 +84,7 @@ def install_files(
 
 
 def make(rig_factory, opencode_bin, *, files=None, env=None, **kw) -> Rig:
+    kw.setdefault("carter_agent", True)
     return rig_factory(
         opencode=opencode_bin,
         extra_files=files if files is not None else install_files(),
@@ -109,9 +110,10 @@ def wait_status(rig: Rig, state: str, timeout: float = 12.0) -> dict:
     raise AssertionError(f"status never became {state}: {status(rig)}")
 
 
-def run_shell(rig: Rig, command: str, *, timeout: float = 40.0) -> str:
-    """An agent shell call through the mock model; returns the raw tool result."""
-    sid = rig.new_session()
+def run_shell(rig: Rig, command: str, *, timeout: float = 40.0, agent: str | None = None) -> str:
+    """An agent shell call through the mock model; returns the raw tool result. The session's
+    agent is the rig's Carter agent unless ``agent`` names another one (D71)."""
+    sid = rig.new_session(agent)
     seen = len(rig.results())
     rig.prompt(sid, f"RUN {command}")
     return str(rig.wait_results(seen + 1, timeout=timeout)[-1]["result"])

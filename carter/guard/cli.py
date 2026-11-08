@@ -2,8 +2,8 @@
 
 A thin click layer over ``engine`` and ``status``. ``install`` and ``remove`` refuse in agent
 shells (AD1). ``install`` asks one question (``--yes`` skips it) and, without a terminal and
-without ``--yes``, is skipped with a notice (exit 0); ``remove`` asks nothing. ``--dry-run`` and
-``--print-policies`` write nothing. ``status`` is read-only and allowed anywhere. A normal run
+without ``--yes``, is skipped with a notice (exit 0); ``remove`` asks nothing. ``--dry-run``
+writes nothing. ``status`` is read-only and allowed anywhere. A normal run
 ends in one line; ``-v`` shows the rest.
 """
 
@@ -70,19 +70,14 @@ def guard() -> None:
 
 @guard.command("install")
 @_common
-@click.option("--print-policies", is_flag=True, help="Print the policies and exit.")
 @verbose_option
 def install_cmd(
-    only: list[str] | None,
-    dry_run: bool,
-    assume_yes: bool,
-    base_dir: Path | None,
-    print_policies: bool,
+    only: list[str] | None, dry_run: bool, assume_yes: bool, base_dir: Path | None
 ) -> None:
     """Install the guards (one question)."""
 
     def run() -> int:
-        if not (dry_run or print_policies):
+        if not dry_run:
             terminal.require_human_terminal("guard install", need_tty=False)
         code = engine.install(
             base_dir=base_dir,
@@ -90,11 +85,10 @@ def install_cmd(
             assume_yes=assume_yes,
             interactive=terminal.stdin_is_tty(),
             dry_run=dry_run,
-            print_policies=print_policies,
-            echo=click.echo if print_policies or dry_run else report.say,
+            echo=click.echo if dry_run else report.say,
             confirm=click.confirm,
         )
-        if code == 0 and not (dry_run or print_policies):
+        if code == 0 and not dry_run:
             report.installed(base_dir)
         return code
 

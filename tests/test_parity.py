@@ -408,10 +408,10 @@ class TestNoAgentPushes:
     def test_only_devops_lacks_the_carter_broker_deny(self, rendered_agents_dir: Path) -> None:
         for role, rules in self._rules(rendered_agents_dir).items():
             denies = {r["action"] for r in rules if r["effect"] == "deny"}
-            has_both = {"carter_push", "carter_pr"} <= denies
+            has_both = "carter_push" in denies
             assert has_both is (role != "devops"), role
             if role == "devops":
-                assert not {r["action"] for r in rules} & {"carter_push", "carter_pr"}
+                assert "carter_push" not in {r["action"] for r in rules}
 
     def test_the_broker_denies_come_from_the_data_file(self, rendered_agents_dir: Path) -> None:
         from carter.identity.policyset import agent_permission_denies, agent_permission_exempt
@@ -578,12 +578,11 @@ class TestCarterOpsSkillGeneratedBlocks:
         assert sync_text(sync_text(text)) == sync_text(text)
 
 
-class TestHandoffProse:
-    """Plan 003 step 23 (T14, text half): the agent-facing prose matches the push model.
-
-    Nobody pushes. A finished branch is a handoff file, then the human runs ``carter push`` and
-    ``carter pr``. Jira and Slack stay with devops. The one sentence about *where* comes from
-    ``handoff.OWN_TERMINAL`` and nowhere else."""
+class TestPushProse:
+    """Plan 003 step 23 (T14, text half) as amended by D72: the agent-facing prose matches the push
+    model. Nobody pushes: the human runs ``carter push``, then an agent may open the pull request
+    with ``gh pr create``. Jira and Slack stay with devops. The one sentence about *where* comes
+    from ``push.OWN_TERMINAL`` and nowhere else."""
 
     @staticmethod
     def _body(rendered_agents_dir: Path, role: str) -> str:
@@ -591,59 +590,61 @@ class TestHandoffProse:
         text = (rendered_agents_dir / f"carter-{role}.md").read_text()
         return " ".join(text.split("\n---\n", 1)[1].split())
 
-    def test_devops_describes_the_handoff_and_no_longer_pushes(
+    def test_devops_tells_the_user_to_push_and_then_opens_the_pr(
         self, rendered_agents_dir: Path
     ) -> None:
-        from carter.aplus.handoff import OWN_TERMINAL
+        from carter.aplus.push import OWN_TERMINAL
 
         body = self._body(rendered_agents_dir, "devops")
         assert OWN_TERMINAL in body
-        assert ".carter/state/handoff/<encoded-branch>.md" in body and "`carter-ops`" in body
-        assert "`carter push`" in body and "`carter pr`" in body  # as the human's commands
+        assert "gh pr create --head <branch>" in body and "`gh pr edit` / `gh pr comment`" in body
         assert "Jira and Slack writes stay with you" in body
-        assert "Pushing and GitHub writes are human-only" in body
-        for gone in ("git push", "gh pr create", "gh pr merge", "Full access — create PRs"):
+        assert "Pushing is human-only" in body
+        for gone in ("handoff file", "`carter pr`", "carter_pr", "git push", "gh pr merge"):
             assert gone not in body, gone
         assert "single pusher" not in body and "sole pusher" not in body.lower()
 
-    def test_devops_describes_the_b_tools_as_approval_requests_and_nobody_else_does(
+    def test_devops_describes_the_b_tool_as_an_approval_request_and_nobody_else_does(
         self, rendered_agents_dir: Path
     ) -> None:
-        """Slice B (plan 007 step 21): only devops names the tools; every use asks the human."""
+        """Slice B (plan 007 step 21): only devops names the tool; every use asks the human."""
         body = self._body(rendered_agents_dir, "devops")
-        assert "`carter_push`" in body and "`carter_pr`" in body
+        assert "`carter_push`" in body and "carter_pr" not in body
         assert "opens a prompt" in body and "A rejection is final" in body
         assert "never use them as a way around a refusal" in body
-        assert "If the tools are not in your list" in body and "hand off" in body
+        assert "If the tool is not in your list" in body and "hand off" in body
         assert "later release" not in body
         for role in ("engineer", "maestro", "pm", "security", "narrator", "architect", "learner"):
             other = self._body(rendered_agents_dir, role)
             assert "carter_push" not in other and "carter_pr" not in other, role
 
     @pytest.mark.parametrize("role", ["engineer", "maestro", "pm", "security", "narrator"])
-    def test_other_agents_route_pushing_to_the_handoff(
+    def test_other_agents_route_pushing_to_the_user(
         self, rendered_agents_dir: Path, role: str
     ) -> None:
         body = self._body(rendered_agents_dir, role)
         assert "human-only" in body, role
         assert "single pusher" not in body and "Only devops can push" not in body
         assert "sole holder of `remote-write` and `dangerous` — the single" not in body
+        assert "carter pr" not in body and "handoff file" not in body, role
 
-    def test_engineer_and_maestro_hand_the_branch_to_devops_for_the_handoff_file(
+    def test_engineer_and_maestro_hand_the_branch_to_devops(
         self, rendered_agents_dir: Path
     ) -> None:
-        from carter.aplus.handoff import OWN_TERMINAL
+        from carter.aplus.push import OWN_TERMINAL
 
         engineer = self._body(rendered_agents_dir, "engineer")
-        assert "carter-devops" in engineer and "handoff file" in engineer
-        assert "`carter push` and `carter pr`" in engineer
+        assert "carter-devops" in engineer and "`carter push`" in engineer
+        assert "gh pr create" in engineer
         maestro = self._body(rendered_agents_dir, "maestro")
-        assert OWN_TERMINAL in maestro and "handoff file" in maestro
+        assert OWN_TERMINAL in maestro and "gh pr create" in maestro
         assert "carter-devops" in maestro and "Jira and Slack" in maestro
 
-    def test_the_narrator_transmits_nothing_to_github(self, rendered_agents_dir: Path) -> None:
+    def test_the_narrator_drafts_pr_text_for_devops_and_transmits_nothing_itself(
+        self, rendered_agents_dir: Path
+    ) -> None:
         body = self._body(rendered_agents_dir, "narrator")
-        assert "Nobody transmits to GitHub" in body
+        assert "PR descriptions and PR comments go to carter-devops" in body
         assert "redaction handoff" in body and "remote-write" in body and "transmit" in body
 
     def test_denied_roles_do_not_claim_the_github_mcp(self, rendered_agents_dir: Path) -> None:

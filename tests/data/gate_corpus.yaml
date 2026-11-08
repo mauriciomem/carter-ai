@@ -190,10 +190,32 @@ cases:
   rule: other-verbs
   why: 'a leading -R fails closed: put it after the subcommand'
 - id: rfc-gh-not-allowlisted
-  command: gh pr create --title x
+  command: gh pr merge 12
   expect: deny
   rule: other-verbs
-  why: gh is deny-by-default outside the read allowlist
+  why: gh is deny-by-default outside the allowlist; the human merges (D72)
+- id: d72-gh-pr-close
+  command: gh pr close 12
+  expect: deny
+  rule: other-verbs
+  why: the human decides what happens to a PR (D72)
+- id: d72-gh-pr-review
+  command: gh pr review 12 --approve
+  expect: deny
+  rule: other-verbs
+  why: the human decides what happens to a PR (D72)
+- id: d72-gh-pr-create
+  command: gh pr create --title x --head feat/x
+  expect: allow
+  why: PRs are allowed, not gated (D72)
+- id: d72-gh-pr-edit
+  command: gh pr edit 12 --add-label bug
+  expect: allow
+  why: PRs are allowed, not gated (D72)
+- id: d72-gh-pr-comment
+  command: gh pr comment 12 --body done
+  expect: allow
+  why: PRs are allowed, not gated (D72)
 - id: rfc-sudo
   command: sudo ls
   expect: deny
@@ -236,11 +258,6 @@ cases:
   why: scheduling
 - id: rfc-carter-push
   command: carter push
-  expect: deny
-  rule: human-only-carter
-  why: human-only Carter verb
-- id: rfc-carter-pr
-  command: carter pr
   expect: deny
   rule: human-only-carter
   why: human-only Carter verb

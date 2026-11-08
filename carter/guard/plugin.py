@@ -127,9 +127,7 @@ def render_headless() -> str:
     Per-agent permissions, not ``policies`` (a global ``tool.use`` policy never matches a plugin
     tool, spike A6). It applies to the process that starts the server: ``opencode run
     --standalone`` or the run that starts the service; a running service ignores it."""
-    deny = [
-        {"action": name, "resource": "*", "effect": "deny"} for name in ("carter_push", "carter_pr")
-    ]
+    deny = [{"action": "carter_push", "resource": "*", "effect": "deny"}]
     doc = {"agents": {BROKER_AGENT: {"permissions": deny}}}
     return json.dumps(doc, indent=2, sort_keys=True) + "\n"
 
@@ -211,7 +209,7 @@ def install(
     else:
         echo(f"plugin up to date: {plugin_dir(base_dir)}")
     if broker_enabled(state):
-        echo("B tools: carter_push and carter_pr are enabled for devops (every use asks you).")
+        echo("B tool: carter_push is enabled for devops (every use asks you).")
     elif consent.broker_wanted(state):
         echo(
             "⚠ B tools not enabled: no git found in /usr/bin, /bin, /usr/local/bin or "

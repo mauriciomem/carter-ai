@@ -42,11 +42,6 @@
         "effect": "deny"
       },
       {
-        "action": "carter_pr",
-        "resource": "*",
-        "effect": "deny"
-      },
-      {
         "action": "browser",
         "resource": "*",
         "effect": "deny"
@@ -106,11 +101,6 @@
         "effect": "deny"
       },
       {
-        "action": "carter_pr",
-        "resource": "*",
-        "effect": "deny"
-      },
-      {
         "action": "browser",
         "resource": "*",
         "effect": "deny"
@@ -161,11 +151,6 @@
       },
       {
         "action": "carter_push",
-        "resource": "*",
-        "effect": "deny"
-      },
-      {
-        "action": "carter_pr",
         "resource": "*",
         "effect": "deny"
       },
@@ -274,11 +259,6 @@
         "effect": "deny"
       },
       {
-        "action": "carter_pr",
-        "resource": "*",
-        "effect": "deny"
-      },
-      {
         "action": "browser",
         "resource": "*",
         "effect": "deny"
@@ -318,11 +298,6 @@
       },
       {
         "action": "carter_push",
-        "resource": "*",
-        "effect": "deny"
-      },
-      {
-        "action": "carter_pr",
         "resource": "*",
         "effect": "deny"
       },
@@ -375,11 +350,6 @@
         "effect": "deny"
       },
       {
-        "action": "carter_pr",
-        "resource": "*",
-        "effect": "deny"
-      },
-      {
         "action": "browser",
         "resource": "*",
         "effect": "deny"
@@ -428,11 +398,6 @@
         "effect": "deny"
       },
       {
-        "action": "carter_pr",
-        "resource": "*",
-        "effect": "deny"
-      },
-      {
         "action": "browser",
         "resource": "*",
         "effect": "deny"
@@ -447,7 +412,7 @@
       "headers": {},
       "body": {}
     },
-    "description": "Software Engineer \u2014 code quality, testing, design patterns, and implementation best practices.",
+    "description": "Software Engineer — code quality, testing, design patterns, and implementation best practices.",
     "mode": "subagent",
     "hidden": false,
     "permissions": [
@@ -538,11 +503,6 @@
       },
       {
         "action": "carter_push",
-        "resource": "*",
-        "effect": "deny"
-      },
-      {
-        "action": "carter_pr",
         "resource": "*",
         "effect": "deny"
       },
@@ -676,7 +636,7 @@
       "headers": {},
       "body": {}
     },
-    "description": "DevOps Engineer \u2014 CI/CD, infrastructure as code, containers, deployment, and git workflows.",
+    "description": "DevOps Engineer — CI/CD, infrastructure as code, containers, deployment, and git workflows.",
     "mode": "subagent",
     "hidden": false,
     "permissions": [

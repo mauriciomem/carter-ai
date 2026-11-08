@@ -3,7 +3,7 @@
 
 Opt-in (``CARTER_E2E=1``), OpenCode 2.1.4 (2.1.2 through ``CARTER_E2E_OPENCODE_ALT``). A real
 OpenCode in its own HOME and ports, the mock model, loopback-only netns. The probe plugin
-(``probes/broker_probe.ts``) registers stand-ins for ``carter_push`` / ``carter_pr`` that run
+(``probes/broker_probe.ts``) registers stand-ins for ``carter_push`` and a code-mode probe that run
 nothing; it records what the tool context carries and how the approval behaves. No credentials,
 no git, no real GitHub. Findings: ``.carter/state/plans/active/007-slice-b-broker/notes.md``.
 """
@@ -27,7 +27,6 @@ PROBE = (Path(__file__).parent / "probes" / "broker_probe.ts").read_text()
 ALLOW_ALL = [{"action": "*", "resource": "*", "effect": "allow"}]
 DENY_B = [
     {"action": "carter_push", "resource": "*", "effect": "deny"},
-    {"action": "carter_pr", "resource": "*", "effect": "deny"},
 ]
 AGENTS = {
     "dev": {"mode": "primary", "permissions": ALLOW_ALL},
@@ -167,7 +166,7 @@ class TestSpikeARegistration:
         ]
         names = {n for ts in tools for n in (ts or [])}
         print("A2 tools offered to a denied agent:", sorted(names))
-        assert "carter_push" not in names and "carter_pr" not in names
+        assert "carter_push" not in names and "carter_probe_cm" not in names
         assert sid
 
     def test_codemode_flag_decides_where_the_tool_is_listed(
@@ -180,13 +179,15 @@ class TestSpikeARegistration:
         names = next(r["tools"] for r in requests if r["tools"])
         print("\nA3 offered to dev:", names)
         assert "carter_push" in names  # codemode false: a direct tool
-        assert "carter_pr" not in names  # codemode true: reachable only inside the `execute` tool
+        assert (
+            "carter_probe_cm" not in names
+        )  # codemode true: reachable only inside the `execute` tool
         schema = (rig.logs / "tools.json").read_text() if (rig.logs / "tools.json").exists() else ""
         print(
             "A3 execute tool present:",
             "execute" in names,
-            "| carter_pr in the first request's tool schemas:",
-            "carter_pr" in schema,
+            "| carter_probe_cm in the first request's tool schemas:",
+            "carter_probe_cm" in schema,
         )
         run_prompt(rig, "den", "hello")
         time.sleep(2.5)

@@ -18,6 +18,7 @@ class Item:
     area: str
     text: str
     fix: str = ""
+    raw: str = ""  # a complete line to print as is (the D70 unknown-key line)
 
     def render(self) -> str:
         fix = f"\n      → {self.fix}" if self.fix else ""

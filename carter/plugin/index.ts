@@ -24,6 +24,13 @@ export default Plugin.define({
     }
     // The session directory is only visible through the session API (spike B 3a, G6).
     const sessionDir = async (sessionID: string) => (await ctx.session.get({ sessionID }))?.location?.directory
+    // D71: the parent of a session (null for a root); an unreadable session throws, which the scope test
+    // treats as "may belong to Carter".
+    const sessionParent = async (sessionID: string) => {
+      const info = await ctx.session.get({ sessionID })
+      if (!info) throw new Error("session not found")
+      return info.parentID ? String(info.parentID) : null
+    }
     const carter = createCarter({
       fs,
       run,
@@ -38,6 +45,7 @@ export default Plugin.define({
       random: Math.random,
       euid: process.geteuid?.(),
       sessionDir,
+      sessionParent,
       log: (line) => console.error(line),
       onFailed: () => void Promise.resolve().then(() => ctx.tool.reload()).catch(() => {}), // B drops out
     })

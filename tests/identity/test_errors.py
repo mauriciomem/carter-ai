@@ -96,7 +96,9 @@ class TestRegistry:
                 in_rfc.update(re.findall(r"E-[A-Z0-9-]+", first))
         # Codes the 1G architect gate added beyond Appendix B (plan 003 step 6, F10).
         # E-UNLOCK-NOPASS left with D50 (D68 d): the RFC table still lists it.
-        assert (set(registry()) | {"E-UNLOCK-NOPASS"}) - ADDED_BEYOND_APPENDIX_B == in_rfc
+        # D72 removed E-HANDOFF and E-SECRET-SCAN with `carter pr`; the RFC stays as history.
+        gone = {"E-UNLOCK-NOPASS", "E-HANDOFF", "E-SECRET-SCAN"}
+        assert (set(registry()) | gone) - ADDED_BEYOND_APPENDIX_B == in_rfc
 
 
 class TestUsedByCode:
@@ -225,7 +227,7 @@ class TestRenderErrorTable:
         }
         assert not human & codes and human <= set(registry())  # in the docs, not in the agent table
         assert {
-            "E-POLICY", "E-GH-READONLY", "E-HANDOFF", "E-SECRET-SCAN", "E-HUMAN-TERMINAL",
+            "E-POLICY", "E-GH-READONLY", "E-HUMAN-TERMINAL",
             "E-ISOLATION-MISSING", "E-GATE", "E-GATE-FAIL", "E-PUSH-GUARD", "E-GIT-OLD",
             "E-OPENCODE-VERSION", "E-SIGN-UNAVAILABLE",
         } <= codes  # fmt: skip

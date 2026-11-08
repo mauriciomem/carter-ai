@@ -299,14 +299,14 @@ class TestRefusals:
         cfg_path.write_text("schema = 2\n[identity\n")
         assert update(ws, "--yes").exit_code == 0
 
-    def test_schema_1_config_asks_for_install_first(self, ws, cfg_path):
+    def test_a_config_with_old_keys_is_not_rewritten_and_the_keys_are_named(self, ws, cfg_path):
         cfg_path.parent.mkdir(parents=True)
         legacy = '[attribution]\nname = "x"\n'
         cfg_path.write_text(legacy)
         set_policy(ws, role="author")
         result = update(ws, "--yes")
         assert result.exit_code == 1
-        assert "carter install" in result.output
+        assert "unknown key(s) `attribution.name`" in result.output
         assert cfg_path.read_text() == legacy
 
     def test_invalid_yaml_policy_stops_update(self, ws, cfg_path):
@@ -340,22 +340,24 @@ class TestWorkspaceKey:
         assert (res.role, res.role_source) == ("author", "workspace")
 
 
-class TestDeprecationsAreShown:
-    def test_update_and_check_warn_about_legacy_keys_without_failing(self, ws):
+class TestRetiredKeysAreReported:
+    def test_update_and_check_report_retired_keys_without_failing(self, ws):
         set_policy(ws, git_account="me", bot_name="acme-bot")
+        yaml_path = ws / ".carter" / "carter.yaml"
 
         up = update(ws, "--yes")
         chk = CliRunner().invoke(main, ["check", str(ws), "--no-harness"])
 
         assert up.exit_code == 0, up.output
-        assert "identity.bot_name" in up.output and "deprecated" in up.output
-        assert "identity.git_account" in chk.output and "deprecated" in chk.output
-        assert "Workspace OK" in chk.output  # a warning, never an error
+        assert f"unknown key `identity.bot_name` in {yaml_path} → delete it" in up.output
+        assert f"unknown key `identity.git_account` in {yaml_path} → delete it" in chk.output
+        assert "Workspace OK" in chk.output  # a report, never an error
+        assert "deprecated" not in up.output + chk.output
 
     def test_check_is_silent_for_a_policy_only_block(self, ws):
         set_policy(ws, role="author", require_tier="t1")
         chk = CliRunner().invoke(main, ["check", str(ws), "--no-harness"])
-        assert "deprecated" not in chk.output
+        assert "unknown key" not in chk.output
 
 
 class TestWorkspaceLevelNoteOnly:
@@ -388,7 +390,7 @@ class TestWorkspaceLevelNoteOnly:
         assert "not rewritten" not in update(ws, "--yes").output
 
     def test_a_workspace_with_the_commit_rule_but_no_push_rule_gets_the_push_rule(self, ws):
-        from carter.aplus.handoff import OWN_TERMINAL
+        from carter.aplus.push import OWN_TERMINAL
 
         agents = ws / "AGENTS.md"
         agents.write_text("# Mine\n- **Commits**: use the coauthor_trailer.\n")
@@ -400,7 +402,7 @@ class TestWorkspaceLevelNoteOnly:
         assert agents.read_text() == "# Mine\n- **Commits**: use the coauthor_trailer.\n"
 
     def test_a_current_workspace_file_gets_no_note(self, ws):
-        from carter.aplus.handoff import OWN_TERMINAL
+        from carter.aplus.push import OWN_TERMINAL
 
         agents = ws / "AGENTS.md"
         agents.write_text(f"# Mine\ncoauthor_trailer\n{OWN_TERMINAL}\n")

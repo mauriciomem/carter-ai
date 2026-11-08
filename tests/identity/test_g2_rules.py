@@ -305,7 +305,7 @@ class TestRenderers:
             if entry.note:
                 assert entry.note in block
         assert "`git push`" in block and "`git send-pack`" in block
-        assert "carter push" in block and "carter pr" in block and "carter guard *" in block
+        assert "carter push" in block and "carter pr`" not in block and "carter guard *" in block
 
     def test_block_is_deterministic(self):
         assert render_forbidden_block() == render_forbidden_block()

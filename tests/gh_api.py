@@ -172,7 +172,11 @@ class FakeGitHub:
         self.routes[(method, path)] = reply
 
     def readonly_token_world(
-        self, owner_repo: str = "carter-llm/zz-probe-repo", *, expiry: str | None = None
+        self,
+        owner_repo: str = "carter-llm/zz-probe-repo",
+        *,
+        expiry: str | None = None,
+        pulls: int = 422,
     ) -> None:
         """What a read-only fine-grained PAT sees: GET /user and /user/repos work, writes 403.
 
@@ -186,3 +190,10 @@ class FakeGitHub:
         listing = [{"full_name": owner_repo, "owner": {"login": owner}}]
         self.on("GET", "/user/repos", Reply(200, json.dumps(listing)))
         self.on("POST", f"/repos/{owner_repo}/git/refs", Reply(403, SPIKE_403))
+        # D72: the token may hold `Pull requests: write`; an empty POST then fails validation (422)
+        # and creates nothing, otherwise GitHub says 403 "Resource not accessible"
+        self.on(
+            "POST",
+            f"/repos/{owner_repo}/pulls",
+            Reply(pulls, SPIKE_403 if pulls == 403 else SPIKE_422),
+        )

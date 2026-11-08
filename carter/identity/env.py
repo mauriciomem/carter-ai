@@ -15,9 +15,8 @@ unreadable, unknown schema or an incomplete signing setup: E-CONFIG), ``tier-req
 ``require_tier`` or role ``author`` below T2 is not met), ``key-missing``, ``fingerprint-mismatch``,
 ``shim-missing`` or ``human-identity-invalid`` (role ``author``: the human's ``user.name`` /
 ``user.email`` in ``--cwd`` are empty, the LLM's or a Carter fallback; see ``payload``).
-Only an *absent* file is T0 with no reason; a schema-1 file is
-recognised and is T0 too. The entry never probes the agent and never prints a value from the
-config beyond the block itself (no key comment, no private-key path).
+Only an *absent* file is T0 with no reason. The entry never probes the agent and never prints a
+value from the config beyond the block itself (no key comment, no private-key path).
 """
 
 from __future__ import annotations

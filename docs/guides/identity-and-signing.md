@@ -380,12 +380,12 @@ message.
 
 ```bash
 carter identity remove        # takes back what `add` wrote, only what is unchanged
-carter guard remove           # the guards (hooks, policies, plugin), separately
+carter guard remove           # the guards (hooks, agent rules, plugin), separately
 ```
 
 They are independent: either order works. After `identity remove` agent commits are unsigned
 again. What stays, and is yours to remove: the account and the registered key on GitHub, the
-private key file, the read-only token, the hooks and policies until you run `guard remove`.
+private key file, the GitHub token, the hooks and agent rules until you run `guard remove`.
 
 If `carter` itself is broken, no tool is needed: deleting `~/.carter/gitconfig` makes git
 behave as if Carter's keys were never there (a malformed file in `~/.carter/gitconfig.d/` is
@@ -395,7 +395,7 @@ deleted the same way), and deleting `~/.carter/bin/carter-ssh-sign` makes agent 
 ## Type, never paste
 
 A line that starts with `!` in OpenCode runs in *your* shell. Type such lines yourself (`!carter
-push` and `!carter pr` work there once the plugin has tagged the shell as yours); never paste
+push` works there once the plugin has tagged the shell as yours); never paste
 one from anywhere, because a pasted line is sent to the model instead. In the same
 spirit, keep `.github/workflows/` under `CODEOWNERS` (a required review): an LLM-signed pull
 request that changes a workflow file should always get a human look.

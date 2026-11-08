@@ -141,7 +141,7 @@ test("it registers the three hooks of 2a/B and touches nothing else of ctx", asy
   })
 })
 
-test("the evaluate hook forces ask for carter_push and carter_pr unless the effect is deny, and ignores other actions", async () => {
+test("the evaluate hook forces ask for carter_push unless the effect is deny, and ignores other actions", async () => {
   await withPlugin({ isoEdit: (d) => ((d.plugin.b_enabled = true), (d.plugin.b_git = "/usr/bin/git")) }, async (f) => {
     const run = (action: string, effect: string) => {
       const e = { action, effect }
@@ -149,7 +149,7 @@ test("the evaluate hook forces ask for carter_push and carter_pr unless the effe
       return e.effect
     }
     assert.equal(run("carter_push", "allow"), "ask")
-    assert.equal(run("carter_pr", "allow"), "ask")
+    assert.equal(run("carter_pr", "allow"), "allow") // D72: there is no such tool any more
     assert.equal(run("carter_push", "deny"), "deny")
     assert.equal(run("shell", "allow"), "allow")
     assert.equal(run("carter_github_search", "allow"), "allow") // the MCP tools are not ours
@@ -167,7 +167,7 @@ test("the gate is called by absolute python_path with gate_args, the command on 
     assert.deepEqual(f.recorded("gate.args").trim().split("\n"), ["-I", "-m", "carter.gate", "--json", "--cwd", "/work/repo", "--skip-groups", "sudo-docker"])
     assert.equal(f.recorded("gate.cwd").trim(), f.home)
     assert.equal(f.recorded("gate.sshsock").trim(), "1")
-    assert.match(e.input.command, /^: carter_agent_[0-9a-z]{12}\ngit status -s$/)
+    assert.match(e.input.command, /^: carter_agent_[0-9a-z]{12}_1\ngit status -s$/)
   })
 })
 
@@ -236,7 +236,7 @@ test("a broken isolation file refuses the shell call before the gate is even ask
   await withPlugin({ sha: "__CARTER_ISOLATION_SHA256__" }, async (f) => {
     await assert.rejects(f.hooks["tool.execute.before"](call("ls")), /E-ISOLATION-MISSING/)
     assert.equal(f.recorded("gate.args"), "")
-    const agent = { command: ": carter_agent_zzz\nls", cwd: "/w", env: {} }
+    const agent = { command: ": carter_agent_zzz_1\nls", cwd: "/w", env: {} }
     const human = { command: "ls", cwd: "/w", env: { SSH_AUTH_SOCK: "/s" } as Record<string, string | undefined> }
     await f.hooks["shell.create.before"](human) // a `!` shell is never blocked
     assert.equal(human.env.SSH_AUTH_SOCK, "/s")
@@ -257,12 +257,12 @@ test("workdir: absolute is used as given; relative is resolved against the sessi
   })
 })
 
-test("the session directory is looked up through ctx.session.get once per session", async () => {
+test("the session directory and its parent are each looked up through ctx.session.get once per session", async () => {
   await withPlugin({ sessionDir: "/work/repo" }, async (f) => {
     await f.hooks["tool.execute.before"](call("ls"))
     await f.hooks["tool.execute.before"](call("pwd"))
     await f.hooks["tool.execute.before"](call("pwd", { workdir: "/abs" }))
-    assert.deepEqual(f.sessions, ["ses_1"])
+    assert.deepEqual(f.sessions, ["ses_1", "ses_1"]) // the directory, then the parent (D71)
   })
 })
 

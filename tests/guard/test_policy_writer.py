@@ -308,7 +308,7 @@ class TestComments:
         _, res = run_apply(tmp_path, [A])
         backup = cfg.with_name(cfg.name + ".carter-backup")
         assert backup.read_text() == text
-        assert any("comments" in w and "--print-policies" in w for w in res.warnings)
+        assert any("comments" in w and "carter-backup" in w for w in res.warnings)
         assert "// my notes" not in cfg.read_text()
 
     def test_a_file_without_comments_is_rewritten_without_a_comment_backup(
@@ -438,21 +438,6 @@ class TestMissingStatements:
     def test_effect_and_resource_must_both_match(self):
         other = st("deny-a", "shell:aaa *", "allow")
         assert policies.missing_statements(json.loads(dbg([other])), [A]) == [A]
-
-    def test_the_older_experimental_spelling_counts(self):
-        data = {"experimental": {"policies": as_json([A])}}
-        assert policies.missing_statements(data, [A]) == []
-
-
-class TestSnippet:
-    def test_print_policies_equals_what_would_be_written(self, tmp_path, cfg, fake_opencode):
-        stmts = list(policy_statements(("sudo-docker", "g2"), home=str(tmp_path)))
-        fake_opencode(config_sequence=[dbg(), dbg(stmts)])
-        run_apply(tmp_path, stmts)
-        assert policies.render_snippet(stmts) == cfg.read_text()
-
-    def test_snippet_has_no_ids(self):
-        assert "deny-a" not in policies.render_snippet([A])
 
 
 class TestDryRun:

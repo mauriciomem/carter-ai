@@ -55,6 +55,9 @@ GH_ALLOW_VERBS = (
     "pr list",
     "pr diff",
     "pr checks",
+    "pr create",  # D72: PRs are allowed (opened, edited, commented by agents; merged by the human)
+    "pr edit",
+    "pr comment",
     "issue view",
     "issue list",
     "run view",
@@ -64,7 +67,7 @@ GH_ALLOW_VERBS = (
 )
 
 # F6 / D46.
-AGENT_PERMISSION_DENIES = ("carter_push", "carter_pr")
+AGENT_PERMISSION_DENIES = ("carter_push",)  # D72 removed carter_pr
 
 
 def test_consent_groups_are_the_seven_c61_names() -> None:
@@ -149,7 +152,7 @@ def test_guard_state_entry_shapes() -> None:
     assert (st.gitconfig or {})["key"] == "include.path"
     assert list(st.git_config[0]) == ["file", "key", "value", "scope"]
     assert list(st.opencode_policies[0]) == ["id", "action", "resource", "effect", "preexisting"]
-    assert list(st.agent_permissions[0]) == ["agent", "key", "value", "preexisting", "form"]
+    assert list(st.agent_permissions[0]) == ["agent", "key", "value", "preexisting"]
 
 
 # ---------------------------------------------------------------------------------------------
@@ -767,12 +770,12 @@ def test_k13_the_current_slice_is_2c_once_step_11_has_run() -> None:
 MODULES_B = (
     "carter/broker/__init__.py", "carter/broker/env.py", "carter/broker/argv.py",
     "carter/broker/checks.py", "carter/broker/plan.py", "carter/broker/execute.py",
-    "carter/broker/pr.py", "carter/broker/counter.py", "carter/broker/audit.py",
+    "carter/broker/counter.py", "carter/broker/audit.py",
     "carter/broker_cli.py", "carter/plugin/broker.ts",
     "tests/data/b_hostile_argv.json", "tests/data/ssh_g/index.json",
 )  # fmt: skip
 BROKER_ENTRY = ("-I", "-m", "carter.broker_cli")  # B2 / T6: the only entry
-BROKER_SUBCOMMANDS = ("push", "pr", "record")
+BROKER_SUBCOMMANDS = ("push", "record")
 BROKER_MODES = ("plan", "execute")  # --plan / --exec
 RECORD_OUTCOMES = ("rejected", "timeout", "aborted", "corrected", "dwell")
 BROKER_EXIT_CODES = {"ok": 0, "refused": 1, "usage": 2}
@@ -837,7 +840,7 @@ def test_b1_b2_the_entry_the_subcommands_and_the_exit_codes() -> None:
     assert tuple(rules.plugin_defaults()["broker_args"]) == BROKER_ENTRY
     sub = cli.parser()._subparsers._group_actions[0].choices  # type: ignore[union-attr]
     assert tuple(sub) == BROKER_SUBCOMMANDS
-    for verb in ("push", "pr"):
+    for verb in ("push",):
         flags = {o for a in sub[verb]._actions for o in a.option_strings}
         assert {"--plan", "--exec", "--pinned-sha", "--asked-at", "--answered-at"} <= flags
         assert not {"--remote", "--ref", "--url", "--refspec", "--force", "--branch"} & flags
@@ -866,7 +869,7 @@ def test_b10_the_only_caller() -> None:
     from carter.identity import rules
 
     assert broker.DEVOPS_AGENT == DEVOPS_AGENT == rules.plugin_defaults()["b_caller"]
-    assert broker.VERBS == ("push", "pr")  # widening B needs a new ADR
+    assert broker.VERBS == ("push",)  # D72: PRs are opened with gh; widening B needs a new ADR
 
 
 def test_b15_the_audit_store() -> None:

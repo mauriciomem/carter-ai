@@ -142,6 +142,7 @@ def full(rig_factory, opencode_bin) -> Iterator[Full]:  # type: ignore[no-untype
 
     rig = rig_factory(
         opencode=opencode_bin,
+        carter_agent=True,
         extra_files={
             ".config/opencode/plugins/carter/index.ts": index_ts,
             ".config/opencode/plugins/carter/core.ts": (PLUGIN_SRC / "core.ts").read_text(),

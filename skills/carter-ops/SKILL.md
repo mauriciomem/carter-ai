@@ -14,23 +14,24 @@ and post-hoc audit logging. Run commands directly in the terminal — no interme
 
 - **Local steps** — `git status`, `git add`, `git commit`, branch creation, `git log`,
   `carter ops audit` — run directly in whichever agent received `ops:`.
-- **Pushing and every other GitHub write** — `git push`, PR/issue create/merge/comment/edit,
-  releases, `gh api` — are **human-only**. No agent runs them from a shell, carter-devops
-  included, and the harness denies them to all of them. You finish the local work and write a
-  **handoff file** (see "Push and PR"); the human pushes and opens the PR from their own
-  terminal. One narrow exception: **carter-devops only** has the tools `carter_push` and
-  `carter_pr`, which do not run a command of yours but *ask the human to approve each use* (see
-  "B tools"). No other agent has them.
+- **Pushing** — `git push` — is **human-only**. No agent runs it from a shell, carter-devops
+  included, and the harness denies it to all of them. You finish the local work and tell the
+  user to run `carter push` (see "Push and PR"). One narrow exception: **carter-devops only**
+  has the tool `carter_push`, which does not run a command of yours but *asks the human to
+  approve each use* (see "B tool"). No other agent has it.
+- **Pull requests** — once the branch is pushed, any agent may open (`gh pr create`), edit
+  (`gh pr edit`) and comment on (`gh pr comment`) a PR. Merging, closing, reviewing and marking
+  it ready, issues, releases and `gh api` stay with the human.
 - **Jira and Slack writes** are remote steps performed **only by carter-devops** (they ask first).
 - **Outward text** (PR bodies, review comments, release notes, Jira comments) goes through
-  **carter-narrator**'s redaction pass before it is written into a handoff or posted.
+  **carter-narrator**'s redaction pass before it is posted.
 
 ### If you are not carter-devops
 
 Do the local steps, then stop and return a handoff to the maestro. For a Jira or Slack write
 the handoff names the operation and the exact text for the narrator pass. **There is no push
-tool for you**: a push or PR goes through the handoff file below, and `carter_push` /
-`carter_pr` do not exist in your session (asking for them fails with "No tool named").
+tool for you**: a push goes through `carter push` (below), and `carter_push` does not exist in
+your session (asking for it fails with "No tool named").
 
 </routing>
 
@@ -105,8 +106,8 @@ Never run any of these (generated from `g2_rules.json`):
 - **git config:** `git config --global`, `git config --system`, `git config --file`, `git config --worktree`, `git config <key> <value>`. Any write at any scope is forbidden; only `--get*`, `--list` and `--show-*` pass.
 - **-c and --config-env=:** `hook.*`, `core.hooksPath`, `core.sshCommand`, `core.askPass`, `core.fsmonitor`, `commit.gpgsign`, `user.*`, `gpg.*`, `alias.*`, `include*`, `credential.*`, `url.*`, `remote.*`, `http.*`, `protocol.*`, `carter.*`.
 - **Plumbing:** `commit-tree`, `fast-import`, `filter-branch`, `filter-repo`, `replace`, `update-ref`. `update-ref` is forbidden with a raw SHA.
-- **Other verbs:** `sudo`, `docker`, `podman`, `systemd-run`, `crontab`, `at`, `opencode run`, `opencode serve`, `gh api`. `docker` and `podman` belong to consent group `sudo-docker`; `gh` is limited to the read allowlist and a leading `gh -R` is refused.
-- **Human-only Carter verbs:** `carter push`, `carter pr`, `carter identity add/remove/unlock/lock`, `carter guard *`, `carter github-token set`, `carter broker *`, `carter ci install`.
+- **Other verbs:** `sudo`, `docker`, `podman`, `systemd-run`, `crontab`, `at`, `opencode run`, `opencode serve`, `gh api`. `docker` and `podman` belong to consent group `sudo-docker`; `gh` is limited to the allowlist (reads, and `pr create|edit|comment`, D72) and a leading `gh -R` is refused.
+- **Human-only Carter verbs:** `carter push`, `carter identity add/remove/unlock/lock`, `carter guard *`, `carter github-token set`, `carter broker *`, `carter ci install`.
 - **Credential paths:** `security find-generic-password`, `security find-internet-password`. Any token that references `credential_paths` after normalization.
 - **Control files:** `tee`, `sed -i`, `cp`, `mv`, `rm`, `ln`, `chmod`, `truncate`. Write-capable references to `control_paths`: redirections (`>`, `>>`) and these commands, or interpreter args naming them.
 <!-- forbidden:end -->
@@ -128,13 +129,13 @@ Never run any of these (generated from `g2_rules.json`):
 | `E-GUARD-TRAILER` | commit-msg | Co-authored-by trailer missing | `prepare-commit-msg` adds it; re-run without editing it out. |
 | `E-GUARD-T01SIGN` | prepare-commit-msg (T0/T1, capped) | Signing attempted below T2: agent commits here are unsigned [D51]. Don't pass `-S` or override `commit.gpgsign`. If you just changed `max_tier`, run `carter update`. | — |
 | `E-GUARD-UNSIGNED` | post-commit (warn only) | carter-guard(post-commit): HEAD <sha> is unsigned or not signed by the LLM key | Warning, never undone; re-commit without `--no-gpg-sign`; A+/B will refuse the push otherwise. |
-| `E-PUSH-GUARD` | pre-push | carter-guard: agent push blocked (<reason>) | Pushes are human-only: write the handoff and tell the user: Run `carter push` and then `carter pr` yourself, in your terminal or as `!carter push` in OpenCode, not through an agent. |
+| `E-PUSH-GUARD` | pre-push | carter-guard: agent push blocked (<reason>) | Pushes are human-only: tell the user: Run `carter push` yourself, in your terminal or as `!carter push` in OpenCode, not through an agent. |
 | `E-PUSH-ISOLATED` | agent `git push origin` | fatal: 'no_push' does not appear to be a git repository | Same: pushes are human-only. |
 | `E-POLICY` | OpenCode policy | permission.rejected: Blocked by configuration policy | Same; for gh, use an allowlisted read verb: `gh pr\|issue\|run <verb> -R <owner>/<repo>` (put `-R` after the subcommand), and `gh repo view <owner>/<repo>` or `gh search repos <query>` positionally, with no `-R`. |
-| `E-GATE` | `execute.before` gate | `<verb>` is human-only (rule `<id>`). Hand off: ask the human to run `carter push` / `carter pr` themselves (their terminal, or `!carter push` in OpenCode). | Commands shown without a leading `!`. |
+| `E-GATE` | `execute.before` gate | `<verb>` is human-only (rule `<id>`). Hand off: ask the human to run `carter push` themselves (their terminal, or `!carter push` in OpenCode). | Commands shown without a leading `!`. |
 | `E-GATE-FAIL` | gate crash / timeout | Command gate unavailable; command refused (fail closed). Run `carter check --host`. | — |
-| `E-GH-READONLY` | gh or git write with the read-only PAT | GitHub refused the write: the read-only token has no write access (`Resource not accessible by personal access token`, HTTP 403). | Writes are human-only. Run `carter push` and then `carter pr` yourself, in your terminal or as `!carter push` in OpenCode, not through an agent. |
-| `E-PAT-TYPE` | `github-token set` / plugin / check | Only fine-grained `github_pat_` tokens are accepted. | Create a read-only fine-grained token on the repositories Carter works on, then pipe it to `carter github-token set` in your own terminal. |
+| `E-GH-READONLY` | gh or git write with the read-only PAT | GitHub refused the write: the read-only token has no write access (`Resource not accessible by personal access token`, HTTP 403). | Pushes are human-only. Run `carter push` yourself, in your terminal or as `!carter push` in OpenCode, not through an agent. A PR needs `Pull requests: write` on the token (`carter github-token check` says). |
+| `E-PAT-TYPE` | `github-token set` / plugin / check | Only fine-grained `github_pat_` tokens are accepted. | Create a fine-grained token on the repositories Carter works on (Contents: read, Pull requests: write), then pipe it to `carter github-token set` in your own terminal. |
 | `E-PAT-PERM` | `github-token set` / plugin / check | Token file must be 0600, yours, not a symlink, outside any repo. | Fix the mode or location (the secrets directory must be 0700), or run `carter github-token set` again. |
 | `E-SSH-ISOLATED` | agent `ssh -T git@github.com` | Permission denied (publickey). | Expected; agent fetch uses HTTPS + PAT. |
 | `E-B-CALLER` | B | `carter_push` is devops-only. | — |
@@ -147,11 +148,9 @@ Never run any of these (generated from `g2_rules.json`):
 | `E-B-HTTPS` | B | `origin` is HTTPS; B pushes over SSH only. Use `carter push`. | — |
 | `E-B-MOVED` | B `--exec` | HEAD moved after approval (`<pinned>` → `<now>`); refused. | — |
 | `E-B-UNSIGNED` | B, A+ | Commits `<shas>` have the LLM as committer but no valid LLM signature; refused. | — |
-| `E-B-DEFAULT` | B | `<branch>` is the remote default branch; B never pushes it. Run `carter push` and then `carter pr` yourself, in your terminal or as `!carter push` in OpenCode, not through an agent; `carter push` pushes it for you. | — |
+| `E-B-DEFAULT` | B | `<branch>` is the remote default branch; B never pushes it. Run `carter push` yourself, in your terminal or as `!carter push` in OpenCode, not through an agent; `carter push` pushes it for you. | — |
 | `E-B-ARGS` | B | Only fast-forward of the current non-default branch to `origin` is allowed. | — |
 | `E-B-REJECTED` | B | B refused: 3 rejections in this session family. Start a new session or run `carter guard status --reset-b`. | — |
-| `E-SECRET-SCAN` | `carter pr`, `carter_pr` | PR text matches a secret pattern (`<rule>`); refused. | — |
-| `E-HANDOFF` | `carter pr` | No valid handoff at `.carter/state/handoff/<branch>.md`, or `head_sha` is not an ancestor of HEAD. | — |
 | `E-CONFIG` | any identity command | config.toml is invalid; agent commits are disabled until fixed. | Never falls back to defaults. |
 | `E-HUMAN-IDENTITY` | plugin / `carter ops config --emit` / prepare-commit-msg, role `author` | Role `author` needs your git identity (`user.name` and `user.email`): empty, the LLM's or a Carter fallback; refusing (no downgrade). | Set `user.name` and `user.email` in your own git config (a workspace `includeIf` override counts), then ask the agent to retry. |
 | `E-CI-REVIEW` | `carter commit` / plugin / `identity env` / `carter ops config --emit`, mode `review` (CI context E) | This is a review run: report findings and make no commits. | Context E is review-only by design (no commits, `contents: read`). Commits in CI (contexts C and D) are not built. |
@@ -177,9 +176,9 @@ Carter command gate screens every command before it runs. What that means for yo
   Stop, tell the user what you wanted to do and why it was refused, and hand off. **Do not
   rephrase the command**: another flag order, a wrapper, an interpreter or a script is the same
   request and the same violation. Never write a script to get around a rejection.
-- Pushes and PRs stay human-only from a shell. Write the handoff file; the user runs
-  `carter push` and `carter pr` in their own terminal (carter-devops may also ask through its
-  approval tools, see "B tools").
+- Pushes stay human-only from a shell. Tell the user to run `carter push` in their own
+  terminal (carter-devops may also ask through its approval tool, see "B tool"). Opening, editing
+  and commenting on a PR with `gh` is allowed.
 - Put `-R <owner>/<repo>` after the `gh` subcommand, never before it.
 - Stage explicit paths. `git add -A`, `git add .` and `git commit -a` are rejected.
 - There is no SSH in your shell: fetch and pull use HTTPS with a read-only token, which works
@@ -300,74 +299,65 @@ Then stop at the commit: pushing is the human's step (next section).
 
 <push-and-pr>
 
-## Push and PR (the human does it)
+## Push and PR
 
-You never push and never open or edit anything on GitHub. When a branch is ready, write the
-handoff file `.carter/state/handoff/<encoded-branch>.md` with your file tools, where
-`<encoded-branch>` is the branch name with `%` written as `%25` and `/` as `%2F`
-(`feat/x` → `feat%2Fx.md`). Front matter has exactly these keys, nothing else; quote the
-`title` (it often contains a colon):
+You never push. When a branch is ready, tell the user, in these words:
 
-```markdown
----
-title: "feat: one line, Conventional Commits style"
-base: main
-draft: false
-head_sha: <40 lowercase hex characters: git rev-parse HEAD>
-repo: <owner/name>
----
+Run `carter push` yourself, in your terminal or as `!carter push` in OpenCode, not through an agent.
 
-PR description in Markdown. Append the `footer` (`carter ops config --emit --field footer`) after a `---`.
+Rules: you never run it yourself, not even with a `!` prefix (that shell is the user's, and the
+gate refuses it from you); never pass `--force` or any flag to a push; never offer a branch you
+did not finish or whose commits you did not verify (`carter identity verify --commit HEAD
+--quiet` at T2).
+
+**After the user pushed, open the PR yourself** with `gh` (the read token carries `Pull requests:
+write`, so this works; it cannot push or merge):
+
+```bash
+gh pr create --head <branch> --base <base> --title "feat: one line, Conventional Commits style" --body "<description>"
 ```
 
 Write the description in the `carter-code-review` register when it is a code review (default
 Standard); otherwise use the **Brief register** (defined in `carter-docs`): lead with the ask,
-concise, scoped.
+concise, scoped. Append the `footer` (`carter ops config --emit --field footer`) after a `---`.
+The body is outward text: put no tokens, keys, internal URLs or credential paths in it (the
+narrator's redaction pass comes first). Edit it later with `gh pr edit`, answer with
+`gh pr comment`.
 
-The file is untrusted input to the human's `carter pr`: it reads only these keys, scans the
-title, branch and body for secrets, then opens the PR without asking. Put no tokens, keys, internal
-URLs or credentials paths in it (the narrator's redaction pass comes first).
-
-Then tell the user, in these words:
-
-Run `carter push` and then `carter pr` yourself, in your terminal or as `!carter push` in OpenCode, not through an agent.
-
-Rules: you never run them yourself, not even with a `!` prefix (that shell is the user's, and the
-gate refuses them from you); never pass `--force` or any flag to a push; never write the handoff
-for a branch you did not finish or whose commits you did not verify (`carter identity verify
---commit HEAD --quiet` at T2). For an
-issue, a PR comment, a review or a release there is no agent path in this version: give the
-user the drafted text (with the footer) to post themselves.
+If `gh` says the branch is not on the remote, the user has not pushed yet: ask them to run
+`carter push`. If it says `Resource not accessible by personal access token`, the token lacks
+`Pull requests: write`: tell the user to add it (`carter github-token check` says which
+permission is missing). Merging, closing, reviewing and marking a PR ready, issues, releases and
+`gh api` are the human's: give the user the drafted text (with the footer) to post themselves.
 
 </push-and-pr>
 
 <broker-tools>
 
-## B tools (carter-devops only): ask the human to approve a push or a PR
+## B tool (carter-devops only): ask the human to approve a push
 
-`carter_push` and `carter_pr` exist only for **carter-devops**, only after the user confirmed
-them (`carter guard install`, group `g2` revision 3). A subagent of devops does not have them.
-The human-run `carter push` / `carter pr` stays the default path: if you do not see the tools, or one is refused, hand off.
+`carter_push` exists only for **carter-devops**, only after the user confirmed it
+(`carter guard install`, group `g2` revision 3). A subagent of devops does not have it.
+The human-run `carter push` stays the default path: if you do not see the tool, or it is refused, hand off.
 
-- **Use them only when the work is finished**: committed and verified (`carter identity verify
-  --commit HEAD --quiet` at T2), for a PR after you wrote the handoff file (it is the only input of
-  `carter_pr`; the tool takes no arguments, and the branch is the current one).
+- **Use it only when the work is finished**: committed and verified (`carter identity verify
+  --commit HEAD --quiet` at T2); the tool takes no arguments, and the branch is the current one.
 - **Every use opens a prompt for the human** in OpenCode (Once or Reject; never "Always"). Say so
   before you call it: "I am asking you to approve pushing `<branch>`". Wait for the answer.
 - **A rejection is an answer.** Never call the tool again for the same change, never rephrase the
   request, never switch to another path to get around it. After a plain reject the turn may end
-  with no result; that is expected. Three rejections in a session stop the tools (`E-B-REJECTED`):
+  with no result; that is expected. Three rejections in a session stop the tool (`E-B-REJECTED`):
   hand off.
 - **Never use `--auto` or autoaccept, and never ask the user to.** An approval that arrives
   within half a second is refused as automatic (`E-B-DWELL`), and so is one after two minutes
   (`E-B-TIMEOUT`).
-- **Read the code in the error and fall back to the human's commands.** `E-B-DEFAULT` (the default branch),
+- **Read the code in the error and fall back to the human's command.** `E-B-DEFAULT` (the default branch),
   `E-B-HTTPS` (an HTTPS origin), `E-B-REPOCFG` (repo or SSH config that could run code),
-  `E-B-UNSIGNED`, `E-B-NOAGENT`, `E-B-POLLUTED`, `E-B-MOVED`, `E-B-ARGS` and `E-SECRET-SCAN` all
-  mean: stop, tell the user the code, and give the handoff for `carter push` / `carter pr`
+  `E-B-UNSIGNED`, `E-B-NOAGENT`, `E-B-POLLUTED`, `E-B-MOVED` and `E-B-ARGS` all
+  mean: stop, tell the user the code, and ask them to run `carter push`
   in their own terminal. Do not try to fix a config, the SSH agent or a hook yourself.
-- B only pushes the current non-default branch as a fast-forward and opens the PR from the
-  handoff. It never forces, tags, deletes or pushes another branch.
+- B only pushes the current non-default branch as a fast-forward. It never forces, tags, deletes
+  or pushes another branch. Open the PR afterwards with `gh pr create`.
 
 </broker-tools>
 
@@ -390,12 +380,12 @@ Append the `footer` (`carter ops config --emit --field footer`) to ALL body text
 
 | Error | Recovery |
 |-------|----------|
-| Local branch is behind its remote | `git pull origin <branch> --rebase`, then update the handoff `head_sha`; the human pushes |
+| Local branch is behind its remote | `git pull origin <branch> --rebase`; the human pushes |
 | Branch already exists | Ask user: switch to existing branch or pick a new name? |
 | A commit fails or `commits` is `refused` | Stop. Report `refusal_reason` (see the error table); do not retry with other flags |
 | Jira auth error | Re-authenticate the `carter-atlassian` MCP server (OAuth) in your client |
 | `gh` not found | Reads only: suggest installing the GitHub CLI (`gh`) |
-| A push or `gh` write is denied (`E-POLICY`, "Blocked by configuration policy") | Expected: write the handoff file; never retry another way |
+| A push or `gh` write is denied (`E-POLICY`, "Blocked by configuration policy") | Expected: tell the user to run `carter push`; never retry another way |
 | `coauthor_trailer` missing or wrong | Re-read it with `carter ops config --emit --field coauthor_trailer` |
 
 </error-recovery>
@@ -409,8 +399,9 @@ Read operations run directly without the `ops:` prefix — no approval needed:
 `git log`, `git status`, `git diff`, `git blame`, `git branch --list`,
 `gh issue list`, `gh pr list`, `gh pr view`, `gh pr diff`, `gh pr checks`, JQL queries via MCP.
 
-`gh` is read-only for agents and limited to `gh pr|issue|run view|list` (`pr diff`, `pr checks`),
-`gh repo view` and `gh search`; `gh status` and `gh api` are denied. Where `gh` needs a
+`gh` is limited for agents to `gh pr|issue|run view|list` (`pr diff`, `pr checks`),
+`gh repo view`, `gh search` and, since PRs are allowed, `gh pr create|edit|comment`; `gh status`,
+`gh api` and merging, closing or reviewing a PR are denied. Where `gh` needs a
 repository, put `-R <owner>/<repo>` **after** the subcommand (`gh pr view 3 -R o/r`, never
 `gh -R o/r pr view 3`). `gh repo view` and `gh search repos` take it positionally and have no
 `-R`: `gh repo view <owner>/<repo>`, `gh search repos <query>`.

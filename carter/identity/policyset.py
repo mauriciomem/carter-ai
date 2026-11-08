@@ -11,7 +11,7 @@ Shapes (plan 003, step 6 F3-F6):
 - The gh allows are *generated* from ``gh_read_allowlist`` (id ``allow-gh-<verb-slug>``),
   not repeated in ``policy_set``. They belong to ``g2`` and come last: denies, then allows
   (OpenCode policies are last-match-wins, so an allow only lifts an earlier deny).
-- Per-agent ``carter_push``/``carter_pr`` denies are *not* policies (D46): see
+- Per-agent ``carter_push`` denies are *not* policies (D46): see
   ``agent_permission_denies``.
 """
 

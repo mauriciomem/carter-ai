@@ -1,8 +1,9 @@
 """``carter-guard`` and its self-contained hook command (plan 004 step 22; RFC-0007 §4.4, C.6.4).
 
 Every case runs the real script under ``dash`` and ``bash --posix`` (macOS ``/bin/sh`` joins in
-step 38). The AD1 vectors are the shared ones of ``tests/data/plugin_vectors.json``; the Python
-oracle is ``carter.identity.rules.is_agent``.
+step 38). The AD1 vectors are the shared ones of ``tests/data/plugin_vectors.json``. Since D71
+the hooks act only on ``CARTER_AGENT_SHELL=1`` (``hooks.hook_is_agent`` is their oracle); the
+full AD1 test, ``carter.identity.rules.is_agent``, stays for Carter's own CLI refusals.
 """
 
 from __future__ import annotations
@@ -20,7 +21,6 @@ import pytest
 from carter.guard import hooks
 from carter.guard.state import GuardState
 from carter.identity.errors import registry
-from carter.identity.rules import is_agent
 
 VECTORS = json.loads(
     (Path(__file__).resolve().parents[1] / "data" / "plugin_vectors.json").read_text("utf-8")
@@ -68,10 +68,17 @@ class TestAd1Vectors:
     def test_the_script_agrees_with_the_python_oracle(
         self, vector: dict, sh: list[str], script: Path, tmp_path: Path
     ) -> None:
-        assert is_agent(vector["env"]) is vector["agent"]
+        expected = hooks.hook_is_agent(vector["env"])
         done = run([*sh, str(script), "is-agent"], vector["env"], tmp_path)
-        assert (done.returncode == 0) is vector["agent"], (vector["name"], done.stderr)
+        assert (done.returncode == 0) is expected, (vector["name"], done.stderr)
         assert done.stdout == "" and done.stderr == ""
+
+    def test_the_hooks_are_narrower_than_the_full_test_only_by_the_weak_signals(self) -> None:
+        from carter.identity.rules import is_agent
+
+        for vector in VECTORS:
+            if hooks.hook_is_agent(vector["env"]):
+                assert is_agent(vector["env"]) is True, vector["name"]  # never wider
 
     @pytest.mark.parametrize("vector", VECTORS, ids=lambda v: v["name"])
     def test_the_inline_wrapper_agrees_too(
@@ -79,14 +86,17 @@ class TestAd1Vectors:
     ) -> None:
         command = hooks.hook_command(tmp_path / "no-such-script")
         done = run([*sh, "-c", GIT_RUN % command, "hook", "origin", "url"], vector["env"], tmp_path)
-        assert (done.returncode == 1) is vector["agent"], (vector["name"], done.stderr)
+        assert (done.returncode == 1) is hooks.hook_is_agent(vector["env"]), (
+            vector["name"],
+            done.stderr,
+        )
 
     def test_a_forged_broker_marker_changes_nothing(
         self, sh: list[str], script: Path, tmp_path: Path
     ) -> None:
         for env in (
-            {"AGENT": "1", "CARTER_BROKER": "1"},
             {"CARTER_AGENT_SHELL": "1", "CARTER_BROKER": "1"},
+            {"CARTER_AGENT_SHELL": "1", "CARTER_BROKER": "0"},
         ):
             assert run([*sh, str(script), "pre-push"], env, tmp_path).returncode == 1
         assert run([*sh, str(script), "pre-push"], {"CARTER_BROKER": "1"}, tmp_path).returncode == 0
@@ -96,25 +106,28 @@ class TestPrePush:
     def test_an_agent_push_is_blocked_with_the_registered_text(
         self, sh: list[str], script: Path, tmp_path: Path
     ) -> None:
-        done = run([*sh, str(script), "pre-push", "origin", "url"], {"AGENT": "1"}, tmp_path)
+        env = {"CARTER_AGENT_SHELL": "1"}
+        done = run([*sh, str(script), "pre-push", "origin", "url"], env, tmp_path)
         entry = registry()["E-PUSH-GUARD"]
         head = entry.message.split("<reason>")[0]
         assert done.returncode == 1 and done.stdout == ""
-        assert done.stderr.startswith(head + "AGENT is set)")
+        assert done.stderr.startswith(head + "CARTER_AGENT_SHELL=1)")
         assert entry.remediation in done.stderr and "carter push" in done.stderr
 
     def test_the_reason_names_the_signal_never_a_value(
         self, sh: list[str], script: Path, tmp_path: Path
     ) -> None:
-        done = run(
-            [*sh, str(script), "pre-push"], {"OPENCODE_SESSION_ID": "ses_SECRET123"}, tmp_path
-        )
-        assert "OPENCODE_SESSION_ID is set" in done.stderr and "SECRET123" not in done.stderr
+        env = {"CARTER_AGENT_SHELL": "1", "OPENCODE_SESSION_ID": "ses_SECRET123"}
+        done = run([*sh, str(script), "pre-push"], env, tmp_path)
+        assert "CARTER_AGENT_SHELL=1" in done.stderr and "SECRET123" not in done.stderr
 
     def test_a_human_push_passes_silently(
         self, sh: list[str], script: Path, tmp_path: Path
     ) -> None:
-        for env in ({}, {"CARTER_HUMAN_SHELL": "1"}, {"OPENCODE_TERMINAL": "1"}):
+        envs = ({}, {"CARTER_HUMAN_SHELL": "1"}, {"OPENCODE_TERMINAL": "1"})
+        # D71: the weak signals of another agent's shell no longer block
+        envs += ({"AGENT": "1"}, {"OPENCODE_SESSION_ID": "ses_x"}, {"OPENCODE": "1"})
+        for env in envs:
             done = run([*sh, str(script), "pre-push", "origin", "url"], env, tmp_path)
             assert (done.returncode, done.stdout, done.stderr) == (0, "", "")
 
@@ -151,7 +164,7 @@ class TestWrapper:
     def test_with_the_script_it_runs_the_script(
         self, sh: list[str], script: Path, tmp_path: Path
     ) -> None:
-        agent = self.wrapper(sh, script, {"AGENT": "1"}, tmp_path)
+        agent = self.wrapper(sh, script, {"CARTER_AGENT_SHELL": "1"}, tmp_path)
         assert agent.returncode == 1 and agent.stderr.count("agent push blocked") == 1
         assert self.wrapper(sh, script, {}, tmp_path).returncode == 0
 
@@ -170,8 +183,9 @@ class TestWrapper:
         human = self.wrapper(sh, script, {}, tmp_path)
         assert human.returncode == 0  # the damaged script may print; it never blocks a human
         assert self.wrapper(sh, script, {"CARTER_HUMAN_SHELL": "1"}, tmp_path).returncode == 0
-        agent = self.wrapper(sh, script, {"OPENCODE": "1"}, tmp_path)
-        assert agent.returncode == 1 and "agent push blocked (OPENCODE is set)" in agent.stderr
+        agent = self.wrapper(sh, script, {"CARTER_AGENT_SHELL": "1"}, tmp_path)
+        assert agent.returncode == 1 and "agent push blocked (CARTER_AGENT_SHELL=1)" in agent.stderr
+        assert self.wrapper(sh, script, {"OPENCODE": "1", "AGENT": "1"}, tmp_path).returncode == 0
 
     def test_a_crashing_script_never_blocks_the_human(
         self, sh: list[str], script: Path, tmp_path: Path
@@ -220,7 +234,7 @@ class TestWrapper:
         fake = odd / "carter-guard"
         fake.write_text("#!/bin/sh\nexit 0\n")
         fake.chmod(0o755)
-        assert self.wrapper(sh, fake, {"AGENT": "1"}, tmp_path).returncode == 0
+        assert self.wrapper(sh, fake, {"CARTER_AGENT_SHELL": "1"}, tmp_path).returncode == 0
 
 
 class TestPortability:

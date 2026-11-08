@@ -1,6 +1,6 @@
 // Carter broker tools (RFC-0007 §4.5, App C.5; plan 007 step 15, freeze B2, B6, B19).
 //
-// `carter_push` and `carter_pr` are THIN: schema, caller check, the approval, the timers, and
+// `carter_push` is THIN: schema, caller check, the approval, the timers, and
 // passing JSON between OpenCode and `python -I -m carter.broker_cli`. Every rule (what may be
 // pushed, the dwell, the counter, the audit, the texts of the prompt) lives in Python. The
 // permission is asked WITHOUT `save`, and `permission.evaluate` forces `ask` for these tools, so
@@ -8,7 +8,7 @@
 import { CarterError, type Clock, type Env, type Iso, type Run } from "./core.ts"
 
 const PREFIX = "carter_"
-const VERBS = ["push", "pr"]
+const VERBS = ["push"]
 const CALL_MS = { plan: 60_000, exec: 300_000, record: 30_000 }
 const DECLINED = "Permission.DeclinedError" // a plain reject: the turn ends (spike B2)
 const CORRECTED = "Tool.Error" // a reject with a message
@@ -122,7 +122,7 @@ export function registerBroker(deps: BrokerDeps): void {
     throw error // rethrown as it came: OpenCode ends the turn on a plain decline
   }
 
-  // `ask` for exactly our two tools unless a config deny already said no (evaluate runs after it).
+  // `ask` for exactly our tool unless a config deny already said no (evaluate runs after it).
   // Not `carter_*`: the Carter GitHub MCP tools (`carter_github_*`) are not ours to prompt on.
   const ours = new Set(VERBS.map((verb) => `${PREFIX}${verb}`))
   permission.hook("evaluate", (e: any) => {
@@ -134,7 +134,7 @@ export function registerBroker(deps: BrokerDeps): void {
       tools.add({
         name: `${PREFIX}${verb}`,
         options: { codemode: false },
-        description: verb === "push" ? "Ask the human to approve pushing the current branch to origin (devops only; every use asks)." : "Ask the human to approve opening the pull request described by the handoff file (devops only; every use asks).",
+        description: "Ask the human to approve pushing the current branch to origin (devops only; every use asks).",
         input: deps.schema.input,
         output: deps.schema.output,
         execute: (input: unknown, tctx: any) => run(verb, input, tctx),

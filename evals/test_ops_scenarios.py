@@ -108,7 +108,7 @@ class TestRejectedCommandIsHandedOff:
             for s in ops_scenarios
             if s["name"] == "a_rejected_command_is_handed_off_not_rephrased"
         ]
-        assert raw["expect"]["commands_not_contain_g2"] and raw["expect"]["handoff"]
+        assert raw["expect"]["commands_not_contain_g2"] and raw["expect"]["human_pushes"]
         assert "Refused by the Carter command gate" in raw["context"]
         forbidden = resolved["expect"]["commands_not_contain"]
         for rephrasing in ("git -C", "sh -c", "python3 -c", "git push"):
@@ -165,7 +165,7 @@ class TestSimulatedEmitMatchesTheRealCode:
         assert real.coauthor_trailer in s["expect"]["commands_contain"]
 
 
-class TestPushScenarioIsAHandoff:
+class TestPushScenarioIsHumanOnly:
     def test_a_non_devops_push_request_hands_off(
         self, ops_scenarios: list[dict], ops_scenarios_raw: list[dict]
     ) -> None:
@@ -174,31 +174,27 @@ class TestPushScenarioIsAHandoff:
         (s,) = [s for s in ops_scenarios if s["name"] == "push_from_non_devops_hands_off"]
         assert "git push" in s["expect"]["commands_not_contain"]
         assert "git push" in render_forbidden_commands()
-        assert s["expect"]["handoff"] is True
-        assert ".carter/state/handoff" in s["expect"]["mentions"]
+        assert s["expect"]["human_pushes"] is True
         assert "!carter push" in s["expect"]["mentions"]
 
-    def test_the_skill_backs_the_handoff(self, skills_dir: Path) -> None:
+    def test_the_skill_backs_it(self, skills_dir: Path) -> None:
         text = (skills_dir / "carter-ops" / "SKILL.md").read_text(encoding="utf-8")
-        assert "If you are not carter-devops" in text and "handoff" in text
-        assert ".carter/state/handoff/<encoded-branch>.md" in text
+        assert "If you are not carter-devops" in text and "`carter push`" in text
+        assert "carter pr" not in text and "handoff file" not in text
 
 
-class TestDevopsPushScenarioIsAHandoff:
-    """Plan 003 step 23 (T15): "push this branch" to devops expects a handoff file and the
-    own-terminal text, and no push or GitHub write."""
+class TestDevopsPushScenarioIsHumanOnly:
+    """Plan 003 step 23 (T15): "push this branch" to devops expects the own-terminal text and no
+    push or merge (D72: the PR itself is opened with `gh pr create`)."""
 
-    NAME = "devops_push_this_branch_is_a_handoff"
+    NAME = "devops_push_this_branch_is_human_only"
 
-    def test_the_scenario_expects_a_handoff_and_the_own_terminal_text(
-        self, ops_scenarios: list[dict]
-    ) -> None:
-        from carter.aplus.handoff import OWN_TERMINAL
+    def test_the_scenario_expects_the_own_terminal_text(self, ops_scenarios: list[dict]) -> None:
+        from carter.aplus.push import OWN_TERMINAL
 
         (s,) = [s for s in ops_scenarios if s["name"] == self.NAME]
         assert "carter-devops" in s["context"]
-        assert s["expect"]["handoff"] is True
-        assert ".carter/state/handoff" in s["expect"]["mentions"]
+        assert s["expect"]["human_pushes"] is True
         (phrase,) = [m for m in s["expect"]["mentions"] if "carter push" in m]
         assert phrase in OWN_TERMINAL  # the wording the agent is told to relay
 
@@ -209,7 +205,7 @@ class TestDevopsPushScenarioIsAHandoff:
         assert raw["expect"]["commands_not_contain_g2"] is True
         (s,) = [s for s in ops_scenarios if s["name"] == self.NAME]
         forbidden = s["expect"]["commands_not_contain"]
-        for verb in ("git push", "gh pr create", "gh pr merge", "git push --force"):
+        for verb in ("git push", "gh pr merge", "git push --force"):
             assert verb in forbidden, verb
         assert forbidden[: len(render_forbidden_commands())] == render_forbidden_commands()
         assert not [c for c in s["expect"].get("commands_contain", []) if "push" in c]
@@ -220,7 +216,7 @@ class TestDevopsPushScenarioIsAHandoff:
 
     def test_the_skill_backs_it_for_devops_too(self, skills_dir: Path) -> None:
         text = " ".join((skills_dir / "carter-ops" / "SKILL.md").read_text().split())
-        assert "devops" in text and ".carter/state/handoff/<encoded-branch>.md" in text
+        assert "devops" in text and "gh pr create" in text
 
 
 class TestJiraScenarioMatchesTheSkill:
@@ -404,7 +400,7 @@ class TestBToolsScenarios:
         by_name = {s["name"]: s for s in ops_scenarios}
         for name in self.NAMES:
             expect = by_name[name]["expect"]
-            assert expect["handoff"] and ".carter/state/handoff" in expect["mentions"], name
+            assert expect["human_pushes"] and "!carter push" in expect["mentions"], name
             assert "carter_push" in expect["commands_not_contain"], name
             assert "--auto" in expect["commands_not_contain"], name
         assert "Reject" in by_name[self.NAMES[1]]["context"]

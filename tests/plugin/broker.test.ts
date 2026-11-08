@@ -79,10 +79,10 @@ function rig(opts: { isoDoc?: Iso; state?: string; sessions?: Record<string, any
 }
 const flush = () => new Promise((resolve) => setImmediate(resolve))
 
-test("it registers both tools, direct (not Code Mode), with no input of the model's own", () => {
+test("it registers the one tool, direct (not Code Mode), with no input of the model's own", () => {
   const r = rig()
   registerBroker(r.deps)
-  assert.deepEqual(Object.keys(r.tools).sort(), ["carter_pr", "carter_push"])
+  assert.deepEqual(Object.keys(r.tools).sort(), ["carter_push"])
   for (const t of Object.values(r.tools)) {
     assert.deepEqual(t.options, { codemode: false })
     assert.equal(t.input, "IN")
@@ -96,10 +96,10 @@ test("it registers nothing while B is off or the self-test failed", () => {
   }
 })
 
-test("evaluate forces ask for the two broker tools except on deny, and for nothing else named carter_*", () => {
+test("evaluate forces ask for the broker tool except on deny, and for nothing else named carter_*", () => {
   const r = rig()
   registerBroker(r.deps)
-  for (const [action, from, to] of [["carter_push", "allow", "ask"], ["carter_pr", "allow", "ask"], ["carter_push", "deny", "deny"], ["edit", "allow", "allow"], ["carter_github_search", "allow", "allow"], ["carter_other", "allow", "allow"]]) {
+  for (const [action, from, to] of [["carter_push", "allow", "ask"], ["carter_pr", "allow", "allow"], ["carter_push", "deny", "deny"], ["edit", "allow", "allow"], ["carter_github_search", "allow", "allow"], ["carter_other", "allow", "allow"]]) {
     const e = { action, effect: from }
     r.hooks.evaluate(e)
     assert.equal(e.effect, to, `${action} ${from}`)
@@ -318,14 +318,4 @@ test("a broker that does not answer is a refusal, never an approval", async () =
   registerBroker(r.deps)
   await assert.rejects(() => r.tools.carter_push.execute({}, r.tctx()), /did not answer/)
   assert.equal(r.asserts.length, 0)
-})
-
-test("carter_pr uses the same flow with the pr verb", async () => {
-  const r = rig()
-  registerBroker(r.deps)
-  const done = r.tools.carter_pr.execute({}, r.tctx())
-  await flush()
-  assert.ok(r.calls[0].includes("pr") && r.asserts[0].action === "carter_pr")
-  r.answer.resolve()
-  await done
 })

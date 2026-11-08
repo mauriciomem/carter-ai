@@ -180,7 +180,7 @@ class TestNoSilentUpgrade:
         assert res.exit_code == 0 and not plugin_present()
         assert state.consents["g2"] == {"decision": "accepted", "date": "2026-11-01", "rev": 1}
         assert state.extra["consent_offers"]["g2"]["decision"] == "declined"
-        assert state.opencode_policies  # the 1G denies keep working
+        assert state.consents["sudo-docker"]["decision"] == "accepted"  # the denies keep working
 
     def test_the_dry_run_says_the_plugin_needs_confirmation(self, stack) -> None:
         rev1(stack)

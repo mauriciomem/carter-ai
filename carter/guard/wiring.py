@@ -46,7 +46,6 @@ def install_guards(base_dir: Path | None, *, assume_yes: bool) -> int:
             assume_yes=assume_yes,
             interactive=terminal.stdin_is_tty(),
             dry_run=False,
-            print_policies=False,
             echo=report.say,
             confirm=click.confirm,
         )

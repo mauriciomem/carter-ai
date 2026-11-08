@@ -11,13 +11,17 @@ from carter.guard.state import load_or_empty_readonly
 from carter.identity.policyset import consent_groups
 from carter.install.paths import guard_state_path
 
-PROBLEM = re.compile(r"MISSING|CHANGED|INVALID|NOT in|cannot (?:verify|read)|unreadable")
+PROBLEM = re.compile(
+    r"MISSING|CHANGED|INVALID|NOT in|cannot (?:verify|read)|unreadable|still recorded"
+)
 
 
 def say(line: str) -> None:
     """Engine lines: problems surface as warnings, the rest shows with ``-v``."""
     text = line.strip()
-    if text.startswith(("⚠", "Declined", "Not confirmed", "no terminal", "Opt-outs")) or (
+    if text.startswith("✓ "):  # a result the user should always see (the D71 notice)
+        ui.ok(text.removeprefix("✓ "))
+    elif text.startswith(("⚠", "Declined", "Not confirmed", "no terminal", "Opt-outs")) or (
         "need your confirmation" in text or "needs your confirmation" in text
     ):
         ui.warn(text.lstrip("⚠ "))

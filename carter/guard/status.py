@@ -11,11 +11,10 @@ from __future__ import annotations
 from collections.abc import Callable
 from pathlib import Path
 
-from carter import harness
-from carter.guard import consent, gitconfig, hooks
-from carter.guard.configwrite import Reader, missing_statements, target_path
+from carter.guard import agent_rules, consent, gitconfig, hooks
+from carter.guard.configwrite import target_path
 from carter.guard.state import GuardState, load_or_empty_readonly
-from carter.identity.policyset import Statement, consent_groups
+from carter.identity.policyset import consent_groups
 from carter.install.jsonc import _load_jsonc
 from carter.install.paths import guard_state_path
 
@@ -44,25 +43,22 @@ def _consents(state: GuardState, echo: Echo) -> None:
         echo(f"  {', '.join(reserved)}: reserved, nothing to install in this version")
 
 
-def _policies(state: GuardState, reader: Reader | None, echo: Echo) -> None:
-    recorded = state.opencode_policies
-    echo(f"OpenCode config: {state.opencode_config or target_path(None)}")
-    if not recorded:
-        echo("  no policies recorded")
-        return
-    wanted = [Statement(p["id"], "", p["action"], p["resource"], p["effect"], "") for p in recorded]
-    try:
-        loaded = (reader or harness.read_debug_config)()
-    except harness.DebugConfigError as exc:
-        echo(f"  cannot verify {len(recorded)} statement(s): {exc}")
-        return
-    missing = {s.id for s in missing_statements(loaded, wanted)}
-    for rec in recorded:
-        mark = "MISSING" if rec["id"] in missing else "loaded"
-        note = " (already yours)" if rec["preexisting"] else ""
-        echo(f"  {mark:<8} {rec['id']}{note}")
-    if missing:
-        echo("  A broken config drops all policies and providers: re-run `carter guard install`.")
+def _policies(state: GuardState, base_dir: Path | None, echo: Echo) -> None:
+    """D71: G2's rules live in the Carter agent files; the OpenCode config holds no policies."""
+    echo(f"OpenCode config: {state.opencode_config or target_path(base_dir)}")
+    if state.opencode_policies:
+        echo(
+            f"  {len(state.opencode_policies)} global policy statement(s) still recorded from an "
+            "earlier Carter: run `carter guard install` to remove them (G2 now applies only to "
+            "Carter agents and Carter workspaces)"
+        )
+    else:
+        echo("  no global policies (G2's rules are in the Carter agent files)")
+    current, drifted = agent_rules.agent_file_state(base_dir)
+    if current:
+        echo(f"  Carter agent files carrying the G2 rules: {len(current)}")
+    for name in drifted:
+        echo(f"  CHANGED {name}: its permissions differ from what Carter renders")
 
 
 def _permissions(state: GuardState, echo: Echo) -> None:
@@ -125,7 +121,7 @@ def _git(state: GuardState, base_dir: Path | None, echo: Echo) -> None:
         echo(f"repo hook {mark} {path}")
 
 
-def report(base_dir: Path | None, echo: Echo, *, reader: Reader | None = None) -> None:
+def report(base_dir: Path | None, echo: Echo) -> None:
     path = guard_state_path(base_dir)
     read = load_or_empty_readonly(path)
     label = {"absent": "absent (nothing installed)", "ok": "ok"}.get(read.status)
@@ -135,7 +131,7 @@ def report(base_dir: Path | None, echo: Echo, *, reader: Reader | None = None) -
         return
     state = read.state
     _consents(state, echo)
-    _policies(state, reader, echo)
+    _policies(state, base_dir, echo)
     _permissions(state, echo)
     if state.files:
         echo("Files:")

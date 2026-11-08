@@ -17,7 +17,7 @@ from carter import hostcheck
 from carter.cli import main
 from carter.guard import gitconfig as gc
 from carter.guard.state import load, save
-from carter.identity.errors import E_POLICIES_MISSING, E_STATE_INVALID
+from carter.identity.errors import E_STATE_INVALID
 from carter.install.mcp import config_target
 from carter.install.paths import carter_gitconfig_path, guard_state_path
 from guard.helpers import STAND_IN, debug_config, decline, tree_hash, verbose
@@ -38,6 +38,12 @@ def installed(stack) -> None:
     assert guard("install", "--yes").exit_code == 0
 
 
+def installed_with_agents(stack) -> None:
+    """``carter install --yes``: the Carter agent files carry G2's rules (D71)."""
+    stack.fake()
+    assert CliRunner().invoke(main, ["install", "--yes"], catch_exceptions=False).exit_code == 0
+
+
 def levels(output: str) -> dict[str, list[str]]:
     out: dict[str, list[str]] = {}
     for line in output.splitlines():
@@ -49,13 +55,13 @@ def levels(output: str) -> dict[str, list[str]]:
 
 class TestHealthyInstall:
     def test_all_green_or_only_the_documented_warns(self, stack) -> None:
-        installed(stack)
+        installed_with_agents(stack)
         stack.fake(before=debug_config(stack.live))
         res = host()
         assert res.exit_code == 0, res.output
         found = levels(res.output)
         assert "RED" not in found
-        assert any("statement(s) loaded" in t for t in found["OK"])
+        assert any("carry the G2 rules" in t for t in found["OK"])
         warns = " ".join(found["WARN"])
         assert "not loaded yet: start OpenCode" in warns  # installed, no server has loaded it
         assert "not provisioned" in warns  # no token yet: a WARN, never a failure
@@ -120,20 +126,16 @@ class TestNothingInstalled:
 
 
 class TestRedItems:
-    def test_a_missing_statement_names_it_with_the_registry_code(self, stack) -> None:
-        installed(stack)
-        stack.fake(before=debug_config(stack.live[1:]))  # OpenCode dropped deny-git-push
+    def test_a_changed_agent_file_names_the_file(self, stack, home: Path) -> None:
+        installed_with_agents(stack)
+        path = home / ".config" / "opencode" / "agents" / "carter-pm.md"
+        path.write_text(path.read_text().replace("git send-pack *", "git send-pack --x *"))
+        stack.fake(before=debug_config())
         res = host()
         assert res.exit_code == 1
-        assert f"{E_POLICIES_MISSING}: `deny-git-push` is not loaded" in res.output
-        assert "deny-git-send-pack is" not in res.output
-        assert "drops all policies and your providers" in res.output
-
-    def test_each_missing_statement_is_its_own_line(self, stack) -> None:
-        installed(stack)
-        stack.fake(before=debug_config(stack.live[2:]))
-        reds = levels(host().output)["RED"]
-        assert sum("is not loaded" in r for r in reds) == 2
+        assert "carter-pm.md: its permissions differ from what Carter renders" in res.output
+        reds = levels(res.output)["RED"]
+        assert sum("differ from what Carter renders" in r for r in reds) == 1  # its own line
 
     def test_a_lost_provider_is_red(self, stack) -> None:
         target = config_target(None)
@@ -203,12 +205,12 @@ class TestRedItems:
         assert res.exit_code == 1 and "newer" in res.output
 
     def test_one_broken_check_does_not_hide_the_others(self, stack, monkeypatch) -> None:
-        installed(stack)
+        installed_with_agents(stack)
         stack.fake(before=debug_config(stack.live))
         monkeypatch.setattr(hostcheck, "_files", lambda s: (_ for _ in ()).throw(RuntimeError("x")))
         res = host()
         assert res.exit_code == 1 and "check could not run (RuntimeError)" in res.output
-        assert "statement(s) loaded" in res.output
+        assert "carry the G2 rules" in res.output
 
 
 class TestGitIncludeLine:

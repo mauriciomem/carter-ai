@@ -155,35 +155,36 @@ class TestSchema2Parses:
         text = SCHEMA2 + "[identity.future]\nx = 1\n[extra]\ny = 2\n"
         text = text.replace('mode = "review"', 'mode = "review"\nsurprise = "x"')
         cfg = load_identity(write(tmp_path, text))
-        assert set(cfg.unknown_keys) == {"identity.surprise", "identity.future", "extra"}
+        assert set(cfg.unknown_keys) == {"identity.surprise", "identity.future.x", "extra.y"}
 
 
-class TestSchema1IsRecognisedNotReinterpreted:
-    def test_schema1_without_schema_key_needs_migration(self, tmp_path):
+class TestOldKeysAreJustUnknown:
+    """D70: no migration. A file without ``schema`` is read as schema 2; old keys are unknown."""
+
+    def test_a_missing_schema_key_is_read_as_schema_2(self, tmp_path):
         cfg = load_identity(write(tmp_path, SCHEMA1))
-        assert cfg.state == "needs_migration"
-        assert cfg.needs_migration is True
+        assert (cfg.state, cfg.schema) == ("current", 2)
+        assert not hasattr(cfg, "needs_migration")
 
-    def test_explicit_schema_1_needs_migration(self, tmp_path):
-        cfg = load_identity(write(tmp_path, "schema = 1\n" + SCHEMA1))
-        assert cfg.state == "needs_migration"
+    def test_old_keys_are_listed_as_unknown_leaf_keys(self, tmp_path):
+        cfg = load_identity(write(tmp_path, SCHEMA1))
+        assert set(cfg.unknown_keys) == {"attribution.name", "attribution.email", "git.signing_key"}
 
     def test_legacy_values_never_leak_into_identity(self, tmp_path):
         cfg = load_identity(write(tmp_path, SCHEMA1))
         assert cfg.identity == Identity()
         assert cfg.signing == Signing()
-        dumped = repr(dataclasses.asdict(cfg))
+        dumped = repr(dataclasses.replace(cfg, unknown_keys=()))
         assert "carter-bot@" not in dumped  # the legacy email
         assert "id_ed25519" not in dumped  # the human's key path
-        assert "Legacy footer" not in dumped  # footers come from load_footer()
+        assert cfg.attribution.footer == "_Legacy footer._"  # the footer is a schema-2 key too
 
-    def test_empty_file_is_not_a_migration(self, tmp_path):
+    def test_empty_file_is_absent(self, tmp_path):
         cfg = load_identity(write(tmp_path, "# only a comment\n"))
         assert cfg.state == "absent"
-        assert cfg.needs_migration is False
 
-    @pytest.mark.parametrize("schema", ["3", "0", '"2"', "true", "2.0"])
-    def test_unsupported_schema_fails_closed(self, tmp_path, schema):
+    @pytest.mark.parametrize("schema", ["1", "3", "0", '"2"', "true", "2.0"])
+    def test_any_other_schema_value_fails_closed(self, tmp_path, schema):
         with pytest.raises(ConfigError) as exc:
             load_identity(write(tmp_path, f"schema = {schema}\n"))
         assert exc.value.code == "E-CONFIG"
@@ -267,7 +268,7 @@ class TestFooterDegrades:
         assert result.footer == "Generated with Carter."
         assert result.warning is None
 
-    def test_schema1_footer_is_kept(self, tmp_path):
+    def test_a_footer_in_an_old_file_is_kept(self, tmp_path):
         result = load_footer(write(tmp_path, SCHEMA1))
         assert result.footer == "_Legacy footer._"
         assert result.warning is None

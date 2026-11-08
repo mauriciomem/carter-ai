@@ -146,7 +146,7 @@ def transact(
     if commented and result.changed:
         result.warnings.append(
             f"{target.name} has comments and rewriting drops them (the original is kept as "
-            f"{target.name}{BACKUP_SUFFIX}); to paste by hand instead, use --print-policies"
+            f"{target.name}{BACKUP_SUFFIX})"
         )
     if dry_run:
         return result

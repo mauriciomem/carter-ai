@@ -1,15 +1,13 @@
 """The audit store (RFC-0007 App C.5 "Audit", freeze B15): one directory, two files.
 
 ``~/.carter/state/audit/`` (0700) holds ``b.jsonl`` (one line per B decision) and the ``ops``
-``audit.log`` (moved here from ``~/.carter``). Files are 0600 and append-only (``O_APPEND``,
+``audit.log``. Files are 0600 and append-only (``O_APPEND``,
 ``O_NOFOLLOW``). A B line has **exactly** the fields in ``FIELDS`` and nothing else: never env,
 credentialed URLs, tokens, titles or commit messages. Every value is cut to a printable,
 bounded string, so a model-chosen branch name cannot forge a second line.
 
 ``b.jsonl`` rotates at ``ROTATE_BYTES`` (``b.jsonl.1`` ... ``.3``). The path is resolved when
-called, never at import, so tests patch ``HOME`` first. The ops log is migrated once: an
-existing ``~/.carter/audit.log`` is moved (``os.replace``) into the directory on first use.
-Stdlib only.
+called, never at import, so tests patch ``HOME`` first. Stdlib only.
 """
 
 from __future__ import annotations
@@ -57,21 +55,6 @@ def _ensure_dir(carter_dir: Path | None) -> Path:
         directory.mkdir(exist_ok=True, mode=0o700)
     audit_dir(carter_dir).chmod(0o700)
     return audit_dir(carter_dir)
-
-
-def migrate_ops_log(carter_dir: Path | None = None) -> bool:
-    """Move ``~/.carter/audit.log`` into the directory once; keep the new file if both exist."""
-    old = (carter_dir or carter_home()) / OPS_LOG
-    new = ops_log_path(carter_dir)
-    try:
-        if not old.is_file() or old.is_symlink() or new.exists():
-            return False
-        _ensure_dir(carter_dir)
-        os.replace(old, new)
-        new.chmod(0o600)
-    except OSError:
-        return False
-    return True
 
 
 def _clean(value: Any) -> Any:
@@ -141,8 +124,7 @@ def record(event: dict[str, Any], carter_dir: Path | None = None) -> None:
 
 
 def append_ops(entry: dict[str, Any], carter_dir: Path | None = None) -> None:
-    """Append one ops entry (free-form JSON, as before) to the moved ``audit.log``."""
-    migrate_ops_log(carter_dir)
+    """Append one ops entry (free-form JSON) to ``audit.log``."""
     directory = _ensure_dir(carter_dir)
     append_line(directory / OPS_LOG, json.dumps(entry), rotate=False)
 

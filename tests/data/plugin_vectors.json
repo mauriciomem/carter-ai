@@ -522,68 +522,112 @@
   "prefix": ": carter_agent_",
   "cases": [
    {
-    "name": "marked",
-    "command": ": carter_agent_abc123\ngit status",
+    "name": "marked, in scope",
+    "command": ": carter_agent_abc123_1\ngit status",
     "marked": true,
+    "scope": true,
+    "stripped": "git status"
+   },
+   {
+    "name": "marked, out of scope",
+    "command": ": carter_agent_abc123_0\ngit status",
+    "marked": true,
+    "scope": false,
     "stripped": "git status"
    },
    {
     "name": "unmarked",
     "command": "git status",
     "marked": false,
+    "scope": null,
     "stripped": "git status"
    },
    {
     "name": "forged with another nonce",
-    "command": ": carter_agent_zzz999\ngit status",
+    "command": ": carter_agent_zzz999_1\ngit status",
     "marked": false,
-    "stripped": ": carter_agent_zzz999\ngit status"
+    "scope": null,
+    "stripped": ": carter_agent_zzz999_1\ngit status"
    },
    {
     "name": "marker not at the start",
-    "command": "echo hi\n: carter_agent_abc123\n",
+    "command": "echo hi\n: carter_agent_abc123_1\n",
     "marked": false,
-    "stripped": "echo hi\n: carter_agent_abc123\n"
+    "scope": null,
+    "stripped": "echo hi\n: carter_agent_abc123_1\n"
    },
    {
     "name": "marker only",
-    "command": ": carter_agent_abc123\n",
+    "command": ": carter_agent_abc123_1\n",
     "marked": true,
+    "scope": true,
     "stripped": ""
    },
    {
     "name": "no newline after the marker",
-    "command": ": carter_agent_abc123 git status",
+    "command": ": carter_agent_abc123_1 git status",
     "marked": false,
-    "stripped": ": carter_agent_abc123 git status"
+    "scope": null,
+    "stripped": ": carter_agent_abc123_1 git status"
    },
    {
-    "name": "marker repeated by the model",
-    "command": ": carter_agent_abc123\n: carter_agent_abc123\ngit status",
-    "marked": true,
+    "name": "no scope bit (the pre-D71 shape)",
+    "command": ": carter_agent_abc123\ngit status",
+    "marked": false,
+    "scope": null,
     "stripped": ": carter_agent_abc123\ngit status"
    },
    {
-    "name": "nonce is a prefix of a longer one",
-    "command": ": carter_agent_abc1239\ngit status",
+    "name": "a scope bit that is neither 1 nor 0",
+    "command": ": carter_agent_abc123_2\ngit status",
     "marked": false,
-    "stripped": ": carter_agent_abc1239\ngit status"
+    "scope": null,
+    "stripped": ": carter_agent_abc123_2\ngit status"
+   },
+   {
+    "name": "marker repeated by the model",
+    "command": ": carter_agent_abc123_1\n: carter_agent_abc123_1\ngit status",
+    "marked": true,
+    "scope": true,
+    "stripped": ": carter_agent_abc123_1\ngit status"
+   },
+   {
+    "name": "the model forges a scope bit in the repeat",
+    "command": ": carter_agent_abc123_0\n: carter_agent_abc123_1\ngit status",
+    "marked": true,
+    "scope": false,
+    "stripped": ": carter_agent_abc123_1\ngit status"
+   },
+   {
+    "name": "nonce is a prefix of a longer one",
+    "command": ": carter_agent_abc1239_1\ngit status",
+    "marked": false,
+    "scope": null,
+    "stripped": ": carter_agent_abc1239_1\ngit status"
    },
    {
     "name": "empty command",
     "command": "",
     "marked": false,
+    "scope": null,
     "stripped": ""
    }
   ],
   "mark": [
    {
     "command": "git status",
-    "marked": ": carter_agent_abc123\ngit status"
+    "scope": true,
+    "marked": ": carter_agent_abc123_1\ngit status"
+   },
+   {
+    "command": "git status",
+    "scope": false,
+    "marked": ": carter_agent_abc123_0\ngit status"
    },
    {
     "command": "",
-    "marked": ": carter_agent_abc123\n"
+    "scope": true,
+    "marked": ": carter_agent_abc123_1\n"
    }
   ]
  },

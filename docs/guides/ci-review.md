@@ -102,4 +102,4 @@ value is `E-CONFIG`, with no fallback.
 - GitHub shows a first-time contributor's workflow as "needs approval"; that setting is yours.
 - The first real run on GitHub (fork skip, summary, timeout) is checked by hand; CI cannot do it.
 
-See also: [Safety and permissions](safety-and-permissions.md), [Push and PR tools](push-and-pr-tools.md).
+See also: [Safety and permissions](safety-and-permissions.md), [Push tool](push-and-pr-tools.md).

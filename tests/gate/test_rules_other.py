@@ -24,14 +24,25 @@ class TestGh:
     @pytest.mark.parametrize(
         "cmd",
         [
+            "gh pr create --title x --head feat/x",
+            "gh pr create --fill",
+            "gh pr edit 1 --add-label bug",
+            "gh pr comment 1 --body done",
+        ],
+    )
+    def test_pull_requests_may_be_opened_edited_and_commented_d72(self, cmd: str) -> None:
+        assert rule_of(cmd) is None, cmd
+
+    @pytest.mark.parametrize(
+        "cmd",
+        [
             "gh",
             "gh api user",
             "gh api -X POST x",
-            "gh pr create",
             "gh pr merge 1",
-            "gh pr comment 1",
             "gh pr review 1",
             "gh pr close 1",
+            "gh pr ready 1",
             "gh issue create",
             "gh issue comment 1",
             "gh release create v1",
@@ -151,7 +162,6 @@ class TestHumanOnlyCarter:
         "cmd",
         [
             "carter push",
-            "carter pr",
             "carter guard",
             "carter guard install",
             "carter guard remove --only plugin",
@@ -162,15 +172,14 @@ class TestHumanOnlyCarter:
             "carter identity unlock",
             "carter identity lock",
             "carter --debug push",
-            "uv run carter pr",
             "python3 -m carter push",
             "/home/u/.local/bin/carter push",
             "env CARTER_X=1 carter push",
             # D68 g: the human tag lets the user's `!` shell push, so an agent must never forge it
             "CARTER_HUMAN_SHELL=1 carter push",
-            "env CARTER_HUMAN_SHELL=1 carter pr",
+            "env CARTER_HUMAN_SHELL=1 carter push",
             "export CARTER_HUMAN_SHELL=1 && carter push",
-            "unset CARTER_AGENT_SHELL && carter pr",
+            "unset CARTER_AGENT_SHELL && carter push",
         ],
     )
     def test_refused(self, cmd: str) -> None:

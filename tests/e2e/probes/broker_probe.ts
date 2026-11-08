@@ -2,7 +2,7 @@ import { Plugin } from "@opencode/plugin"
 import { Schema } from "effect"
 import { appendFileSync, existsSync, readFileSync } from "node:fs"
 
-// Spike probe for plan 007 (steps 2-3): stand-ins for carter_push / carter_pr that run NOTHING.
+// Spike probe for plan 007 (steps 2-3): stand-ins for carter_push and a code-mode probe that run NOTHING.
 // They record what the tool context carries, what the permission ask looks like, how long the
 // approval takes, and what happens when the tool gives up. Names and timings only, no secrets.
 // "__LOGS__" is replaced by the rig. `b-status.json` ({"selftest": "failed"}) switches the
@@ -75,7 +75,7 @@ export default Plugin.define({
         },
       })
       if (st === "failed") return
-      for (const [name, codemode] of [["carter_push", false], ["carter_pr", true]] as const) {
+      for (const [name, codemode] of [["carter_push", false], ["carter_probe_cm", true]] as const) {
         tools.add({
           name,
           options: { codemode },

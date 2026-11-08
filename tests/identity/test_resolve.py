@@ -120,9 +120,6 @@ class TestConfiguredTier:
         assert configured_tier(cfg(identity=T1_ID, signing=bare)) == "t2"
         assert configured_tier(cfg(identity=T1_ID, signing=with_agent)) == "t2"
 
-    def test_schema1_config_is_t0(self):
-        assert configured_tier(cfg(state="needs_migration")) == "t0"
-
 
 class TestT2FailsClosed:
     """RFC §4.1: once signing is configured, a broken config disables agent commits;
@@ -201,9 +198,6 @@ class TestT2FailsClosed:
         assert exc.value.code == "E-CONFIG"
         assert "disabled" in str(exc.value)
         assert "identity.signing.public_key" in exc.value.detail
-
-    def test_schema1_config_with_nothing_is_not_refused(self):
-        assert resolve(cfg(state="needs_migration"), workspace=WS, env={}).commits == "allowed"
 
 
 class TestT1Warning:
@@ -367,10 +361,6 @@ class TestResolve:
         r = resolve(c, workspace=WS, env={})
         assert r.require_tier == "t2"
         assert r.commits == "allowed"  # E-TIER-REQUIRED is enforced by 2a/2b
-
-    def test_schema1_config_resolves_to_t0_and_flags_migration(self):
-        r = resolve(cfg(state="needs_migration"), workspace=WS, env={})
-        assert (r.tier, r.migration_needed) == ("t0", True)
 
     def test_ensure_commits_allowed_raises_with_the_registry_code(self):
         c = cfg(workspaces={WS: Workspace(role="author")})

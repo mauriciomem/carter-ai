@@ -143,7 +143,7 @@ class TestInstall:
         assert global_cfg().read_bytes() == before
         assert not guard_script_path(None).exists() and not carter_gitconfig_path(None).exists()
 
-    def test_remove_only_hooks_keeps_the_policies(self, stack) -> None:
+    def test_remove_only_hooks_keeps_the_denies(self, stack) -> None:
         stack.fake()
         guard("install", "--yes")
         stack.fake(before=debug_config(stack.live), after=debug_config(stack.live))
@@ -154,7 +154,8 @@ class TestInstall:
             and "carter-gitconfig" not in global_cfg().read_text()
         )
         state = load(guard_state_path(None))
-        assert "hooks" not in state.consents and "g2" in state.consents and state.opencode_policies
+        assert "hooks" not in state.consents and "g2" in state.consents
+        assert state.agent_permissions  # the per-agent denies stay
 
 
 class TestDotfiles:

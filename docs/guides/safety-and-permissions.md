@@ -25,7 +25,7 @@ Three ideas decide the effect for any action:
 |----------|----------|---------------------|----------|
 | **read** | read and search files, `git status`, `git diff` | allow | allow |
 | **local-write** | edit files, run commands and tests, `git commit` | allow | allow |
-| **remote-write** | Jira and Slack writes, `vault read` (the `git push` and `gh` write commands are denied to every agent) | ask | ask |
+| **remote-write** | Jira and Slack writes, `vault read` (`git push`, `gh pr merge|close|review|ready`, issue and release writes are denied to every agent) | ask | ask |
 | **dangerous** | `terraform apply`, `kubectl apply`, `helm upgrade`, `rm -rf`, `git push --force` | ask | **deny** |
 
 The exact command patterns are in the
@@ -41,12 +41,16 @@ The exact command patterns are in the
 
 What that means in practice:
 
-- **Nobody pushes.** `git push` and the `gh` write commands are denied to every agent,
-  DevOps included; you push with `carter push` and open the pull request with
-  `carter pr`, in your terminal or as `!carter push` in OpenCode ([Write operations](write-operations.md#pushing-and-pull-requests-the-handoff)).
-  A finished branch is handed over as a file. **One optional exception:** if you confirm it,
-  DevOps alone gets two tools, `carter_push` and `carter_pr`, that *ask you to approve each use*
-  in OpenCode; see [Push and PR tools](push-and-pr-tools.md).
+- **Nobody pushes or merges.** `git push` and the `gh` write commands other than opening,
+  editing and commenting on a pull request are denied to every agent, DevOps included; you
+  push with `carter push`, in your terminal or as `!carter push` in OpenCode, and the agent then
+  opens the pull request with `gh pr create` ([Write operations](write-operations.md#pushing-and-pull-requests)).
+  **One optional exception:** if you confirm it, DevOps alone gets a tool, `carter_push`, that
+  *asks you to approve each use* in OpenCode; see [Push tool](push-and-pr-tools.md).
+- **The guards bind Carter's agents only.** The deny rules sit in each Carter agent's own
+  permissions, and the plugin and gate act for Carter agents and Carter workspaces
+  ([Install: scope](install.md#scope-only-carter-agents-and-carter-workspaces)). Other OpenCode
+  agents, such as `build`, are not restricted by Carter.
 - **A CI review run commits nothing.** If you install the optional [review-only CI](ci-review.md)
   workflow, the model there can only read the checkout, the workflow has `contents: read`, and the
   resolver refuses commits in a detected CI (`E-CI-REVIEW`).
@@ -108,11 +112,16 @@ the real work; the command gate is a speed bump in front of it, not a sandbox.
   read a script or program the agent writes and runs by path (`python3 tool.py`,
   `bash run.sh`, a sourced file), and it cannot see through every way of building a command at
   run time. What an evaded gate still cannot do is reach your SSH keys or write to GitHub.
-- **The B tools are forgeable by a same-user agent until a sandbox exists.** An agent running as
+- **Outside Carter there is no G2 (D71).** Other agents (`build`, `plan`, your own) and
+  sessions outside a Carter workspace are not gated, not isolated and not read- or edit-denied:
+  a non-Carter agent can edit the plugin or `isolation.json` (`carter check --host` goes RED on
+  the hash) and, with the plugin not loaded, nothing stops its `git push` but the credentials
+  it has. Use a Carter agent for anything you want guarded.
+- **The B tool is forgeable by a same-user agent until a sandbox exists.** An agent running as
   you, with the OpenCode server password, can answer B's approval prompt through the server API
   after any delay. The dwell rule (an approval within half a second is refused) and the prompt
   stop a careless agent and an auto-accepting client, not a hostile one. They are a convenience,
-  not a boundary ([Push and PR tools](push-and-pr-tools.md#residuals-accepted-written-down)).
+  not a boundary ([Push tool](push-and-pr-tools.md#residuals-accepted-written-down)).
 - **`git push --no-verify` skips the `pre-push` hook.** The hook is the backstop for pushes
   the gate never saw; the gate itself rejects every `git push`.
 - **Shell writes outside Carter's own files are not gated** (the accepted D67 residual): the

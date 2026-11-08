@@ -44,7 +44,6 @@ LOGIN, UID = "llm-bot", 4242
 LLM_EMAIL = f"{UID}+{LOGIN}@users.noreply.github.com"
 ORIGIN = "git@github.com:o/r.git"
 FORCE_PUSH = "FORCE carter_push {}"
-FORCE_PR = "FORCE carter_pr {}"
 HUMAN_PAUSE = 0.9  # seconds a scripted human "reads" the prompt: above the 500 ms dwell floor
 LAUNCHER = (
     "import os, sys;"

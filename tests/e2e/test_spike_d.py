@@ -19,7 +19,7 @@ from e2e.harness import Rig
 pytestmark = pytest.mark.e2e
 
 PROBE = (Path(__file__).parent / "probes" / "deny_probe.ts").read_text()
-ACTIONS = ("carter_push", "carter_pr")
+ACTIONS = ("carter_push",)
 FORCE = 'FORCE carter_push {"ref": "x"}'
 DENY = {"carter_push": {"action": "carter_push", "resource": "*", "effect": "deny"}}
 
@@ -75,9 +75,8 @@ def test_debug_agents_carries_the_denies_in_14_of_15_agents(rig_factory) -> None
         assert rules[-1] == {"action": "browser", "resource": "*", "effect": "deny"}
     # the rule is just before OpenCode's last rule, so it is the last one matching `carter_push`
     build = agents["build"]["permissions"]
-    assert build[-3:-1] == [
+    assert build[-2:-1] == [
         {"action": "carter_push", "resource": "*", "effect": "deny"},
-        {"action": "carter_pr", "resource": "*", "effect": "deny"},
     ]
     # built-ins and Carter agents alike
     assert {"build", "plan", "general", "explore", "carter-engineer", "carter-maestro"} <= set(
@@ -90,8 +89,8 @@ def test_debug_agents_carries_the_denies_in_14_of_15_agents(rig_factory) -> None
 @pytest.mark.parametrize(
     "bad",
     [
-        [{"action": "carter_pr", "resource": "*", "effect": "nope"}],  # invalid effect
-        [{"action": "carter_pr", "effect": "deny"}],  # missing resource
+        [{"action": "carter_push", "resource": "*", "effect": "nope"}],  # invalid effect
+        [{"action": "carter_push", "effect": "deny"}],  # missing resource
     ],
     ids=["bad-effect", "missing-resource"],
 )

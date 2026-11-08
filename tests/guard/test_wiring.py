@@ -47,8 +47,9 @@ class TestInstallCallsGuard:
         assert res.exit_code == 0, res.output
         assert agents_installed(base_dir) and read_manifest(base_dir)
         state = load(guard_state_path(base_dir))
-        assert len(state.owned_policies()) == len(stack.live)
-        assert len(cfg(base_dir)["policies"]) == len(stack.live)
+        assert state.opencode_policies == [] and "policies" not in cfg(base_dir)  # D71
+        agent = (base_dir / "opencode" / "agents" / "carter-engineer.md").read_text()
+        assert "git send-pack *" in agent  # the deny set lives in the Carter agents
         assert "plugin installed:" in res.output and "restart the OpenCode server" in res.output
 
     def test_without_a_terminal_and_without_yes_the_guards_are_skipped_with_a_notice(
@@ -75,7 +76,7 @@ class TestInstallCallsGuard:
     def test_a_guard_failure_exits_1_but_the_rest_of_the_install_stands(
         self, stack, base_dir: Path
     ) -> None:
-        stack.fake(after=debug_config(stack.live[1:]))  # OpenCode drops a statement
+        stack.fake(after=debug_config(stack.live, providers={}))  # OpenCode drops the providers
         res = carter(base_dir, "install", "--yes")
         assert res.exit_code == 1
         assert "guards: install failed" in res.output and "E-POLICIES-MISSING" in res.output
@@ -128,7 +129,7 @@ class TestUpgradeKeepsGuardState:
         stack.fake(before=debug_config(stack.live))
         assert carter(base_dir, "install").exit_code == 0  # non-TTY, no --yes: skipped
         assert guard_state_path(base_dir).read_bytes() == before
-        assert len(cfg(base_dir)["policies"]) == len(stack.live)
+        assert "policies" not in cfg(base_dir)
 
 
 class TestUninstallRemovesGuards:
@@ -184,7 +185,6 @@ class TestUninstallRemovesGuards:
         monkeypatch.setattr(gc, "carter_git_entries", STAND_IN)
         self.installed(stack, base_dir)
         data = cfg(base_dir)
-        data["policies"][0]["resource"] = "shell:git push --edited *"  # a Carter policy tuple
         data["agents"]["build"]["permissions"][0]["effect"] = "allow"  # a permission value
         config_target(base_dir).write_text(json.dumps(data))
         carter_file = carter_gitconfig_path(base_dir)
@@ -193,11 +193,10 @@ class TestUninstallRemovesGuards:
         res = carter(base_dir, "uninstall", "--yes")
         assert res.exit_code == 0, res.output
         out = res.output
-        assert "kept deny-git-push: edited since Carter wrote it" in out
         assert "kept build:carter_push: edited since Carter wrote it" in out
         assert f"kept {carter_file}: edited since Carter wrote it" in out
         left = cfg(base_dir)
-        assert [p["resource"] for p in left["policies"]] == ["shell:git push --edited *"]
+        assert "policies" not in left
         assert left["agents"]["build"]["permissions"] == [
             {"action": "carter_push", "resource": "*", "effect": "allow"}
         ]
@@ -206,7 +205,7 @@ class TestUninstallRemovesGuards:
 
     def test_preexisting_user_entries_are_never_touched(self, stack, base_dir: Path) -> None:
         mine = {"action": "tool.use", "resource": "shell:sudo *", "effect": "deny"}
-        rule = {"action": "carter_pr", "resource": "*", "effect": "deny"}
+        rule = {"action": "carter_push", "resource": "*", "effect": "deny"}
         target = config_target(base_dir)
         target.parent.mkdir(parents=True)
         target.write_text(

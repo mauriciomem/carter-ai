@@ -43,7 +43,7 @@ Carter Maestro (`carter-maestro`) is the orchestrator. Direct specialist request
 - **Redaction**: External-facing content goes through carter-narrator for redaction.
 - **Language**: Repository and outward content (commits, branches, code comments, docs, PRs, issues, Jira, Slack) is always English. Carter internal docs (ADRs, RFCs, `.carter/`, memories) use {{ docs_language_phrase(config) }}. Talk to the user in their language.
 - **Commits**: The user is the author and committer; never pass `--author`, `--no-verify`, `-s` or `-S`. Credit comes only from the `coauthor_trailer` that `carter ops config --emit --field coauthor_trailer` prints (use the `carter-ops` skill); if `commits` is `refused`, stop and report.
-- **Pushing**: Pushing and every other GitHub write are human-only. When a branch is ready, write the handoff file (`carter-ops` skill) and tell the user: {{ own_terminal }}
+- **Pushing**: Pushing is human-only. When a branch is ready, tell the user: {{ own_terminal }} Then you may open the PR with `gh pr create`.
 
 ## Security
 

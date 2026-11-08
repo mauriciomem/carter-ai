@@ -7,7 +7,7 @@
 // Python renders from `g2_rules.json`; shared golden vectors keep this file and the Python
 // oracles equal (`tests/data/plugin_vectors.json`).
 import { createHash } from "node:crypto"
-import { join, resolve, isAbsolute } from "node:path"
+import { dirname, join, resolve, isAbsolute } from "node:path"
 
 // ---- types ---------------------------------------------------------------------------------
 export type Env = Record<string, string | undefined>
@@ -75,6 +75,8 @@ export interface Deps {
   random: () => number
   euid: number | undefined
   sessionDir: (sessionID: string) => Promise<string | undefined>
+  // The parent of a session, null for a root session. Throws when the session cannot be read (D71).
+  sessionParent: (sessionID: string) => Promise<string | null>
   log: (line: string) => void
   onFailed?: () => void // the self-test failed: the adapter reloads the tool list so B drops out
 }
@@ -99,17 +101,59 @@ export class CarterError extends Error {
   }
 }
 
-// ---- marker (App C.2 "Shell tagging") -------------------------------------------------------
+// ---- marker (App C.2 "Shell tagging"; D71 adds the scope bit) --------------------------------
+// `: carter_agent_<nonce>_<1|0>\n`: 1 = the shell is in Carter's scope (a Carter agent or a Carter
+// workspace), 0 = it is not and create.before leaves it untouched. Every shell call is marked, so the
+// self-test and the `!` human tag stay correct whatever the scope.
 export const MARK_PREFIX = ": carter_agent_"
 export function newNonce(random: () => number): string {
   return Array.from({ length: 12 }, () => Math.floor(random() * 36).toString(36)).join("")
 }
-export function mark(nonce: string, command: string): string {
-  return `${MARK_PREFIX}${nonce}\n${command}`
+export function mark(nonce: string, command: string, scope = true): string {
+  return `${MARK_PREFIX}${nonce}_${scope ? 1 : 0}\n${command}`
 }
-export function detect(nonce: string, command: string): { marked: boolean; command: string } {
-  const head = `${MARK_PREFIX}${nonce}\n`
-  return command.startsWith(head) ? { marked: true, command: command.slice(head.length) } : { marked: false, command }
+export function detect(nonce: string, command: string): { marked: boolean; scope: boolean | null; command: string } {
+  const head = `${MARK_PREFIX}${nonce}_`
+  if (command.startsWith(head) && (command[head.length] === "1" || command[head.length] === "0") && command[head.length + 1] === "\n") {
+    return { marked: true, scope: command[head.length] === "1", command: command.slice(head.length + 2) }
+  }
+  return { marked: false, scope: null, command }
+}
+
+// ---- scope (D71) ----------------------------------------------------------------------------
+// A shell is in Carter's scope when (A) the calling agent is a Carter agent (`carter-*`, workspace
+// suffixes included), or a subagent of one, or (B) its directory is inside a Carter workspace.
+export const WORKSPACE_LEVELS = 32 // directories walked upwards from the shell's directory
+export const SESSION_HOPS = 5 // parent sessions followed to find a Carter agent
+const CARTER_AGENT = /^carter-/
+export function isCarterAgent(agent: unknown): boolean {
+  return typeof agent === "string" && CARTER_AGENT.test(agent)
+}
+// The nearest ancestor holding `.carter/carter.yaml` is the workspace root; it counts only if it also
+// holds a Carter agent file (`carter init` renders both), so `.carter/` alone (a global install that
+// keeps plans in a repo) does not.
+export function inCarterWorkspace(fs: Deps["fs"], dir: string | undefined): boolean {
+  if (!dir || !isAbsolute(dir)) return false
+  let cur = resolve(dir)
+  for (let i = 0; i < WORKSPACE_LEVELS; i++) {
+    let root = false
+    try {
+      root = fs.statSync(join(cur, ".carter", "carter.yaml")).isFile()
+    } catch {
+      root = false
+    }
+    if (root) {
+      try {
+        return fs.readdirSync(join(cur, ".opencode", "agents")).some((n) => /^carter-.*\.md$/.test(n))
+      } catch {
+        return false
+      }
+    }
+    const up = dirname(cur)
+    if (up === cur) return false
+    cur = up
+  }
+  return false
 }
 
 // ---- pollution and the GIT_CONFIG_COUNT state (shared vectors with carter.identity.pollution) -
@@ -416,6 +460,7 @@ export interface ExecuteBefore {
   tool: string
   sessionID: string
   input: unknown
+  agent?: string // the calling agent's id (OpenCode 2.1 reports it on every tool call)
 }
 export interface CreateBefore {
   command: string
@@ -482,6 +527,42 @@ export function createCarter(deps: Deps) {
     if (state === "failed") deps.onFailed?.()
   })
   writeStatus()
+
+  // D71 (A): sessions in which a `carter-*` agent called a tool, and the parent of each session read so
+  // far (null = root). A subagent (`general`, `explore`) reports its own id, so its session is covered
+  // through its ancestors. Both maps are bounded; forgetting a session only costs one more lookup.
+  const carterSessions = new Set<string>()
+  const parents = new Map<string, string | null>()
+  const CAP = 5000
+  const remember = <K, V>(map: Map<K, V>, key: K, value: V) => {
+    if (map.size >= CAP) map.delete(map.keys().next().value as K)
+    map.set(key, value)
+  }
+  const agentInScope = async (sessionID: string, agent: unknown): Promise<boolean> => {
+    if (isCarterAgent(agent)) {
+      if (!carterSessions.has(sessionID)) {
+        if (carterSessions.size >= CAP) carterSessions.delete(carterSessions.values().next().value as string)
+        carterSessions.add(sessionID)
+      }
+      return true
+    }
+    let id = sessionID
+    for (let hop = 0; hop <= SESSION_HOPS; hop++) {
+      if (carterSessions.has(id)) return true
+      let parent = parents.get(id)
+      if (parent === undefined) {
+        try {
+          parent = await deps.sessionParent(id)
+        } catch {
+          return true // the chain cannot be read: it may lead to a Carter session (fail closed)
+        }
+        remember(parents, id, parent)
+      }
+      if (parent === null) return typeof agent !== "string" // a root session of another agent: out
+      id = parent
+    }
+    return true // too deep to follow: fail closed
+  }
 
   const effectiveDir = async (e: ExecuteBefore): Promise<string | undefined> => {
     const given = isObj(e.input) && typeof e.input.workdir === "string" ? e.input.workdir : undefined
@@ -559,12 +640,23 @@ export function createCarter(deps: Deps) {
     flags: (): string[] => [...flags].sort(),
     nonce: (): string => nonce,
 
-    // The only hook that may reject a call. Order: isolation -> gate -> mark -> arm the timer.
+    // The only hook that may reject a call. Order: scope -> isolation -> gate -> mark -> arm the timer.
+    // Every tool call records a Carter agent's session (D71 A); only a shell is gated, and only in scope.
     async executeBefore(e: ExecuteBefore): Promise<void> {
-      if (e.tool !== "shell" || !isObj(e.input) || typeof e.input.command !== "string") return
-      const iso = load()
-      await gate(iso, e.input.command, await effectiveDir(e))
-      e.input.command = mark(nonce, e.input.command)
+      const carterAgent = isCarterAgent(e.agent)
+      if (e.tool !== "shell" || !isObj(e.input) || typeof e.input.command !== "string") {
+        if (carterAgent) await agentInScope(e.sessionID, e.agent) // fills the map, no lookup
+        return
+      }
+      const dir = await effectiveDir(e)
+      // a failed self-test cannot tell the scope: every shell counts (conservative, RED in check --host)
+      const inScope =
+        selfTest.state() === "failed" || (await agentInScope(e.sessionID, e.agent)) || inCarterWorkspace(fs, dir)
+      if (inScope) {
+        const iso = load()
+        await gate(iso, e.input.command, dir)
+      }
+      e.input.command = mark(nonce, e.input.command, inScope)
       selfTest.arm()
     },
 
@@ -574,7 +666,14 @@ export function createCarter(deps: Deps) {
         e.command = seen.command
         selfTest.roundTrip()
       }
-      const agent = seen.marked || selfTest.state() === "failed"
+      // D71: a marked shell is Carter's when the mark says so, or its own directory is a Carter
+      // workspace; a failed self-test cannot tell, so every shell is. Otherwise it is left alone.
+      const agent = selfTest.state() === "failed" || (seen.marked && (seen.scope === true || inCarterWorkspace(fs, e.cwd)))
+      if (seen.marked && !agent) {
+        delete e.env.CARTER_AGENT_SHELL // no tag at all: neither agent nor human
+        delete e.env.CARTER_HUMAN_SHELL
+        return
+      }
       let iso: Iso | undefined
       try {
         iso = load()

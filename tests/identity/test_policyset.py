@@ -149,9 +149,20 @@ class TestGhAllowlist:
     def test_is_the_rfc_list_minus_gh_status(self) -> None:
         verbs = [v.verb for v in gh_allowlist()]
         assert verbs == [
-            "pr view", "pr list", "pr diff", "pr checks", "issue view", "issue list",
-            "run view", "run list", "repo view", "search",
-        ]  # fmt: skip
+            "pr view",
+            "pr list",
+            "pr diff",
+            "pr checks",
+            "pr create",
+            "pr edit",
+            "pr comment",
+            "issue view",
+            "issue list",
+            "run view",
+            "run list",
+            "repo view",
+            "search",
+        ]  # fmt: skip (D72 adds create, edit and comment: PRs are allowed)
 
     def test_gh_status_was_dropped_after_spike_4_and_nothing_is_pending(self, statements) -> None:
         # Spike 4: `gh status` -> HTTP 403 "Resource not accessible by personal access token".
@@ -172,9 +183,10 @@ class TestGhAllowlist:
 
     def test_write_verbs_stay_denied(self, statements) -> None:
         for cmd in (
-            "gh pr create --title x",
             "gh pr merge 3",
-            "gh pr comment 3 -b x",
+            "gh pr close 3",
+            "gh pr review 3",
+            "gh pr ready 3",
             "gh issue create",
             "gh release create v1",
             "gh repo delete x",
@@ -182,6 +194,10 @@ class TestGhAllowlist:
             "gh pr checkout 3",
         ):
             assert decide(statements, "shell", cmd) == "deny", cmd
+
+    def test_pr_open_edit_and_comment_pass(self, statements) -> None:
+        for cmd in ("gh pr create --title x", "gh pr edit 3 --add-label a", "gh pr comment 3 -b x"):
+            assert decide(statements, "shell", cmd) == "allow", cmd
 
     def test_allowlisted_reads_pass(self, statements) -> None:
         for cmd in (
@@ -354,10 +370,10 @@ class TestRendering:
 
 
 class TestPerAgentBlock:
-    def test_denies_are_carter_push_and_pr_and_not_global(self) -> None:
-        assert policyset.agent_permission_denies() == ("carter_push", "carter_pr")
+    def test_the_deny_is_carter_push_and_not_global(self) -> None:
+        assert policyset.agent_permission_denies() == ("carter_push",)  # D72: no carter_pr
         for st in policy_set():
-            assert "carter_push" not in st.resource and "carter_pr" not in st.resource
+            assert "carter_push" not in st.resource
 
     def test_the_exemption_is_devops_only(self) -> None:
         assert policyset.agent_permission_exempt() == ("devops",)

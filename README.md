@@ -34,7 +34,7 @@ flowchart LR
 | **Maestro** | Anything. It answers simple questions itself and routes the rest |
 | **Architect** | System design, cloud architecture, trade-offs, decision records |
 | **Engineer** | Code, tests, refactoring, code review |
-| **DevOps** | CI/CD, Terraform, containers, git. Prepares the handoff; you push |
+| **DevOps** | CI/CD, Terraform, containers, git. You push; it opens the pull request |
 | **Security** | Threat models, secure code review, vulnerability triage |
 | **Learner** | Explanations and research, with sources |
 | **PM** | Plans, roadmaps, risks |
@@ -90,8 +90,8 @@ or memory: see [Your first workspace](docs/guides/first-workspace.md).
 ## Safety in one paragraph
 
 Every agent starts from "ask before doing anything". Reading and searching are free.
-Local edits are allowed only for agents that need them. Pushing and every GitHub write
-are yours (`carter push`, `carter pr`); publishing to Jira and Slack and Vault secret
+Local edits are allowed only for agents that need them. Pushing (`carter push`) and merging
+are yours; agents may open, edit and comment on pull requests; publishing to Jira and Slack and Vault secret
 reads are reserved for DevOps and always ask. Destructive or
 infrastructure-changing commands ask too, and in `strict` mode they are blocked
 outright. OpenCode enforces these rules, not the model. Read

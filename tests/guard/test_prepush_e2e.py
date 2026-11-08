@@ -21,10 +21,12 @@ from carter.guard.state import GuardState
 from carter.identity.errors import registry
 from carter.install.paths import carter_gitconfig_path, guard_script_path
 
-AGENT_ENVS = [
+# D71: the hooks act only on the plugin's tag; another agent's AGENT/OPENCODE_* alone never block
+AGENT_ENVS = [pytest.param({"CARTER_AGENT_SHELL": "1"}, id="CARTER_AGENT_SHELL")]
+OTHER_AGENT_ENVS = [
     pytest.param({"AGENT": "1"}, id="AGENT"),
     pytest.param({"OPENCODE_SESSION_ID": "ses_e2e"}, id="OPENCODE_SESSION_ID"),
-    pytest.param({"CARTER_AGENT_SHELL": "1"}, id="CARTER_AGENT_SHELL"),
+    pytest.param({"AGENT": "1", "OPENCODE": "1", "AI_AGENT": "opencode"}, id="all-weak"),
 ]
 SIGNALS = ("AGENT", "AI_AGENT", "OPENCODE", "OPENCODE_SESSION_ID", "CARTER_AGENT_SHELL")
 
@@ -118,6 +120,16 @@ class TestAgentVersusHuman:
         assert "carter push" in done.stderr
         assert hooked.remote_head() == ""  # nothing ever reached the remote
 
+    @pytest.mark.parametrize("env", OTHER_AGENT_ENVS)
+    def test_another_agents_push_is_not_blocked_by_our_hook(
+        self, env: dict[str, str], hooked: Rig
+    ) -> None:
+        """D71: without the plugin's tag the hook leaves the shell alone (no Carter scope)."""
+        hooked.commit("other-agent-work")
+        done = hooked.push(env)
+        assert done.returncode == 0, done.stderr
+        assert hooked.remote_head() != ""
+
     def test_the_same_push_from_a_human_env_succeeds(self, hooked: Rig) -> None:
         hooked.commit("human-work")
         done = hooked.push()
@@ -126,7 +138,7 @@ class TestAgentVersusHuman:
         assert hooked.remote_head() == head
 
     def test_a_blocked_agent_push_then_a_human_push_of_the_same_commit(self, hooked: Rig) -> None:
-        assert hooked.push({"AGENT": "1"}).returncode != 0
+        assert hooked.push({"CARTER_AGENT_SHELL": "1"}).returncode != 0
         assert hooked.push().returncode == 0
 
     def test_scrubbed_is_human_the_documented_ad1_limit(self, hooked: Rig) -> None:
@@ -155,7 +167,7 @@ class TestUrlForms:
     ) -> None:
         git("config", "--global", f"url.file://{hooked.remote}.insteadOf", url)
         git("remote", "set-url", "origin", url, cwd=hooked.work)
-        assert hooked.push({"AGENT": "1"}).returncode != 0
+        assert hooked.push({"CARTER_AGENT_SHELL": "1"}).returncode != 0
         assert hooked.remote_head() == ""
         human = hooked.push()
         assert human.returncode == 0, human.stderr
@@ -164,14 +176,14 @@ class TestUrlForms:
 
 class TestSurvival:
     def test_blocked_also_with_core_hookspath_dev_null(self, hooked: Rig) -> None:
-        done = hooked.push({"AGENT": "1"}, pre=("-c", "core.hooksPath=/dev/null"))
+        done = hooked.push({"CARTER_AGENT_SHELL": "1"}, pre=("-c", "core.hooksPath=/dev/null"))
         assert done.returncode != 0 and hooked.remote_head() == ""
 
     def test_no_verify_skips_the_hook_a_documented_limit(self, hooked: Rig) -> None:
         """``git push --no-verify`` skips every pre-push hook, config hooks included (spike E 5).
         With the plugin loaded the gate rejects every ``git push``; the hook is the backstop only
         for pushes the gate never saw."""
-        done = hooked.push({"AGENT": "1"}, "--no-verify")
+        done = hooked.push({"CARTER_AGENT_SHELL": "1"}, "--no-verify")
         assert done.returncode == 0, done.stderr
         assert hooked.remote_head() != ""
 
@@ -181,7 +193,7 @@ class TestSurvival:
         """``-c hook.<name>.enabled=false`` works in git; the gate refuses ``-c hook.*`` (corpus
         ``x-c-hooks-enabled``). This pins why that gate rule is load-bearing."""
         off = ("-c", "hook.carter-guard-pre-push.enabled=false")
-        assert hooked.push({"AGENT": "1"}, pre=off).returncode == 0
+        assert hooked.push({"CARTER_AGENT_SHELL": "1"}, pre=off).returncode == 0
 
 
 class TestCoexistence:
@@ -192,7 +204,7 @@ class TestCoexistence:
         hook.chmod(0o755)
         assert hooked.push().returncode == 0 and marker.read_text() == "ran\n"
         marker.unlink()
-        assert hooked.push({"AGENT": "1"}).returncode != 0
+        assert hooked.push({"CARTER_AGENT_SHELL": "1"}).returncode != 0
 
     def test_a_husky_style_hookspath_and_the_config_hook_both_run(
         self, hooked: Rig, tmp_path: Path
@@ -204,7 +216,7 @@ class TestCoexistence:
         (husky / "pre-push").chmod(0o755)
         git("config", "core.hooksPath", str(husky), cwd=hooked.work)
         assert hooked.push().returncode == 0 and marker.read_text() == "ran\n"
-        assert hooked.push({"AGENT": "1"}).returncode != 0
+        assert hooked.push({"CARTER_AGENT_SHELL": "1"}).returncode != 0
 
     def test_a_failing_repo_hook_still_blocks_a_human_push(
         self, hooked: Rig
@@ -218,7 +230,7 @@ class TestCoexistence:
 class TestWhenCarterIsDamaged:
     def test_a_deleted_script_blocks_only_the_agent(self, hooked: Rig) -> None:
         guard_script_path(None).unlink()
-        assert hooked.push({"AGENT": "1"}).returncode != 0
+        assert hooked.push({"CARTER_AGENT_SHELL": "1"}).returncode != 0
         assert hooked.remote_head() == ""
         assert hooked.push().returncode == 0
 
@@ -235,10 +247,19 @@ class TestPluginNotLoaded:
     ) -> None:
         assert not (Path.home() / ".carter" / "isolation.json").exists()
         assert not (Path.home() / ".config" / "opencode" / "plugins").exists()
-        done = hooked.push({"OPENCODE_SESSION_ID": "ses_x"})
+        done = hooked.push({"CARTER_AGENT_SHELL": "1"})
         assert done.returncode != 0
         assert "`carter push`" in done.stderr
         assert hooked.remote_head() == ""
+
+    def test_without_the_plugin_another_signal_alone_has_no_backstop_the_documented_residual(
+        self, hooked: Rig
+    ) -> None:
+        """OpenCode sets ``AGENT=1`` (not the agent's id), so no hook can tell a Carter agent from
+        another one without the plugin's tag. What remains: the Carter agents' own `git push *`
+        deny and the RED `plugin not loaded` row of `carter check --host`."""
+        hooked.commit("work")
+        assert hooked.push({"AGENT": "1", "OPENCODE_SESSION_ID": "ses_x"}).returncode == 0
 
 
 def test_the_agent_signals_used_here_are_the_data_files() -> None:

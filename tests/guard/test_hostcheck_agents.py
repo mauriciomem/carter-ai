@@ -49,7 +49,6 @@ class TestAgentDenies:
         got = items(agents)
         assert [i.text for i in got if i.level == "red"] == [
             "agent plan: carter_push is not denied in `opencode debug agents`",
-            "agent plan: carter_pr is not denied in `opencode debug agents`",
         ]
 
     def test_a_dropped_entry_is_red_with_the_hint_and_the_agent_name(self) -> None:

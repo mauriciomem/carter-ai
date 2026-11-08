@@ -94,7 +94,6 @@ class TestInstallGuide:
             "carter guard install --dry-run",
             "carter guard remove",
             "Restart the OpenCode server",
-            "--print-policies",
             "carter uninstall --keep-guards",
             "read-only token file and `~/.carter/state/audit/` stay",
         ):
@@ -130,9 +129,10 @@ class TestConfigurationReference:
         assert loaded.workspaces[str(tmp_path)].allow_project_opencode_edit is True
         assert path.startswith("/abs")
 
-    def test_it_says_only_a_human_run_apply_turns_it_into_policy(self) -> None:
+    def test_it_says_where_the_opt_out_lands(self) -> None:
         doc = " ".join(text("reference/configuration.md").split())
         assert "only when a human runs `carter guard install` or `carter update`" in doc
+        assert "Carter agents' permissions" in doc  # D71: not a global policy
 
 
 class TestFilesAndPaths:
@@ -144,15 +144,10 @@ class TestFilesAndPaths:
             "~/.carter/gitconfig",
             "~/.carter/secrets/gh-read.token",
             "~/.carter/state/audit/",
-            ".carter/state/handoff/<branch>.md",
         ],
     )
     def test_each_new_path_is_listed(self, needle: str) -> None:
         assert needle in text("reference/files-and-paths.md")
-
-    def test_the_handoff_dir_is_said_to_be_outside_state_snapshots(self) -> None:
-        doc = " ".join(text("reference/files-and-paths.md").split())
-        assert "Never part of the `.carter/.git` snapshots" in doc
 
     def test_guard_state_is_0600_and_survives_older_installers(self) -> None:
         row = next(
@@ -199,28 +194,26 @@ class TestNewCommandsInTheCliReference:
         expected = {"--dry-run", "--set-upstream", "--verbose"}
         assert documented(block) == help_options("push") == expected
 
-    @pytest.mark.parametrize(
-        "command", [["pr"], ["github-token", "set"], ["github-token", "check"]]
-    )
+    @pytest.mark.parametrize("command", [["github-token", "set"], ["github-token", "check"]])
     def test_commands_without_options_say_so(self, command: list[str]) -> None:
         assert help_options(*command) <= {"--verbose"}  # nothing but -v (D68 a)
 
     def test_every_new_command_is_in_the_table_and_has_a_heading(self) -> None:
         doc = text("reference/cli.md")
-        for name in ("github-token", "push", "pr"):
+        for name in ("github-token", "push"):
             assert f"[`{name}`](#carter-{name})" in doc
             assert f"\n## carter {name}\n" in doc
+        assert "\n## carter pr\n" not in doc and "(#carter-pr)" not in doc  # D72
         for sub in ("set", "check"):
             assert f"### carter github-token {sub}" in doc
         out = CliRunner().invoke(main, ["--help"]).output
-        for name in ("github-token", "push", "pr"):
+        for name in ("github-token", "push"):
             assert name in out
+        assert "\n  pr " not in out
 
-    def test_push_and_pr_are_documented_for_a_human_in_the_terminal_or_the_bang_shell(
-        self,
-    ) -> None:
+    def test_push_is_documented_for_a_human_in_the_terminal_or_the_bang_shell(self) -> None:
         doc = " ".join(text("reference/cli.md").split())
-        assert doc.count("For a human only") >= 2  # D68 g
+        assert doc.count("For a human only") >= 1  # D68 g
         assert "`!carter push`" in doc and "no terminal is needed" in doc
         assert "asks nothing" in doc
 
@@ -237,10 +230,11 @@ class TestNewCommandsInTheCliReference:
         )
         assert "all-zero commit" in block and "Resource not accessible" in block
         assert "All repositories" in block and "14 days" in block and "E-PAT-PERM" in block
+        assert "agents can open PRs" in block and "Pull requests: write" in block  # D72
 
     def test_check_host_lists_the_token_items(self) -> None:
         block = " ".join(section(text("reference/cli.md"), "carter check --host", "###").split())
-        assert "read-only GitHub token" in block and "cannot write" in block
+        assert "GitHub token" in block and "cannot" in block
 
 
 class TestConfigurationGithubTable:
@@ -263,38 +257,26 @@ class TestWriteOperationsAPlusFlow:
         raw = re.sub(r"^> ?", "", text("guides/write-operations.md"), flags=re.M)
         return " ".join(raw.split())
 
-    def test_the_flow_is_handoff_then_push_then_pr(self) -> None:
+    def test_the_flow_is_push_then_pr_then_the_human_decides(self) -> None:
         doc = self.doc()
-        i_hand = doc.index("The agent writes the handoff")
         i_push = doc.index("You run `carter push`")
-        i_pr = doc.index("You run `carter pr`")
-        assert i_hand < i_push < i_pr
+        i_pr = doc.index("The agent opens the pull request")
+        i_human = doc.index("You decide what happens to the PR")
+        assert i_push < i_pr < i_human
         for needle in (
-            ".carter/state/handoff/<encoded-branch>.md",
-            "`feat/x` becomes `feat%2Fx.md`",
-            "Only these five keys are accepted",
             "carter push --dry-run",
             "the default branch too: nothing to type",
-            "deleted only after the pull request exists",
+            "gh pr create --head <branch>",
+            "Pull requests: write",
             "There are no options for forcing",
         ):
             assert needle in doc, needle
-
-    def test_the_example_handoff_parses(self) -> None:
-        import textwrap
-
-        from carter.aplus.handoff import parse_handoff
-
-        raw = text("guides/write-operations.md")
-        block = re.search(r"\n\s*```markdown\n(.*?)\n\s*```", raw, flags=re.S)
-        assert block
-        item, _ = parse_handoff(textwrap.dedent(block.group(1)) + "\n")
-        assert item.base == "main" and item.repo == "owner/name" and item.draft is False
-        assert item.title == "feat(auth): add token refresh" and "## Summary" in item.body
+        for gone in ("handoff", "carter pr", "E-SECRET-SCAN", "E-HANDOFF"):  # D72
+            assert gone not in doc, gone
 
     def test_it_says_they_are_for_the_human_in_a_terminal_or_the_tagged_bang_shell(self) -> None:
         doc = self.doc()
-        assert "They are for you, not an agent" in doc and "`!carter push`" in doc
+        assert "`carter push` is for you, not an agent" in doc and "`!carter push`" in doc
         assert "once the plugin has tagged it" in doc  # D68 g
 
     def test_the_typed_bang_fallback_is_unvalidated_and_must_be_typed(self) -> None:
@@ -305,7 +287,7 @@ class TestWriteOperationsAPlusFlow:
 
     def test_issues_comments_and_releases_have_no_agent_path(self) -> None:
         doc = self.doc()
-        assert "no agent path for issues, comments, reviews or releases" in doc
+        assert "no agent path for issues, reviews, merges or releases" in doc
 
     def test_the_interim_paragraph_is_here_and_in_install(self) -> None:
         wo = " ".join(text("guides/write-operations.md").split())
@@ -329,7 +311,8 @@ class TestMcpServersGithubToken:
             "never to another organisation's",
             "`[github] probe_repo",
             "the repository's name is never printed",
-            "Metadata, Contents, Pull requests, Issues, Actions, Checks and Commit statuses",
+            "Metadata, **Contents**, Issues, Actions, Checks and Commit statuses",
+            "**Pull requests: Read and write**",
             "90 days or less",
             "SAML single sign-on",
             "`carter github-token set`",
@@ -389,7 +372,7 @@ class TestNoStaleAdvice:
 
     def test_the_safety_page_says_nobody_pushes(self) -> None:
         doc = " ".join(text("guides/safety-and-permissions.md").split())
-        assert "**Nobody pushes.**" in doc and "DevOps included" in doc
+        assert "**Nobody pushes or merges.**" in doc and "DevOps included" in doc
 
     def test_the_readme_says_you_push(self) -> None:
         readme = " ".join((REPO / "README.md").read_text(encoding="utf-8").split())
@@ -399,7 +382,7 @@ class TestNoStaleAdvice:
 class TestTroubleshootingHandoffRows:
     @pytest.mark.parametrize(
         "code",
-        ["E-HANDOFF", "E-SECRET-SCAN", "E-B-UNSIGNED", "E-APLUS-ARGS", "E-PAT-TYPE", "E-PAT-PERM"],
+        ["E-B-UNSIGNED", "E-APLUS-ARGS", "E-PAT-TYPE", "E-PAT-PERM"],
     )
     def test_each_code_has_a_row(self, code: str) -> None:
         assert f"`{code}`" in section(text("troubleshooting.md"), "Guards")

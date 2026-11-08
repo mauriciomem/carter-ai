@@ -3,8 +3,7 @@
 GitHub push protection and secret scanning flag ``github_pat_`` / ``ghp_`` / ``gho_`` /
 ``ghu_`` / ``ghs_`` / ``ghr_`` followed by 20 or more token characters, even for made-up
 values. Tests build such sentinels at runtime (``tests/sentinels.py``). The scanner below
-is written with the prefixes split so that this file does not match itself; the secret-scan
-rules in ``carter/aplus/secretscan.py`` hold only the pattern, never a sample.
+is written with the prefixes split so that this file does not match itself.
 """
 
 from __future__ import annotations
@@ -74,11 +73,6 @@ def test_the_scanner_flags_a_runtime_built_sample_and_ignores_split_literals() -
 def test_the_sentinel_helpers_build_values_that_look_like_tokens() -> None:
     assert len(fine_grained()) > 60 and fine_grained("TAG").count("TAG") == 1
     assert len(prefixed("gho_")) == 40
-
-
-def test_the_secret_scan_rules_define_patterns_not_samples() -> None:
-    source = (REPO / "carter" / "aplus" / "secretscan.py").read_text(encoding="utf-8")
-    assert not TOKEN_SHAPED.search(source)
 
 
 def test_no_tracked_file_contains_a_token_shaped_literal() -> None:

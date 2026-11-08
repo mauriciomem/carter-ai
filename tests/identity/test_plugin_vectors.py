@@ -7,13 +7,17 @@ from identity import vectors
 V = vectors.load()
 
 
-def mark(prefix: str, nonce: str, command: str) -> str:
-    return f"{prefix}{nonce}\n{command}"
+def mark(prefix: str, nonce: str, command: str, scope: bool) -> str:
+    return f"{prefix}{nonce}_{1 if scope else 0}\n{command}"
 
 
-def detect(prefix: str, nonce: str, command: str) -> tuple[bool, str]:
-    head = f"{prefix}{nonce}\n"
-    return (True, command[len(head) :]) if command.startswith(head) else (False, command)
+def detect(prefix: str, nonce: str, command: str) -> tuple[bool, bool | None, str]:
+    """``(marked, scope, rest)``: the D71 marker ends in ``_1`` (in scope) or ``_0``."""
+    head = f"{prefix}{nonce}_"
+    bit = command[len(head) : len(head) + 1] if command.startswith(head) else ""
+    if bit in ("1", "0") and command[len(head) + 1 : len(head) + 2] == "\n":
+        return True, bit == "1", command[len(head) + 2 :]
+    return False, None, command
 
 
 def test_the_sections_of_g17_are_all_there() -> None:
@@ -25,10 +29,11 @@ def test_marker_oracle() -> None:
     for case in m["cases"]:
         assert detect(m["prefix"], m["nonce"], case["command"]) == (
             case["marked"],
+            case["scope"],
             case["stripped"],
         )
     for case in m["mark"]:
-        assert mark(m["prefix"], m["nonce"], case["command"]) == case["marked"]
+        assert mark(m["prefix"], m["nonce"], case["command"], case["scope"]) == case["marked"]
 
 
 def test_the_marker_format_is_the_c2_one() -> None:

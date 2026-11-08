@@ -1,5 +1,5 @@
-"""D52: ``allow_project_opencode_edit`` becomes exact-path allows, applied only by a human
-(plan 003 step 11; RFC-0007 §4.5, App C.6.2)."""
+"""D52: ``allow_project_opencode_edit`` becomes exact-path allows in the Carter agents' own
+permissions (plan 003 step 11; RFC-0007 §4.5, App C.6.2; D71 moved them out of global policies)."""
 
 from __future__ import annotations
 
@@ -10,11 +10,12 @@ import re
 from pathlib import Path
 
 import pytest
+import yaml
 from click.testing import CliRunner
 
 from carter.cli import main
 from carter.guard import consent, optout, policies
-from carter.guard.state import GuardState, load, save
+from carter.guard.state import GuardState, save
 from carter.identity import load_identity
 from carter.install.mcp import config_target
 from carter.install.paths import guard_state_path
@@ -179,14 +180,13 @@ class TestRuntimeReadersNeverApply:
 
 
 class UpdateEnv:
-    """A workspace + a consented, applied guard state, ready for ``carter update``."""
+    """A workspace + a consented guard state, ready for ``carter update``."""
 
     def __init__(self, home: Path, ws: Path, fake_opencode) -> None:
         self.home, self.ws, self.fake = home, ws, fake_opencode
         self.state = GuardState()
         for g in ("g2", "config-edit"):
             self.state.consent(g, "accepted", "2026-11-02")
-        self.base = consent.desired_statements(self.state, home=str(home))
         runner = CliRunner()
         assert (
             runner.invoke(main, ["init", str(ws), "--single"], catch_exceptions=False).exit_code
@@ -194,12 +194,22 @@ class UpdateEnv:
         )
 
     def install_base(self) -> None:
-        self.fake(config_sequence=[dbg([]), dbg(self.base)])
-        policies.apply(None, self.state, self.base, backup_root=self.home / "bk")
         save(self.state, guard_state_path(None))
 
     def update(self, *args: str, human_tty: bool = False) -> tuple[int, str]:
         return _update(self.ws, args, human_tty)
+
+    def rules(self) -> list[dict]:
+        text = (self.ws / ".opencode" / "agents" / "carter-engineer-local.md").read_text()
+        return yaml.safe_load(text.split("---", 2)[1])["permissions"]
+
+    def opt_outs(self) -> list[str]:
+        real = str(self.ws.resolve())
+        return [
+            r["resource"]
+            for r in self.rules()
+            if r["action"] == "edit" and r["effect"] == "allow" and r["resource"].startswith(real)
+        ]
 
 
 def _update(ws: Path, args: tuple[str, ...], human_tty: bool) -> tuple[int, str]:
@@ -215,137 +225,101 @@ def env(home: Path, ws: Path, fake_opencode) -> UpdateEnv:
 
 
 class TestCarterUpdate:
-    def test_a_workspace_without_opt_outs_changes_no_policy(self, env: UpdateEnv) -> None:
+    def test_a_workspace_without_opt_outs_gets_the_denies_and_no_allow(
+        self, env: UpdateEnv
+    ) -> None:
         env.install_base()
-        cfg = config_target(None)
-        before = (cfg.read_bytes(), guard_state_path(None).read_bytes())
-        env.fake()  # `debug config` unconfigured: any call fails the test
         code, out = env.update("--yes")
-        assert code == 0 and "Policies" not in out and "opt-out" not in out
-        assert (cfg.read_bytes(), guard_state_path(None).read_bytes()) == before
+        assert code == 0
+        assert {"action": "shell", "resource": "git push *", "effect": "deny"} in env.rules()
+        assert env.opt_outs() == []
 
-    def test_no_guard_state_means_update_never_creates_policies(self, env: UpdateEnv) -> None:
+    def test_no_guard_state_means_update_never_adds_the_rules(self, env: UpdateEnv) -> None:
         write_toml(env.home, {str(env.ws): True})
         code, out = env.update("--yes")
         assert (
             code == 0 and not config_target(None).exists() and not guard_state_path(None).exists()
         )
+        assert env.opt_outs() == []  # no consent on record: update never creates G2 rules
 
-    def test_yes_lists_every_opt_out_and_applies(self, env: UpdateEnv) -> None:
+    def test_update_lists_nothing_and_applies_the_opt_out_to_the_workspace_agents(
+        self, env: UpdateEnv
+    ) -> None:
         env.install_base()
         write_toml(env.home, {str(env.ws): True})
-        wanted = consent.desired_statements(
-            env.state,
-            home=str(env.home),
-            optouts=optout.active_optouts(load_identity()).statements(),
-        )
-        env.fake(config_sequence=[dbg(env.base), dbg(wanted)])
         code, out = env.update("--yes")
         assert code == 0
-        assert (
-            "Active opt-outs" in out and str(env.ws.resolve()) in out
-        )  # listing is not skipped by --yes
-        assert "+ optout-" in out
-        data = json.loads(config_target(None).read_text())
-        assert [
-            p["resource"]
-            for p in data["policies"]
-            if p["effect"] == "allow" and "opencode" in p["resource"]
+        real = str(env.ws.resolve())
+        assert env.opt_outs() == [
+            f"{real}/opencode.json",
+            f"{real}/opencode.jsonc",
+            f"{real}/.opencode/*",
         ]
-        assert (
-            len(
-                [
-                    r
-                    for r in load(guard_state_path(None)).owned_policies()
-                    if r["id"].startswith("optout-")
-                ]
-            )
-            == 3
+        deny_at = max(
+            i for i, r in enumerate(env.rules()) if r["effect"] == "deny" and r["action"] == "edit"
         )
+        allow_at = min(
+            i for i, r in enumerate(env.rules()) if r["resource"] == f"{real}/opencode.json"
+        )
+        assert allow_at > deny_at  # last match wins: the allow lifts only that workspace
 
     def test_update_asks_nothing_and_applies_without_a_terminal_or_yes(
         self, env: UpdateEnv
     ) -> None:
         env.install_base()
         write_toml(env.home, {str(env.ws): True})
-        wanted = consent.desired_statements(
-            env.state,
-            home=str(env.home),
-            optouts=optout.active_optouts(load_identity()).statements(),
-        )
-        env.fake(config_sequence=[dbg(env.base), dbg(wanted)])
         code, out = env.update(human_tty=False)  # no --yes, no TTY, no question
         assert code == 0 and "[y/N]" not in out and "Not applied" not in out
-        assert (
-            len(
-                [
-                    r
-                    for r in load(guard_state_path(None)).owned_policies()
-                    if r["id"].startswith("optout-")
-                ]
-            )
-            == 3
-        )
+        assert len(env.opt_outs()) == 3
 
-    def test_an_agent_shell_never_applies_even_with_yes(self, env: UpdateEnv, monkeypatch) -> None:
+    def test_an_agent_shell_never_refreshes_the_global_agents(
+        self, env: UpdateEnv, monkeypatch
+    ) -> None:
         env.install_base()
         write_toml(env.home, {str(env.ws): True})
-        before = config_target(None).read_bytes()
-        env.fake()
         monkeypatch.setenv("AGENT", "x")
         code, out = env.update("--yes")
-        assert code == 0 and "agent shell" in out
-        assert config_target(None).read_bytes() == before
+        assert code == 0 and "agent shells never change them" in out
 
-    def test_dry_run_shows_the_diff_and_writes_nothing(self, env: UpdateEnv) -> None:
+    def test_dry_run_writes_nothing(self, env: UpdateEnv) -> None:
         env.install_base()
         write_toml(env.home, {str(env.ws): True})
-        before = (config_target(None).read_bytes(), guard_state_path(None).read_bytes())
-        env.fake()
+        before = env.rules()
         code, out = env.update("--dry-run", "--yes")
-        assert code == 0 and "+ optout-" in out and "Dry run" in out
-        assert (config_target(None).read_bytes(), guard_state_path(None).read_bytes()) == before
+        assert code == 0 and "would render" in out
+        assert env.rules() == before and env.opt_outs() == []
 
-    def test_removing_the_opt_out_removes_the_statements_on_the_next_apply(
+    def test_removing_the_opt_out_removes_the_allows_on_the_next_update(
         self, env: UpdateEnv
     ) -> None:
         env.install_base()
         write_toml(env.home, {str(env.ws): True})
-        with_opt = consent.desired_statements(
-            env.state,
-            home=str(env.home),
-            optouts=optout.active_optouts(load_identity()).statements(),
-        )
-        env.fake(config_sequence=[dbg(env.base), dbg(with_opt)])
         env.update("--yes")
+        assert len(env.opt_outs()) == 3
         write_toml(env.home, {str(env.ws): False})
-        env.fake(config_sequence=[dbg(with_opt), dbg(env.base)])
         code, out = env.update("--yes")
-        assert code == 0 and "- optout-" in out
-        data = json.loads(config_target(None).read_text())
-        assert not [
-            p
-            for p in data["policies"]
-            if "opencode.json" in p["resource"] and p["effect"] == "allow"
-        ]
-        assert not [
-            r
-            for r in load(guard_state_path(None)).opencode_policies
-            if r["id"].startswith("optout-")
-        ]
+        assert code == 0 and env.opt_outs() == []
 
     def test_a_corrupt_guard_state_does_not_block_update(self, env: UpdateEnv) -> None:
         guard_state_path(None).parent.mkdir(parents=True, exist_ok=True)
         guard_state_path(None).write_text("{broken")
         write_toml(env.home, {str(env.ws): True})
         code, out = env.update("--yes")
-        assert code == 0 and "unreadable" in out and guard_state_path(None).read_text() == "{broken"
+        assert code == 0 and guard_state_path(None).read_text() == "{broken"
 
-    def test_a_refused_workspace_is_reported_even_when_nothing_changes(
+    def test_a_declined_config_edit_group_gives_no_opt_out(self, env: UpdateEnv) -> None:
+        env.state.consent("config-edit", "declined", "2026-11-02")
+        env.install_base()
+        write_toml(env.home, {str(env.ws): True})
+        code, out = env.update("--yes")
+        assert code == 0 and env.opt_outs() == []
+
+    def test_a_refused_workspace_is_reported_by_check_host(
         self, env: UpdateEnv, tmp_path: Path
     ) -> None:
+        from rows import check_host
+
         env.install_base()
         write_toml(env.home, {str(tmp_path / "gone"): True})
-        env.fake()
-        code, out = env.update("--yes")
-        assert code == 0 and "not found" in out
+        out = check_host().output
+        assert "D52 opt-out: not applied" in out and "not found" in out

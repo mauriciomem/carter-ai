@@ -100,7 +100,7 @@ test("a shell tool call is marked and its create.before round trip passes the se
   const carter = createCarter(r.deps)
   const call = shell("echo hi")
   await carter.executeBefore(call)
-  assert.match(call.input.command, new RegExp(`^: carter_agent_${carter.nonce()}\\necho hi$`))
+  assert.match(call.input.command, new RegExp(`^: carter_agent_${carter.nonce()}_1\\necho hi$`))
   assert.equal(carter.pending(), 1)
   const ev = event(call.input.command, { SSH_AUTH_SOCK: "/s", PATH: "/usr/bin" })
   await carter.createBefore(ev)

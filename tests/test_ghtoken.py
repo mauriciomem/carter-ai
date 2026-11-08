@@ -194,7 +194,7 @@ class TestStore:
         assert cfg.exists() and "schema = 2" in cfg.read_text()
         assert stat.S_IMODE(cfg.stat().st_mode) == 0o600
 
-    def test_a_schema_1_config_is_left_alone_and_the_token_is_still_stored(
+    def test_a_config_of_old_keys_is_left_alone_and_the_token_is_still_stored(
         self, tmp_path: Path
     ) -> None:
         cfg = tmp_path / "carter" / "config.toml"
@@ -202,7 +202,7 @@ class TestStore:
         cfg.write_text('[git]\nsigning_key = "x"\n')
         before = cfg.read_bytes()
         res = ghtoken.store_token(TOKEN, tmp_path)
-        assert res.recorded is False and "carter install" in res.note
+        assert res.recorded is False and "left unchanged" in res.note
         assert cfg.read_bytes() == before and token_path(tmp_path).read_text() == TOKEN
 
     def test_a_broken_config_is_left_alone_too(self, tmp_path: Path) -> None:
@@ -362,9 +362,10 @@ class TestCheck:
             ("GET", "/user"),
             ("GET", "/user/repos"),
             ("POST", f"/repos/{OWNED}/git/refs"),
+            ("POST", f"/repos/{OWNED}/pulls"),  # D72: the PR probe, an empty body
         ]
         assert github_api.unexpected == []
-        post = github_api.requests[-1]
+        post = github_api.requests[-2]
         assert json.loads(post.body) == {"ref": "refs/heads/carter-write-probe", "sha": ZERO_SHA}
         assert ZERO_SHA == "0" * 40
 
@@ -622,7 +623,12 @@ class TestProbeRepository:
         return tmp_path
 
     def posts(self, github_api) -> list[str]:
-        return [r.path for r in github_api.requests if r.method == "POST"]
+        # the write probe only; the D72 PR probe has its own tests (tests/test_d72.py)
+        return [
+            r.path
+            for r in github_api.requests
+            if r.method == "POST" and r.path.endswith("/git/refs")
+        ]
 
     def test_the_listing_asks_for_repositories_you_own_most_recently_updated_first(
         self, stored, github_api

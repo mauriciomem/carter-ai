@@ -1,11 +1,11 @@
 """D52: the per-workspace opt-out from the project-config edit deny (RFC-0007 §4.5, C.6.2).
 
 ``[workspaces."<abs path>"] allow_project_opencode_edit = true`` in ``~/.carter/config.toml``
-becomes exact-path ``allow`` statements for ``<ws>/opencode.json``, ``<ws>/opencode.jsonc``
-and ``<ws>/.opencode/*``, placed after the denies in Carter's block. Only a human may turn
-that into a policy: ``carter guard install`` and ``carter update`` run this, show every
-active opt-out and ask for confirmation (``--yes`` skips only the question, never the
-listing). A shell write to ``config.toml`` is a residual risk, so the human must see it.
+becomes exact-path ``allow`` rules for ``<ws>/opencode.json``, ``<ws>/opencode.jsonc``
+and ``<ws>/.opencode/*``, placed after the denies in the Carter agents' ``permissions:`` (D71).
+``carter guard install`` lists every active opt-out; ``carter update`` re-renders the agent
+files from ``config.toml``. A shell write to ``config.toml`` is a residual risk, so the human
+must see them.
 Runtime readers (the plugin, ``carter ops``, ``carter identity``) never import this module.
 
 A worktree outside the workspace path gets nothing: the statements name the workspace's
@@ -19,9 +19,7 @@ from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from carter.guard import consent, policies
-from carter.guard.configwrite import Reader
-from carter.guard.state import GuardState, load_or_empty_readonly, save
+from carter.guard import consent
 from carter.identity.policyset import Statement
 from carter.identity.schema import IdentityConfig
 
@@ -81,55 +79,3 @@ def optout_statements(workspaces: Iterable[str]) -> list[Statement]:
 def describe(optouts: Optouts) -> list[str]:
     lines = [f"  {ws}/{{opencode.json, opencode.jsonc, .opencode/*}}" for ws in optouts.workspaces]
     return [f"  not applied, {why}" for why in optouts.refused] + lines
-
-
-def refresh_from_update(
-    base_dir: Path | None,
-    state_path: Path,
-    cfg: IdentityConfig,
-    *,
-    home: str,
-    backup_root: Path,
-    dry_run: bool,
-    agent: bool,
-    echo: Echo,
-    reader: Reader | None = None,
-) -> None:
-    """The D52 step of ``carter update``. Silent unless something would change; it asks nothing
-    (D68 h): the statements come from the user's own ``config.toml`` and the consent on record."""
-    read = load_or_empty_readonly(state_path)
-    if read.status in ("corrupt", "newer"):
-        echo(
-            "ℹ  guard state is unreadable; D52 opt-outs not refreshed (see `carter guard status`)."
-        )
-        return
-    state: GuardState = read.state
-    if consent.CONFIG_EDIT not in consent.accepted_groups(state):
-        return  # no policies installed with consent: update never creates them
-    optouts = active_optouts(cfg)
-    wanted = consent.desired_statements(state, home=home, optouts=optouts.statements())
-    preview = policies.apply(base_dir, state, wanted, backup_root=backup_root, dry_run=True)
-    if not preview.changed:
-        for line in describe(Optouts(refused=optouts.refused)):
-            echo(line)
-        return
-    echo("Policies change (D52 opt-outs and consented statements):")
-    if optouts.workspaces or optouts.refused:
-        echo("Active opt-outs (agents may edit these project files):")
-        for line in describe(optouts):
-            echo(line)
-    for ident in preview.added:
-        echo(f"  + {ident}")
-    for ident in preview.removed:
-        echo(f"  - {ident}")
-    if dry_run:
-        echo("Dry run: no policy was written.")
-        return
-    if agent:
-        echo("Policies are applied only from your own terminal (agent shell detected); skipped.")
-        return
-    result = policies.apply(base_dir, state, wanted, backup_root=backup_root, reader=reader)
-    save(state, state_path)
-    echo(f"Policies updated in {result.target}.")
-    for warning in result.warnings:
-        echo(f"⚠  {warning}")

@@ -293,23 +293,24 @@ class TestAtomicWrite:
         assert same(load_identity(path), FULL)
 
 
-SCHEMA1 = '[attribution]\nname = "carter-bot"\nfooter = "_Mine._"\n\n[git]\nsigning_key = "/k"\n'
+OLD_KEYS = '[attribution]\nname = "carter-bot"\nfooter = "_Mine._"\n\n[git]\nsigning_key = "/k"\n'
+EXISTING = 'schema = 2\n[attribution]\nfooter = "_Mine._"\n'  # a valid file a command rewrites
 
 
 class TestBackup:
     def test_backup_is_written_once_with_the_original_bytes(self, tmp_path):
-        path, bak = tmp_path / "config.toml", tmp_path / "config.toml.schema1.bak"
-        path.write_text(SCHEMA1)
+        path, bak = tmp_path / "config.toml", tmp_path / "config.toml.bak"
+        path.write_text(EXISTING)
 
         write_config(FULL, path, backup_to=bak)
 
-        assert bak.read_text() == SCHEMA1
+        assert bak.read_text() == EXISTING
         assert mode(bak) == 0o600
         assert same(load_identity(path), FULL)
 
     def test_existing_backup_is_never_overwritten(self, tmp_path):
-        path, bak = tmp_path / "config.toml", tmp_path / "config.toml.schema1.bak"
-        path.write_text(SCHEMA1)
+        path, bak = tmp_path / "config.toml", tmp_path / "config.toml.bak"
+        path.write_text(EXISTING)
         bak.write_text("PRECIOUS")
 
         write_config(FULL, path, backup_to=bak)
@@ -317,32 +318,32 @@ class TestBackup:
         assert bak.read_text() == "PRECIOUS"
 
     def test_no_backup_when_there_is_nothing_to_back_up(self, tmp_path):
-        bak = tmp_path / "config.toml.schema1.bak"
+        bak = tmp_path / "config.toml.bak"
         write_config(FULL, tmp_path / "config.toml", backup_to=bak)
         assert not bak.exists()
 
     def test_backup_survives_a_failed_replace(self, tmp_path, monkeypatch):
-        path, bak = tmp_path / "config.toml", tmp_path / "config.toml.schema1.bak"
-        path.write_text(SCHEMA1)
+        path, bak = tmp_path / "config.toml", tmp_path / "config.toml.bak"
+        path.write_text(EXISTING)
         monkeypatch.setattr(os, "replace", lambda *a, **k: (_ for _ in ()).throw(OSError("x")))
         with pytest.raises(OSError):
             write_config(FULL, path, backup_to=bak)
-        assert path.read_text() == SCHEMA1
-        assert bak.read_text() == SCHEMA1
+        assert path.read_text() == EXISTING
+        assert bak.read_text() == EXISTING
         assert sorted(p.name for p in tmp_path.iterdir()) == sorted([bak.name, path.name])
 
-    def test_schema1_file_is_not_rewritten_without_a_backup(self, tmp_path):
-        path = tmp_path / "config.toml"
-        path.write_text(SCHEMA1)
+    def test_a_file_with_old_keys_is_never_rewritten_even_with_a_backup(self, tmp_path):
+        path, bak = tmp_path / "config.toml", tmp_path / "config.toml.bak"
+        path.write_text(OLD_KEYS)
         with pytest.raises(UnmodelledKeysError):
-            write_config(FULL, path)
-        assert path.read_text() == SCHEMA1
+            write_config(FULL, path, backup_to=bak)
+        assert path.read_text() == OLD_KEYS and not bak.exists()
 
 
 class TestIdempotent:
     def test_second_identical_write_changes_nothing(self, tmp_path):
-        path, bak = tmp_path / "config.toml", tmp_path / "config.toml.schema1.bak"
-        path.write_text(SCHEMA1)
+        path, bak = tmp_path / "config.toml", tmp_path / "config.toml.bak"
+        path.write_text(EXISTING)
 
         assert write_config(FULL, path, backup_to=bak) is True
         first = path.read_bytes()
@@ -373,7 +374,7 @@ class TestRefusesUnmodelledKeys:
             write_config(FULL, path)
 
         assert path.read_text() == text  # untouched
-        assert exc.value.keys == ("extra",)
+        assert exc.value.keys == ("extra.precious",)
         assert "-precious = 1" in exc.value.diff
         assert "+" in exc.value.diff
         assert "precious" in str(exc.value)  # the printed diff
@@ -421,7 +422,7 @@ class TestReadsNeverWrite:
     def test_only_explicit_commands_import_the_writer(self):
         allowed = {
             "carter/identity/writer.py",
-            "carter/identity/migrate.py",
+            "carter/install/components.py",  # `carter install` creates the defaults
             "carter/identity/pin.py",  # only `carter update` calls it
             "carter/cli.py",  # `carter update` (lazy import, WriterError)
             "carter/ghtoken.py",  # only `github-token set` calls it (records read_token_file)

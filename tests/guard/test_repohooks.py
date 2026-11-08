@@ -454,9 +454,7 @@ class TestStep23MatrixOnARepoLocalInstall:
 
         return push, remote_head
 
-    @pytest.mark.parametrize(
-        "env", [{"AGENT": "1"}, {"OPENCODE_SESSION_ID": "s"}, {"CARTER_AGENT_SHELL": "1"}]
-    )
+    @pytest.mark.parametrize("env", [{"CARTER_AGENT_SHELL": "1"}])
     def test_agents_are_blocked_humans_pass(self, rig, env: dict[str, str]) -> None:
         push, remote_head = rig
         done = push(env)
@@ -466,19 +464,24 @@ class TestStep23MatrixOnARepoLocalInstall:
     def test_a_deleted_script_blocks_only_the_agent(self, rig) -> None:
         push, remote_head = rig
         guard_script_path(None).unlink()
-        assert push({"AGENT": "1"}).returncode != 0 and remote_head() == ""
+        assert push({"CARTER_AGENT_SHELL": "1"}).returncode != 0 and remote_head() == ""
         assert push().returncode == 0
 
     def test_no_verify_and_hookspath_skip_the_repo_hook_documented_limits(self, rig) -> None:
         """Weaker than the config hook, which survives ``-c core.hooksPath``: the gate's rules on
         ``--no-verify`` and ``-c core.hooksPath`` are what hold here (C.4.1)."""
         push, remote_head = rig
-        assert push({"AGENT": "1"}, pre=("-c", "core.hooksPath=/dev/null")).returncode == 0
+        assert (
+            push({"CARTER_AGENT_SHELL": "1"}, pre=("-c", "core.hooksPath=/dev/null")).returncode
+            == 0
+        )
         assert remote_head() != ""
 
     def test_no_verify_skips_it(self, rig) -> None:
         push, remote_head = rig
-        assert push({"AGENT": "1"}, "--no-verify").returncode == 0 and remote_head() != ""
+        assert (
+            push({"CARTER_AGENT_SHELL": "1"}, "--no-verify").returncode == 0 and remote_head() != ""
+        )
 
 
 def test_the_probe_reports_old_git_for_the_wrapper(old: Path) -> None:

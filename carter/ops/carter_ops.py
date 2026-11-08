@@ -29,7 +29,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from carter.aplus.handoff import OWN_TERMINAL
+from carter.aplus.push import OWN_TERMINAL
 from carter.broker import audit as audit_store
 from carter.config import _BASH_COMMANDS, RISK_TAXONOMY
 from carter.identity.rules import forbidden_classes
@@ -208,7 +208,8 @@ def _handle_policy_override(params: dict[str, Any]) -> int:
         return 1
 
     if is_github_write(action):
-        # Every GitHub write is human-only (RFC-0007 D31): the ledger must not suggest otherwise.
+        # Every GitHub write is human-only (RFC-0007 D31, D72): the ledger must not suggest
+        # otherwise. Opening, editing and commenting on a PR are not writes of that kind (D72).
         _audit(
             {
                 "timestamp": datetime.now(UTC).isoformat(),
@@ -220,7 +221,8 @@ def _handle_policy_override(params: dict[str, Any]) -> int:
             }
         )
         emit_error(
-            "GitHub writes (push, PR, issue, comment, release, API) are human-only; "
+            "GitHub writes (push, merging or reviewing a PR, issues, releases, the API) are "
+            "human-only; "
             f"policy-override cannot change that. {OWN_TERMINAL}"
         )
         return 1

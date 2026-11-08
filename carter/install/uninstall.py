@@ -27,7 +27,7 @@ def _remove_if_owned(
 
     * Outside the managed roots (path-component check, not string prefix) → ignored.
     * Recorded hash → delete only if the content still matches; else keep + warn.
-    * No recorded hash (manifests from older versions) → delete only ``carter-*``
+    * No recorded hash → delete only ``carter-*``
       agent/skill files, which are Carter-owned by name. Knowledge files and
       ``AGENTS.md`` are user data and are kept.
     """

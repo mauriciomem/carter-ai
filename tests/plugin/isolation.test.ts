@@ -114,7 +114,7 @@ test("an agent shell is never created without a valid isolation file (create.bef
   rmSync(join(r.home, ".carter", "isolation.json"))
   const ev = { command: "echo hi", cwd: "/w", env: { SSH_AUTH_SOCK: "/s" } as Record<string, string | undefined> }
   await carter.executeBefore({ tool: "shell", sessionID: "s", input: { command: "echo" } }).catch(() => {})
-  await assert.rejects(carter.createBefore({ ...ev, command: `: carter_agent_${carter.nonce()}\necho hi` }), /E-ISOLATION-MISSING/)
+  await assert.rejects(carter.createBefore({ ...ev, command: `: carter_agent_${carter.nonce()}_1\necho hi` }), /E-ISOLATION-MISSING/)
   assert.equal(ev.env.SSH_AUTH_SOCK, "/s") // untouched
   // a human shell is not blocked by a broken file
   await assert.doesNotReject(carter.createBefore({ command: "echo hi", cwd: "/w", env: {} }))
@@ -202,7 +202,7 @@ test("with a good token GH_TOKEN is the token; otherwise the dummy and a status 
   writePat(r.home, PAT)
   const withToken = { command: "echo", cwd: "/w", env: {} as Record<string, string | undefined> }
   await carter.executeBefore({ ...call, input: { command: "echo" } })
-  withToken.command = `: carter_agent_${carter.nonce()}\necho`
+  withToken.command = `: carter_agent_${carter.nonce()}_1\necho`
   await carter.createBefore(withToken)
   assert.equal(withToken.env.GH_TOKEN, PAT)
   assert.ok(!carter.flags().includes("pat-dummy"))

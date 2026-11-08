@@ -49,6 +49,21 @@ class RigError(Exception):
 # --- pure helpers (unit tested) --------------------------------------------------------------
 
 
+CARTER_E2E_AGENT = "carter-engineer"
+CARTER_E2E_AGENT_MD = (
+    "---\n"
+    "description: e2e stand-in for a Carter agent\n"
+    "mode: primary\n"
+    "model: mock/mock-1\n"
+    "permissions:\n"
+    "- action: '*'\n"
+    "  resource: '*'\n"
+    "  effect: allow\n"
+    "---\n"
+    "A Carter agent for the e2e rig.\n"
+)
+
+
 def free_port() -> int:
     """A currently free loopback TCP port."""
     with socket.socket() as s:
@@ -176,6 +191,10 @@ class Rig:
     executable: Sequence[str] = ()  # extra_files paths to chmod 0755
     ws_files: Mapping[str, str] = field(default_factory=dict)
     server_env_extra: Mapping[str, str] = field(default_factory=dict)
+    # D71: the plugin acts for Carter agents only, so a rig that exercises it needs one. With this
+    # on, ``prepare`` writes a minimal ``carter-engineer`` (model: the mock) and ``new_session``
+    # uses it unless a test names another agent (``build`` for the out-of-scope cases).
+    carter_agent: bool = False
     port: int = 0
     mock_port: int = 0
     password: str = field(default_factory=lambda: secrets.token_hex(16), repr=False)
@@ -245,6 +264,10 @@ class Rig:
             target.write_text(text.replace("__LOGS__", str(self.logs)))
             if rel in self.executable:
                 target.chmod(0o755)
+        if self.carter_agent:
+            agent_file = self.config_file.parent / "agents" / f"{CARTER_E2E_AGENT}.md"
+            agent_file.parent.mkdir(parents=True, exist_ok=True)
+            agent_file.write_text(CARTER_E2E_AGENT_MD)
         for rel, content in self.ws_files.items():
             target = self.ws / rel
             target.parent.mkdir(parents=True, exist_ok=True)
@@ -415,8 +438,10 @@ class Rig:
             raise RigError(f"{method} {url} -> HTTP {code or '000'}")
         return _loads(text.encode())
 
-    def new_session(self) -> str:
-        return str(self.api("POST", "/api/session", {})["data"]["id"])
+    def new_session(self, agent: str | None = None) -> str:
+        agent = agent or (CARTER_E2E_AGENT if self.carter_agent else None)
+        body = {"agent": agent} if agent else {}
+        return str(self.api("POST", "/api/session", body)["data"]["id"])
 
     def prompt(self, session_id: str, text: str) -> None:
         self.api("POST", f"/api/session/{session_id}/prompt", {"text": text})

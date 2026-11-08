@@ -7,10 +7,10 @@ cases:
 - {id: wr-add-dot, command: git add ., rule: staging, habit: "stage explicit paths: git add <file> <file>"}
 - {id: wr-commit-all, command: git commit -a -m x, rule: staging, habit: "git add <paths>, then git commit"}
 - {id: wr-no-verify, command: git commit --no-verify -m x, rule: commit-flags, habit: "fix the failing hook instead of skipping it"}
-- {id: wr-push, command: git push origin main, rule: push-verbs, habit: "write the handoff file; the human runs carter push, then carter pr"}
+- {id: wr-push, command: git push origin main, rule: push-verbs, habit: "tell the user to run carter push; then open the PR with gh pr create"}
 - {id: wr-push-dash-c, command: git -C . push, rule: push-verbs, habit: "same: pushing is human-only in every spelling"}
 - {id: wr-push-sh, command: "sh -c 'git push'", rule: push-verbs, habit: "same; a wrapper does not change the request"}
-- {id: wr-gh-create, command: gh pr create --title x, rule: other-verbs, habit: "write the handoff file; the human runs carter pr"}
+- {id: wr-gh-merge, command: gh pr merge 12, rule: other-verbs, habit: "the human merges; open or comment with gh pr create / gh pr comment"}
 - {id: wr-gh-api, command: gh api repos/o/r, rule: other-verbs, habit: "use an allowlisted read: gh pr view 12 -R o/r, gh repo view o/r, gh search repos q"}
 - {id: wr-gh-leading-r, command: gh -R o/r pr view 1, rule: other-verbs, habit: "put -R after the subcommand: gh pr view 1 -R o/r"}
 - {id: wr-gh-version, command: gh --version, rule: other-verbs, habit: "command -v gh"}

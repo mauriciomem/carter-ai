@@ -10,12 +10,12 @@ test("the marker format is the App C.2 one", () => {
 test("marker vectors: detect strips only our own nonce at the very start", () => {
   const { nonce, cases } = vectors.marker
   for (const c of cases) {
-    assert.deepEqual(detect(nonce, c.command), { marked: c.marked, command: c.stripped }, c.name)
+    assert.deepEqual(detect(nonce, c.command), { marked: c.marked, scope: c.scope, command: c.stripped }, c.name)
   }
 })
 
-test("marker vectors: mark prefixes the command", () => {
-  for (const c of vectors.marker.mark) assert.equal(mark(vectors.marker.nonce, c.command), c.marked)
+test("marker vectors: mark prefixes the command and carries the scope bit", () => {
+  for (const c of vectors.marker.mark) assert.equal(mark(vectors.marker.nonce, c.command, c.scope), c.marked)
 })
 
 test("the nonce is per instance, alphanumeric and never equal across draws", () => {
@@ -27,7 +27,7 @@ test("the nonce is per instance, alphanumeric and never equal across draws", () 
 })
 
 test("a forged marker with another nonce is not a marker", () => {
-  assert.equal(detect("abc123", ": carter_agent_zzz999\ngit status").marked, false)
+  assert.equal(detect("abc123", ": carter_agent_zzz999_1\ngit status").marked, false)
 })
 
 test("pollution vectors (shared with carter.identity.pollution)", () => {

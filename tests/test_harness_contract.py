@@ -209,7 +209,7 @@ class TestPerAgentDeniesInDebugAgents:
     Plan 004 step 5 (spike D), recorded from the real 2.1.4 after ``carter install --yes`` in an
     isolated HOME (fixture ``debug-agents-denies``, trimmed, all values made up):
 
-    - the rule ``{"action": "carter_push" | "carter_pr", "resource": "*", "effect": "deny"}`` is in
+    - the rule ``{"action": "carter_push", "resource": "*", "effect": "deny"}`` is in
       the ``permissions`` of **14 of 15** agents: every built-in (build, plan, general, explore,
       compaction, summary, title) and every Carter agent except devops, which is exempt;
     - it sits just before OpenCode's last rule (``browser`` deny), so it is the last rule that
@@ -232,7 +232,7 @@ class TestPerAgentDeniesInDebugAgents:
         return harness.agent_deny_gaps(agents, **kw)
 
     def test_the_fixture_has_the_denies_everywhere_but_devops(self) -> None:
-        deny = {"carter_push": False, "carter_pr": False}
+        deny = {"carter_push": False}
         for agent in self.agents():
             rules = {(r["action"], r["resource"], r["effect"]) for r in agent["permissions"]}
             has = {a: (a, "*", "deny") in rules for a in deny}
@@ -257,13 +257,11 @@ class TestPerAgentDeniesInDebugAgents:
         plan["permissions"].append({"action": "carter_*", "resource": "*", "effect": "allow"})
         assert self.gaps(agents, exempt=("carter-devops",)) == [
             ("plan", "carter_push"),
-            ("plan", "carter_pr"),
         ]
 
     def test_devops_is_a_gap_unless_it_is_exempt(self) -> None:
         assert self.gaps(self.agents(), exempt=()) == [
             ("carter-devops", "carter_push"),
-            ("carter-devops", "carter_pr"),
         ]
 
     def test_a_dropped_agent_entry_is_visible_in_debug_config(self) -> None:

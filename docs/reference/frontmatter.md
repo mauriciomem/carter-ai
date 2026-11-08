@@ -43,10 +43,9 @@ must_haves:                   # at least one entry in total
   `completed/`; `proposed`, `active` and `blocked` plans live in `active/`.
 - The README stays within `plans.readme_max_lines` (default 150).
 
-`push_policy` is **deprecated**. Older plans may still carry it (`manual` or `auto`);
-`carter check` accepts any value, ignores it, and prints a warning. Warnings never
-change the exit code of `carter check`; only errors do. Remove the key when you next
-edit the plan. New plans do not write it.
+A key `carter check` does not know in a plan's front matter is not validated. The retired
+`push_policy` is the one it names: ``⚠ unknown key `push_policy` in <path> → delete it``. Such a
+report never changes the exit code of `carter check`; only errors do.
 
 ### The `ai-usage` field
 

@@ -42,6 +42,13 @@ def _glyph(kind: str, stream: TextIO) -> str:
     return (GLYPHS if encoding in ("utf8", "utf16", "utf32") else ASCII)[kind]
 
 
+def _plain(line: str, stream: TextIO) -> str:
+    """``line`` as is on a UTF-8 stream, with ASCII stand-ins for its two glyphs otherwise."""
+    if _glyph("ok", stream) == GLYPHS["ok"]:
+        return line
+    return line.replace("⚠", ASCII["warn"]).replace("→", ASCII["fix"])
+
+
 def _console(stream: TextIO) -> Any:
     from rich.console import Console
 
@@ -139,6 +146,9 @@ def items(rows: Sequence[Any], noun: str, *, all_items: bool | None = None) -> i
             continue
         mark = {"ok": "ok", "info": "info", "warn": "warn", "red": "fail"}[row.level]
         stream = err if row.level in ("warn", "red") else out
+        if row.raw:
+            _emit(stream, [(_plain(row.raw, stream), "yellow")])
+            continue
         style = {"ok": "green", "info": "dim", "warn": "yellow", "red": "red bold"}[row.level]
         lines = [[(_glyph(mark, stream), style), (f" {row.area}: ", "bold"), (row.text, "")]]
         if row.fix:

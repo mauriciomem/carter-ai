@@ -1,11 +1,12 @@
-# Push and PR tools (B): let devops ask you to push
+# Push tool (B): let devops ask you to push
 
-By default **nobody but you pushes**. When a branch is ready the agent writes a handoff file and
-you run `carter push` and then `carter pr` yourself, in your terminal or as `!carter push` in OpenCode ([Write operations](write-operations.md)).
-That path is called **A+** and it stays the default.
+By default **nobody but you pushes**. When a branch is ready the agent tells you to run
+`carter push` yourself, in your terminal or as `!carter push` in OpenCode ([Write operations](write-operations.md)).
+That path is called **A+** and it stays the default. Pull requests are not part of it: once the branch is
+pushed, agents open them with `gh pr create`.
 
-This guide covers the optional second path, **B**: two tools, `carter_push` and `carter_pr`, that
-only the **devops** agent has and that **ask you to approve every single use** in the OpenCode
+This guide covers the optional second path, **B**: one tool, `carter_push`, that
+only the **devops** agent has and that will ask you to approve every single use in the OpenCode
 prompt. Nothing is pushed until you click.
 
 > [!WARNING]
@@ -17,7 +18,7 @@ prompt. Nothing is pushed until you click.
 
 ## What you get
 
-| | A+ (`carter push`, `carter pr`) | B (`carter_push`, `carter_pr`) |
+| | A+ (`carter push`) | B (`carter_push`) |
 |---|---|---|
 | Who runs it | You, in your terminal or the `!` shell | devops asks; you click **Once** in OpenCode |
 | Pushes | The current branch, with nothing to confirm | A fast-forward of the commit you were shown, to the current **non-default** branch, over **SSH** |
@@ -47,8 +48,7 @@ whether B is on, and why not if it is off.
 
 ## What you will see
 
-1. devops finishes its work and calls `carter_push`. For a PR it writes the handoff file first and
-   calls `carter_pr`; the file is the only input of that tool.
+1. devops finishes its work and calls `carter_push`. The tool takes no input.
 2. Carter checks everything it can **without using your credentials** (the repository config, your SSH
    config, the commit signatures, the range) and refuses with a code if something is wrong. You are
    not asked for something that cannot work.
@@ -102,21 +102,19 @@ Against a running service the controls are the auto-reject and the dwell floor a
 | `E-B-MOVED` | HEAD changed after you approved | Ask again |
 | `E-B-DWELL`, `E-B-TIMEOUT`, `E-B-REJECTED` | See "Approving" above | |
 | `E-B-ARGS` | Not a fast-forward, nothing to push, detached HEAD, `git push` failed, no `origin/HEAD` ... | The detail says which |
-| `E-SECRET-SCAN`, `E-HANDOFF` | `carter_pr`: a secret in the title, branch or body, or no valid handoff | Fix the handoff file |
 
 ## Files
 
 | Path | What |
 |------|------|
 | `~/.carter/state/audit/b.jsonl` | One line per decision: time, agent, session and root session, repo, branch, range, commit count, decision, code, dwell. No environment, no URL with credentials, no title. Rotates at 5 MiB (keeps three). Directory 0700, files 0600 |
-| `~/.carter/state/audit/audit.log` | The `ops:` audit log, moved here from `~/.carter/audit.log` the first time it is written |
+| `~/.carter/state/audit/audit.log` | The `ops:` audit log |
 | `~/.carter/run/b-rejections.json` | The rejection counters (0600) |
 | `~/.carter/opencode-headless.json` | The headless profile (tracked by `guard-state.json`) |
 | `~/.carter/isolation.json` | Schema 2: `plugin.b_enabled`, `b_caller`, `broker_args`, `b_git`, `b_gh` |
 
-`carter_pr` uses your own `gh auth login` (keyring or `hosts.yml`). A token in `GH_TOKEN` or
-`GITHUB_TOKEN` in the OpenCode server's environment is **not** passed on; `carter check --host`
-warns when it finds one.
+A token in `GH_TOKEN` or `GITHUB_TOKEN` in the OpenCode server's environment is **not** passed
+on; `carter check --host` warns when it finds one.
 
 `git` and `gh` are found **once**, when you run `carter guard install` (in `/usr/bin`, `/bin`,
 `/usr/local/bin`, `/opt/homebrew/bin`), and stored by absolute path; B never searches `PATH`. `ssh`

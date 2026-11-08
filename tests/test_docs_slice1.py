@@ -91,14 +91,14 @@ class TestConfigurationReference:
         example = yaml.safe_load(re.search(r"```yaml\n(.*?)```", doc, flags=re.S).group(1))
         assert example == generate_default_config(workspace_name="my-project")
 
-    def test_identity_section_documents_policy_and_deprecations(self) -> None:
+    def test_identity_section_documents_policy_only(self) -> None:
         block = section(text("reference/configuration.md"), "Keys")
         identity = block[block.index("### identity") :].split("\n### ", 2)[0]
         for needle in ("`role`", "`require_tier`", "`co-author`", "`author`", "`t0`", "`t2`"):
             assert needle in identity, needle
         assert "carter update" in identity and "~/.carter/config.toml" in identity
-        assert re.search(r"`git_account`[^\n]*deprecated", identity, re.I)
-        assert re.search(r"`bot_name`[^\n]*deprecated", identity, re.I)
+        assert "git_account" not in identity and "bot_name" not in identity  # D70: unknown keys
+        assert "deprecated" not in identity.lower()
 
     def test_user_config_schema_2_is_documented(self) -> None:
         doc = text("reference/configuration.md")
@@ -106,22 +106,21 @@ class TestConfigurationReference:
         assert '[workspaces."/abs/path"]' in doc or '[workspaces."' in doc
         for key in ("max_tier", "role", "require_tier"):
             assert f"`{key}`" in doc
-        assert "config.toml.schema1.bak" in doc
+        assert "config.toml.schema1.bak" not in doc and "unknown key" in doc  # D70: no migration
 
 
 class TestInstallAndFiles:
     def test_files_and_paths_cover_the_new_files(self) -> None:
         doc = text("reference/files-and-paths.md")
-        assert "config.toml.schema1.bak" in doc
-        assert "~/.carter/upgrade-notes/" in doc
+        assert "config.toml.schema1.bak" not in doc and "upgrade-notes" not in doc  # D70
         assert "Never overwritten" not in next(
             ln for ln in doc.splitlines() if ln.startswith("| `~/.carter/config.toml`")
         )
 
-    def test_install_guide_explains_migration_and_the_human_key(self) -> None:
+    def test_install_guide_names_unknown_keys_and_the_human_key(self) -> None:
         doc = " ".join(text("guides/install.md").split())
-        assert "migrated" in doc and "config.toml.schema1.bak" in doc
-        assert "upgrade-notes" in doc
+        assert "not migrated" in doc and "→ delete it" in doc
+        assert "schema1.bak" not in doc and "upgrade-notes" not in doc
         assert "never uses your signing key" in doc.lower() or "never reads your signing key" in doc
 
 

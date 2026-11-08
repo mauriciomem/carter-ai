@@ -1,12 +1,11 @@
 """``python -I -m carter.broker_cli``: the only entry of B's Python core (freeze B2, erratum T6).
 
-Spawned by the OpenCode plugin tools ``carter_push`` / ``carter_pr`` with the **server**
+Spawned by the OpenCode plugin tools ``carter_push`` with the **server**
 environment (nothing here is meant for a human or an agent shell; there is no click wrapper
-because humans use A+, ``carter push`` / ``carter pr``). Subcommands::
+because humans use A+, ``carter push``). Subcommands::
 
     push --plan --cwd DIR --agent A --session S --root R --git G [--gh H]
     push --exec ... --pinned-sha SHA --asked-at MS --answered-at MS
-    pr   --plan|--exec ...                       (same flags)
     record --outcome rejected|timeout|aborted|corrected|dwell --agent A --session S --root R
            [--audit JSON]
 
@@ -28,7 +27,6 @@ from pathlib import Path
 from typing import Any
 
 from carter.broker import audit, checks, counter, env, execute, plan, refusal
-from carter.broker import pr as prmod
 from carter.broker.plan import Caller
 from carter.identity.errors import (
     E_B_ARGS,
@@ -57,7 +55,7 @@ class _Parser(argparse.ArgumentParser):
 def parser() -> argparse.ArgumentParser:
     top = _Parser(prog="python -I -m carter.broker_cli", add_help=False)
     sub = top.add_subparsers(dest="command", required=True, parser_class=_Parser)
-    for verb in ("push", "pr"):
+    for verb in ("push",):
         p = sub.add_parser(verb, add_help=False)
         mode = p.add_mutually_exclusive_group(required=True)
         mode.add_argument("--plan", action="store_true")
@@ -144,15 +142,11 @@ def _dispatch(
     caller = Caller(args.agent, args.session, args.root)
     cwd = args.cwd
     if args.plan:
-        if args.command == "push":
-            built = plan.build_push_plan(cwd, ctx, caller, environ)
-            return plan.push_plan_json(built, ctx, caller)
-        p = prmod.build_pr_plan(cwd, ctx, caller, environ)
-        return prmod.pr_plan_json(p, ctx, caller)
+        built = plan.build_push_plan(cwd, ctx, caller, environ)
+        return plan.push_plan_json(built, ctx, caller)
     if args.pinned_sha is None or args.asked_at is None or args.answered_at is None:
         raise _exec_args_error()
-    runner = execute.exec_push if args.command == "push" else prmod.exec_pr
-    return runner(
+    return execute.exec_push(
         cwd, ctx, caller, environ, pinned_sha=args.pinned_sha,
         asked_at=args.asked_at, answered_at=args.answered_at, info=info,
     )  # fmt: skip

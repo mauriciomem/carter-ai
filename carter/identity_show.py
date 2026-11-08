@@ -187,9 +187,9 @@ def guard_items(cwd: Path) -> list[Item]:
 
 def policy_items(reader: Reader | None) -> list[Item]:
     state = load_or_empty_readonly(guard_state_path(None)).state
-    if not state.opencode_policies:
+    if "g2" not in consent.accepted_groups(state):
         return [Item("info", "policies", "none installed")]
-    items = hostcheck._policies(state, reader, str(Path.home()))
+    items = hostcheck._policies(state, reader, None)
     # a missing OpenCode is not a defect of the identity: introspection stays readable
     return [
         Item("warn", i.area, i.text, i.fix) if i.text.startswith("cannot read") else i

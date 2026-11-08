@@ -9,8 +9,8 @@ from pathlib import Path
 import click
 from jinja2 import Environment
 
-from carter import ui
-from carter.aplus.handoff import OWN_TERMINAL
+from carter import ui, unknownkeys
+from carter.aplus.push import OWN_TERMINAL
 from carter.cliguard import CarterGroup, verbose_option
 from carter.config import (
     PROFILES,
@@ -18,7 +18,6 @@ from carter.config import (
     _validate_agent_suffix,
     _validate_docs_language,
     generate_default_config,
-    identity_warnings,
     load_config,
 )
 from carter.harness import Expected, validate_agents
@@ -65,12 +64,6 @@ def main() -> None:
     help="MCP servers to set up, comma-separated (default: all).",
 )
 @click.option(
-    "--bot-name",
-    default=None,
-    hidden=True,
-    help="Ignored (deprecated).",
-)
-@click.option(
     "--base-dir",
     type=click.Path(file_okay=False, path_type=Path),
     default=None,
@@ -84,7 +77,6 @@ def main() -> None:
 def install(
     mcp: bool,
     mcp_servers: str | None,
-    bot_name: str | None,
     base_dir: Path | None,
     assume_yes: bool,
     quiet: bool,
@@ -95,9 +87,6 @@ def install(
     from carter.install.mcp import MCP_SERVERS
     from carter.install.orchestrator import run as run_install
     from carter.install.prereqs import PrerequisiteError
-
-    if bot_name is not None:
-        ui.warn("--bot-name is ignored: attribution comes from the LLM identity (config.toml)")
 
     if verbose:
         ui.configure(verbose=True)  # the guard step prints its details too
@@ -247,8 +236,7 @@ def _pin_identity_policy(target: Path, config: dict, *, dry_run: bool) -> None:
     """Copy ``identity.role``/``require_tier`` from carter.yaml into config.toml (D62).
 
     Asks nothing (D68 h); an agent shell never pins. Raises ``click.ClickException`` when
-    pinning is wanted but refused (cap below ``require_tier``, unmodelled keys, a broken or
-    schema-1 file).
+    pinning is wanted but refused (cap below ``require_tier``, unmodelled keys, a broken file).
     """
     from carter.identity import ConfigError, load_identity
     from carter.identity.pin import apply_pin, plan_pin
@@ -264,13 +252,6 @@ def _pin_identity_policy(target: Path, config: dict, *, dry_run: bool) -> None:
             raise click.ClickException(
                 f"config.toml is invalid ({exc.code}: {exc.detail}); identity policy not pinned."
             ) from exc
-        return
-    if cfg.needs_migration:
-        if role or tier:
-            raise click.ClickException(
-                "~/.carter/config.toml is schema 1; run `carter install` to migrate it "
-                "before pinning identity policy."
-            )
         return
 
     key = workspace_key(target)
@@ -318,8 +299,6 @@ def _sync_mirror(*, dry_run: bool) -> None:
     except ConfigError:
         ui.warn("config.toml is invalid; the tier mirror was not refreshed")
         return
-    if cfg.needs_migration:
-        return
     plan = update_mirror.plan(None, cfg)
     if plan.refusal:
         raise click.ClickException(f"Tier mirror not written: {plan.refusal}.")
@@ -346,34 +325,35 @@ def _sync_mirror(*, dry_run: bool) -> None:
         ui.warn("add Carter's include line to your git config yourself", hint)
 
 
-def _refresh_policies(*, dry_run: bool) -> None:
-    """D52 (RFC-0007 C.6.2): turn ``allow_project_opencode_edit`` into policy statements.
+def _report_unknown_keys(target: Path) -> None:
+    """D70, at the end of ``update``: each leftover key once, workspace files then host files."""
+    hits = [*unknownkeys.workspace(target), *unknownkeys.host()]
+    unknownkeys.report(unknownkeys.once_per_key(hits))
 
-    Only where policies were installed with consent; only from a human's shell. Everything
-    is skipped, with a note, if ``config.toml`` cannot be read: ``update`` never fails here."""
-    from datetime import datetime
 
-    from carter.guard.optout import refresh_from_update
-    from carter.identity import ConfigError, load_identity
-    from carter.install.paths import backups_dir, guard_state_path
+def _refresh_agents(*, dry_run: bool) -> None:
+    """D52 and D71: the global Carter agent files carry G2's rules, including the opt-outs read
+    from ``config.toml``. Re-render them from a human's shell when they differ; ``update`` never
+    fails here."""
+    from carter.guard.agent_rules import current_rules
+    from carter.install import components
     from carter.terminal import is_agent_shell
 
-    try:
-        cfg = load_identity()
-    except ConfigError:
-        ui.warn("config.toml is invalid; D52 opt-outs not refreshed")
+    if not current_rules():
+        return  # no guards installed with consent: update never creates any
+    if dry_run:
+        ui.detail("the global Carter agent files would be refreshed (dry run)")
         return
-    stamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%S")
-    refresh_from_update(
-        None,
-        guard_state_path(None),
-        cfg,
-        home=str(Path.home()),
-        backup_root=backups_dir(None) / stamp,
-        dry_run=dry_run,
-        agent=is_agent_shell(),
-        echo=_detail,
-    )
+    if is_agent_shell():
+        ui.warn("global Carter agents not refreshed: agent shells never change them")
+        return
+    try:
+        stats = components.rerender_agents(None)
+    except OSError as exc:
+        ui.warn(f"global Carter agents not refreshed ({type(exc).__name__})")
+        return
+    if stats and stats["updated"] + stats["created"]:
+        ui.ok("global Carter agents refreshed", f"{stats['updated'] + stats['created']} file(s)")
 
 
 # What a workspace AGENTS.md must contain to be current: (marker text, rendered line prefix).
@@ -419,11 +399,9 @@ def update(target_dir: str, dry_run: bool, assume_yes: bool) -> None:
     except ConfigError as e:
         raise click.ClickException(str(e)) from e
 
-    for warning in identity_warnings(config):
-        ui.warn(warning)
     _pin_identity_policy(target, config, dry_run=dry_run)
     _sync_mirror(dry_run=dry_run)
-    _refresh_policies(dry_run=dry_run)
+    _refresh_agents(dry_run=dry_run)
 
     env = create_env()
 
@@ -435,12 +413,14 @@ def update(target_dir: str, dry_run: bool, assume_yes: bool) -> None:
         instr = _instructions_path(target)
         note = " (skipped: exists)" if instr.exists() else ""
         ui.info(f"would render {len(agents)} agents and {instr.relative_to(target)}{note}")
+        _report_unknown_keys(target)
         return
 
     _render_and_write(target, config, env)
     ui.detail(policy_notice(config))
     ui.ok("updated", f"{len(render_agents(config, env))} agents from carter.yaml")
     _note_stale_workspace_rules(target, config, env)
+    _report_unknown_keys(target)
 
 
 @main.command()
@@ -498,8 +478,6 @@ def check(target_dir: str, no_harness: bool, host: bool, probe: bool) -> None:
     except ConfigError as e:
         raise click.ClickException(str(e)) from e
 
-    warnings.extend(identity_warnings(config))
-
     # Check agent and instruction files exist in OpenCode's discovery paths,
     # collecting each role's parsed frontmatter for the policy lint as we go.
     installed: dict[str, dict] = {}
@@ -529,7 +507,6 @@ def check(target_dir: str, no_harness: bool, host: bool, probe: bool) -> None:
     plans_root = target / ".carter" / "state" / "plans"
     plans_result = validate_plans_dir(plans_root, config.get("plans"))
     errors.extend(plans_result.errors)
-    warnings.extend(plans_result.warnings)
 
     # Validate the session checkpoint cursor (absent is fine); cross-check that
     # its active_plan resolves to a real plan under active/.
@@ -565,6 +542,7 @@ def check(target_dir: str, no_harness: bool, host: bool, probe: bool) -> None:
 
     for warning in warnings:
         ui.warn(warning)
+    unknownkeys.report(unknownkeys.workspace(target))
 
     if errors:
         for error in errors:
@@ -684,10 +662,9 @@ def _register_github_token() -> None:
 
 
 def _register_aplus() -> None:
-    from carter.aplus_cli import pr, push
+    from carter.aplus_cli import push
 
     main.add_command(push)
-    main.add_command(pr)
 
 
 def _register_gate() -> None:

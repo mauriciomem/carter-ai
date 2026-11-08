@@ -93,24 +93,7 @@ class TestStore:
         assert target.read_text() == ""
 
 
-class TestOpsLogMove:
-    def test_an_old_audit_log_moves_once_and_keeps_its_content(self, carter_dir: Path) -> None:
-        (carter_dir / "audit.log").write_text('{"operation": "old"}\n')
-        assert audit.migrate_ops_log(carter_dir) is True
-        moved = audit.ops_log_path(carter_dir)
-        assert (
-            moved.read_text() == '{"operation": "old"}\n'
-            and not (carter_dir / "audit.log").exists()
-        )
-        assert mode(moved) == 0o600
-        assert audit.migrate_ops_log(carter_dir) is False
-
-    def test_a_new_file_wins_over_a_stale_old_one(self, carter_dir: Path) -> None:
-        audit.append_ops({"operation": "new"}, carter_dir)
-        (carter_dir / "audit.log").write_text("stale\n")
-        assert audit.migrate_ops_log(carter_dir) is False
-        assert (carter_dir / "audit.log").read_text() == "stale\n"
-
+class TestOpsLog:
     def test_the_path_is_resolved_when_used_not_at_import(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:

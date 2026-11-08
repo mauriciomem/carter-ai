@@ -88,22 +88,11 @@ class TestPlanAndExec:
         code, doc = call(world, "push", "--plan", *common(world))
         assert code == 1 and doc["code"] == "E-B-DEFAULT" and "carter push" in doc["message"]
 
-    def test_pr_plan_goes_through_the_same_entry(self, world: World) -> None:
-        from carter.aplus import handoff
-
-        world.commit("a.txt")
-        world.publish()
-        handoff.write_handoff(
-            world.repo, "feat/x", handoff.Handoff("T", "main", False, world.head(), "o/r", "b\n")
-        )
-        code, doc = call(world, "pr", "--plan", *common(world))
-        assert code == 0 and doc["verb"] == "pr" and doc["title"] == "T"
-
 
 class TestUsage:
     @pytest.mark.parametrize(
         "argv",
-        [[], ["push"], ["push", "--plan"], ["nope"], ["record"], ["push", "--plan", "--exec"],
+        [[], ["push"], ["push", "--plan"], ["nope"], ["record"], ["push", "--plan", "--exec"], ["pr", "--plan"],  # D72: there is no pr verb any more
          ["record", "--outcome", "maybe", "--agent", "a", "--session", "s", "--root", "r"]],
     )  # fmt: skip
     def test_bad_usage_exits_two_with_a_json_line(self, world: World, argv: list[str]) -> None:
@@ -121,9 +110,7 @@ class TestUsage:
 
 
 class TestRefusalLayer:
-    @pytest.mark.parametrize(
-        "argv", [["push", "--plan"], ["push", "--exec"], ["pr", "--plan"], ["pr", "--exec"]]
-    )
+    @pytest.mark.parametrize("argv", [["push", "--plan"], ["push", "--exec"]])
     def test_every_subcommand_refuses_in_an_agent_shell(
         self, world: World, argv: list[str]
     ) -> None:

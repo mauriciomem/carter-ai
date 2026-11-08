@@ -8,9 +8,8 @@ from types import SimpleNamespace
 
 import pytest
 
-from carter.aplus.handoff import OWN_TERMINAL
+from carter.aplus.push import OWN_TERMINAL
 from carter.config import generate_default_config
-from carter.identity.config import DEFAULT_FOOTER
 from carter.install import components, files, mcp, paths
 from carter.install import uninstall as uninstall_mod
 from carter.install.components import _ATTRIBUTION_RULE, _OPENCODE_AGENTS_MD
@@ -568,45 +567,34 @@ class TestInstallOps:
         assert created is False
         assert config.read_text() == text
 
-    def test_existing_schema_1_config_is_migrated_with_a_backup(self, base_dir: Path) -> None:
-        from carter.identity import load_identity
-
+    def test_an_existing_file_with_old_keys_is_left_byte_identical_and_not_backed_up(
+        self, base_dir: Path
+    ) -> None:
         config = base_dir / "carter" / "config.toml"
         config.parent.mkdir(parents=True, exist_ok=True)
         config.write_text(SCHEMA1_INSTALLED)
 
-        install.install_ops(base_dir, {"files": [], "file_hashes": {}})
+        created = install.install_ops(base_dir, {"files": [], "file_hashes": {}})
 
-        backup = config.with_name("config.toml.schema1.bak")
-        assert backup.read_text() == SCHEMA1_INSTALLED
-        loaded = load_identity(config)
-        assert loaded.state == "current"
-        assert loaded.attribution.footer == DEFAULT_FOOTER  # the old default is "unset" (D68 i)
-        assert "HUMAN_SIGNING_KEY" not in config.read_text()
+        assert created is False
+        assert config.read_text() == SCHEMA1_INSTALLED  # D70: nothing is migrated
+        assert [p.name for p in config.parent.glob("config.toml*")] == ["config.toml"]
 
-    def test_second_install_is_a_no_op(self, base_dir: Path) -> None:
+    def test_a_future_schema_is_left_untouched(self, base_dir: Path) -> None:
         config = base_dir / "carter" / "config.toml"
         config.parent.mkdir(parents=True, exist_ok=True)
-        config.write_text(SCHEMA1_INSTALLED)
-        install.install_ops(base_dir, {"files": [], "file_hashes": {}})
-        before = (config.read_bytes(), config.stat().st_mtime_ns)
+        config.write_text("schema = 3\n")
+        assert install.install_ops(base_dir, {"files": [], "file_hashes": {}}) is False
+        assert config.read_text() == "schema = 3\n"
 
-        created_again = install.install_ops(base_dir, {"files": [], "file_hashes": {}})
-
-        assert created_again is False
-        assert (config.read_bytes(), config.stat().st_mtime_ns) == before
-        assert len(list(config.parent.glob("config.toml*"))) == 2
-
-    def test_manifest_tracks_config_but_not_the_backup(self, base_dir: Path) -> None:
+    def test_the_manifest_tracks_a_created_config_only(self, base_dir: Path) -> None:
         config = base_dir / "carter" / "config.toml"
-        config.parent.mkdir(parents=True, exist_ok=True)
-        config.write_text(SCHEMA1_INSTALLED)
         manifest = {"files": [], "file_hashes": {}}
         install.install_ops(base_dir, manifest)
-
         assert str(config) in manifest["files"]
-        # The backup is the user's safety net: uninstall must never delete it.
-        assert not any(f.endswith(".schema1.bak") for f in manifest["files"])
+        manifest2 = {"files": [], "file_hashes": {}}
+        install.install_ops(base_dir, manifest2)
+        assert str(config) not in manifest2["files"]  # an existing file is not Carter's to remove
 
     def test_idempotent(self, base_dir: Path) -> None:
         manifest = {"files": [], "file_hashes": {}}
@@ -619,10 +607,10 @@ class TestInstallOps:
 
     @pytest.mark.parametrize(
         "broken",
-        ['[attribution]\nname = "unterminated\n', "schema = 3\n"],
-        ids=["syntax", "future"],
+        ['[attribution]\nname = "unterminated\n'],
+        ids=["syntax"],
     )
-    def test_unmigratable_config_is_reported_and_left_untouched(
+    def test_an_unreadable_config_is_reported_and_left_untouched(
         self, base_dir: Path, capsys: pytest.CaptureFixture[str], broken: str
     ) -> None:
         config = base_dir / "carter" / "config.toml"
@@ -634,20 +622,7 @@ class TestInstallOps:
 
         assert changed is False
         assert config.read_text() == broken
-        assert not config.with_name("config.toml.schema1.bak").exists()
-        assert "not migrated" in seen(capsys)
-
-    def test_migration_warnings_are_surfaced(
-        self, base_dir: Path, capsys: pytest.CaptureFixture[str]
-    ) -> None:
-        config = base_dir / "carter" / "config.toml"
-        config.parent.mkdir(parents=True, exist_ok=True)
-        config.write_text(SCHEMA1_INSTALLED)
-        install.install_ops(base_dir, {"files": [], "file_hashes": {}})
-        out = capsys.readouterr()
-        text = out.out + out.err
-        assert "signing_key" in text
-        assert "HUMAN_SIGNING_KEY" not in text
+        assert "not read" in seen(capsys)
 
     def test_components_no_longer_import_the_humans_key_reader(self) -> None:
         source = Path(components.__file__).read_text(encoding="utf-8")
@@ -656,7 +631,7 @@ class TestInstallOps:
 
 
 # ──────────────────────────────────────────────────────────────────────────────
-# Bot name (deprecated)
+# Bot name (gone: D70)
 # ──────────────────────────────────────────────────────────────────────────────
 
 
@@ -891,196 +866,58 @@ class TestGlobalAttributionRule:
         assert len(_ATTRIBUTION_RULE) <= 700  # AGENTS.md loads every session (plan 005: +committer)
 
     def test_the_rule_carries_the_handoff_sentence_and_stays_short(self) -> None:
-        from carter.aplus.handoff import OWN_TERMINAL
+        from carter.aplus.push import OWN_TERMINAL
 
         assert OWN_TERMINAL in _ATTRIBUTION_RULE and "human-only" in _ATTRIBUTION_RULE
         assert len(_ATTRIBUTION_RULE) <= 700  # AGENTS.md loads every session
 
-    def test_a_file_from_before_d68_is_upgraded_in_place(self, base_dir: Path) -> None:
-        old_first = (
-            "- Commits: the user is the author (their own git config) unless `carter ops config"
-            " --emit` says `author` is `llm` (role b: the Carter plugin sets it); the committer is"
-            " the user, or the LLM at T2. Never pass `--author`, `--no-verify`, `-s` or `-S`,"
-            " never set `GIT_AUTHOR_*` or `GIT_COMMITTER_*`, and never add `Signed-off-by` unless"
-            " the user asks. Credit comes only from the `coauthor_trailer` it prints; if"
-            " `commits` is `refused`, stop and report.\n"
-        )
-        before = _OPENCODE_AGENTS_MD.replace(
-            _ATTRIBUTION_RULE.splitlines(keepends=True)[0], old_first
-        ).replace(OWN_TERMINAL, OLD_OWN_TERMINAL)
-        agents_md = base_dir / "opencode" / "AGENTS.md"
-        agents_md.parent.mkdir(parents=True)
-        agents_md.write_text(before)
-
-        self._install(base_dir)
-
-        assert agents_md.read_text() == _OPENCODE_AGENTS_MD
-        assert not (base_dir / "carter" / "upgrade-notes").exists()
-
-    def test_unmodified_v017_file_is_upgraded_in_place(self, base_dir: Path) -> None:
-        # v0.17.x shipped the commit rule without the push rule: no user edit, so upgrade.
-        first, push_rule = _ATTRIBUTION_RULE.splitlines(keepends=True)[:2]
-        old_first = (
-            "- Commits: the user is the author and committer (their own git config). Never pass"
-            " `--author`, `--no-verify`, `-s` or `-S`, and never add `Signed-off-by` unless the"
-            " user asks for it on that commit. Credit comes only from the `coauthor_trailer` that"
-            " `carter ops config --emit` prints; if `commits` is `refused`, stop and report.\n"
-        )
-        v017 = _OPENCODE_AGENTS_MD.replace(first, old_first).replace(push_rule, "")
-        assert v017 != _OPENCODE_AGENTS_MD
-        agents_md = base_dir / "opencode" / "AGENTS.md"
-        agents_md.parent.mkdir(parents=True)
-        agents_md.write_text(v017)
-
-        manifest = self._install(base_dir)
-
-        assert agents_md.read_text() == _OPENCODE_AGENTS_MD
-        assert str(agents_md) in manifest["files"]
-        assert not (base_dir / "carter" / "upgrade-notes").exists()
-
-    def test_unmodified_v018_file_is_upgraded_in_place_to_the_signing_aware_rule(
+    def test_a_file_matching_the_recorded_manifest_hash_is_upgraded_in_place(
         self, base_dir: Path
     ) -> None:
-        import hashlib
-
-        old_rule = (
-            "- Commits: the user is the author and committer (their own git config). Never pass"
-            " `--author`, `--no-verify`, `-s` or `-S`, and never add `Signed-off-by` unless the"
-            " user asks for it on that commit. Credit comes only from the `coauthor_trailer` that"
-            " `carter ops config --emit` prints; if `commits` is `refused`, stop and report.\n"
-        )
-        v018 = _OPENCODE_AGENTS_MD.replace(
-            _ATTRIBUTION_RULE.splitlines(keepends=True)[0], old_rule
-        ).replace(OWN_TERMINAL, OLD_OWN_TERMINAL)
-        assert (
-            hashlib.sha256(v018.encode()).hexdigest()
-            == "7aea1b84a6693292380e2c15796dcd33b612e8c2787af40e90b1b3c83f31e0a1"
-        )
-        agents_md = base_dir / "opencode" / "AGENTS.md"
-        agents_md.parent.mkdir(parents=True)
-        agents_md.write_text(v018)
-
-        self._install(base_dir)
-
-        assert agents_md.read_text() == _OPENCODE_AGENTS_MD
-        assert not (base_dir / "carter" / "upgrade-notes").exists()
-
-    def test_unmodified_2b_file_is_upgraded_in_place_to_the_role_b_aware_rule(
-        self, base_dir: Path
-    ) -> None:
-        """Plan 006: the AGENTS.md text of 2b (author = the user only) is replaced, not kept."""
-        import hashlib
-
-        old_first = (
-            "- Commits: the user is the author (their own git config); the committer is the user,"
-            " or the LLM identity at T2 when the Carter plugin signs for you. Never pass"
-            " `--author`, `--no-verify`, `-s` or `-S`, never set `GIT_COMMITTER_*`, and never"
-            " add `Signed-off-by` unless the user asks for it on that commit. Credit comes only"
-            " from the"
-            " `coauthor_trailer` that `carter ops config --emit` prints; if `commits` is `refused`,"
-            " stop and report.\n"
-        )
-        v2b = _OPENCODE_AGENTS_MD.replace(
-            _ATTRIBUTION_RULE.splitlines(keepends=True)[0], old_first
-        ).replace(OWN_TERMINAL, OLD_OWN_TERMINAL)
-        assert (
-            hashlib.sha256(v2b.encode()).hexdigest()
-            == "15a896f96a1c6e172e66e51c54a1553cac04c8ba0bef913c0cd8072a8144a6c6"
-        )
-        agents_md = base_dir / "opencode" / "AGENTS.md"
-        agents_md.parent.mkdir(parents=True)
-        agents_md.write_text(v2b)
-
-        self._install(base_dir)
-
-        assert agents_md.read_text() == _OPENCODE_AGENTS_MD
-        assert (
-            "role b" in _ATTRIBUTION_RULE and not (base_dir / "carter" / "upgrade-notes").exists()
-        )
-
-    def test_a_modified_v017_file_is_kept_and_the_note_has_both_rules(
-        self, base_dir: Path, capsys: pytest.CaptureFixture[str]
-    ) -> None:
-        from carter import __version__
-        from carter.aplus.handoff import OWN_TERMINAL
-
-        push_rule = _ATTRIBUTION_RULE.splitlines(keepends=True)[1]
-        mine = _OPENCODE_AGENTS_MD.replace(push_rule, "") + "\n## Mine\n"
-        agents_md = base_dir / "opencode" / "AGENTS.md"
-        agents_md.parent.mkdir(parents=True)
-        agents_md.write_text(mine)
-
-        self._install(base_dir)
-
-        assert agents_md.read_text() == mine
-        printed = capsys.readouterr().out
-        note = (base_dir / "carter" / "upgrade-notes" / f"{__version__}.md").read_text()
-        for text in (printed, note):
-            assert _ATTRIBUTION_RULE in text and OWN_TERMINAL in text
-
-    def test_unmodified_v016_file_is_upgraded_in_place(self, base_dir: Path) -> None:
-        agents_md = base_dir / "opencode" / "AGENTS.md"
-        agents_md.parent.mkdir(parents=True)
-        agents_md.write_text(_v016_text())
-
-        manifest = self._install(base_dir)
-
-        assert agents_md.read_text() == _OPENCODE_AGENTS_MD
-        assert str(agents_md) in manifest["files"]
-        assert not (base_dir / "carter" / "upgrade-notes").exists()
-
-    def test_file_matching_the_recorded_manifest_hash_is_upgraded(self, base_dir: Path) -> None:
+        """What the real host has: an earlier Carter text whose hash the manifest recorded."""
         from carter.install.ownership import sha256_bytes
 
         agents_md = base_dir / "opencode" / "AGENTS.md"
         agents_md.parent.mkdir(parents=True)
-        older = _OPENCODE_AGENTS_MD.replace("Be concise and clear", "Be brief and clear")
+        older = _OPENCODE_AGENTS_MD.replace(OWN_TERMINAL, OLD_OWN_TERMINAL)
         agents_md.write_text(older)
         previous = {"file_hashes": {str(agents_md): sha256_bytes(older.encode())}}
 
-        self._install(base_dir, previous=previous)
+        manifest = self._install(base_dir, previous=previous)
 
         assert agents_md.read_text() == _OPENCODE_AGENTS_MD
+        assert str(agents_md) in manifest["files"]
 
-    def test_user_modified_file_is_kept_and_the_note_is_printed_and_written(
+    def test_an_earlier_text_the_manifest_does_not_know_is_user_modified(
         self, base_dir: Path, capsys: pytest.CaptureFixture[str]
     ) -> None:
-        from carter import __version__
-
+        """D70: no sha lists of shipped versions; only the recorded hash proves it is unedited."""
         agents_md = base_dir / "opencode" / "AGENTS.md"
         agents_md.parent.mkdir(parents=True)
-        custom = _v016_text() + "\n## My own rules\n"
+        older = _OPENCODE_AGENTS_MD.replace(OWN_TERMINAL, OLD_OWN_TERMINAL)
+        agents_md.write_text(older)
+
+        manifest = self._install(base_dir)
+
+        assert agents_md.read_text() == older
+        assert str(agents_md) not in manifest["files"]
+        assert "user-modified" in seen(capsys)
+
+    def test_user_modified_file_is_kept_with_a_warning_and_no_note(
+        self, base_dir: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        agents_md = base_dir / "opencode" / "AGENTS.md"
+        agents_md.parent.mkdir(parents=True)
+        custom = _OPENCODE_AGENTS_MD + "\n## My own rules\n"
         agents_md.write_text(custom)
 
-        self._install(base_dir)
+        manifest = self._install(base_dir)
 
         assert agents_md.read_text() == custom
-        out = capsys.readouterr().out
-        assert _ATTRIBUTION_RULE in out  # printed
-        note = base_dir / "carter" / "upgrade-notes" / f"{__version__}.md"
-        assert note.is_file()
-        assert _ATTRIBUTION_RULE in note.read_text()  # the same single constant
-        assert (note.stat().st_mode & 0o777) == 0o644
-
-    def test_second_install_does_not_duplicate_the_note(
-        self, base_dir: Path, capsys: pytest.CaptureFixture[str]
-    ) -> None:
-        agents_md = base_dir / "opencode" / "AGENTS.md"
-        agents_md.parent.mkdir(parents=True)
-        agents_md.write_text(_v016_text() + "\n## Mine\n")
-        self._install(base_dir)
-        notes = base_dir / "carter" / "upgrade-notes"
-        (first,) = list(notes.iterdir())
-        before = (first.read_bytes(), first.stat().st_mtime_ns)
-        capsys.readouterr()
-
-        self._install(base_dir)
-
-        assert [p.name for p in notes.iterdir()] == [first.name]
-        assert (first.read_bytes(), first.stat().st_mtime_ns) == before
-        second_out = seen(capsys)
-        assert _ATTRIBUTION_RULE not in second_out  # not repeated, only pointed to
-        assert first.name in second_out
+        out = seen(capsys)
+        assert "user-modified" in out and "merge" in out
+        assert not (base_dir / "carter" / "upgrade-notes").exists()
+        assert any("user-modified" in n for n in manifest["notes"])
 
     def test_an_unmodified_current_file_needs_no_note(self, base_dir: Path) -> None:
         agents_md = base_dir / "opencode" / "AGENTS.md"
@@ -1088,29 +925,6 @@ class TestGlobalAttributionRule:
         agents_md.write_text(_OPENCODE_AGENTS_MD)
         self._install(base_dir)
         assert not (base_dir / "carter" / "upgrade-notes").exists()
-
-    def test_note_write_is_atomic_and_never_blocks_the_install(
-        self, base_dir: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
-    ) -> None:
-        import os
-
-        agents_md = base_dir / "opencode" / "AGENTS.md"
-        agents_md.parent.mkdir(parents=True)
-        agents_md.write_text(_v016_text() + "\n## Mine\n")
-        monkeypatch.setattr(os, "replace", lambda *a, **k: (_ for _ in ()).throw(OSError("x")))
-
-        self._install(base_dir)  # must not raise
-
-        notes = base_dir / "carter" / "upgrade-notes"
-        assert not notes.exists() or list(notes.iterdir()) == []  # no half-written file
-        assert _ATTRIBUTION_RULE in capsys.readouterr().out  # still printed
-
-    def test_the_note_is_not_listed_in_the_manifest(self, base_dir: Path) -> None:
-        agents_md = base_dir / "opencode" / "AGENTS.md"
-        agents_md.parent.mkdir(parents=True)
-        agents_md.write_text("# mine\n")
-        manifest = self._install(base_dir)
-        assert not any("upgrade-notes" in f for f in manifest["files"])
 
 
 class TestOpsOneLiner:

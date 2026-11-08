@@ -7,23 +7,21 @@ uninstall.
 
 | Path | Contents | Re-install | Uninstall |
 |------|----------|------------|-----------|
-| `~/.config/opencode/agents/carter-*.md` | The 8 agents | Updated (old copy backed up) | Removed unless edited |
+| `~/.config/opencode/agents/carter-*.md` | The 8 agents, with G2's deny rules in their `permissions:` once the guards are installed | Updated (old copy backed up) | Removed unless edited |
 | `~/.config/opencode/skills/carter-*/` | The 27 skills | Updated (old copy backed up) | Removed unless edited |
-| `~/.config/opencode/AGENTS.md` | Global rules loaded in every session | Updated if it is an unedited earlier Carter version; left alone (with an upgrade note) if you changed it | Removed unless edited |
+| `~/.config/opencode/AGENTS.md` | Global rules loaded in every session | Updated if it is the version Carter recorded and you did not edit it; left alone ("user-modified") if you changed it | Removed unless edited |
 | `~/.config/opencode/opencode.json` or `.jsonc` | `carter-*` MCP servers (with `--mcp`) | Servers replaced | `carter-*` servers removed |
 | `~/.config/opencode/opencode.jsonc.carter-backup` | Copy of a config file that had comments | Overwritten | Kept |
 | `~/.carter/knowledge/` | 6 global knowledge files | Never overwritten | Removed only if unchanged |
 | `~/.carter/memories/{user,repo,session}/` | Raw notes | Kept | Kept |
-| `~/.carter/config.toml` | Schema-2 settings: LLM identity, footer, per-workspace policy | Created if missing; a schema-1 file is migrated once (original kept as `config.toml.schema1.bak`); otherwise left alone | Kept |
-| `~/.carter/config.toml.schema1.bak` | Copy of the file before its migration | Never overwritten | Kept |
-| `~/.carter/upgrade-notes/<version>.md` | The new commit rule, when your global `AGENTS.md` has your edits and could not be updated | Written once per version | Kept |
+| `~/.carter/config.toml` | Schema-2 settings: LLM identity, footer, per-workspace policy | Created if missing; otherwise left alone (keys Carter does not know are named, never migrated) | Kept |
 | `<repo>/.github/workflows/carter-review.yml` | The review-only workflow, written by `carter ci install review` in the repository you run it in (first line: a hash of the rest, so an edited file is never overwritten) | Refreshed if unedited | Never removed by Carter (it is your repository's file) |
-| `~/.carter/state/audit/audit.log` | Log of `ops:` operations and policy exceptions (moved here from `~/.carter/audit.log` the first time it is written) | Kept | Kept |
+| `~/.carter/state/audit/audit.log` | Log of `ops:` operations and policy exceptions  | Kept | Kept |
 | `~/.carter/state/audit/b.jsonl` (dir 0700, file 0600) | One line per decision of the [B tools](../guides/push-and-pr-tools.md): time, agent, session, repo, branch, range, commit count, decision, code, dwell. Never an environment, a credentialed URL or a title. Rotates at 5 MiB (three older files kept) | Appended by the broker | Kept |
 | `~/.carter/backups/<timestamp>/` | Files replaced by an install | Added to | Kept |
 | `~/.carter/manifest.json` | What Carter installed, with checksums | Rewritten | Removed |
 | `~/.carter/guard-state.json` (0600) | What `carter guard install` owns: consents, statements, per-agent denies, file hashes. Separate from `manifest.json` so an older installer can't drop it | Updated in place, never rebuilt; unchanged content is not rewritten | Removed by `guard remove` / `uninstall` (kept with `--keep-guards`) |
-| `~/.config/opencode/opencode.json` or `.jsonc` → `policies`, `agents` | Carter's policy block (the tail of `policies`) and the per-agent `carter_push`/`carter_pr` denies | Re-appended at the tail; your own entries are kept | Removed only where unchanged |
+| `~/.config/opencode/opencode.json` or `.jsonc` → `agents` | The per-agent `carter_push` denies for OpenCode's own agents (D71: Carter writes no global `policies`; an earlier Carter's recorded ones are removed by `guard install`) | Converged; your own entries are kept | Removed only where unchanged |
 | `~/.carter/backups/<timestamp>/opencode.json[c]` (0600) | Copy of your OpenCode config before a guard write | Added to | Kept |
 | `~/.carter/gitconfig` and `gitconfig.d/` | Carter's own git keys behind one `include.path` line in your global git config: the hook entries for `pre-push`, `prepare-commit-msg`, `commit-msg` and `post-commit` (`hook.carter-guard-<event>.*`), the optional `alias.ai-commit`, or `init.templateDir` on git older than 2.54. If your global config is a symlink or read-only, Carter prints the line instead of writing it | Rewritten if unchanged; an edited file is kept and reported | Removed only if unchanged |
 | `~/.carter/hooks/carter-guard` (0755) | The POSIX guard script behind the `pre-push` hook. Blocks only agent shells; a missing script never blocks you | Rewritten if unchanged | Removed only if unchanged |
@@ -56,7 +54,6 @@ Anything you changed is kept and reported as `⚠ Kept …`.
 | `.carter/knowledge/` | 5 project knowledge files | Never touched |
 | `.carter/state/plans/active/`, `completed/` | Plans | Never touched |
 | `.carter/state/sessions/checkpoint.md` | Session checkpoint | Never touched |
-| `.carter/state/handoff/<branch>.md` | A branch's PR handoff written by an agent (`/` is written `%2F`). Never part of the `.carter/.git` snapshots, because it may hold unredacted text. Read only by `carter pr`, which deletes it after the pull request is created | Never touched |
 | `.carter/.git/` | Private history of `.carter/` (`carter save`) | Never touched |
 | `.gitignore` | Gets a `.carter/` line with `--single` | Never touched |
 

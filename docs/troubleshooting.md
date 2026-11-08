@@ -49,15 +49,15 @@ Find your symptom, then apply the fix. If nothing here helps, open an
 
 | Symptom | Fix |
 |---------|-----|
-| The agent stops and reports `E-CONFIG` | `~/.carter/config.toml` is invalid, or a signing section is incomplete. Agent commits stay off until it is fixed. `carter ops config --emit` shows `commits: refused`. If it is still a schema-1 file, run `carter install` to migrate it |
+| The agent stops and reports `E-CONFIG` | `~/.carter/config.toml` is invalid, or a signing section is incomplete. Agent commits stay off until it is fixed. `carter ops config --emit` shows `commits: refused`. |
 | The agent reports `E-ROLE-B-TIER` | The role is `author` and the workspace is below T2 (no signing key, or a `max_tier` cap). Add the key (`carter identity add`), remove the cap, or set `role: co-author` in `carter.yaml` and run `carter update` |
 | The agent reports `E-HUMAN-IDENTITY` | Role `author` credits you by your git identity and it is unusable here: `user.name` or `user.email` is empty, is the LLM's address, or is a Carter fallback (the pair `Carter` with `state@carter.invalid`, or `carter-bot@…`; a person named Carter with a real address is fine). Set them in your own git config (an `includeIf` override for this folder counts). `carter check --host` names the reason |
 | `E-GUARD-COMMITTER`: "an agent may not change a commit's author" | An agent used `--reset-author` or `--author` while amending a commit by someone else. Nothing was changed. Ask for a plain amend, or do it yourself |
 | `carter check --host` says the commit hook script is from an older Carter | Run `carter guard install` in your own terminal once after upgrading (role `author` needs the new script) |
 | `carter check --host` says your address is not known to be linked | In role `author` the `Co-authored-by` line is your only credit. Use your `<id>+<login>@users.noreply.github.com` address as `user.email`, or add your address to your GitHub account, then run `carter check --host` again in your own terminal |
 | `carter update` says "Not pinned" | The `identity` policy is only applied after you confirm. Run it in a terminal, or pass `--yes` |
-| `carter install` printed a "commit rule" note | Your global `AGENTS.md` has your edits, so Carter left it alone. Merge the rule from `~/.carter/upgrade-notes/<version>.md` |
-| A warning about `identity.git_account` or `identity.bot_name` | Both are deprecated and ignored. Delete them from `.carter/carter.yaml` |
+| `carter install` says `AGENTS.md` is user-modified | Your global `AGENTS.md` has your edits, so Carter left it alone. Merge its Communication and Git & Language sections by hand |
+| ``⚠ unknown key `…` in <file> → delete it`` | A key Carter no longer reads (`attribution.name`, `git.signing_key`, `identity.bot_name`, `identity.git_account`, `push_policy`, `agent.<name>.permission`, an old `mcp.carter-*` entry). Nothing was changed and no command failed; delete the key from the file it names. `carter identity add` and `carter update` refuse to rewrite `config.toml` while an unknown key is in it |
 
 ## Review-only CI
 
@@ -75,28 +75,28 @@ Find your symptom, then apply the fix. If nothing here helps, open an
 | Symptom | Fix |
 |---------|-----|
 | `carter install` says the guards were skipped | No terminal and no `--yes`. Run `carter guard install` in a terminal |
-| `E-HUMAN-TERMINAL` | The command is for you, not an agent. If you are not an agent, this shell inherited agent variables: start the terminal fresh. `carter push` and `carter pr` also run as `!carter push` in OpenCode |
-| `E-POLICIES-MISSING: … not loaded` | OpenCode dropped a policy (a broken config drops all of them and your providers; a statement it rejects is dropped without a message). Carter re-reads for a few seconds first, because OpenCode's background service reloads the file a moment after it changes. `carter guard install` already restored your config from the backup; check the file with `opencode debug config`, then try again |
+| `E-HUMAN-TERMINAL` | The command is for you, not an agent. If you are not an agent, this shell inherited agent variables: start the terminal fresh. `carter push` also runs as `!carter push` in OpenCode |
+| `E-POLICIES-MISSING: … not loaded` | OpenCode dropped a provider after a guard write (a broken config drops all of them). Carter re-reads for a few seconds first, because OpenCode's background service reloads the file a moment after it changes. `carter guard install` already restored your config from the backup; check the file with `opencode debug config`, then try again |
 | After a guard write OpenCode lost a provider | The write is rolled back automatically. If it ever isn't, restore `~/.carter/backups/<timestamp>/opencode.json[c]` over your config |
-| `carter guard status` or `check --host` says `MISSING` for a policy | Re-run `carter guard install`; if it keeps failing, `carter guard install --print-policies` and paste the block yourself |
+| `carter check --host` says a Carter agent file's permissions differ from what Carter renders | Someone edited it (or Carter was upgraded). Run `carter guard install` (it re-renders the Carter agent files); `check --host` goes green again |
+| `check --host` says global policies from an earlier Carter are still in your OpenCode config | Run `carter guard install`: G2 now applies only to Carter agents and Carter workspaces, and the install takes the old global statements out (only ones it recorded) |
 | `E-STATE-INVALID` | `~/.carter/guard-state.json` is unreadable or from a newer Carter. Carter never rebuilds it: fix or move the file, then run `carter guard install` |
 | Every git command fails with "bad config line … gitconfig" | Carter's included git file (`~/.carter/gitconfig`) is malformed. Delete that file (`rm ~/.carter/gitconfig`): git works again at once. `carter guard remove` and `carter check --host` also work while git itself fails, because they read the file with your global git config switched off |
-| My `opencode.jsonc` comments disappeared after the guards | Carter rewrote the file as JSON. The original is `opencode.jsonc.carter-backup`; use `--print-policies` to paste by hand next time |
-| `E-HANDOFF` from `carter pr` | There is no valid `.carter/state/handoff/<encoded-branch>.md` for the current branch (the error names the expected path and the bad key, never a value), or its `head_sha` is not part of the branch. Ask the agent to rewrite it, or check out the branch it was written for |
-| `E-SECRET-SCAN` from `carter pr` | The title, branch or body matches a credential pattern (the error names the rule, not the text). Nothing was sent and the file is kept: edit it and run `carter pr` again |
+| My `opencode.jsonc` comments disappeared after the guards | Carter rewrote the file as JSON. The original is `opencode.jsonc.carter-backup` |
 | `E-B-UNSIGNED` from `carter push` | A commit whose committer is the LLM has no valid LLM signature. Nothing was pushed. Re-create the commit as your own (for example by squashing), or fix the LLM signing setup |
 | The agent reports `E-B-DWELL` or `E-B-TIMEOUT` | You approved in under half a second (or OpenCode auto-accepts: `--auto`, the TUI's auto-accept) or after two minutes. Approve by hand, after reading; turn auto-accept off. It counts as a rejection |
 | The agent reports `E-B-REJECTED` | Three rejections (rejects, timeouts, dwell refusals, interrupts) in this session family. Start a new session, or run `carter guard status --reset-b` in your terminal |
 | The agent reports `E-B-POLLUTED` | The OpenCode server was started from an agent shell or already carries Carter's isolation variables; the names are in the message. Quit it and start OpenCode from a clean terminal |
 | The agent reports `E-B-NOAGENT` | The server's `SSH_AUTH_SOCK` is missing, stale or not yours, so B cannot push. Restart OpenCode from a terminal where `ssh-add -l` works |
-| The agent reports `E-B-REPOCFG`, `E-B-HTTPS`, `E-B-DEFAULT`, `E-B-UNSIGNED` or `E-B-ARGS` from `carter_push` | B refused before asking you; the message says why. Everything B refuses, `carter push` in your terminal lets you decide ([Push and PR tools](guides/push-and-pr-tools.md#what-carter-refuses-and-what-to-do)) |
-| `carter_push` / `carter_pr` do not exist for an agent | Expected for everyone but devops; for devops they need `g2` at revision 3 (`carter guard install`) and an OpenCode restart. `carter check --host` says which |
+| The agent reports `E-B-REPOCFG`, `E-B-HTTPS`, `E-B-DEFAULT`, `E-B-UNSIGNED` or `E-B-ARGS` from `carter_push` | B refused before asking you; the message says why. Everything B refuses, `carter push` in your terminal lets you decide ([Push tool](guides/push-and-pr-tools.md#what-carter-refuses-and-what-to-do)) |
+| `carter_push` does not exist for an agent | Expected for everyone but devops; for devops it needs `g2` at revision 3 (`carter guard install`) and an OpenCode restart. `carter check --host` says which |
 | `E-APLUS-ARGS` from `carter push` | Detached HEAD, no `origin`, a non-fast-forward branch, or an extra argument. `carter push` takes no arguments or force option: check out the branch, fetch and rebase |
 | `carter push` lists settings in red and asks to continue | A repository, git or SSH setting could run code with your credentials (a credential helper, `core.sshCommand`, a hook file, a `ProxyCommand`). Read the names, remove what you did not expect, and answer `y` only if you did put them there |
-| `E-PAT-TYPE` from `carter github-token set` | Only fine-grained `github_pat_` tokens are accepted. The error shows at most the first four characters of what you gave it. Create a fine-grained, read-only token |
+| `E-PAT-TYPE` from `carter github-token set` | Only fine-grained `github_pat_` tokens are accepted. The error shows at most the first four characters of what you gave it. Create a fine-grained token (Contents: read, Pull requests: write) |
 | `E-PAT-PERM` | The token file or its folder is not mode 0600/0700, not yours, a symlink, or inside a git repository. Fix it, or run `carter github-token set` again |
-| `carter github-token check` says the token is WRITABLE | GitHub accepted a write attempt: the token has a Write permission. Revoke it and create a read-only one |
-| `carter pr` fails with HTTP 403 | `gh` is using an exported `GH_TOKEN` or `GITHUB_TOKEN` (read-only) instead of your login. Unset it for that shell |
+| `carter github-token check` says the token is WRITABLE | GitHub accepted a push attempt: the token has **Contents** write. Revoke it and create one with Contents read |
+| `carter github-token check` says agents can't open PRs | The token lacks **Pull requests: write**. Add it on GitHub (keep Contents read) |
+| An agent's `gh pr create` fails with `Resource not accessible by personal access token` | Same: add **Pull requests: write** to the token. If it says the branch is not on the remote, run `carter push` first |
 
 ## Plugin, gate and isolation
 
@@ -105,7 +105,7 @@ Find your symptom, then apply the fix. If nothing here helps, open an
 | An agent command is refused with `E-ISOLATION-MISSING` | `~/.carter/isolation.json` is missing, invalid or no longer matches the hash in the plugin, so agent shells are disabled (your terminal and `!` still work). Run `carter check --host` in your terminal, then `carter guard install` (or `carter guard remove --only plugin` to go back) |
 | An agent command is refused with "Refused by the Carter command gate (rule `…`)" (`E-GATE`) | Expected: the gate rejected the command, and the rule id says why. The agent should hand the step to you instead of rephrasing it. Common fixes: put `-R <owner>/<repo>` after the `gh` subcommand, stage explicit paths instead of `git add -A`, and run pushes yourself with `carter push` |
 | `E-GATE-FAIL`: "Command gate unavailable; command refused" | The gate could not answer, so the command was refused (fail closed). Run `carter check --host`; if the Python or `carter` path it names is gone (for example after `uv tool upgrade`), run `carter guard install` again in your terminal |
-| An agent push stops with `E-PUSH-GUARD` | The `pre-push` hook blocked a push made from an agent shell. Pushing is yours: run `carter push` and then `carter pr` in your own terminal |
+| An agent push stops with `E-PUSH-GUARD` | The `pre-push` hook blocked a push made from an agent shell. Pushing is yours: run `carter push` in your own terminal; the agent then opens the PR |
 | `E-GIT-OLD`: global guards need git 2.54 or newer | Your git is older, so the `hooks` group is not installed and `repo_hooks` is offered instead (a hook file per repo). `carter check --host` lists repos that are `unguarded`; upgrade git (for example `brew upgrade git`) and run `carter guard install` to switch to the global hook |
 | `E-OPENCODE-VERSION`: G2 untested on OpenCode … | Your OpenCode is older or newer than the version Carter was tested with; the plugin relies on its self-test there. Nothing is blocked; check `carter check --host` |
 | `carter check --host` says the plugin is `unproven` after an OpenCode update | The self-test runs again in every new server process and passes at the first agent command. Run any command through an agent, then `carter check --host` again. If it says `failed`, restart OpenCode from a clean terminal |
@@ -144,5 +144,5 @@ Find your symptom, then apply the fix. If nothing here helps, open an
 
 | Symptom | Fix |
 |---------|-----|
-| `carter uninstall` kept my policies | Without a terminal and without `--yes` the guards are kept; run `carter guard remove`, or `carter uninstall --yes` |
+| `carter uninstall` kept the guards | Without a terminal and without `--yes` the guards are kept; run `carter guard remove`, or `carter uninstall --yes` |
 | `carter uninstall` left files behind | By design. Files you edited are kept (those edited since the last install are listed as `⚠ Kept …`), and memories, `config.toml` and `audit.log` are never removed. Delete them by hand if you don't need them |

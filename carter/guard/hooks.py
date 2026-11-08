@@ -1,12 +1,18 @@
 """``carter-guard``: the POSIX ``pre-push`` backstop and the self-contained hook command
 (RFC-0007 §4.4, C.6.4; plan 004 step 22, freeze G3/G17).
 
-The agent test (AD1) is written **once**, here, from the signal names in ``g2_rules.json``, and
-rendered into two mirrors that the vector file (``tests/data/plugin_vectors.json``) keeps equal to
-``carter.identity.rules.is_agent``: the script ``~/.carter/hooks/carter-guard`` and the inline
-wrapper that is the hook's configured command. The wrapper exists so a missing, unreadable or
-broken script can never block the human: it blocks **only** an agent shell, and on the human path
-it makes no git call.
+The hooks act only on ``CARTER_AGENT_SHELL=1`` (D71): the plugin sets that tag solely in
+Carter's scope (a ``carter-*`` agent, its subagents, or a Carter workspace), so another agent's
+shell is never blocked here. ``AGENT=1`` and ``OPENCODE_SESSION_ID`` alone no longer count:
+OpenCode 2.1 sets ``AGENT`` to the constant ``1``, not to the agent's id, so a ``carter-*`` test
+on it is impossible. Residual: with the plugin not loaded there is no hook backstop
+(``carter check --host`` is RED, and the Carter agents' own ``git push *`` deny stays).
+Python's ``rules.is_agent`` (the full AD1 test) is unchanged for Carter's own CLI refusals.
+
+The test is written **once**, here, and rendered into two mirrors: the script
+``~/.carter/hooks/carter-guard`` and the inline wrapper that is the hook's configured command. The
+wrapper exists so a missing, unreadable or broken script can never block the human: it blocks
+**only** an agent shell, and on the human path it makes no git call.
 
 Pure functions (``render_*``, ``hook_command``, ``hook_entries``) plus the install of the script
 file. Everything here is rendered with ``shlex.quote`` and is byte-deterministic.
@@ -16,7 +22,7 @@ from __future__ import annotations
 
 import re
 import shlex
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from importlib import resources
 from pathlib import Path
 
@@ -33,10 +39,10 @@ from carter.identity.errors import (
     E_PUSH_GUARD,
     registry,
 )
-from carter.identity.rules import STRONG_AGENT_SIGNAL, human_identity_rules, load_rules
+from carter.identity.rules import STRONG_AGENT_SIGNAL, human_identity_rules
 from carter.install.paths import guard_script_path
 
-GUARD_VERSION = "2.1.0"
+GUARD_VERSION = "2.2.0"
 EVENT = "pre-push"
 HOOK_NAME = "carter-guard-pre-push"
 COMMIT_EVENTS = ("prepare-commit-msg", "commit-msg", "post-commit")
@@ -66,24 +72,19 @@ def _name(value: str) -> str:
     return value
 
 
+def hook_is_agent(env: Mapping[str, str]) -> bool:
+    """The Python oracle of the shell test below: only the plugin's tag counts (D71)."""
+    return env.get(STRONG_AGENT_SIGNAL) == "1"
+
+
 def is_agent_statements() -> list[str]:
-    """Statements of the body of ``is_agent`` (mirror of ``rules.is_agent``): the strong marker
-    wins, then a human tag, then any weak agent signal. Presence counts, never the value."""
-    rules = load_rules()
+    """Statements of the body of ``is_agent``: true only for ``CARTER_AGENT_SHELL=1``."""
     strong = _name(STRONG_AGENT_SIGNAL)
-    out = [
+    return [
         "reason=",
         f'[ "${{{strong}-}}" = 1 ] && {{ reason={shlex.quote(strong + "=1")}; return 0; }}',
+        "return 1",
     ]
-    out += [f'[ -n "${{{_name(n)}+x}}" ] && return 1' for n in rules.human_signals]
-    for name in rules.agent_signals:
-        if name != strong:
-            out.append(
-                f'[ -n "${{{_name(name)}+x}}" ] && {{ reason={shlex.quote(name + " is set")}; '
-                "return 0; }"
-            )
-    out.append("return 1")
-    return out
 
 
 def block_statement() -> str:

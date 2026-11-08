@@ -19,9 +19,9 @@ if TYPE_CHECKING:
     from carter.gate.words import Judge
 
 GH_HINT = (
-    "gh is read-only for agents: use the allowlisted forms (pr view|list|diff|checks, "
-    "issue view|list, "
-    "run view|list, repo view, search); `gh api` is never allowed. Ask the human for anything else."
+    "gh is limited for agents: use the allowlisted forms (pr view|list|diff|checks|create|edit|"
+    "comment, issue view|list, run view|list, repo view, search); `gh pr merge|close|review` and "
+    "`gh api` are never allowed. Ask the human for anything else."
 )
 GIT_WORD = re.compile(r"(?<![\w.-])(git|gh)(?![\w-])")
 SUDO_WORD = re.compile(r"(?<![\w.-])(sudo|docker|podman)(?![\w-])")

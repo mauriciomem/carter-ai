@@ -24,7 +24,7 @@ export default Plugin.define({
     })
     ctx.tool.hook("execute.before", (e: any) => w({ ev: "execute.before", tool: e.tool, agent: e.agent }))
     ctx.tool.transform((tools: any) => {
-      for (const name of ["carter_push", "carter_pr"]) {
+      for (const name of ["carter_push"]) {
         tools.add({
           name,
           options: { codemode: false },

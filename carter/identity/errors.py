@@ -6,7 +6,7 @@ and the carter-ops skill embeds ``render_error_table()``; a parity test fails on
 
 ``slice`` is the first slice that can raise a code. Slice 1 raises ``E-CONFIG`` and
 ``E-ROLE-B-TIER`` and carries the text of ``E-TIER-REQUIRED`` (enforced by 2a/2b) and
-``E-COMMIT-T1`` (``carter commit``, 2b); slice 1G raises the policy, handoff, secret-scan,
+``E-COMMIT-T1`` (``carter commit``, 2b); slice 1G raises the policy,
 A+ and human-terminal codes. Every other code is registered with its Appendix B wording and
 raised by its own slice. ``render_error_table()`` lists the codes up to ``CURRENT_SLICE``.
 Messages hold placeholders such as ``<t>``, never values read from the environment, a config
@@ -38,8 +38,6 @@ E_APLUS_ARGS = "E-APLUS-ARGS"
 E_PAT_TYPE = "E-PAT-TYPE"
 E_PAT_PERM = "E-PAT-PERM"
 E_GH_READONLY = "E-GH-READONLY"
-E_HANDOFF = "E-HANDOFF"
-E_SECRET_SCAN = "E-SECRET-SCAN"
 E_B_REPOCFG = "E-B-REPOCFG"
 E_B_UNSIGNED = "E-B-UNSIGNED"
 # Slice 2a (plan 004). The last two are not in Appendix B (G14).

@@ -139,7 +139,6 @@ ATTACKS = {
     "edit": ('FORCE edit {"path":"pwned-edit","old":"","new":"x"}', "edit"),
     "write": ('FORCE write {"path":"pwned-write","content":"x"}', "write"),
     "carter_push": ("FORCE carter_push {}", "carter_push"),
-    "carter_pr": ("FORCE carter_pr {}", "carter_pr"),
     "subagent": ('FORCE subagent {"agent":"general","description":"x","prompt":"hi"}', "subagent"),
     "webfetch": ('FORCE webfetch {"url":"http://127.0.0.1:9/x"}', "webfetch"),
 }

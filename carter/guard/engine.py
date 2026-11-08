@@ -4,11 +4,17 @@ Scope so far: policies, per-agent permissions, guard state, and (2a step 24-25) 
 group: ``~/.carter/hooks/carter-guard``, the ``pre-push`` entries in ``~/.carter/gitconfig`` and
 the include line, or on git < 2.54 the ``repo_hooks`` fallback. No plugin yet (step 26).
 
-Order and atomicity. Consent is resolved in memory first. Policies and the per-agent denies
-go to the OpenCode config in ONE verified write (rolled back on any loss); the git part
-follows; guard state is saved **last**. If the git part fails, the config is restored from
-the backup and the state file keeps its previous content. Nothing here prompts through
-click: callers pass ``confirm`` and ``echo`` so this module is testable and click-free.
+Scope (D71). G2's deny set is not written to the OpenCode config any more: it is rendered into
+the ``permissions:`` of Carter's own agent files (``components.rerender_agents``), so other agents
+are untouched. The only global write left is the per-agent ``carter_push`` denies for the built-in
+agents (D46); an earlier Carter's recorded global ``policies`` are taken out.
+
+Order and atomicity. Consent is resolved in memory first. The per-agent denies (and the removal
+of old global policies) go to the OpenCode config in ONE verified write (rolled back on any loss);
+the git part follows; guard state is saved before the agent files are re-rendered. If the
+git part fails, the config is restored from the backup and the state file keeps its previous
+content. Nothing here prompts through click: callers pass ``confirm`` and ``echo`` so this
+module is testable and click-free.
 """
 
 from __future__ import annotations
@@ -34,13 +40,17 @@ from carter.guard import (
 from carter.guard.state import GuardState, load_or_empty_readonly, quarantine_corrupt, save
 from carter.identity import ConfigError, load_identity
 from carter.identity.errors import E_GIT_OLD, E_STATE_INVALID, IdentityError, registry
-from carter.identity.policyset import Statement, consent_groups, policy_statements
+from carter.identity.policyset import Statement, consent_groups
 from carter.install.atomic import atomic_write_bytes
 from carter.install.paths import backups_dir, carter_gitconfig_path, guard_state_path
 
 Echo = Callable[[str], None]
 Confirm = Callable[..., bool]
 
+GLOBAL_REMOVED = (
+    "✓ G2 now applies only to Carter agents and Carter workspaces; "
+    "global OpenCode policies removed."
+)
 INTERIM_NOTE = (
     "Interim: plugin and isolation are not installed; literal denies only. They are a speed "
     "bump, not a boundary, until the plugin is confirmed (`g2` revision 2)."
@@ -135,21 +145,29 @@ def _active_optouts(state: GuardState, *, echo: Echo) -> list[Statement]:
     return found.statements() if found.workspaces else []
 
 
-def _show_diff(res: policies.ApplyResult, wanted: list[Statement], echo: Echo) -> None:
-    by_id = {s.id: s for s in wanted}
+def _show_diff(res: policies.ApplyResult, echo: Echo) -> None:
     for ident in res.removed:
-        echo(f"  - {ident}")
-    for ident in res.added:
-        s = by_id[ident]
-        echo(f"  + {ident:<34} {s.resource}  [{s.effect}]")
-    kept = len(wanted) - len(res.added) - len(res.preexisting)
-    echo(f"  = {max(kept, 0)} statement(s) unchanged, {len(res.preexisting)} already yours")
+        echo(f"  - global policy {ident}")
     for label in res.perms.added:
         echo(f"  + per-agent deny {label}")
     for label in res.perms.removed:
         echo(f"  - per-agent deny {label}")
-    for text in res.perms.warnings + res.warnings:
+    for text in res.warnings:
         echo(f"  ⚠ {text}")
+
+
+def _rerender(base_dir: Path | None, echo: Echo) -> None:
+    """Write the global Carter agent files again: they carry G2's rules (D71)."""
+    from carter.install import components
+
+    try:
+        stats = components.rerender_agents(base_dir)
+    except OSError as exc:
+        echo(f"⚠ could not re-render the Carter agent files ({type(exc).__name__})")
+        return
+    if stats is not None:
+        changed = stats["created"] + stats["updated"]
+        echo(f"Carter agent files: {changed} written, {stats['unchanged']} unchanged")
 
 
 def _undo_git(base_dir: Path | None, before: GuardState, after: GuardState) -> None:
@@ -373,7 +391,7 @@ DENIES = {
 
 NEWS = {
     ("g2", 2): "the Carter plugin isolates every agent shell (no SSH agent, no push)",
-    ("g2", 3): "carter_push and carter_pr for devops (you approve each use)",
+    ("g2", 3): "carter_push for devops (you approve each use)",
     ("hooks", 2): "agent commits are checked (identity, signature, trailer) in every repo",
     ("repo_hooks", 2): "the commit hooks, next to pre-push, where Carter owns the hook files",
 }
@@ -424,7 +442,6 @@ def install(
     assume_yes: bool,
     interactive: bool,
     dry_run: bool,
-    print_policies: bool,
     echo: Echo,
     confirm: Confirm,
     reader: configwrite.Reader | None = None,
@@ -432,13 +449,6 @@ def install(
     """Run ``carter guard install``. Returns the exit code (0 also for a skipped install)."""
     home = str(Path.home())
     groups = {g.id: g for g in consent_groups()}
-    if print_policies:
-        chosen = [g for g in (only or _live_ids()) if groups[g].live]
-        sts = list(policy_statements(chosen, home=home))
-        if consent.CONFIG_EDIT in chosen:
-            sts += optout.active_optouts(load_identity()).statements()
-        echo(policies.render_snippet(sts).rstrip("\n"))
-        return 0
 
     state = _load_state(base_dir, dry_run=dry_run, echo=echo)
     today = datetime.now(UTC).date().isoformat()
@@ -491,16 +501,19 @@ def install(
     optouts = _active_optouts(state, echo=echo)
     wanted = consent.desired_statements(state, home=home, optouts=optouts)
     agents = builtin_agents() if "g2" in consent.accepted_groups(state) else []
+    echo(f"Carter agents will carry {len(wanted)} G2 rule(s)")
     before = copy.deepcopy(state)
     state_path = guard_state_path(base_dir)
     previous = state_path.read_bytes() if state_path.exists() else None
     res = policies.apply(
-        base_dir, state, wanted, agents=agents,
+        base_dir, state, [], agents=agents,
         backup_root=backups_dir(base_dir) / _stamp(), reader=reader,
     )  # fmt: skip
     try:
         echo(f"OpenCode config: {res.target}" + ("" if res.changed else " (already up to date)"))
-        _show_diff(res, wanted, echo)
+        _show_diff(res, echo)
+        if res.removed:  # an earlier Carter's global statements were taken out
+            echo(GLOBAL_REMOVED)
         # Ownership is recorded the moment the config holds our statements, so a process
         # killed during the git step leaves a consistent pair, never orphaned policies.
         if state != GuardState() or state_path.exists():
@@ -520,6 +533,7 @@ def install(
         else:
             atomic_write_bytes(state_path, previous)
         raise
+    _rerender(base_dir, echo)
     if not consent.plugin_wanted(state):
         echo(INTERIM_NOTE)
     return 0
@@ -572,10 +586,11 @@ def _dry_run(
         echo(f"  ⚠ {exc}")
         agents = []
     res = policies.apply(
-        base_dir, preview, wanted, agents=agents, backup_root=backups_dir(base_dir), dry_run=True
+        base_dir, preview, [], agents=agents, backup_root=backups_dir(base_dir), dry_run=True
     )
     echo(f"OpenCode config: {res.target}" + ("" if res.changed else " (already up to date)"))
-    _show_diff(res, wanted, echo)
+    _show_diff(res, echo)
+    echo(f"  Carter agents would carry {len(wanted)} G2 rule(s)")
     if agents:
         echo(f"  per-agent denies for built-in agents: {', '.join(agents)}")
     _git_step(base_dir, preview, echo, dry_run=True, mode=mode)
@@ -682,7 +697,6 @@ def remove(
     scoped = only is not None
     if dry_run:
         echo("carter guard remove (dry run: nothing is written)")
-    home = str(Path.home())
     root = backups_dir(base_dir) / _stamp()
     if scoped:
         target = copy.deepcopy(state) if dry_run else state
@@ -690,19 +704,18 @@ def remove(
         for name in names:
             target.consents.pop(name, None)
         if names:
-            wanted = consent.desired_statements(target, home=home)
             agents = builtin_agents() if "g2" in consent.accepted_groups(target) else []
             res = policies.apply(
                 base_dir,
                 target,
-                wanted,
+                [],
                 agents=agents,
                 backup_root=root,
                 dry_run=dry_run,
                 reader=reader,
             )
             echo(f"OpenCode config: {res.target}")
-            _show_diff(res, wanted, echo)
+            _show_diff(res, echo)
         if consent.PLUGIN in (only or []):
             _only_plugin(base_dir, target, echo, dry_run=dry_run)
         elif consent.BROKER in (only or []):
@@ -722,6 +735,7 @@ def remove(
                 _remove_script(base_dir, target, echo)
         if not dry_run:
             save(target, path)
+            _rerender(base_dir, echo)
         return 0
     rem = policies.remove(base_dir, state, backup_root=root, dry_run=dry_run, reader=reader)
     for ident in rem.removed + rem.perms.removed:
@@ -743,7 +757,9 @@ def remove(
         left.files = [f for f in state.files if f["path"] in identity]
         save(left, path)
         echo("Kept the identity files and their records (`carter identity remove` takes them).")
+        _rerender(base_dir, echo)
         return 0
     path.unlink(missing_ok=True)
     echo("Removed guard state. (state/audit/ is kept.)")
+    _rerender(base_dir, echo)
     return 0

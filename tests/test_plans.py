@@ -14,7 +14,6 @@ from pathlib import Path
 import pytest
 
 from carter.plans import (
-    PlanValidation,
     _count_step_rows,
     _validate_plan_dir,
     parse_frontmatter,
@@ -28,11 +27,6 @@ from carter.plans import (
 def validate_plan_dir(plan_dir: Path, thresholds: dict | None = None) -> list[str]:
     """Errors for one plan directory, via the path ``validate_plans_dir`` uses."""
     return _validate_plan_dir(plan_dir, thresholds)[0].errors
-
-
-def plan_warnings(plan_dir: Path, thresholds: dict | None = None) -> list[str]:
-    """Warnings for one plan directory."""
-    return _validate_plan_dir(plan_dir, thresholds)[0].warnings
 
 
 def plans_errors(plans_root: Path, thresholds: dict | None = None) -> list[str]:
@@ -196,40 +190,21 @@ class TestEnums:
         assert any("status" in e for e in errors)
 
 
-class TestPushPolicyDeprecation:
-    """RFC-0007 §4.8: push_policy is optional, ignored, and warned about (one minor)."""
-
-    def test_plan_without_push_policy_has_no_error_and_no_warning(self, tmp_path):
-        plan = make_plan(tmp_path)
-        assert validate_plan_dir(plan) == []
-        assert plan_warnings(plan) == []
+class TestPushPolicyIsJustAnUnknownKey:
+    """D70: ``push_policy`` is neither accepted-and-warned nor an error; validation ignores it and
+    ``carter check`` reports it as an unknown key (see ``tests/test_d70.py``)."""
 
     @pytest.mark.parametrize("value", ["manual", "auto", "bogus", "null", "42"])
-    def test_any_value_is_accepted_with_exactly_one_warning(self, tmp_path, value):
+    def test_any_value_is_ignored_by_validation(self, tmp_path, value):
         readme = VALID_README.replace("ai-usage:", f"push_policy: {value}\nai-usage:")
         plan = make_plan(tmp_path, readme=readme)
+        assert validate_plan_dir(plan) == []
 
-        assert validate_plan_dir(plan) == []  # enum is not checked any more
-        warnings = plan_warnings(plan)
-        assert len(warnings) == 1
-        assert "push_policy" in warnings[0]
-        assert "deprecated" in warnings[0]
-        assert "001-sample-plan/README.md" in warnings[0]
-
-    def test_warning_does_not_hide_real_errors(self, tmp_path):
+    def test_it_does_not_hide_real_errors(self, tmp_path):
         readme = VALID_README.replace("ai-usage:", "push_policy: manual\nai-usage:")
         readme = readme.replace("status: active", "status: wip")
         plan = make_plan(tmp_path, readme=readme)
         assert any("status" in e for e in validate_plan_dir(plan))
-        assert len(plan_warnings(plan)) == 1
-
-    def test_scan_reports_warnings_on_their_own_channel(self, tmp_path):
-        readme = VALID_README.replace("ai-usage:", "push_policy: manual\nai-usage:")
-        make_plan(tmp_path, readme=readme)
-        result = validate_plans_dir(tmp_path)
-        assert isinstance(result, PlanValidation)
-        assert result.errors == []
-        assert len(result.warnings) == 1
 
 
 REPO_PLANS = Path(__file__).resolve().parent.parent / ".carter" / "state" / "plans"
@@ -237,16 +212,15 @@ REPO_PLANS = Path(__file__).resolve().parent.parent / ".carter" / "state" / "pla
 
 @pytest.mark.skipif(not REPO_PLANS.is_dir(), reason="private .carter/ workspace state is absent")
 class TestRealWorkspacePlans:
-    """Regression: plans 001 and 002 keep ``push_policy: manual`` and must still pass."""
+    """Regression: plans 001 and 002 keep ``push_policy: manual`` and must still validate."""
 
     @pytest.mark.parametrize("name", ["001-llm-attribution-signing", "002-slice-1-hazards"])
-    def test_real_plan_validates_with_warnings_only(self, name):
+    def test_real_plan_validates(self, name):
         plan_dir = REPO_PLANS / "active" / name
         if not plan_dir.is_dir():
             pytest.skip(f"{name} is not in active/ any more")
         result = _validate_plan_dir(plan_dir)[0]
         assert result.errors == []
-        assert all("push_policy" in w and "deprecated" in w for w in result.warnings)
 
     def test_whole_workspace_scan_has_no_errors(self):
         assert validate_plans_dir(REPO_PLANS).errors == []
@@ -259,13 +233,11 @@ class TestAiUsage:
     def test_valid_values_accepted(self, tmp_path, value):
         plan = make_plan(tmp_path, readme=VALID_README.replace("ai-assisted", value))
         assert validate_plan_dir(plan) == []
-        assert plan_warnings(plan) == []
 
     def test_key_is_optional(self, tmp_path):
         plan = make_plan(tmp_path, readme=VALID_README.replace("ai-usage: ai-assisted\n", ""))
         assert "ai-usage" not in (plan / "README.md").read_text()
         assert validate_plan_dir(plan) == []
-        assert plan_warnings(plan) == []
 
     @pytest.mark.parametrize("value", ["robot", "AI-ASSISTED", "null", "true", "[]"])
     def test_invalid_value_is_an_error(self, tmp_path, value):
@@ -468,18 +440,18 @@ class TestCheckIntegration:
         assert result.exit_code == 1
         assert "must_haves" in result.output
 
-    def test_check_prints_warnings_and_still_exits_zero(self, tmp_path):
+    def test_check_reports_the_retired_key_and_still_exits_zero(self, tmp_path):
         runner, main = self._init(tmp_path)
         legacy = VALID_README.replace("ai-usage:", "push_policy: manual\nai-usage:")
         make_plan(tmp_path / ".carter" / "state" / "plans", readme=legacy)
         result = runner.invoke(main, ["check", str(tmp_path)])
         assert result.exit_code == 0, result.output
-        assert "push_policy" in result.output
-        assert "deprecated" in result.output
+        assert "unknown key `push_policy`" in result.output and "delete it" in result.output
+        assert "deprecated" not in result.output
         assert "Workspace OK" in result.output
         assert "Workspace issues found" not in result.output
 
-    def test_check_with_warning_and_error_exits_nonzero_and_prints_both(self, tmp_path):
+    def test_check_with_a_retired_key_and_an_error_exits_nonzero_and_prints_both(self, tmp_path):
         runner, main = self._init(tmp_path)
         bad = VALID_README.replace("ai-usage:", "push_policy: manual\nai-usage:")
         bad = bad.replace('    - "The sample behaviour works"\n', "")
@@ -532,11 +504,11 @@ class TestFrontmatterReferenceMatchesValidator:
         enforces = doc[doc.index("`carter check` enforces:") :].split("\n\n", 3)[1]
         assert "push_policy" not in enforces
 
-    def test_deprecation_and_every_enum_value_are_documented(self) -> None:
+    def test_every_enum_value_is_documented(self) -> None:
         from carter.plans import VALID_AI_USAGE
 
         doc = self._doc()
-        assert "push_policy" in doc and "deprecated" in doc
+        assert "is **deprecated**" not in doc  # D70: a retired key is reported as unknown
         for value in VALID_AI_USAGE:
             assert value in doc
 

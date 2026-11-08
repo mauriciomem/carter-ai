@@ -120,7 +120,7 @@ def g2_items(state: GuardState, base_dir: Path | None) -> list[Item]:
             out.append(Item("info", "consent", text))
         else:
             what = {
-                "g2": "the B tools (carter_push, carter_pr for devops)"
+                "g2": "the B tool (carter_push for devops)"
                 if consent.plugin_wanted(state)
                 else "the plugin and the B tools"
             }.get(group, "the new content")
@@ -272,7 +272,7 @@ def agent_items(
     loaded: Mapping[str, object] | None,
     config_path: str,
 ) -> list[Item]:
-    """Each agent's effective ``carter_push``/``carter_pr`` rule from ``opencode debug agents``."""
+    """Each agent's effective ``carter_push`` rule from ``opencode debug agents``."""
     if not consent.accepted_groups(state) or "g2" not in consent.accepted_groups(state):
         return []
     try:

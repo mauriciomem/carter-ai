@@ -190,8 +190,6 @@ def plan_add(
         current = load_identity(home / ".carter" / "config.toml")
     except ConfigError as exc:
         raise IdentityError(E_CONFIG, detail=exc.detail) from None
-    if current.needs_migration:
-        raise IdentityError(E_CONFIG, detail="config.toml is schema 1; run `carter install` first")
     user = _github(github.get_user, req.login, env)
     ident = current.identity
     base_url = github.api_base(env)

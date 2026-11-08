@@ -2,8 +2,8 @@
 
 Carter emits each agent's OpenCode V2 ``permissions:`` rule list (last match wins)
 from the risk taxonomy x per-agent allowlist. ``carter check`` (``lint_policy``)
-compares the emitted ``permissions:``/``model`` with what carter.yaml generates and
-rejects any V1 frontmatter key. There is no ``<!-- carter:policy -->`` comment.
+compares the emitted ``permissions:``/``model`` with what carter.yaml generates. There is no
+``<!-- carter:policy -->`` comment.
 """
 
 from __future__ import annotations
@@ -13,7 +13,6 @@ import yaml
 from click.testing import CliRunner
 
 from carter.config import (
-    V1_AGENT_KEYS,
     generate_default_config,
     load_config,
     permission_rules,
@@ -60,20 +59,20 @@ _DANGEROUS = (
 _VAULT = ("vault read *", "vault write *")  # the only shell verbs left in remote-write
 # Plan 003 step 12 (T13): GitHub writes are denied for EVERY agent, devops included, and sit
 # last so no earlier rule (e.g. `git push --force *` under dangerous) can re-open one.
+# D72: opening, editing and commenting on a PR are allowed; merge, close, review and ready are not.
 _GITHUB_WRITE = (
     "git push *",
-    "gh pr create *",
     "gh pr merge *",
-    "gh pr comment *",
+    "gh pr close *",
     "gh pr review *",
-    "gh pr edit *",
+    "gh pr ready *",
     "gh issue create *",
     "gh issue comment *",
     "gh issue edit *",
     "gh release *",
     "gh api *",
 )
-_BROKER = [_r("carter_push", "*", "deny"), _r("carter_pr", "*", "deny")]  # D46, all but devops
+_BROKER = [_r("carter_push", "*", "deny")]  # D46, all but devops
 _MCP_GITHUB = _r("carter_github_*", "*", "deny")  # C14, roles that do not need it
 
 
@@ -158,7 +157,7 @@ class TestRuleOrder:
             _r("shell", "vault read *", "deny") in rules
         )  # the override tightens vault ask -> deny
 
-    @pytest.mark.parametrize("cmd", ["gh pr create *", "gh api *", "vault read *", "git push *"])
+    @pytest.mark.parametrize("cmd", ["gh pr merge *", "gh api *", "vault read *", "git push *"])
     def test_engineer_remote_denies_follow_shell_allow(self, cmd):
         # last match wins: the deny must come after the broad shell allow.
         rules = permission_rules(_config(), "engineer")
@@ -176,7 +175,7 @@ class TestRuleOrder:
         rules = permission_rules(_config(level), "devops")
         for rule in rules:
             if rule["action"] == "shell" and rule["resource"].startswith(
-                ("git push", "gh pr", "gh api")
+                ("git push", "gh pr merge", "gh api")
             ):
                 assert rule["effect"] in {"deny", "ask"}
         pushes = [r for r in rules if r["action"] == "shell" and "git push" in r["resource"]]
@@ -197,12 +196,12 @@ class TestRuleOrder:
 
     def test_devops_alone_lacks_the_broker_deny(self):
         rules = permission_rules(_config(), "devops")
-        assert not [r for r in rules if r["action"] in {"carter_push", "carter_pr"}]
+        assert not [r for r in rules if r["action"] == "carter_push"]
 
     def test_broker_denies_follow_the_subagent_rules_and_precede_the_broad_allows(self):
         rules = permission_rules(_config(), "engineer")
         assert rules.index(_BROKER[0]) > rules.index(_r("subagent", "*", "deny"))
-        assert rules.index(_BROKER[1]) < rules.index(_r("shell", "*", "allow"))
+        assert rules.index(_BROKER[0]) < rules.index(_r("shell", "*", "allow"))
 
     @pytest.mark.parametrize("role", _ALL_ROLES)
     def test_github_mcp_is_hidden_only_from_the_listed_roles(self, role):
@@ -253,19 +252,6 @@ class TestRuleOrder:
         assert _r("subagent", "carter-*", "allow") in fm["permissions"]
 
 
-# ─── Emitted frontmatter shape ───────────────────────────────────────────────
-
-
-class TestEmittedFrontmatter:
-    @pytest.mark.parametrize("role", _ALL_ROLES)
-    def test_no_v1_keys(self, role):
-        fm = yaml.safe_load(policy_frontmatter(_config(), role))
-        assert not set(fm) & set(V1_AGENT_KEYS)
-
-    def test_v1_key_set(self):
-        assert set(V1_AGENT_KEYS) == {"permission", "tools", "bash", "task", "name", "temperature"}
-
-
 # ─── Lint ────────────────────────────────────────────────────────────────
 
 
@@ -305,14 +291,6 @@ class TestLint:
         installed = _installed(cfg)
         installed["pm"]["model"] = "openai/gpt-x"
         assert any("pm" in e and "model" in e for e in lint_policy(cfg, installed))
-
-    @pytest.mark.parametrize("key", ["permission", "tools", "bash", "task", "name", "temperature"])
-    def test_v1_key_is_error(self, key):
-        cfg = _config()
-        installed = _installed(cfg)
-        installed["learner"][key] = "x"
-        errors = lint_policy(cfg, installed)
-        assert any("learner" in e and key in e and "V1" in e for e in errors)
 
     def test_absent_role_is_not_an_error(self):
         cfg = _config()

@@ -112,6 +112,7 @@ def _make_rig(rig_factory, opencode_bin) -> Rig:  # type: ignore[no-untyped-def]
 
     return rig_factory(
         opencode=opencode_bin,
+        carter_agent=True,
         plugins={"zprobe": PROBE},
         extra_files={
             ".config/opencode/plugins/carter/index.ts": index_ts,

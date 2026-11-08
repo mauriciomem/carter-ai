@@ -27,13 +27,18 @@ from pathlib import Path
 from carter import ui
 from carter.aplus import rangecalc, repocfg, run, sigcheck, sshcfg
 from carter.aplus.findings import Finding, mask_userinfo
-from carter.aplus.handoff import OWN_TERMINAL
 from carter.guard.state import GuardState, load_or_empty_readonly
 from carter.identity import load_identity
 from carter.identity.errors import E_APLUS_ARGS, IdentityError
 from carter.identity.schema import IdentityConfig
 from carter.install.paths import carter_config_path, guard_state_path
 
+# The one sentence that says who pushes and where (templates, skills and the global rule use it).
+# D68 g: the human may also run it in OpenCode's `!` shell (no TTY needed), never through an agent.
+OWN_TERMINAL = (
+    "Run `carter push` yourself, in your terminal or as `!carter push` in OpenCode, "
+    "not through an agent."
+)
 MAX_COMMITS_SHOWN = 50
 MAX_CHANGES_SHOWN = 20
 REMOTE = "origin"

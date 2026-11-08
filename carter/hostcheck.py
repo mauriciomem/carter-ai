@@ -15,16 +15,16 @@ from collections.abc import Callable, Mapping
 from pathlib import Path
 from typing import Any
 
-from carter import ghtoken, harness, serverenv
+from carter import ghtoken, harness, serverenv, unknownkeys
 from carter import hostcheck_g2 as g2
 from carter.checkitems import Item, exit_code
 from carter.checkitems import render as render_items
-from carter.guard import consent, gitconfig, optout, permissions, repohooks
-from carter.guard.configwrite import Reader, missing_statements, target_path
+from carter.guard import agent_rules, consent, gitconfig, optout, permissions, repohooks
+from carter.guard.configwrite import Reader, target_path
 from carter.guard.state import GuardState, load_or_empty_readonly
 from carter.identity import ConfigError, load_identity
-from carter.identity.errors import E_CONFIG, E_POLICIES_MISSING, E_STATE_INVALID
-from carter.identity.policyset import Statement, consent_groups
+from carter.identity.errors import E_CONFIG, E_STATE_INVALID
+from carter.identity.policyset import consent_groups
 from carter.identity.rules import load_rules
 from carter.install.jsonc import _load_jsonc
 from carter.install.mcp import config_target
@@ -45,7 +45,7 @@ HOOK_MODES = {
 }
 PLUGIN_ABSENT = (
     "plugin not installed: gate, isolation and signing guards are inactive; "
-    "policies are literal denies only"
+    "the Carter agents carry literal denies only"
 )
 
 
@@ -58,34 +58,40 @@ def render(items: list[Item]) -> list[str]:
     return render_items(items, "carter check --host (read-only)", "Host")
 
 
-def _statements_from_records(state: GuardState) -> list[Statement]:
-    return [
-        Statement(p["id"], "config-edit", p["action"], p["resource"], p["effect"], "")
-        for p in state.opencode_policies
-        if p["id"].startswith("optout-")
-    ]
-
-
-def _policies(state: GuardState, reader: Reader | None, home: str) -> list[Item]:
+def _policies(state: GuardState, reader: Reader | None, base_dir: Path | None) -> list[Item]:
+    """D71: G2's rules are in the Carter agent files; the OpenCode config holds no policies, only
+    the per-agent ``carter_push`` denies and the user's providers."""
+    items: list[Item] = []
     accepted = consent.accepted_groups(state)
-    expected = consent.desired_statements(state, home=home, optouts=_statements_from_records(state))
+    if state.opencode_policies:
+        text = (
+            f"{len(state.opencode_policies)} global policy statement(s) from an earlier Carter "
+            "are still in your OpenCode config and bind every agent"
+        )
+        items.append(
+            Item(
+                "warn",
+                "policies",
+                text,
+                "Run `carter guard install`: G2 now applies only to Carter agents "
+                "and Carter workspaces.",
+            )
+        )
+    current, drifted = agent_rules.agent_file_state(base_dir)
+    for name in drifted:
+        text = f"{name}: its permissions differ from what Carter renders (the G2 rules)"
+        items.append(Item("red", "policies", text, "Run `carter guard install`."))
+    if current and not drifted and accepted:
+        text = f"{len(current)} Carter agent file(s) carry the G2 rules ({', '.join(accepted)})"
+        items.append(Item("ok", "policies", text))
     try:
         loaded = (reader or harness.read_debug_config)()
     except harness.DebugConfigError as exc:
-        return [Item("red", "policies", f"cannot read `opencode debug config` ({exc})")]
-    items = []
-    missing = missing_statements(loaded, expected)
-    for s in missing:
-        text = f"{E_POLICIES_MISSING}: `{s.id}` is not loaded"
-        items.append(Item("red", "policies", text, BROKEN_CONFIG_HINT))
-    if expected and not missing:
-        items.append(
-            Item("ok", "policies", f"{len(expected)} statement(s) loaded ({', '.join(accepted)})")
-        )
+        return [*items, Item("red", "policies", f"cannot read `opencode debug config` ({exc})")]
     path = Path(state.opencode_config) if state.opencode_config else target_path(None)
     config = _load_jsonc(path) if path.exists() else None
     if isinstance(config, dict):
-        defined = {str(k) for key in ("providers", "provider") for k in (config.get(key) or {})}
+        defined = {str(k) for k in (config.get("providers") or {})}
         lost = sorted(defined - harness.provider_ids(loaded))
         if lost:
             items.append(Item("red", "providers", f"not loaded by OpenCode: {', '.join(lost)}"))
@@ -302,7 +308,7 @@ def run_host_checks(
             Item("warn", "guard", "G2 off: no guards are installed", "Run `carter guard install`.")
         )
     else:
-        guarded("policies", lambda: _policies(state, reader, home or str(Path.home())))
+        guarded("policies", lambda: _policies(state, reader, base_dir))
         guarded("guard files", lambda: _files(state))
         guarded("consent", lambda: _declined(state))
         if "g2" in consent.accepted_groups(state):
@@ -337,6 +343,7 @@ def run_host_checks(
     guarded("project", lambda: _project_scope(where))
     guarded("D52", _optouts)
     guarded("workspace", lambda: _pending_pins(where))
+    guarded("unknown key", lambda: unknownkeys.host_items(base_dir))
     guarded("token", lambda: _token(base_dir))
     if servers is not None:
         guarded("server env", lambda: g2.pollution_items(servers, home or str(Path.home())))

@@ -17,7 +17,7 @@ from click.testing import CliRunner, Result
 
 from aplus.helpers import commit_file, git
 from carter.aplus import push, run
-from carter.aplus.handoff import OWN_TERMINAL
+from carter.aplus.push import OWN_TERMINAL
 from carter.cli import main
 from carter.identity.errors import E_APLUS_ARGS, E_B_UNSIGNED, E_CONFIG, E_HUMAN_TERMINAL
 from sentinels import fine_grained, prefixed

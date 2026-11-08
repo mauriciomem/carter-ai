@@ -1,5 +1,5 @@
-"""Per-agent ``carter_push``/``carter_pr`` denies for the built-in agents (D46, freeze F6;
-plan 003 step 12)."""
+"""Per-agent ``carter_push`` denies for the built-in agents (D46, freeze F6; plan 003 step 12).
+D72 removed ``carter_pr``; D70 removed the V1 ``agent.<n>.permission`` shape."""
 
 from __future__ import annotations
 
@@ -9,7 +9,7 @@ from pathlib import Path
 import pytest
 
 from carter import harness
-from carter.guard import permissions, policies
+from carter.guard import policies
 from carter.guard.state import GuardState
 from carter.identity.policyset import Statement
 from carter.install.mcp import config_target
@@ -17,7 +17,6 @@ from carter.install.paths import backups_dir
 
 BUILTINS = ["build", "plan", "general", "explore"]
 DENY_PUSH = {"action": "carter_push", "resource": "*", "effect": "deny"}
-DENY_PR = {"action": "carter_pr", "resource": "*", "effect": "deny"}
 A = Statement("deny-a", "g2", "tool.use", "shell:aaa *", "deny", "t")
 
 
@@ -77,7 +76,7 @@ class TestDiscovery:
 
 
 class TestWrite:
-    def test_builtins_get_both_denies_in_the_v2_shape_and_are_tracked(
+    def test_builtins_get_the_deny_in_the_v2_shape_and_are_tracked(
         self, tmp_path, cfg, fake_opencode
     ) -> None:
         fake_opencode(config_sequence=[dbg(), dbg()])
@@ -85,18 +84,15 @@ class TestWrite:
         res = run(tmp_path, state, BUILTINS)
         agents = read(cfg)["agents"]
         for name in BUILTINS:
-            assert agents[name]["permissions"] == [DENY_PUSH, DENY_PR]
-        assert res.perms.added == sorted(
-            f"{n}:{t}" for n in BUILTINS for t in ("carter_push", "carter_pr")
-        )
-        assert len(state.agent_permissions) == 8
+            assert agents[name]["permissions"] == [DENY_PUSH]
+        assert res.perms.added == sorted(f"{n}:carter_push" for n in BUILTINS)
+        assert len(state.agent_permissions) == 4
         rec = state.agent_permissions[0]
         assert rec == {
             "agent": "build",
             "key": "permission.carter_push",
             "value": "deny",
             "preexisting": False,
-            "form": "v2",
         }
         assert "policies" not in read(cfg)  # D46 is not a global policy
 
@@ -107,7 +103,7 @@ class TestWrite:
         run(tmp_path, GuardState(), ["plan"])
         entry = read(cfg)["agents"]["plan"]
         assert entry["model"] == "x#high"
-        assert entry["permissions"] == [mine, DENY_PUSH, DENY_PR]
+        assert entry["permissions"] == [mine, DENY_PUSH]
 
     def test_other_agents_and_keys_are_untouched(self, tmp_path, cfg, fake_opencode) -> None:
         write_cfg(cfg, {"model": "m", "agents": {"title": {"model": "t"}}, "providers": {"a": {}}})
@@ -116,52 +112,20 @@ class TestWrite:
         data = read(cfg)
         assert data["agents"]["title"] == {"model": "t"} and data["model"] == "m"
 
-    def test_the_v1_map_is_used_when_that_is_where_the_agent_is_defined(
+    def test_the_old_v1_map_is_not_handled_and_not_touched(
         self, tmp_path, cfg, fake_opencode
     ) -> None:
+        """D70: no V1 shape. The deny always goes to ``agents.<name>.permissions``; a leftover
+        ``agent.<name>.permission`` is the user's (``carter check --host`` names it)."""
         write_cfg(cfg, {"agent": {"plan": {"permission": {"edit": "deny"}}}})
         fake_opencode(config_sequence=[dbg(), dbg()])
         state = GuardState()
         run(tmp_path, state, ["plan", "build"])
         data = read(cfg)
-        assert data["agent"]["plan"]["permission"] == {
-            "edit": "deny",
-            "carter_push": "deny",
-            "carter_pr": "deny",
-        }
-        assert data["agents"]["build"]["permissions"] == [DENY_PUSH, DENY_PR]  # not in the V1 map
-        assert {(r["agent"], r["form"]) for r in state.agent_permissions} == {
-            ("plan", "v1"),
-            ("build", "v2"),
-        }
-
-    def test_v2_wins_when_the_agent_exists_in_both(self, tmp_path, cfg, fake_opencode) -> None:
-        write_cfg(cfg, {"agent": {"plan": {"prompt": "x"}}, "agents": {"plan": {"system": "y"}}})
-        fake_opencode(config_sequence=[dbg(), dbg()])
-        run(tmp_path, GuardState(), ["plan"])
-        data = read(cfg)
-        assert data["agents"]["plan"]["permissions"] == [DENY_PUSH, DENY_PR]
-        assert "permission" not in data["agent"]["plan"]
-
-    def test_a_v1_conflict_is_kept_and_reported_not_overridden(
-        self, tmp_path, cfg, fake_opencode
-    ) -> None:
-        write_cfg(cfg, {"agent": {"plan": {"permission": {"carter_push": "allow"}}}})
-        fake_opencode(config_sequence=[dbg(), dbg()])
-        state = GuardState()
-        res = run(tmp_path, state, ["plan"])
-        assert read(cfg)["agent"]["plan"]["permission"]["carter_push"] == "allow"
-        assert any("carter_push" in w and "NOT denied" in w for w in res.perms.warnings)
-        assert [r["key"] for r in state.agent_permissions] == ["permission.carter_pr"]
-
-    def test_a_v1_permission_that_is_not_a_map_is_skipped_with_a_warning(
-        self, tmp_path, cfg, fake_opencode
-    ) -> None:
-        write_cfg(cfg, {"agent": {"plan": {"permission": "allow"}}})
-        fake_opencode(config_sequence=[dbg(), dbg([A])])
-        res = run(tmp_path, GuardState(), ["plan"], stmts=[A])
-        assert read(cfg)["agent"]["plan"]["permission"] == "allow"
-        assert len(res.perms.warnings) == 2
+        assert data["agent"]["plan"]["permission"] == {"edit": "deny"}
+        assert data["agents"]["plan"]["permissions"] == [DENY_PUSH]
+        assert data["agents"]["build"]["permissions"] == [DENY_PUSH]
+        assert all("form" not in r for r in state.agent_permissions)
 
     @pytest.mark.parametrize(
         "bad",
@@ -182,10 +146,10 @@ class TestWrite:
         fake_opencode(config_sequence=[dbg(), dbg()])
         state = GuardState()
         res = run(tmp_path, state, ["build"])
-        assert read(cfg)["agents"]["build"]["permissions"] == [DENY_PUSH, DENY_PR]
+        assert read(cfg)["agents"]["build"]["permissions"] == [DENY_PUSH]
         assert res.perms.preexisting == ["build:carter_push"]
         flags = {r["key"]: r["preexisting"] for r in state.agent_permissions}
-        assert flags == {"permission.carter_push": True, "permission.carter_pr": False}
+        assert flags == {"permission.carter_push": True}
 
     def test_idempotent_second_run_writes_nothing(self, tmp_path, cfg, fake_opencode) -> None:
         fake_opencode(config_sequence=[dbg(), dbg()])
@@ -215,7 +179,7 @@ class TestWrite:
         fake_opencode()
         state = GuardState()
         res = run(tmp_path, state, BUILTINS, dry_run=True)
-        assert res.changed and len(res.perms.added) == 8
+        assert res.changed and len(res.perms.added) == 4
         assert not cfg.exists() and state.agent_permissions == []
 
     def test_a_failed_verification_rolls_the_permissions_back_too(
@@ -237,9 +201,24 @@ class TestConverge:
         run(tmp_path, state, ["build", "plan"])
         fake_opencode(config_sequence=[dbg(), dbg()])
         res = run(tmp_path, state, ["build"])
-        assert sorted(res.perms.removed) == ["plan:carter_pr", "plan:carter_push"]
+        assert sorted(res.perms.removed) == ["plan:carter_push"]
         assert "plan" not in read(cfg)["agents"]
         assert {r["agent"] for r in state.agent_permissions} == {"build"}
+
+    def test_an_earlier_carters_carter_pr_deny_is_taken_out_and_carter_push_stays(
+        self, tmp_path, cfg, fake_opencode
+    ) -> None:
+        """D72 upgrade: the real host recorded both denies per agent."""
+        old_pr = {"action": "carter_pr", "resource": "*", "effect": "deny"}
+        write_cfg(cfg, {"agents": {"build": {"permissions": [DENY_PUSH, old_pr]}}})
+        state = GuardState()
+        state.record_permission("build", "permission.carter_push", "deny", preexisting=False)
+        state.record_permission("build", "permission.carter_pr", "deny", preexisting=False)
+        fake_opencode(config_sequence=[dbg(), dbg()])
+        res = run(tmp_path, state, ["build"])
+        assert read(cfg)["agents"]["build"]["permissions"] == [DENY_PUSH]
+        assert res.perms.removed == ["build:carter_pr"]
+        assert [r["key"] for r in state.agent_permissions] == ["permission.carter_push"]
 
     def test_g2_declined_later_means_no_agents_and_everything_is_removed(
         self, tmp_path, cfg, fake_opencode
@@ -273,7 +252,7 @@ class TestRemove:
         fake_opencode(config_sequence=[dbg(), dbg()])
         res = self.remove(tmp_path, state)
         assert read(cfg) == {"agents": {"plan": {"permissions": [mine]}, "title": {"model": "t"}}}
-        assert len(res.perms.removed) == 4 and state.agent_permissions == []
+        assert len(res.perms.removed) == 2 and state.agent_permissions == []
 
     def test_the_agents_map_disappears_when_carter_created_all_of_it(
         self, tmp_path, cfg, fake_opencode
@@ -303,40 +282,3 @@ class TestRemove:
         fake_opencode(config_sequence=[dbg(), dbg()])
         self.remove(tmp_path, state)
         assert read(cfg)["agents"]["build"]["permissions"] == [DENY_PUSH]
-
-    def test_v1_values_are_removed_only_when_unchanged(self, tmp_path, cfg, fake_opencode) -> None:
-        write_cfg(cfg, {"agent": {"plan": {"permission": {"edit": "deny"}}}})
-        fake_opencode(config_sequence=[dbg(), dbg()])
-        state = GuardState()
-        run(tmp_path, state, ["plan"])
-        data = read(cfg)
-        data["agent"]["plan"]["permission"]["carter_pr"] = "ask"  # user changed it
-        write_cfg(cfg, data)
-        fake_opencode(config_sequence=[dbg(), dbg()])
-        res = self.remove(tmp_path, state)
-        assert res.perms.kept_edited == ["plan:carter_pr"] and res.perms.removed == [
-            "plan:carter_push"
-        ]
-        assert read(cfg)["agent"]["plan"]["permission"] == {"edit": "deny", "carter_pr": "ask"}
-
-    def test_a_v1_entry_carter_filled_alone_is_pruned(self, tmp_path, cfg, fake_opencode) -> None:
-        write_cfg(cfg, {"agent": {"plan": {"prompt": "x"}}})
-        fake_opencode(config_sequence=[dbg(), dbg()])
-        state = GuardState()
-        run(tmp_path, state, ["plan"])
-        fake_opencode(config_sequence=[dbg(), dbg()])
-        self.remove(tmp_path, state)
-        assert read(cfg) == {"agent": {"plan": {"prompt": "x"}}}
-
-
-def test_permissions_module_has_no_cli_or_click_imports() -> None:
-    import ast
-
-    src = Path(permissions.__file__).read_text(encoding="utf-8")
-    roots = {
-        n.module for n in ast.walk(ast.parse(src)) if isinstance(n, ast.ImportFrom) and n.module
-    }
-    assert (
-        not [r for r in roots if r.split(".")[0] in {"click", "jinja2"}]
-        and "carter.cli" not in roots
-    )

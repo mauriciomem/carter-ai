@@ -35,9 +35,9 @@ CONFIG_EDIT = "config-edit"
 PLUGIN = "plugin"  # a component, not a group: accepted only by `guard remove --only`
 BROKER = "broker"  # a component of g2 (revision 3): `guard remove --only broker` turns B off
 PLUGIN_REV = 2  # the plugin and isolation.json belong to g2 from this revision on
-BROKER_REV = 3  # the B tools (carter_push, carter_pr) need g2 at this revision (D65, B9)
+BROKER_REV = 3  # the B tool (carter_push) needs g2 at this revision (D65, B9)
 PENDING_TEXT = {
-    "g2": "the plugin and isolation, and the B tools (carter_push, carter_pr) for devops, "
+    "g2": "the plugin and isolation, and the B tool (carter_push) for devops, "
     "need your confirmation",
     "hooks": "the commit checks need your confirmation",
     "repo_hooks": "the commit hooks need your confirmation",
@@ -108,7 +108,7 @@ class ConsentPlan:
         out += [OPTIONAL_NOTICE.format(group=g) for g in self.optional_skipped]
         if self.skipped:
             out.append(
-                "no terminal and no --yes: policies, per-agent permissions and Carter's git "
+                "no terminal and no --yes: the agent rules, per-agent permissions and Carter's git "
                 "config were NOT installed; run `carter guard install` in your own terminal"
             )
         return out

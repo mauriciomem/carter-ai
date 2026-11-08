@@ -143,8 +143,6 @@ def _record(path: Path, base_dir: Path | None) -> tuple[bool, str]:
     cfg_path = carter_config_path(base_dir)
     try:
         current = load_identity(cfg_path)
-        if current.needs_migration:
-            return False, "config.toml is schema 1; run `carter install` to migrate it first"
         github = Github(read_token_file=str(path))
         write_config(replace(current, github=github, state="current"), cfg_path)
     except (ConfigError, WriterError, OSError):
@@ -343,7 +341,7 @@ def _probe(base: str, token: str, login: str, base_dir: Path | None) -> list[Ite
         )
     elif verdict == "writable":
         fix = (
-            "revoke it and create a read-only token (Contents and Pull requests: read), "
+            "revoke it and create a token with Contents: read and Pull requests: write, "
             "then run `carter github-token set`"
         )
         item = Item(
@@ -352,7 +350,27 @@ def _probe(base: str, token: str, login: str, base_dir: Path | None) -> list[Ite
     else:
         text = f"unprobed: unexpected answer for {which} (HTTP {reply.status})"
         item = Item("warn", "write probe", text)
-    return [*notes, item]
+    if verdict == "writable":
+        return [*notes, item]
+    return [*notes, item, _pull_request_item(base, token, repo)]
+
+
+def _pull_request_item(base: str, token: str, repo: str) -> Item:
+    """The PR probe (D72): ``POST /pulls`` with an empty body can never create anything. GitHub
+    validates the permission first: 422 = the token may open PRs, 403 = it may not."""
+    reply = request(base, "POST", f"/repos/{repo}/pulls", token, {})
+    if reply.status in (201, 422):
+        return Item(
+            "ok", "pull requests", "agents can open PRs (the token holds Pull requests: write)"
+        )
+    if reply.status == 403 and _NOT_ACCESSIBLE in reply.text:
+        return Item(
+            "warn",
+            "pull requests",
+            "agents can't open PRs",
+            'add "Pull requests: write" to the token (Contents stays read)',
+        )
+    return Item("info", "pull requests", f"unprobed: unexpected answer (HTTP {reply.status})")
 
 
 def _file_items(path: Path, required: bool) -> tuple[list[Item], str | None]:

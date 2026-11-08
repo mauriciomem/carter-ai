@@ -1,9 +1,9 @@
-"""Schema-only TOML writer (D55). Only explicit commands call it (migration, install,
+"""Schema-only TOML writer (D55). Only explicit commands call it (install,
 ``carter update``); read paths never import it.
 
 Serialises exactly the schema-2 model (basic strings, ints, bools, string lists, tables)
 and omits unset optional enums instead of writing ``""``. It refuses to lose data
-(unmodelled keys, a schema-1 file without a backup, a file that does not parse) and
+(unmodelled keys, a file that does not parse) and
 re-reads its own output through the reader, so it cannot write what the reader rejects.
 Writes are atomic: temp file in the same directory, fsync, ``os.replace``, mode 0600.
 """
@@ -35,7 +35,10 @@ class UnmodelledKeysError(WriterError):
     """The existing file holds data the writer would drop; ``diff`` shows the change."""
 
     def __init__(self, keys: tuple[str, ...], diff: str) -> None:
-        super().__init__(f"refusing to rewrite config.toml: it holds unmodelled keys\n{diff}")
+        names = ", ".join(f"`{k}`" for k in keys)
+        super().__init__(
+            f"refusing to rewrite config.toml: unknown key(s) {names}; delete them, retry\n{diff}"
+        )
         self.keys, self.diff = keys, diff
 
 
@@ -129,21 +132,20 @@ def write_config(
     """Write ``cfg`` to ``path`` (default ``~/.carter/config.toml``).
 
     Returns ``False`` when the file already holds exactly this content (nothing written,
-    no backup). ``backup_to`` receives a copy of the existing file first, once; a schema-1
-    file may only be replaced when it is given. Raises ``ConfigError`` for an unreadable,
-    malformed or future-schema file and ``UnmodelledKeysError`` for data that would be lost.
+    no backup). ``backup_to`` receives a copy of the existing file first, once. Raises
+    ``ConfigError`` for an unreadable, malformed or unsupported-schema file and
+    ``UnmodelledKeysError`` for data that would be lost.
     """
     path = path or default_path()
     new = _checked(cfg)
     old = path.read_text(encoding="utf-8") if path.exists() else None
     if old is not None:
         existing = load_identity(path)  # raises ConfigError on a broken file
-        if existing.unknown_keys or (existing.needs_migration and backup_to is None):
-            keys = existing.unknown_keys or ("<schema 1 content>",)
+        if existing.unknown_keys:
             lines = difflib.unified_diff(
                 old.splitlines(), new.splitlines(), "config.toml", "(rewritten)", lineterm=""
             )
-            raise UnmodelledKeysError(keys, "\n".join(lines))
+            raise UnmodelledKeysError(existing.unknown_keys, "\n".join(lines))
         if old == new:
             path.chmod(0o600)
             return False
