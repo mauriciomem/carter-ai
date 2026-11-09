@@ -151,7 +151,7 @@ class TestFidelity:
         done = carter("-S", "-m", "t1")
         assert (
             done.exit_code == 0
-            and "E-COMMIT-T1" in done.output
+            and "E-COMMIT-NO-KEY" in done.output
             and "dropped a bare -S" in done.output
         )
         assert (

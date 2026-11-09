@@ -11,7 +11,7 @@ arguments and the config into one git invocation. It builds the same signing blo
   **unsigned** with the trailer and ``E-SIGN-HUMAN-FALLBACK`` (never with the human's own key).
 * **T1, T0, a cap, the fallback:** unsigned, human as author and committer. ``commit.gpgsign=false``
   and the four ``gpg.*program=<false>`` go in as ``-c``, so even a bare ``-S`` cannot reach the
-  human's key. T1 warns ``E-COMMIT-T1``; T0 uses ``Assisted-by: Carter``.
+  human's key. T1 warns ``E-COMMIT-NO-KEY``; T0 uses ``Assisted-by: Carter``.
 
 Refused (``REFUSED_FLAGS``): flags that skip a hook, change the signature or pick an identity. A
 bare ``-S``/``--gpg-sign`` is dropped with a note; ``-a`` and ``--reset-author`` pass. The role is
@@ -29,7 +29,7 @@ from carter.identity.agent_probe import probe
 from carter.identity.agent_setup import setup_from_config
 from carter.identity.env import workspace_for
 from carter.identity.errors import (
-    E_COMMIT_T1,
+    E_COMMIT_NO_KEY,
     E_SIGN_AGENT_REFUSE,
     E_SIGN_HUMAN_FALLBACK,
     E_TIER_REQUIRED,
@@ -200,9 +200,9 @@ def plan_commit(
         warnings.append(f"{E_SIGN_HUMAN_FALLBACK}: {registry()[E_SIGN_HUMAN_FALLBACK].remediation}")
         locked = True
     elif res.tier == "t1":
-        warnings.append(f"{E_COMMIT_T1}: {registry()[E_COMMIT_T1].message}")
+        warnings.append(f"{E_COMMIT_NO_KEY}: {registry()[E_COMMIT_NO_KEY].message}")
     else:
-        notes.append("T0: no LLM identity; the commit credits `Assisted-by: Carter`")
+        notes.append("no LLM identity; the commit credits `Assisted-by: Carter`")
     off = ["-c", "commit.gpgsign=false"]
     off += [x for p in GPG_PROGRAMS for x in ("-c", f"{p}={resolve_false()}")]
     return Plan("unsigned", [*off, "commit", *opts, *tail, *paths], clean, warnings, notes, locked)

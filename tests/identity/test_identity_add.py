@@ -494,7 +494,7 @@ class TestCommand:
             env={"AGENT": "1"},
         )
         assert done.exit_code == 0, done.output
-        assert f"{LOGIN} · T2 · {key.fingerprint[:19]}" in done.output
+        assert f"{LOGIN} · LLM signing on · {key.fingerprint[:19]}" in done.output
         assert "dry run, nothing written" in done.output and "carter-ssh-sign" in done.output
         assert tree(home) == before
 
@@ -511,7 +511,9 @@ class TestCommand:
         register(fake, key.blob)
         done = cli("--login", LOGIN, "--ssh-public-key", str(key.pub_path))  # no input, no tty
         assert done.exit_code == 0, done.output
-        assert done.output.splitlines()[0] == f"✓ {LOGIN} · T2 · {key.fingerprint[:19]}…"
+        assert (
+            done.output.splitlines()[0] == f"✓ {LOGIN} · LLM signing on · {key.fingerprint[:19]}…"
+        )
         assert "carter identity unlock" in done.output  # the key has a passphrase: one next step
         assert len(done.output.splitlines()) <= 2
         assert str(key.path) not in done.output  # names and ids only

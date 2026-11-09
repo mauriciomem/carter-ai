@@ -160,12 +160,12 @@ class TestRoleItems:
 
         identity_add.apply_add(identity_add.plan_add(identity_add.AddRequest("octocat")))
         set_role(home, "author")
-        item = find(run(tmp_path), "role", "needs T2")
+        item = find(run(tmp_path), "role", "needs LLM signing on")
         assert (
             item
             and item.level == "red"
             and "E-ROLE-B-TIER" in item.text
-            and "configured tier is t1" in item.text
+            and "this setup is: LLM identity, unsigned" in item.text
         )
 
     def test_role_author_with_a_cap_is_red_and_says_cap(
@@ -178,7 +178,7 @@ class TestRoleItems:
 
         subprocess.run(["git", "init", "-q", str(ws)], check=True)
         set_role(home, "author", **{str(ws.resolve()): Workspace(max_tier="t1")})
-        item = find(run(ws), "role", "needs T2")
+        item = find(run(ws), "role", "needs LLM signing on")
         assert item and item.level == "red" and "workspace cap" in item.text
 
     def test_a_precedence_conflict_is_a_warning(

@@ -202,7 +202,7 @@ class TestPlanBelowT2:
         ]
         assert all(p.split("=")[1] in ("/usr/bin/false", "/bin/false") for p in programs)
         assert got.argv.index("commit") > got.argv.index("-c")  # -c entries come before the verb
-        assert got.warnings and got.warnings[0].startswith("E-COMMIT-T1")
+        assert got.warnings and got.warnings[0].startswith("E-COMMIT-NO-KEY")
 
     def test_the_trailer_goes_before_the_double_dash_not_into_the_paths(self) -> None:
         got = plan(cfg_of("t1"), "-m", "--", "--", "a.txt", "--trailer")
@@ -211,7 +211,7 @@ class TestPlanBelowT2:
     def test_t0_credits_assisted_by_without_an_email(self) -> None:
         got = plan(cfg_of("t0"), "-m", "x")
         assert got.argv[-2:] == ["--trailer", "Assisted-by: Carter"] and not got.warnings
-        assert any("T0" in n for n in got.notes)
+        assert any("no LLM identity" in n for n in got.notes)
 
     def test_a_cap_makes_the_effective_tier_the_cap(self, tmp_path: Path) -> None:
         cfg = cfg_of("t2", workspaces={str(tmp_path): Workspace(max_tier="t1")})
@@ -223,7 +223,7 @@ class TestPlanBelowT2:
             home=Path(os.environ["HOME"]),
             agent=False,
         )
-        assert got.shape == "unsigned" and got.warnings[0].startswith("E-COMMIT-T1")
+        assert got.shape == "unsigned" and got.warnings[0].startswith("E-COMMIT-NO-KEY")
 
     def test_the_environment_is_scrubbed_of_identity_and_config_overrides(self) -> None:
         env = {
@@ -562,7 +562,7 @@ class TestBelowT2WithDecoys:
             got["author"] == got["committer"] == f"{HUMAN[0]} <{HUMAN[1]}>"
             and COAUTHOR in got["body"]
         )
-        assert plan_.warnings[0].startswith("E-COMMIT-T1")
+        assert plan_.warnings[0].startswith("E-COMMIT-NO-KEY")
 
     def test_t0_commits_with_assisted_by(self, lab: Lab) -> None:
         write_config(IdentityConfig(state="absent"), lab.home / ".carter" / "config.toml")

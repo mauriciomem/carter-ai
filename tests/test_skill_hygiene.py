@@ -148,8 +148,10 @@ class TestCarterOpsRecipe:
 
     def test_the_commit_shape_by_tier_is_stated(self) -> None:
         text = " ".join(_ops_text().split())
-        assert "their own git config" in text and "Below T2" in text and "unsigned" in text
-        assert "At `t2` the plugin gives your shell the signing environment" in text
+        assert (
+            "their own git config" in text and "Without LLM signing" in text and "unsigned" in text
+        )
+        assert "the plugin gives your shell the signing environment" in text
         for flag in ("--author", "--no-verify", "-s", "-S", "--no-gpg-sign"):
             assert f"`{flag}`" in text
         for key in ("author", "committer", "signer_fpr", "coauthor_linked"):
@@ -158,7 +160,7 @@ class TestCarterOpsRecipe:
     def test_the_verify_step_is_tier_aware_and_never_accepts_n_at_t2(self) -> None:
         text = " ".join(_ops_text().split())
         assert "(`committer` is `llm`) the verify line must exit 0" in text
-        assert "Below T2 there is no signature to check" in text
+        assert "Without LLM signing\nthere is no signature to check".replace("\n", " ") in text
 
     def test_the_plan_has_no_attribution_block_and_the_emit_is_read_by_field(self) -> None:
         text = _ops_text()
@@ -401,7 +403,7 @@ class TestCarterOpsGate:
         assert "Put `-R <owner>/<repo>` after the `gh` subcommand" in gate
         assert "Stage explicit paths" in gate and "`git add -A`" in gate
         assert "no SSH in your shell" in gate and "HTTPS with the GitHub token" in gate
-        assert "Below T2 your commits are unsigned" in gate
+        assert "Without LLM signing your commits are unsigned" in gate
         for code in ("E-ISOLATION-MISSING", "E-GATE-FAIL"):
             assert f"`{code}`" in gate
         assert "ask the user to run `carter check --host`" in gate
@@ -456,7 +458,7 @@ class TestCarterOpsSigningFailures:
             "E-SIGN-UNAVAILABLE",
             "E-SHIM-REFUSED",
             "E-GUARD-TRAILER",
-            "E-GUARD-T01SIGN",
+            "E-GUARD-NOSIGN",
             "E-GUARD-UNSIGNED",
             "E-ROLE-B-TIER",
             "E-TIER-REQUIRED",

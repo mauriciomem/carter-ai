@@ -52,8 +52,9 @@ def plan_pin(cfg: IdentityConfig, key: str, *, role: str, require_tier: str) -> 
     cap = current.max_tier
     if cap and role == "author":  # role author needs T2 and every cap is below it; never downgraded
         refusal = (
-            f"{E_ROLE_B_TIER}: role author needs T2, but max_tier {cap} (hand-edited in "
-            "config.toml) caps this workspace below it; remove the cap or keep role co-author"
+            f"{E_ROLE_B_TIER}: role author needs LLM signing on, but max_tier {cap} "
+            "(hand-edited in config.toml) caps this workspace below it; remove the cap or keep "
+            "role co-author"
         )
     elif cap and require_tier and TIERS.index(cap) < TIERS.index(require_tier):
         refusal = (

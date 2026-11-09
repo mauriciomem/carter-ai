@@ -30,8 +30,8 @@ from carter.guard.state import GuardState
 from carter.identity.errors import (
     E_GUARD_COMMITTER,
     E_GUARD_NOIDENT,
+    E_GUARD_NOSIGN,
     E_GUARD_SIGNCFG,
-    E_GUARD_T01SIGN,
     E_GUARD_TRAILER,
     E_GUARD_UNSIGNED,
     E_HUMAN_IDENTITY,
@@ -127,7 +127,7 @@ def message_assignments() -> str:
     for i, part in enumerate(_parts(E_GUARD_UNSIGNED)):
         values[f"M_UNSIGNED_{i}"] = part
     values["M_NOIDENT_0"] = reg[E_GUARD_NOIDENT].message
-    values["M_T01SIGN_0"] = reg[E_GUARD_T01SIGN].message
+    values["M_NOSIGN_0"] = reg[E_GUARD_NOSIGN].message
     values["R_NOIDENT"] = reg[E_GUARD_NOIDENT].remediation
     values["R_COMMITTER"] = reg[E_GUARD_COMMITTER].remediation
     values["R_SIGNCFG"] = reg[E_GUARD_SIGNCFG].remediation

@@ -141,7 +141,7 @@ prepare_commit_msg() {
       fi
     fi
   elif [ "$(git config --type=bool --get commit.gpgsign 2>/dev/null)" = true ]; then
-    reject "$M_T01SIGN_0"
+    reject "$M_NOSIGN_0"
   fi
   trailer_for "$tier"
   git interpret-trailers --in-place --if-exists addIfDifferent --trailer "$TRAILER_LINE" "$1" ||

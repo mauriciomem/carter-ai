@@ -414,7 +414,7 @@ def _summary(offer: Sequence[str], state: GuardState, again: Sequence[str] = ())
     lines = [f"Carter will set up: {head}"]
     if again:
         lines.append(
-            f"  asked again: you declined {', '.join(again)}, but the LLM signing key (T2) needs it"
+            f"  asked again: you declined {', '.join(again)}, but signed agent commits need it"
         )
     news = []
     for name in offer:

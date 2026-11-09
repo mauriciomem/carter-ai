@@ -82,7 +82,7 @@ Without a terminal (a script, CI) and without `--yes`, the guards are skipped wi
 
 A group you decline stays declined. `carter guard status` and `carter check --host` list it, with
 the command that asks again (`carter guard install --only <group>`). The one exception: with the LLM
-signing key (T2) configured and no commit hooks installed, the single question offers a declined
+signing on and no commit hooks installed, the single question offers a declined
 `hooks` again and says so in one line.
 Preview everything with `carter guard install --dry-run`: it lists every file it would write
 and writes nothing.
@@ -117,7 +117,7 @@ misses (`git -C . push`, `sh -c "git push"`, aliases, `gh api`).
 | SSH agent | None. `git fetch`/`pull`/`clone` go over HTTPS with the read-only GitHub token, which works for public repositories and for repositories that token covers only |
 | GitHub CLI | The token only: reads, and `gh pr create\|edit\|comment` if the token has `Pull requests: write`. `gh api`, merges and pushes are refused |
 | Pushing | Refused in any spelling, and again by the `pre-push` hook |
-| Commits | Your name and email, **unsigned** below tier T2, signed by the LLM identity at T2 ([Identity and signing](identity-and-signing.md)) |
+| Commits | Your name and email, **unsigned** unless LLM signing is on, signed by the LLM identity when it is ([Identity and signing](identity-and-signing.md)) |
 | Commands | The gate refuses with a message that names the rule |
 | Your terminal and OpenCode's `!` shell | Untouched |
 

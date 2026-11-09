@@ -31,7 +31,7 @@ class TestGuide:
     def test_it_covers_the_topic(self) -> None:
         body = guide()
         for needle in (
-            "## Roles", "## Tiers", "## The vigilant mode table", "## Merge strategy",
+            "## Roles", "## What you set up", "## The vigilant mode table", "## Merge strategy",
             "## Password managers", "## macOS notes", "## Workspace caps",
             "Worktree limit", "Signing key", "Authentication Key", "carter identity add",
             "carter identity unlock", "--extend", "carter commit", "git ai-commit",

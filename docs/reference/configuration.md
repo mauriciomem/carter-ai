@@ -84,7 +84,7 @@ these two values and pins them in `~/.carter/config.toml` (see
 
 | Key | Default | Description |
 |-----|---------|-------------|
-| `role` | not set | `co-author` (the default role) or `author`. `author` makes the LLM the author and credits you by a trailer. It needs a signing key (T2); below that tier or under a `max_tier` cap commits are refused, never downgraded, and `carter update` refuses to pin it next to a cap |
+| `role` | not set | `co-author` (the default role) or `author`. `author` makes the LLM the author and credits you by a trailer. It needs LLM signing on (a signing key); without it, or under a `max_tier` cap, commits are refused, never downgraded, and `carter update` refuses to pin it next to a cap |
 | `require_tier` | not set | The lowest tier this workspace accepts: `t0`, `t1` or `t2` |
 
 `allow_project_opencode_edit` and other settings that loosen a control are not accepted
@@ -189,7 +189,7 @@ schema = 2
 
 [identity]
 role = "co-author"        # co-author | author
-login = ""                # the LLM's GitHub account; empty means no identity (T0)
+login = ""                # the LLM's GitHub account; empty means no LLM identity
 id = 0
 name = ""
 email = ""                # <id>+<login>@users.noreply.github.com
@@ -243,9 +243,16 @@ workspace) after the denies in the Carter agents' permissions, and
 `guard install` lists every active opt-out. It asks nothing. `carter check --host` lists
 them too. A path that no longer exists or contains `*` or `?` is skipped with a message.
 
-Tiers: T0 is nothing configured (commits carry `Assisted-by: Carter`), T1 is an LLM
-account without a key (`Co-authored-by: <login> <address>`), T2 adds a signing key. A
-workspace `max_tier` lowers the tier for that workspace, never raises it. At an effective T2
+What you set up is stored as one of three values, used by `max_tier`, `require_tier` and the
+`tier` field of `carter ops config --emit`:
+
+| Value | Meaning |
+|-------|---------|
+| `t0` | no LLM identity: nothing configured, commits carry `Assisted-by: Carter` |
+| `t1` | LLM identity, unsigned: an LLM account without a key, commits carry `Co-authored-by: <login> <address>` |
+| `t2` | LLM signing on: the account **and** a signing key, so agent commits are signed |
+
+A workspace `max_tier` lowers the setup for that workspace, never raises it. With LLM signing on
 the LLM signs agent commits; if signing cannot happen the commit fails and stays staged.
 `max_tier = "t1"` for a workspace lets agents commit unsigned there. A `max_tier` takes effect for
 the hooks when you run `carter update` (it writes the cap into `~/.carter/gitconfig`); the plugin

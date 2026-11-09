@@ -105,7 +105,7 @@ class TestWhatTheGuardsCannotDo:
             "`git push --no-verify` skips the `pre-push` hook",
             "`.git/hooks/` and `.git/config`",
             "The read-only token is visible to the model",
-            "Agent commits are unsigned below T2",
+            "Agent commits are unsigned unless LLM signing is on",
             '`max_tier = "t1"`',
             "Fail closed",
         ):

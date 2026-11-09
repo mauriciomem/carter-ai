@@ -160,36 +160,36 @@ terminal lets you decide.
 
 ## Attribution
 
-You stay the author of everything. Without a signing key for the LLM (tiers T0 and T1), agent
-commits use your own git config and are unsigned. **With one (tier T2), the LLM is the committer and
+You stay the author of everything. Without a signing key for the LLM (no LLM identity, or an LLM identity without a key), agent
+commits use your own git config and are unsigned. **With one (LLM signing on), the LLM is the committer and
 signs the commit with its own key, while you stay the author.** Carter never asks git to sign with
 *your* key. Setting this up is in [Identity and signing](identity-and-signing.md).
 
-- **Commits** use your `git config user.name` and email as the author, and as the committer below
-  T2. The agent never passes `--author`, `--no-verify`, `-s`, `-S` or any signing option, and never
+- **Commits** use your `git config user.name` and email as the author, and as the committer while
+  LLM signing is off. The agent never passes `--author`, `--no-verify`, `-s`, `-S` or any signing option, and never
   adds `Signed-off-by` unless you ask for it on that commit. Carter is credited only with the trailer
-  that `carter ops config --emit` prints, which depends on the tier:
+  that `carter ops config --emit` prints, which depends on your setup:
 
-  | Tier | What is configured | Trailer |
-  |------|--------------------|---------|
-  | T0 | nothing | `Assisted-by: Carter` (no email) |
-  | T1 | an LLM GitHub account, no key | `Co-authored-by: <login> <id+login@users.noreply.github.com>` |
-  | T2 | account and signing key | `Co-authored-by: <login> <id+login@users.noreply.github.com>`; the commit is also signed by the LLM key |
+  | Setup | What is configured | Trailer |
+  |-------|--------------------|---------|
+  | No LLM identity | nothing | `Assisted-by: Carter` (no email) |
+  | LLM identity, unsigned | an LLM GitHub account, no key | `Co-authored-by: <login> <id+login@users.noreply.github.com>` |
+  | LLM signing on | account and signing key | `Co-authored-by: <login> <id+login@users.noreply.github.com>`; the commit is also signed by the LLM key |
 
   ```bash
   git add src/auth.py
   git commit -m "feat(auth): add token refresh" --trailer "Assisted-by: Carter"
   ```
 
-  At T2 the agent then runs `carter identity verify --commit HEAD --quiet` (exit 0 means the commit
+  With LLM signing on the agent then runs `carter identity verify --commit HEAD --quiet` (exit 0 means the commit
   is signed by the LLM key) and tells you one line: `Committed 4f9c2ab: feat(auth): add token
-  refresh`. In the opt-in role `author` (T2 only) the LLM is also the author and the trailer is
+  refresh`. In the opt-in role `author` (only with LLM signing on) the LLM is also the author and the trailer is
   **your** `Co-authored-by: <user.name> <user.email>`; see
   [Identity and signing](identity-and-signing.md#role-author-the-llm-is-the-author).
 
   If the emit says `commits: refused`, the agent stops and tells you why instead of committing. If
   the LLM key needs a passphrase and is locked, the commit fails, your changes stay staged, and the
-  agent asks you to run `carter identity unlock`. At T2 a commit is signed or it fails; it is never
+  agent asks you to run `carter identity unlock`. With LLM signing on a commit is signed or it fails; it is never
   made unsigned.
 - **GitHub** pull requests are opened, edited and commented on by the agent with `gh`, and end with
   the `footer` from the same command (default `_This comment was generated with Carter._`). There is

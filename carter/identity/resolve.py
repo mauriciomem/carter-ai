@@ -25,7 +25,13 @@ from carter.identity.errors import (
     IdentityError,
 )
 from carter.identity.mode import resolve_mode
-from carter.identity.schema import ROLES, TIERS, IdentityConfig, Workspace
+from carter.identity.schema import (
+    ROLES,
+    TIERS,
+    IdentityConfig,
+    Workspace,
+    tier_words,
+)
 
 ENV_ROLE = "CARTER_IDENTITY_ROLE"
 NOREPLY_DOMAIN = "users.noreply.github.com"
@@ -217,7 +223,10 @@ def resolve(
     elif role.role == "author" and tier != "t2":
         reason = E_ROLE_B_TIER
     if reason != E_CONFIG and configured == "t0" and _identity_touched(cfg):
-        warnings.append("identity is incomplete or inconsistent (login, id, email); treated as T0")
+        warnings.append(
+            "identity is incomplete or inconsistent (login, id, email); treated as "
+            + tier_words("t0")
+        )
     return Resolution(
         configured_tier=configured,
         cap=ws.max_tier,

@@ -18,6 +18,19 @@ KEY_SCHEMA = "schema"  # top-level integer
 
 ROLES = ("co-author", "author")
 TIERS = ("t0", "t1", "t2")
+# What a person reads instead of the config values (the values stay: files use them).
+TIER_WORDS = {
+    "t0": "no LLM identity",
+    "t1": "LLM identity, unsigned",
+    "t2": "LLM signing on",
+}
+
+
+def tier_words(tier: str) -> str:
+    """The plain phrase for a tier value; an empty or unknown value is "no LLM identity"."""
+    return TIER_WORDS.get(tier, TIER_WORDS["t0"])
+
+
 # Values legal *in the file*. An optional key that is unset is omitted from the file; an
 # explicit "" is E-CONFIG. In memory "" is the "unset" marker (the dataclass default).
 CAP_TIERS = ("t0", "t1")  # [workspaces.*] max_tier
