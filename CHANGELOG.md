@@ -2,6 +2,87 @@
 
 <!-- version list -->
 
+## v0.19.0 (2026-11-09)
+
+### Bug Fixes
+
+- **ci**: First-run failures — stale broker.pr import, no-ps hosts, BSD sed, dash, shellcheck, macOS
+  paths, node reporter ([#45](https://github.com/mauriciomem/carter-ai/pull/45),
+  [`e4c1e65`](https://github.com/mauriciomem/carter-ai/commit/e4c1e6525bea0e90f28d2a19f993481a376e152c))
+
+- **ci**: Refuse an old git before any network call in identity add; move manual e2e to its own
+  workflow; tidy job and step names ([#45](https://github.com/mauriciomem/carter-ai/pull/45),
+  [`e4c1e65`](https://github.com/mauriciomem/carter-ai/commit/e4c1e6525bea0e90f28d2a19f993481a376e152c))
+
+- **guard**: Check --probe tests push refusal without tripping the commit guard
+  ([#45](https://github.com/mauriciomem/carter-ai/pull/45),
+  [`e4c1e65`](https://github.com/mauriciomem/carter-ai/commit/e4c1e6525bea0e90f28d2a19f993481a376e152c))
+
+### Features
+
+- Carter-only guard scope, PRs allowed, no legacy config paths
+  ([#45](https://github.com/mauriciomem/carter-ai/pull/45),
+  [`e4c1e65`](https://github.com/mauriciomem/carter-ai/commit/e4c1e6525bea0e90f28d2a19f993481a376e152c))
+
+- Isolate agent shells, sign LLM commits, approve pushes, CI review
+  ([#45](https://github.com/mauriciomem/carter-ai/pull/45),
+  [`e4c1e65`](https://github.com/mauriciomem/carter-ai/commit/e4c1e6525bea0e90f28d2a19f993481a376e152c))
+
+- **broker**: Approval-forced carter_push and carter_pr for devops
+  ([#45](https://github.com/mauriciomem/carter-ai/pull/45),
+  [`e4c1e65`](https://github.com/mauriciomem/carter-ai/commit/e4c1e6525bea0e90f28d2a19f993481a376e152c))
+
+- **ci**: Review-only CI workflow template and CI identity mode
+  ([#45](https://github.com/mauriciomem/carter-ai/pull/45),
+  [`e4c1e65`](https://github.com/mauriciomem/carter-ai/commit/e4c1e6525bea0e90f28d2a19f993481a376e152c))
+
+- **gate**: Stdlib-only tokenizing gate for agent shell commands
+  ([#45](https://github.com/mauriciomem/carter-ai/pull/45),
+  [`e4c1e65`](https://github.com/mauriciomem/carter-ai/commit/e4c1e6525bea0e90f28d2a19f993481a376e152c))
+
+- **guard**: Agent text and docs for shell isolation; gate hardening
+  ([#45](https://github.com/mauriciomem/carter-ai/pull/45),
+  [`e4c1e65`](https://github.com/mauriciomem/carter-ai/commit/e4c1e6525bea0e90f28d2a19f993481a376e152c))
+
+- **guard**: Carter-guard pre-push hook, Carter gitconfig and per-repo fallback
+  ([#45](https://github.com/mauriciomem/carter-ai/pull/45),
+  [`e4c1e65`](https://github.com/mauriciomem/carter-ai/commit/e4c1e6525bea0e90f28d2a19f993481a376e152c))
+
+- **guard**: Install the G2 plugin with re-consent, check --host/--probe, CI
+  ([#45](https://github.com/mauriciomem/carter-ai/pull/45),
+  [`e4c1e65`](https://github.com/mauriciomem/carter-ai/commit/e4c1e6525bea0e90f28d2a19f993481a376e152c))
+
+- **identity**: Carter identity add/show/verify/remove, commit guards, carter commit
+  ([#45](https://github.com/mauriciomem/carter-ai/pull/45),
+  [`e4c1e65`](https://github.com/mauriciomem/carter-ai/commit/e4c1e6525bea0e90f28d2a19f993481a376e152c))
+
+- **identity**: LLM-signed agent commits at T2, check --host signing items, guide
+  ([#45](https://github.com/mauriciomem/carter-ai/pull/45),
+  [`e4c1e65`](https://github.com/mauriciomem/carter-ai/commit/e4c1e6525bea0e90f28d2a19f993481a376e152c))
+
+- **identity**: Role b — LLM author with the human as co-author
+  ([#45](https://github.com/mauriciomem/carter-ai/pull/45),
+  [`e4c1e65`](https://github.com/mauriciomem/carter-ai/commit/e4c1e6525bea0e90f28d2a19f993481a376e152c))
+
+- **identity**: Signing block, shim and dedicated ssh-agent unlock/lock
+  ([#45](https://github.com/mauriciomem/carter-ai/pull/45),
+  [`e4c1e65`](https://github.com/mauriciomem/carter-ai/commit/e4c1e6525bea0e90f28d2a19f993481a376e152c))
+
+- **plugin**: Isolation block, self-test and minimal OpenCode plugin core
+  ([#45](https://github.com/mauriciomem/carter-ai/pull/45),
+  [`e4c1e65`](https://github.com/mauriciomem/carter-ai/commit/e4c1e6525bea0e90f28d2a19f993481a376e152c))
+
+- **ux**: Light, colored CLI output and no confirmation prompts
+  ([#45](https://github.com/mauriciomem/carter-ai/pull/45),
+  [`e4c1e65`](https://github.com/mauriciomem/carter-ai/commit/e4c1e6525bea0e90f28d2a19f993481a376e152c))
+
+### Refactoring
+
+- Current-state cleanup of code, agents, skills and docs
+  ([#45](https://github.com/mauriciomem/carter-ai/pull/45),
+  [`e4c1e65`](https://github.com/mauriciomem/carter-ai/commit/e4c1e6525bea0e90f28d2a19f993481a376e152c))
+
+
 ## v0.18.0 (2026-11-03)
 
 ### Bug Fixes
