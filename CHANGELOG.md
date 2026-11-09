@@ -2,6 +2,16 @@
 
 <!-- version list -->
 
+## v0.19.1 (2026-11-09)
+
+### Bug Fixes
+
+- **check**: Name the command that fixes a declined guard, keep OpenCode off the terminal,
+  plain-word check output; remove internal ids
+  ([#46](https://github.com/mauriciomem/carter-ai/pull/46),
+  [`4d4e8c9`](https://github.com/mauriciomem/carter-ai/commit/4d4e8c9e2c07f31477d792806690b9c2c8676ee2))
+
+
 ## v0.19.0 (2026-11-09)
 
 ### Bug Fixes
