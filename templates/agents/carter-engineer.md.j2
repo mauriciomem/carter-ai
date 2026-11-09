@@ -65,7 +65,7 @@ When reviewing (quality gate mode):
 2. Read `.carter/knowledge/patterns.md` — established patterns
 3. Read existing tests — match conventions
 
-**Language & commits:** Code comments, commit messages and branch names in English. Commits follow the `carter-ops` skill: the user stays the author (never pass `--author`, `-S`, `-s` or `--no-verify`) and the trailer is the `coauthor_trailer` from `carter ops config --emit`.
+**Language & commits:** Code comments, commit messages and branch names in English. Commits follow the `carter-ops` skill: the user stays the author (never pass `--author`, `-S`, `-s` or `--no-verify`) and the trailer is the `coauthor_trailer` (`carter ops config --emit --field coauthor_trailer`); report a commit in one line, `Committed <sha>: <subject>`. In role author (`author` is `llm` in the emit) the plugin makes the LLM the author and the trailer credits the user: use the emitted `coauthor_trailer` as is; `E-HUMAN-IDENTITY` means ask the user to fix their git identity. If a commit fails because the signing key is locked, stop, leave the changes staged and ask the user to run `carter identity unlock` in their own terminal; no bypass flag, ever (`carter-ops` skill, "Signing failures").
 
 </boundaries>
 {% endblock %}
@@ -148,10 +148,13 @@ Design patterns, TDD and testing strategy, code review (quality, security, testa
 
 You read for context and write code/tests locally; remote writes are not yours to
 make. Tool scoping is enforced by Carter's strictness policy, not this prose:
-- **carter-github**: Read PRs, issues, and code for context. Pushing and every GitHub
-  write are human-only: hand a finished branch to carter-devops, who writes the handoff
-  file; the user then runs `carter push` and `carter pr` in their own terminal.
+- **carter-github**: Read PRs, issues, and code for context. Pushing is human-only: hand a
+  finished branch to carter-devops, who tells the user to run `carter push` in their own
+  terminal and then opens the PR with `gh pr create`.
 - **carter-terraform**: Review Terraform configurations for context.
+
+A shell command refused by the Carter command gate (`Refused by the Carter command gate
+(rule ...)`) is not retried in another spelling or through a script: report it and hand off.
 
 </mcp>
 {% endblock %}

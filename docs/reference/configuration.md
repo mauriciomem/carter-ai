@@ -79,15 +79,13 @@ defaults, so you only write what you change; lists (`agents`,
 Optional: `carter init` does not write it, and a file without it is valid.
 
 Policy only. Nothing here changes attribution while agents run: `carter update` shows
-these two values, asks, and pins them in `~/.carter/config.toml` (see
+these two values and pins them in `~/.carter/config.toml` (see
 [User config](#user-config-carterconfigtoml)).
 
 | Key | Default | Description |
 |-----|---------|-------------|
-| `role` | not set | `co-author` (the default role) or `author`. `author` needs a signing key; below that tier commits are refused, never downgraded |
+| `role` | not set | `co-author` (the default role) or `author`. `author` makes the LLM the author and credits you by a trailer. It needs a signing key (T2); below that tier or under a `max_tier` cap commits are refused, never downgraded, and `carter update` refuses to pin it next to a cap |
 | `require_tier` | not set | The lowest tier this workspace accepts: `t0`, `t1` or `t2` |
-| `git_account` | not set | Deprecated and ignored. `carter check` and `carter update` warn if it is present |
-| `bot_name` | not set | Deprecated and ignored, with the same warning. The co-author comes from `~/.carter/config.toml` |
 
 `allow_project_opencode_edit` and other settings that loosen a control are not accepted
 here. Edit-denied settings live only in `~/.carter/config.toml`.
@@ -180,11 +178,11 @@ English.
 
 ## User config: `~/.carter/config.toml`
 
-`carter install` creates it (schema 2) and migrates an older file once, saving the
-original as `config.toml.schema1.bak` (never overwritten). The migration drops the old
-`[git] signing_key` (Carter never uses your key) and an email that is not
-`<id>+<login>@users.noreply.github.com`; it keeps your footer exactly as written. Loading
-the file never writes to it.
+`carter install` creates it if it is missing and never rewrites it. A key Carter doesn't read is
+named by `carter check --host`, `carter install` and `carter update` with its file, for example
+``⚠ unknown key `x.y` in /home/you/.carter/config.toml → delete it``, and `carter identity add` refuses
+to rewrite the file until you delete it. Loading the file never writes to it. `carter check` reports
+unknown keys in `.carter/carter.yaml` and in plans the same way.
 
 ```toml
 schema = 2
@@ -203,17 +201,28 @@ footer = "_This comment was generated with Carter._"
 read_token_file = ""      # set by `carter github-token set`: ~/.carter/secrets/gh-read.token
 probe_repo = ""           # optional "owner/name" for the token's write probe (never printed)
 
+[identity.signing]        # written by `carter identity add`; see the identity-and-signing guide
+public_key = ""           # "ssh-ed25519 AAAA..." (no private key is ever stored here)
+fingerprint = ""
+private_key_path = ""     # a path only; Carter never opens the file
+                          # optional: ttl = "8h" (lifetime for unlock; unset = until locked)
+                          # set by `identity add`: mode = "file" (no passphrase) or "agent"
+
+[broker]                  # optional; written only when you set something
+min_dwell_ms = 500        # how long an approval must take; 500 is the floor, 10000 the cap
+
 [workspaces."/abs/path"]
-max_tier = "t1"           # optional cap: t0 | t1, set by hand
+max_tier = "t1"           # optional cap: t0 | t1, set by hand, then run `carter update`
 role = "co-author"        # pinned by `carter update`
 require_tier = "t2"       # pinned by `carter update`
 ```
 
 | Table | Keys |
 |-------|------|
-| `[identity]` | `role`, `login`, `id`, `name`, `email`, `mode` |
-| `[identity.signing]`, `[identity.disclosure]` | Reserved for later releases; read and kept, not used yet |
-| `[github]` | `read_token_file`: where `carter github-token set` stored the read-only token (a path only, never the token itself). `probe_repo`: optional `owner/name` that `github-token check` uses for its refused write attempt instead of a repository you own |
+| `[identity]` | `role`, `login`, `id`, `name`, `email`, `mode` (`auto`, `interactive` or `review`; `CARTER_IDENTITY_MODE` wins; in a detected CI `auto` is `review`, which refuses commits. See [Review-only CI](../guides/ci-review.md#modes)) |
+| `[identity.signing]` | The LLM's signing key, written by `carter identity add`: `public_key`, `fingerprint`, `private_key_path` (a path, never read), `previous_public_keys` (kept after a rotation so old commits verify), `ssh_bin_dir` (default `/usr/bin`; where `ssh-keygen`, `ssh-agent` and `ssh-add` come from), `ttl` (how long `identity unlock` keeps the key; none by default), `mode` (`file` for a key without a passphrase, signed straight from `private_key_path`; `agent` otherwise; set by `identity add`), `agent_socket` or `program` (a password manager instead of Carter's own agent) |
+| `[github]` | `read_token_file`: where `carter github-token set` stored the GitHub token (a path only, never the token itself). `probe_repo`: optional `owner/name` that `github-token check` uses for its refused push attempt and its pull-request probe instead of a repository you own |
+| `[broker]` | Optional, for [`carter_push`](../guides/write-operations.md#letting-devops-ask-you-to-push). `min_dwell_ms`: the shortest an approval may take before it is refused as automatic; the effective value is never below 500 and never above 10000. It always uses the home in your system account entry (what OpenSSH reads) for its git and ssh calls and for the `~/.ssh/config` scan; there is no setting for it |
 | `[attribution]` | `footer`: appended to GitHub and Jira bodies |
 | `[workspaces."<path>"]` | `max_tier`, `role`, `require_tier`, `allow_project_opencode_edit`. The path is the resolved absolute path of the workspace |
 
@@ -228,13 +237,20 @@ in your own terminal:
 allow_project_opencode_edit = true
 ```
 
-It takes effect only when a human runs `carter guard install` or `carter update`: both list
-every active opt-out and ask (`--yes` skips only the question). `carter check --host` lists
+It takes effect only when a human runs `carter guard install` or `carter update`: they write
+three exact-path `allow` rules (`opencode.json`, `opencode.jsonc` and `.opencode/*` of that
+workspace) after the denies in the Carter agents' permissions, and
+`guard install` lists every active opt-out. It asks nothing. `carter check --host` lists
 them too. A path that no longer exists or contains `*` or `?` is skipped with a message.
 
 Tiers: T0 is nothing configured (commits carry `Assisted-by: Carter`), T1 is an LLM
 account without a key (`Co-authored-by: <login> <address>`), T2 adds a signing key. A
-workspace `max_tier` lowers the tier for that workspace, never raises it. Unset optional
+workspace `max_tier` lowers the tier for that workspace, never raises it. At an effective T2
+the LLM signs agent commits; if signing cannot happen the commit fails and stays staged.
+`max_tier = "t1"` for a workspace lets agents commit unsigned there. A `max_tier` takes effect for
+the hooks when you run `carter update` (it writes the cap into `~/.carter/gitconfig`); the plugin
+reads `config.toml` directly. **Worktree limit:** the cap follows the *main* repository of a
+linked worktree, not the worktree's path (`carter check --host` lists such worktrees). Unset optional
 keys are left out of the file. A file Carter cannot read or that is incomplete
 (for example, signing keys without an account) is `E-CONFIG`: agent commits are refused
 instead of falling back to defaults.

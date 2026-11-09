@@ -20,10 +20,10 @@ carter init ~/my-project
 ```
 
 ```text
-Initialized .carter/ in /home/you/my-project
-ℹ  Strictness policy is 'guarded': remote-write and dangerous (infra-mutate / destructive) actions are gated per the risk taxonomy (see the maestro policy table).
-Workspace 'my-project' initialized (umbrella mode)
+✓ workspace 'my-project' initialized  umbrella mode
 ```
+
+Add `-v` to see each step, including the policy level.
 
 Useful options:
 
@@ -104,9 +104,8 @@ carter check ~/my-project
 ```
 
 ```text
-OpenCode loaded all 8 Carter agents
-ℹ  Model pins: maestro → anthropic/claude-opus-5-5, architect → anthropic/claude-opus-5-5, engineer → anthropic/claude-sonnet-5-5, devops → anthropic/claude-sonnet-5-5, pm → anthropic/claude-sonnet-5-5, learner → anthropic/claude-opus-5-5, narrator → anthropic/claude-sonnet-5-5, security → anthropic/claude-opus-5-5. Carter cannot verify your OpenCode provider subscription includes them.
-Workspace OK
+· Model pins: maestro → anthropic/claude-opus-5-5, architect → anthropic/claude-opus-5-5, … Carter cannot verify your OpenCode provider subscription includes them.
+✓ Workspace OK  8 agents · loaded by OpenCode
 ```
 
 `carter check` confirms that:

@@ -1,6 +1,6 @@
-"""Carter's own gitconfig behind one ``include.path`` line (RFC-0007 App C.6.4, D61;
-plan 003 step 13). Built and tested under the sandbox home only: in 1G the real host gets
-no include line (architect decision 1), so nothing here may touch ``~/.gitconfig``."""
+"""Carter's own gitconfig behind one ``include.path`` line .
+
+Built and tested under the sandbox home only: nothing here may touch ``~/.gitconfig``."""
 
 from __future__ import annotations
 
@@ -542,7 +542,7 @@ class TestDirectFallback:
 
 
 class TestApplyKeys:
-    ENTRIES = [("carter.tier", "t1")]
+    ENTRIES = [("alias.ai-commit", "!true")]  # not a `carter.*` key: those are the tier mirror
 
     def apply(self, tmp_path: Path, mode: str, entries=None, **kw):
         state = GuardState()
@@ -560,12 +560,14 @@ class TestApplyKeys:
     ) -> None:
         state, res = self.apply(tmp_path, "include")
         carter = carter_gitconfig_path(tmp_path)
-        assert git("config", "--file", str(carter), "--get", "carter.tier").stdout.strip() == "t1"
+        assert (
+            git("config", "--file", str(carter), "--get", "alias.ai-commit").stdout.strip()
+            == "!true"
+        )
         assert includes(global_cfg) == [str(carter)]
         assert state.gitconfig["value"] == str(carter) and state.owned_unchanged(carter)
-        assert (
-            git("config", "--global", "--includes", "--get", "carter.tier").stdout.strip() == "t1"
-        )
+        glob = git("config", "--global", "--includes", "--get", "alias.ai-commit")
+        assert glob.stdout.strip() == "!true"
 
     def test_no_entries_means_no_file_and_no_include_line(
         self, tmp_path: Path, global_cfg: Path
@@ -644,31 +646,6 @@ class TestApplyKeys:
         assert not gc.global_config_path().is_relative_to(real_home)
 
 
-class TestSingleValuedKeys:
-    def test_sets_a_key_the_user_does_not_have(self, global_cfg: Path) -> None:
-        res = gc.set_single_valued(global_cfg, "init.templateDir", "/carter/templates")
-        assert res.status == "set"
-        assert (
-            git("config", "--file", str(global_cfg), "--get", "init.templateDir").stdout.strip()
-            == "/carter/templates"
-        )
-
-    def test_refuses_when_the_user_has_a_value_and_returns_the_chain_snippet(
-        self, global_cfg: Path
-    ) -> None:
-        git("config", "--file", str(global_cfg), "alias.ai-commit", "!mine")
-        before = global_cfg.read_bytes()
-        res = gc.set_single_valued(global_cfg, "alias.ai-commit", "!carter commit")
-        assert res.status == "kept-user-value"
-        assert "alias.ai-commit" in res.snippet and "!carter commit" in res.snippet
-        assert global_cfg.read_bytes() == before
-
-    def test_the_value_may_come_from_an_include(self, tmp_path: Path, global_cfg: Path) -> None:
-        other = tmp_path / "other.gitconfig"
-        other.write_text("[init]\n\ttemplateDir = /theirs\n")
-        git("config", "--file", str(global_cfg), "--add", "include.path", str(other))
-        res = gc.set_single_valued(global_cfg, "init.templateDir", "/carter/templates")
-        assert res.status == "kept-user-value"
-
-    def test_neither_key_is_written_by_1g(self) -> None:
+class TestKeys:
+    def test_no_key_is_written_without_a_consent(self) -> None:
         assert gc.carter_git_entries() == []

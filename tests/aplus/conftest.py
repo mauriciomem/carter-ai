@@ -1,4 +1,4 @@
-"""Helpers for the A+ building blocks: throwaway repos under tmp, sandbox git config."""
+"""Helpers for the `carter push` building blocks: throwaway repos under tmp, sandbox git config."""
 
 from __future__ import annotations
 

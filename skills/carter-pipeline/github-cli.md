@@ -2,10 +2,12 @@
 
 Use `gh` for GitHub operations instead of the web UI. Prefer structured output with `--json` and `--jq` for reliable parsing.
 
-> **Agents only read.** Creating, commenting on, reviewing, merging or releasing through `gh`
-> (and `gh api`) is human-only: the commands marked *human-only* below are for the person at
-> the keyboard. An agent that finishes a branch writes the handoff file (`carter-ops` skill)
-> and tells the user to run `carter push` and then `carter pr` in their own terminal.
+> **Agents read, and handle pull requests.** An agent may open (`gh pr create`), edit
+> (`gh pr edit`) and comment on (`gh pr comment`) a PR once the branch is pushed. Merging,
+> closing, reviewing, marking ready, issues, releases and `gh api` are human-only: the
+> commands marked *human-only* below are for the person at the keyboard. An agent that
+> finishes a branch tells the user to run `carter push` in their own terminal, then opens
+> the PR.
 > `gh repo view` and `gh search repos` take the repository or query positionally (no `-R`);
 > the other read verbs take `-R OWNER/REPO` after the subcommand.
 
@@ -30,15 +32,16 @@ gh pr status                   # PRs relevant to you
 gh pr checks 123               # CI status
 gh pr diff 123
 
-# Create (human-only)
+# Create, edit, comment (agents may, once the branch is pushed)
 gh pr create --fill            # from commit messages
-gh pr create --title "Fix login redirect" --body "## Summary\n- Fix redirect loop"
+gh pr create --title "Fix login redirect" --body "## Summary\n- Fix redirect loop" --head fix/login
+gh pr edit 123 --add-label bug
+gh pr comment 123 -b "CI is green now."
 
 # Actions (checkout is a local read; the rest is human-only)
 gh pr checkout 123             # fetch and switch to PR branch
 gh pr review 123 --approve
 gh pr review 123 --comment -b "One small question on the error handling."
-gh pr comment 123 -b "CI is green now."
 gh pr ready 123                # mark ready for review
 gh pr merge 123
 gh pr close 123

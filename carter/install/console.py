@@ -1,42 +1,14 @@
-"""ANSI color + leveled logging helpers for the installer.
+"""Leveled logging for the installer, drawn by ``carter.ui``.
 
 The verbosity level is module state here (single source); ``carter.install.orchestrator.run``
-sets it via :func:`set_verbosity`. ``0=quiet, 1=default, 2=verbose, 3=debug``.
+sets it via :func:`set_verbosity`. ``0=quiet, 1=default, 2=verbose, 3=debug``. A default run
+shows only warnings and errors, then the one summary line the caller prints; ``-v`` shows each
+step.
 """
 
 from __future__ import annotations
 
-import os
-import sys
-
-_NO_COLOR = not sys.stdout.isatty() or os.environ.get("NO_COLOR")
-
-
-def _c(code: str, text: str) -> str:
-    if _NO_COLOR:
-        return text
-    return f"\033[{code}m{text}\033[0m"
-
-
-def green(t: str) -> str:
-    return _c("32", t)
-
-
-def yellow(t: str) -> str:
-    return _c("33", t)
-
-
-def red(t: str) -> str:
-    return _c("31", t)
-
-
-def bold(t: str) -> str:
-    return _c("1", t)
-
-
-def dim(t: str) -> str:
-    return _c("2", t)
-
+from carter import ui
 
 # Log levels: 0=quiet, 1=default, 2=verbose, 3=debug
 _verbosity = 1
@@ -50,31 +22,33 @@ def set_verbosity(level: int) -> None:
 
 def _log(msg: str, level: int = 1) -> None:
     if _verbosity >= level:
-        print(msg)
+        ui.info(msg.strip("\n"))
 
 
 def log_step(msg: str) -> None:
-    _log(f"\n{bold('→')} {bold(msg)}")
+    if _verbosity >= 2:
+        ui.info(f"→ {msg}")
 
 
 def log_ok(msg: str, detail: str = "") -> None:
-    suffix = f" {dim(detail)}" if detail else ""
-    _log(f"  {green('✓')} {msg}{suffix}")
+    if _verbosity >= 2:
+        ui.ok(msg, detail)
 
 
 def log_warn(msg: str, hint: str = "") -> None:
-    _log(f"  {yellow('⚠')} {msg}")
-    if hint:
-        _log(f"    {dim(hint)}")
+    if _verbosity >= 1:
+        ui.warn(msg, hint)
 
 
 def log_err(msg: str) -> None:
-    _log(f"  {red('✗')} {msg}", level=0)
+    ui.fail(msg)
 
 
 def log_skip(msg: str) -> None:
-    _log(f"  {dim('·')} {msg}", level=2)
+    if _verbosity >= 2:
+        ui.info(f"· {msg}")
 
 
 def log_debug(msg: str) -> None:
-    _log(f"  {dim('[debug]')} {msg}", level=3)
+    if _verbosity >= 3:
+        ui.info(f"[debug] {msg}")

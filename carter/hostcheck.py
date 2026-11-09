@@ -1,10 +1,9 @@
 """``carter check --host``: read-only checks of the machine, from the human's terminal.
 
-RFC-0007 App B §3, the items that exist in slice 1G. It prints names, never values: no
-environment values, no tokens, no provider settings (``opencode debug config`` is compared
-in memory). Every item has a level: ``ok``, ``info``, ``warn`` or ``red``; the exit code is 1
-only if something is ``red``. Items that need the plugin, hooks or isolation (slice 2a/2b)
-say so ("not installed in this slice"), never green.
+It prints names, never values: no environment values, no tokens, no provider settings
+(``opencode debug config`` is compared in memory). Every item has a level: ``ok``, ``info``,
+``warn`` or ``red``; the exit code is 1 only if something is ``red``. An item that needs the
+plugin, hooks or isolation is never green when they are not installed.
 
 Nothing here writes. The same pieces back ``carter guard status``.
 """
@@ -13,37 +12,35 @@ from __future__ import annotations
 
 from collections.abc import Callable, Mapping
 from pathlib import Path
+from typing import Any
 
-from carter import ghtoken, harness
+from carter import ghtoken, harness, serverenv, unknownkeys
+from carter import hostcheck_g2 as g2
 from carter.checkitems import Item, exit_code
 from carter.checkitems import render as render_items
-from carter.guard import consent, gitconfig, optout, permissions
-from carter.guard.configwrite import Reader, missing_statements, target_path
+from carter.guard import agent_rules, consent, gitconfig, optout, permissions, repohooks
+from carter.guard.configwrite import Reader, target_path
 from carter.guard.state import GuardState, load_or_empty_readonly
 from carter.identity import ConfigError, load_identity
-from carter.identity.errors import E_POLICIES_MISSING, E_STATE_INVALID
-from carter.identity.policyset import Statement, consent_groups
+from carter.identity.errors import E_CONFIG, E_STATE_INVALID
+from carter.identity.policyset import consent_groups
 from carter.identity.rules import load_rules
 from carter.install.jsonc import _load_jsonc
 from carter.install.mcp import config_target
 from carter.install.paths import guard_state_path
 
-BROKEN_CONFIG_HINT = (
-    "A broken OpenCode config drops all policies and your providers: run `carter guard install`."
-)
 STATE_HINT = "Carter does not rebuild it: fix or move the file, then run `carter guard install`."
 CARTER_KEYS_NA = (
-    "carter.tier, carter.llmEmail, carter.llmFingerprint and the cap mirror: "
-    "not applicable in this slice"
+    "carter.tier, carter.llmEmail, carter.llmFingerprint and the cap mirror: not applicable"
 )
 HOOK_MODES = {
     "include": "hooks from an included file are reported `global` here",
     "direct": "hooks work but not via include: the direct-write fallback would be used",
-    "no-config-hooks": "no config-based hooks (git < 2.54): per-repo fallback (slice 2a)",
+    "no-config-hooks": "no config-based hooks (git < 2.54): per-repo fallback (`repo_hooks`)",
 }
 PLUGIN_ABSENT = (
-    "plugin not installed (slice 2a): gate, isolation and signing guards are inactive; "
-    "policies are literal denies only"
+    "plugin not installed: gate, isolation and signing guards are inactive; "
+    "the Carter agents carry literal denies only"
 )
 
 
@@ -56,34 +53,40 @@ def render(items: list[Item]) -> list[str]:
     return render_items(items, "carter check --host (read-only)", "Host")
 
 
-def _statements_from_records(state: GuardState) -> list[Statement]:
-    return [
-        Statement(p["id"], "config-edit", p["action"], p["resource"], p["effect"], "")
-        for p in state.opencode_policies
-        if p["id"].startswith("optout-")
-    ]
-
-
-def _policies(state: GuardState, reader: Reader | None, home: str) -> list[Item]:
+def _policies(state: GuardState, reader: Reader | None, base_dir: Path | None) -> list[Item]:
+    """G2's rules are in the Carter agent files; the OpenCode config holds no policies, only
+    the per-agent ``carter_push`` denies and the user's providers."""
+    items: list[Item] = []
     accepted = consent.accepted_groups(state)
-    expected = consent.desired_statements(state, home=home, optouts=_statements_from_records(state))
+    if state.opencode_policies:
+        text = (
+            f"{len(state.opencode_policies)} global policy statement(s) from an earlier Carter "
+            "are still in your OpenCode config and bind every agent"
+        )
+        items.append(
+            Item(
+                "warn",
+                "policies",
+                text,
+                "Run `carter guard install`: G2 now applies only to Carter agents "
+                "and Carter workspaces.",
+            )
+        )
+    current, drifted = agent_rules.agent_file_state(base_dir)
+    for name in drifted:
+        text = f"{name}: its permissions differ from what Carter renders (the G2 rules)"
+        items.append(Item("red", "policies", text, "Run `carter guard install`."))
+    if current and not drifted and accepted:
+        text = f"{len(current)} Carter agent file(s) carry the G2 rules ({', '.join(accepted)})"
+        items.append(Item("ok", "policies", text))
     try:
         loaded = (reader or harness.read_debug_config)()
     except harness.DebugConfigError as exc:
-        return [Item("red", "policies", f"cannot read `opencode debug config` ({exc})")]
-    items = []
-    missing = missing_statements(loaded, expected)
-    for s in missing:
-        text = f"{E_POLICIES_MISSING}: `{s.id}` is not loaded"
-        items.append(Item("red", "policies", text, BROKEN_CONFIG_HINT))
-    if expected and not missing:
-        items.append(
-            Item("ok", "policies", f"{len(expected)} statement(s) loaded ({', '.join(accepted)})")
-        )
+        return [*items, Item("red", "policies", f"cannot read `opencode debug config` ({exc})")]
     path = Path(state.opencode_config) if state.opencode_config else target_path(None)
     config = _load_jsonc(path) if path.exists() else None
     if isinstance(config, dict):
-        defined = {str(k) for key in ("providers", "provider") for k in (config.get(key) or {})}
+        defined = {str(k) for k in (config.get("providers") or {})}
         lost = sorted(defined - harness.provider_ids(loaded))
         if lost:
             items.append(Item("red", "providers", f"not loaded by OpenCode: {', '.join(lost)}"))
@@ -111,9 +114,9 @@ def _files(state: GuardState) -> list[Item]:
 def _git(state: GuardState) -> list[Item]:
     items = []
     rec = state.gitconfig
-    if rec is None and not state.git_config:
+    if rec is None and not state.git_config and "hooks" not in consent.accepted_groups(state):
         items.append(
-            Item("info", "git", "include.path: not needed yet (no Carter git keys; slice 2a)")
+            Item("info", "git", "include.path: not needed (no Carter git keys are enabled)")
         )
     if rec is not None:
         cfg, value = Path(rec["file"]), rec["value"]
@@ -137,13 +140,24 @@ def _git(state: GuardState) -> list[Item]:
         items.append(Item("red", "git", str(exc)))
     else:
         text = HOOK_MODES[mode]
-        items.append(Item("info", "git", f"Carter installs no hooks in this slice; {text}"))
+        hooked = "hooks" in consent.accepted_groups(state)
+        lead = "pre-push config hook installed" if hooked else "no pre-push hook installed"
+        items.append(Item("info", "git", f"{lead}; {text}"))
+        for hook in state.repo_hooks:
+            path = Path(hook["path"])
+            if state.repo_hook_unchanged(path):
+                items.append(Item("ok", "git", f"repo hook {path} matches guard-state.json"))
+            else:
+                what = "was changed since Carter wrote it" if path.exists() else "is missing"
+                items.append(
+                    Item("red", "git", f"repo hook {path} {what}", "Run `carter guard install`.")
+                )
     items.append(Item("info", "git", CARTER_KEYS_NA))
     return items
 
 
 def _project_scope(cwd: Path) -> list[Item]:
-    """D48: a project config that can run code is worth a line (names only)."""
+    """a project config that can run code is worth a line (names only)."""
     risky = {"plugin", "plugins", "mcp", "commands", "command", "formatter", "shell"}
     found: list[str] = []
     for name in (
@@ -170,12 +184,12 @@ def _optouts() -> list[Item]:
     try:
         found = optout.active_optouts(load_identity())
     except ConfigError:
-        return [Item("warn", "D52 opt-outs", "config.toml is invalid; opt-outs not listed")]
+        return [Item("warn", "opt-outs", "config.toml is invalid; opt-outs not listed")]
     items = [
-        Item("warn", "D52 opt-out", f"agents may edit project config in {ws}")
+        Item("warn", "opt-out", f"agents may edit project config in {ws}")
         for ws in found.workspaces
     ]
-    return items + [Item("warn", "D52 opt-out", f"not applied: {why}") for why in found.refused]
+    return items + [Item("warn", "opt-out", f"not applied: {why}") for why in found.refused]
 
 
 def _pending_pins(cwd: Path) -> list[Item]:
@@ -255,8 +269,17 @@ def run_host_checks(
     reader: Reader | None = None,
     server_env: Mapping[str, str] | None = None,
     home: str | None = None,
+    agents_reader: Callable[[], list[dict]] | None = None,
+    servers: Callable[[], Mapping[int, Mapping[str, str] | None]] | None = None,
+    opencode_version: tuple[int, int, int] | None = None,
+    git_version: tuple[int, int] | None = None,
+    tier: str = "t0",
+    fetch: Any = None,
 ) -> list[Item]:
-    """All 1G host checks, in a stable order. Never raises for a failing check."""
+    """All host checks, in a stable order. Never raises for a failing check.
+
+    The readers (``agents_reader``, ``servers``, versions) are passed by the CLI; a
+    library caller that omits them gets no check for that area (nothing is read behind its back)."""
     where = cwd or Path.cwd()
     items: list[Item] = []
     state_path = guard_state_path(base_dir)
@@ -268,6 +291,10 @@ def run_host_checks(
         except Exception as exc:  # one broken check must not hide the others
             items.append(Item("red", area, f"check could not run ({type(exc).__name__})"))
 
+    first, git_ok = g2.gitconfig_first(base_dir)  # before any plain git or OpenCode call
+    items += first
+    state = read.state if read.status == "ok" else GuardState()
+    loaded: dict | None = None
     if read.status in ("corrupt", "newer"):
         text = f"{E_STATE_INVALID}: {state_path} is {read.status} ({read.detail})"
         items.append(Item("red", "guard state", text, STATE_HINT))
@@ -276,25 +303,131 @@ def run_host_checks(
             Item("warn", "guard", "G2 off: no guards are installed", "Run `carter guard install`.")
         )
     else:
-        state = read.state
-        guarded("policies", lambda: _policies(state, reader, home or str(Path.home())))
+        guarded("policies", lambda: _policies(state, reader, base_dir))
         guarded("guard files", lambda: _files(state))
         guarded("consent", lambda: _declined(state))
         if "g2" in consent.accepted_groups(state):
-            items.append(Item("warn", "plugin", PLUGIN_ABSENT))
+            if not consent.plugin_wanted(state):
+                items.append(Item("warn", "plugin", PLUGIN_ABSENT))
+            guarded("plugin", lambda: g2.file_items(state, base_dir))
+            guarded("plugin", lambda: g2.status_items(state, base_dir, opencode_version))
+            guarded("consent", lambda: g2.g2_items(state, base_dir))
         else:
             items.append(Item("warn", "guard", "G2 off: group g2 was not installed"))
-    guarded("git", lambda: _git(read.state if read.status == "ok" else GuardState()))
+        if agents_reader is not None:
+            loaded = _safe_loaded(reader)
+            guarded(
+                "per-agent denies",
+                lambda: g2.agent_items(state, agents_reader, loaded, str(target_path(None))),
+            )
+    guarded("B", lambda: _broker(state, base_dir, where, servers, home))
+    guarded("git", lambda: _git(state))
+    if git_ok:
+        guarded("git", lambda: g2.include_items(state, base_dir))
+        guarded("git", lambda: g2.hook_scope_items(state, where))
+    mode = None
+    if git_ok:
+        try:
+            mode = gitconfig.probe_scope()
+        except gitconfig.GitError:
+            mode = None
+    guarded("git", lambda: g2.repo_items(state, base_dir, where, _workspace_paths(), tier, mode))
+    guarded("identity", lambda: _identity(state, base_dir, where, git_version, fetch))
+    guarded("versions", lambda: g2.version_items(opencode_version, git_version))
+    guarded("plugin files", lambda: g2.foreign_plugin_items(base_dir, where))
     guarded("project", lambda: _project_scope(where))
-    guarded("D52", _optouts)
+    guarded("opt-outs", _optouts)
     guarded("workspace", lambda: _pending_pins(where))
+    guarded("unknown key", lambda: unknownkeys.host_items(base_dir))
     guarded("token", lambda: _token(base_dir))
-    items.append(
-        Item(
-            "info",
-            "server env",
-            "pollution (agent signals, isolation markers) not checked: slice 2a",
-        )
-    )
+    if servers is not None:
+        guarded("server env", lambda: g2.pollution_items(servers, home or str(Path.home())))
+    else:
+        items.append(Item("info", "server env", "pollution not checked (no server reader given)"))
     items += _env(server_env or {})
+    items += g2.residual_items()
     return items
+
+
+def live_readers() -> dict[str, Any]:
+    """The readers ``carter check --host`` passes to ``run_host_checks`` (real processes)."""
+    from carter import hostcheck_id  # noqa: PLC0415 - hostcheck_id imports identity_show, which imports us
+    from carter.identity.resolve import configured_tier
+    from carter.install import prereqs
+
+    try:
+        tier = configured_tier(load_identity())
+    except ConfigError:
+        tier = "t0"
+    return {
+        "agents_reader": harness.read_agents,
+        "servers": lambda: {p: serverenv.read_environ(p) for p in serverenv.server_pids()},
+        "opencode_version": prereqs.parse_opencode_version(
+            prereqs._cmd_version("opencode", "--version") or ""
+        ),
+        "git_version": repohooks.git_version("git"),
+        "tier": tier,
+        "fetch": hostcheck_id.live_fetch,
+    }
+
+
+def _identity(
+    state: GuardState,
+    base_dir: Path | None,
+    cwd: Path,
+    git_version: tuple[int, int] | None,
+    fetch: Any,
+) -> list[Item]:
+    """The identity items (``hostcheck_id``); a broken config is E-CONFIG, never defaults."""
+    from carter import hostcheck_id  # noqa: PLC0415
+    from carter.identity.env import workspace_for  # noqa: PLC0415
+
+    try:
+        cfg = load_identity()
+    except ConfigError as exc:
+        return [
+            Item(
+                "red",
+                "identity",
+                f"{E_CONFIG}: {exc.detail}",
+                "Fix config.toml; agent commits are off.",
+            )
+        ]
+    return hostcheck_id.identity_items(
+        cfg, state, cwd=cwd, base_dir=base_dir, git=git_version, fetch=fetch,
+        workspace=workspace_for(cfg, str(cwd)),
+    )  # fmt: skip
+
+
+def _broker(
+    state: GuardState,
+    base_dir: Path | None,
+    cwd: Path,
+    servers: Callable[[], Mapping[int, Mapping[str, str] | None]] | None,
+    home: str | None,
+) -> list[Item]:
+    """The push tool items (``hostcheck_broker``); the working repo is only asked for its origin."""
+    from carter import hostcheck_broker  # noqa: PLC0415
+
+    try:
+        ssh_bin_dir = load_identity().signing.ssh_bin_dir
+    except ConfigError:
+        ssh_bin_dir = "/usr/bin"
+    return hostcheck_broker.items(
+        state, base_dir, cwd, servers=servers, home=home or str(Path.home()),
+        auto_pids=serverenv.auto_pids, ssh_bin_dir=ssh_bin_dir,
+    )  # fmt: skip
+
+
+def _safe_loaded(reader: Reader | None) -> dict | None:
+    try:
+        return (reader or harness.read_debug_config)()
+    except harness.DebugConfigError:
+        return None
+
+
+def _workspace_paths() -> list[str]:
+    try:
+        return list(load_identity().workspaces)
+    except ConfigError:
+        return []

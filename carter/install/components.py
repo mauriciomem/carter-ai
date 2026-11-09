@@ -8,16 +8,16 @@ the knowledge base, manifest and backups live under ``~/.carter`` (see
 from __future__ import annotations
 
 import json
-import os
 import shutil
-import tempfile
+from datetime import UTC, datetime
 from pathlib import Path
 
-from carter import __version__
-from carter.aplus.handoff import OWN_TERMINAL
+from carter.aplus.push import OWN_TERMINAL
 from carter.home import tilde
 from carter.identity import ConfigError
-from carter.identity.migrate import MigrationError, ensure_config
+from carter.identity.config import read_document
+from carter.identity.schema import IdentityConfig
+from carter.identity.writer import write_config
 from carter.install.console import log_err, log_ok, log_skip, log_step, log_warn
 from carter.install.files import (
     _install_file,
@@ -42,28 +42,49 @@ def install_agents(
     """Install the OpenCode agents rendered from the shipped guarded defaults."""
     log_step("Installing agents...")
     stats: dict[str, int] = {"created": 0, "updated": 0, "unchanged": 0}
-    for name, content in sorted(_render_opencode_agents().items()):
+    for name, content in sorted(_render_opencode_agents(base_dir).items()):
         dst = _opencode_base(base_dir) / "agents" / name
         status = _install_rendered_file(content, dst, manifest, backup_root)
         stats[status] += 1
     return stats
 
 
-def _render_opencode_agents() -> dict[str, str]:
+def rerender_agents(base_dir: Path | None) -> dict[str, int] | None:
+    """Re-write the global Carter agent files and their manifest entries.
+
+    ``carter guard install`` and ``remove`` call this after the guard state changed: G2's deny
+    set is part of each agent's ``permissions:``. Nothing happens without a manifest (no
+    ``carter install`` ran here). Returns the per-file statuses, or ``None`` when skipped."""
+    manifest = read_manifest(base_dir)
+    if manifest is None:
+        return None
+    agents_dir = _opencode_base(base_dir) / "agents"
+    ours = {str(agents_dir / name) for name in _render_opencode_agents(base_dir)}
+    manifest["files"] = [f for f in manifest["files"] if f not in ours]
+    backup_root = _carter_base(base_dir) / "backups" / "agents"
+    stats = install_agents(base_dir, manifest, backup_root)
+    manifest["updated_at"] = datetime.now(UTC).isoformat()
+    write_manifest(manifest, base_dir)
+    return stats
+
+
+def _render_opencode_agents(base_dir: Path | None = None) -> dict[str, str]:
     """Render the OpenCode-shaped agent files from the shipped guarded defaults.
 
     Returns ``{filename: content}`` keyed by ``carter-<role>.md`` (no agent suffix —
-    global installs use canonical names). The scaffold/Jinja stack is imported
-    lazily so importing the installer stays cheap.
+    global installs use canonical names), each carrying G2's rules as the guard state of
+    ``base_dir`` records them. The scaffold/Jinja stack is imported lazily so importing
+    the installer stays cheap.
     """
     from carter.config import generate_default_config
+    from carter.guard.agent_rules import current_rules
     from carter.scaffold import create_env, render_agents
 
     cfg = generate_default_config(workspace_name="carter", mode="single")
     cfg["agent_suffix"] = ""
     # Global agents serve every workspace: defer to each workspace's docs_language.
     cfg["docs_language"] = None
-    return render_agents(cfg, create_env())
+    return render_agents(cfg, create_env(), current_rules(base_dir))
 
 
 def install_skills(
@@ -151,9 +172,7 @@ its instructions exactly.
   solutions to check for past decisions and lessons.
 """
 
-# Global rules §Communication (only this section: AGENTS.md loads every session,
-# so its token cost must stay small). Written as implicit concatenation purely to satisfy
-# the line-length lint.
+# Global rules, Communication section. AGENTS.md loads in every session, so it stays short.
 _OPENCODE_COMMUNICATION = (
     "\n## Communication\n"
     "- Be concise and clear. Explain so a junior developer or solution architect"
@@ -165,15 +184,17 @@ _OPENCODE_COMMUNICATION = (
     "- At any doubt, ask for clarification before proceeding.\n"
 )
 
-# The commit-attribution rule. One constant: it is installed into the global AGENTS.md and
-# is also the text of the upgrade note for users whose AGENTS.md we must not rewrite.
+# The commit-attribution rule: installed into the global AGENTS.md.
 _ATTRIBUTION_RULE = (
-    "- Commits: the user is the author and committer (their own git config). Never pass"
-    " `--author`, `--no-verify`, `-s` or `-S`, and never add `Signed-off-by` unless the"
-    " user asks for it on that commit. Credit comes only from the `coauthor_trailer` that"
-    " `carter ops config --emit` prints; if `commits` is `refused`, stop and report.\n"
-    "- Pushing and every other GitHub write are human-only. When a branch is ready, write"
-    " the handoff file (`carter-ops` skill) and tell the user: " + OWN_TERMINAL + "\n"
+    "- Commits: the user is the author (their own git config) unless `carter ops config --emit`"
+    " says `author` is `llm` (role author); the committer is the user, or"
+    " the LLM at T2. Never pass `--author`, `--no-verify`, `-s` or `-S`, never set `GIT_AUTHOR_*`"
+    " or `GIT_COMMITTER_*`, and never add `Signed-off-by` unless the user asks. Credit comes only"
+    " from the `coauthor_trailer` it prints; if `commits` is `refused`, stop and report.\n"
+    "- Pushing is human-only: tell the user: "
+    + OWN_TERMINAL
+    + " Only carter-devops may ask with `carter_push`; the user approves each use."
+    " After the push, `gh pr create` is fine.\n"
 )
 
 # The "Git & Language" global rules (also rendered into the workspace AGENTS.md).
@@ -192,63 +213,15 @@ _OPENCODE_GIT_LANGUAGE = (
 
 _OPENCODE_AGENTS_MD = _OPENCODE_AGENTS_MD_BASE + _OPENCODE_COMMUNICATION + _OPENCODE_GIT_LANGUAGE
 
-# sha256 of each global AGENTS.md text Carter shipped before this one: up to v0.16.x, and
-# v0.17.x (commit rule only, without the handoff rule). A file with exactly one of these
-# was never edited by the user, so it is upgraded in place.
-_KNOWN_PREVIOUS_AGENTS_MD_SHA256 = frozenset(
-    {
-        "f96032e740c9fc9660d0798c36ed38b53aa12d7323b21bddf338834ca37d5401",
-        "252415df75dd375f9afe2189572c14b90930f35e14f2ac14eeb26752f1e86eeb",
-    }
-)
-
-
-def _upgrade_note_text() -> str:
-    return (
-        f"# Carter {__version__}: commit attribution rule\n\n"
-        "Your global rules file (`~/.config/opencode/AGENTS.md`) has your own edits, so Carter\n"
-        "left it alone. Replace the commit/author/signing line in its Git & Language section\n"
-        "with these two rules (commits, and pushing as a human-only step):\n\n" + _ATTRIBUTION_RULE
-    )
-
-
-def _write_upgrade_note(base_dir: Path | None, shown_agents_md: str) -> None:
-    """Print the new rule and save it to ``~/.carter/upgrade-notes/<version>.md`` once.
-
-    The file is written atomically (tmp + replace, mode 0644) and a failure never blocks
-    the install. It is not in the manifest: it is the user's reminder, not Carter's state."""
-    note = _carter_base(base_dir) / "upgrade-notes" / f"{__version__}.md"
-    if note.exists():
-        log_warn(f"{shown_agents_md}: attribution rule still to merge, see {tilde(note)}")
-        return
-    text = _upgrade_note_text()
-    log_warn(f"{shown_agents_md}: not updated. Merge this rule by hand:")
-    print(text)
-    try:
-        note.parent.mkdir(parents=True, exist_ok=True)
-        fd, tmp = tempfile.mkstemp(dir=note.parent, prefix=".note.", suffix=".tmp")
-        try:
-            with os.fdopen(fd, "w", encoding="utf-8") as fh:
-                fh.write(text)
-            os.chmod(tmp, 0o644)
-            os.replace(tmp, note)
-        except BaseException:
-            Path(tmp).unlink(missing_ok=True)
-            raise
-        log_ok(tilde(note), "saved")
-    except OSError as exc:
-        log_warn(f"could not save the upgrade note ({type(exc).__name__})")
-
 
 def install_opencode_rules(
     base_dir: Path | None, manifest: dict, previous: dict | None = None
 ) -> None:
     """Generate ~/.config/opencode/AGENTS.md for OpenCode global rules.
 
-    A missing file is written; the current text is kept. A file that is exactly a text
-    Carter shipped before (known hash, or the hash the previous install recorded) is
-    upgraded in place. Anything else is the user's: it is never touched, and the new
-    attribution rule is printed and saved as an upgrade note instead.
+    A missing file is written; the current text is kept. A file whose hash is the one the
+    previous install recorded was never edited by the user, so it is upgraded in place.
+    Anything else is the user's ("user-modified"): it is never touched.
     """
     log_step("Installing OpenCode global rules...")
     dst = _opencode_base(base_dir) / "AGENTS.md"
@@ -261,9 +234,7 @@ def install_opencode_rules(
         log_ok(shown)
     elif dst.read_text() == _OPENCODE_AGENTS_MD:
         log_skip(f"{shown} (already current)")
-    elif _sha256(dst).removeprefix("sha256:") in _KNOWN_PREVIOUS_AGENTS_MD_SHA256 or (
-        recorded and _hash_matches(dst, str(recorded))
-    ):
+    elif recorded and _hash_matches(dst, str(recorded)):
         dst.write_text(_OPENCODE_AGENTS_MD)
         log_ok(shown, "updated (was an unmodified earlier Carter version)")
     else:
@@ -275,7 +246,6 @@ def install_opencode_rules(
         manifest.setdefault("notes", []).append(
             f"{shown}: user-modified, current Carter rules not installed"
         )
-        _write_upgrade_note(base_dir, shown)
         owned = False
     if owned:
         # Recorded with its hash so uninstall can tell if the user edits it later.
@@ -333,31 +303,33 @@ def install_knowledge(
     return count
 
 
-def install_ops(base_dir: Path | None, manifest: dict) -> bool:
-    """Create or migrate ``~/.carter/config.toml`` (schema 2). Returns True if it changed.
+def ensure_config(path: Path) -> bool:
+    """Write the schema-2 defaults if there is no file. Returns True if it wrote. An existing file
+    is never touched (``ConfigError`` if it does not parse)."""
+    if read_document(path) is not None:
+        return False
+    write_config(IdentityConfig(state="current"), path)
+    return True
 
-    A missing file gets schema-2 defaults (T0: no identity, no signing key). A schema-1
-    file is migrated once, after a ``config.toml.schema1.bak`` backup that is never
-    overwritten and never listed in the manifest (uninstall must not delete it). A schema-2
-    file is left alone. A file that cannot be migrated is reported and left untouched; the
-    rest of the install goes on and identity stays fail-closed.
+
+def install_ops(base_dir: Path | None, manifest: dict) -> bool:
+    """Create ``~/.carter/config.toml`` (schema 2) if it is missing. Returns True if created.
+
+    A missing file gets the defaults (T0: no identity, no signing key). An existing file is
+    never touched; a file that does not parse is reported and left alone, and the rest of the
+    install goes on (identity stays fail-closed).
     """
     log_step("Configuring carter-ops...")
     config_path = _carter_base(base_dir) / "config.toml"
     try:
-        result = ensure_config(config_path)
-    except (ConfigError, MigrationError) as exc:
-        detail = getattr(exc, "detail", "")
-        log_err(f"{tilde(config_path)} not migrated: {exc}{f' ({detail})' if detail else ''}")
+        created = ensure_config(config_path)
+    except ConfigError as exc:
+        log_err(f"{tilde(config_path)} not read: {exc} ({exc.detail})")
         return False
-    for warning in result.warnings:
-        log_warn(warning)
-    if result.status == "current":
-        log_skip(f"{tilde(config_path)} (schema 2, not touched)")
+    if not created:
+        log_skip(f"{tilde(config_path)} (not touched)")
         return False
-    log_ok(tilde(config_path), "created" if result.status == "created" else "migrated to schema 2")
-    if result.backup:
-        log_ok(tilde(result.backup), "backup of the schema-1 file")
+    log_ok(tilde(config_path), "created")
     manifest["files"].append(str(config_path))
     return True
 

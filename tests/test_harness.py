@@ -84,7 +84,9 @@ class TestValidateAgents:
         sleeps: list = []
         result = _validate(_Runner(_proc(out)), sleeps)
         assert result.status == "fail"
-        assert any("carter-engineer-local" in e and "tools:" in e for e in result.errors)
+        assert any(
+            "carter-engineer-local" in e and "not loaded by OpenCode" in e for e in result.errors
+        )
         assert not any("carter-pm-local" in e for e in result.errors)
         assert len(sleeps) == harness.DEFAULT_ATTEMPTS - 1  # retried, then gave up
 
@@ -295,7 +297,7 @@ class TestCheckCli:
         fake_opencode(agents_output=_loaded(ws))
         result = CliRunner().invoke(main, ["check", str(ws)])
         assert result.exit_code == 0, result.output
-        assert "OpenCode loaded" in result.output
+        assert "loaded by OpenCode" in result.output
 
     def test_fails_naming_dropped_agent(self, tmp_path, fake_opencode, no_sleep):
         ws = _init(tmp_path)
@@ -372,7 +374,7 @@ class TestCheckWorkspaceFiles:
         assert "Unparseable frontmatter" not in result.output
 
 
-# --- `opencode debug config` reader (plan 003 step 10; RFC-0007 App C.6.3 step 4) ---------
+# --- `opencode debug config` reader ---------
 
 SENTINEL = "sk-SENTINEL-provider-key-0123456789"
 DEBUG_CONFIG = {
@@ -469,11 +471,11 @@ class TestReadDebugConfig:
 
     def test_provider_ids_and_statements_helpers(self) -> None:
         assert harness.provider_ids(DEBUG_CONFIG) == {"anthropic", "openai"}
-        assert harness.provider_ids({"provider": {"acme": {}}}) == {"acme"}  # V1 spelling
+        assert harness.provider_ids({"provider": {"acme": {}}}) == set()  # only `providers`
         assert harness.provider_ids({}) == set()
         assert harness.policy_statements(DEBUG_CONFIG) == [
             {"action": "tool.use", "resource": "shell:sudo *", "effect": "deny"}
         ]
-        v1 = {"experimental": {"policies": [{"action": "a", "resource": "r", "effect": "deny"}]}}
-        assert harness.policy_statements(v1) == [{"action": "a", "resource": "r", "effect": "deny"}]
+        old = {"experimental": {"policies": [{"action": "a", "resource": "r", "effect": "deny"}]}}
+        assert harness.policy_statements(old) == []  # the older spelling is not read
         assert harness.policy_statements({"policies": "junk"}) == []

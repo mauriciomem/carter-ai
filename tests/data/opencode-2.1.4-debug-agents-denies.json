@@ -1,0 +1,850 @@
+[
+  {
+    "id": "build",
+    "name": "Build",
+    "request": {
+      "settings": {},
+      "headers": {},
+      "body": {}
+    },
+    "description": "The default agent. Executes tools based on configured permissions.",
+    "mode": "primary",
+    "hidden": false,
+    "permissions": [
+      {
+        "action": "*",
+        "resource": "*",
+        "effect": "allow"
+      },
+      {
+        "action": "read",
+        "resource": "*.env",
+        "effect": "ask"
+      },
+      {
+        "action": "read",
+        "resource": "*.env.*",
+        "effect": "ask"
+      },
+      {
+        "action": "read",
+        "resource": "*.env.example",
+        "effect": "allow"
+      },
+      {
+        "action": "question",
+        "resource": "*",
+        "effect": "allow"
+      },
+      {
+        "action": "carter_push",
+        "resource": "*",
+        "effect": "deny"
+      },
+      {
+        "action": "browser",
+        "resource": "*",
+        "effect": "deny"
+      }
+    ]
+  },
+  {
+    "id": "plan",
+    "name": "Plan",
+    "request": {
+      "settings": {},
+      "headers": {},
+      "body": {}
+    },
+    "description": "Read-only agent for exploring the codebase and planning work before implementation.",
+    "mode": "primary",
+    "hidden": false,
+    "permissions": [
+      {
+        "action": "*",
+        "resource": "*",
+        "effect": "allow"
+      },
+      {
+        "action": "read",
+        "resource": "*.env",
+        "effect": "ask"
+      },
+      {
+        "action": "read",
+        "resource": "*.env.*",
+        "effect": "ask"
+      },
+      {
+        "action": "read",
+        "resource": "*.env.example",
+        "effect": "allow"
+      },
+      {
+        "action": "question",
+        "resource": "*",
+        "effect": "allow"
+      },
+      {
+        "action": "edit",
+        "resource": "*",
+        "effect": "deny"
+      },
+      {
+        "action": "edit",
+        "resource": "/home/user/.opencode/plan/*",
+        "effect": "allow"
+      },
+      {
+        "action": "carter_push",
+        "resource": "*",
+        "effect": "deny"
+      },
+      {
+        "action": "browser",
+        "resource": "*",
+        "effect": "deny"
+      }
+    ]
+  },
+  {
+    "id": "general",
+    "name": "General",
+    "request": {
+      "settings": {},
+      "headers": {},
+      "body": {}
+    },
+    "description": "General-purpose agent for researching complex questions and executing multi-step tasks. Use this agent to execute multiple units of work in parallel.",
+    "mode": "subagent",
+    "hidden": false,
+    "permissions": [
+      {
+        "action": "*",
+        "resource": "*",
+        "effect": "allow"
+      },
+      {
+        "action": "read",
+        "resource": "*.env",
+        "effect": "ask"
+      },
+      {
+        "action": "read",
+        "resource": "*.env.*",
+        "effect": "ask"
+      },
+      {
+        "action": "read",
+        "resource": "*.env.example",
+        "effect": "allow"
+      },
+      {
+        "action": "question",
+        "resource": "*",
+        "effect": "deny"
+      },
+      {
+        "action": "subagent",
+        "resource": "*",
+        "effect": "deny"
+      },
+      {
+        "action": "carter_push",
+        "resource": "*",
+        "effect": "deny"
+      },
+      {
+        "action": "browser",
+        "resource": "*",
+        "effect": "deny"
+      }
+    ]
+  },
+  {
+    "id": "explore",
+    "name": "Explore",
+    "request": {
+      "settings": {},
+      "headers": {},
+      "body": {}
+    },
+    "description": "Fast agent specialized for exploring codebases. Use this when you need to quickly find files by patterns (eg. \"src/components/**/*.tsx\"), search code for keywords (eg. \"API endpoints\"), or answer questions about the codebase (eg. \"how do API endpoints work?\"). When calling this agent, specify the desired thoroughness level: \"quick\" for basic searches, \"medium\" for moderate exploration, or \"very thorough\" for comprehensive analysis across multiple locations and naming conventions.",
+    "mode": "subagent",
+    "hidden": false,
+    "permissions": [
+      {
+        "action": "*",
+        "resource": "*",
+        "effect": "allow"
+      },
+      {
+        "action": "read",
+        "resource": "*.env",
+        "effect": "ask"
+      },
+      {
+        "action": "read",
+        "resource": "*.env.*",
+        "effect": "ask"
+      },
+      {
+        "action": "read",
+        "resource": "*.env.example",
+        "effect": "allow"
+      },
+      {
+        "action": "*",
+        "resource": "*",
+        "effect": "deny"
+      },
+      {
+        "action": "shell",
+        "resource": "*",
+        "effect": "allow"
+      },
+      {
+        "action": "grep",
+        "resource": "*",
+        "effect": "allow"
+      },
+      {
+        "action": "glob",
+        "resource": "*",
+        "effect": "allow"
+      },
+      {
+        "action": "webfetch",
+        "resource": "*",
+        "effect": "allow"
+      },
+      {
+        "action": "websearch",
+        "resource": "*",
+        "effect": "allow"
+      },
+      {
+        "action": "read",
+        "resource": "*",
+        "effect": "allow"
+      },
+      {
+        "action": "read",
+        "resource": "*.env",
+        "effect": "ask"
+      },
+      {
+        "action": "read",
+        "resource": "*.env.*",
+        "effect": "ask"
+      },
+      {
+        "action": "read",
+        "resource": "*.env.example",
+        "effect": "allow"
+      },
+      {
+        "action": "subagent",
+        "resource": "*",
+        "effect": "deny"
+      },
+      {
+        "action": "external_directory",
+        "resource": "*",
+        "effect": "allow"
+      },
+      {
+        "action": "carter_push",
+        "resource": "*",
+        "effect": "deny"
+      },
+      {
+        "action": "browser",
+        "resource": "*",
+        "effect": "deny"
+      }
+    ]
+  },
+  {
+    "id": "compaction",
+    "name": "Compaction",
+    "request": {
+      "settings": {},
+      "headers": {},
+      "body": {}
+    },
+    "mode": "primary",
+    "hidden": true,
+    "permissions": [
+      {
+        "action": "*",
+        "resource": "*",
+        "effect": "allow"
+      },
+      {
+        "action": "read",
+        "resource": "*.env",
+        "effect": "ask"
+      },
+      {
+        "action": "read",
+        "resource": "*.env.*",
+        "effect": "ask"
+      },
+      {
+        "action": "read",
+        "resource": "*.env.example",
+        "effect": "allow"
+      },
+      {
+        "action": "carter_push",
+        "resource": "*",
+        "effect": "deny"
+      },
+      {
+        "action": "browser",
+        "resource": "*",
+        "effect": "deny"
+      }
+    ]
+  },
+  {
+    "id": "summary",
+    "name": "Summary",
+    "request": {
+      "settings": {},
+      "headers": {},
+      "body": {}
+    },
+    "mode": "primary",
+    "hidden": true,
+    "permissions": [
+      {
+        "action": "*",
+        "resource": "*",
+        "effect": "allow"
+      },
+      {
+        "action": "read",
+        "resource": "*.env",
+        "effect": "ask"
+      },
+      {
+        "action": "read",
+        "resource": "*.env.*",
+        "effect": "ask"
+      },
+      {
+        "action": "read",
+        "resource": "*.env.example",
+        "effect": "allow"
+      },
+      {
+        "action": "*",
+        "resource": "*",
+        "effect": "deny"
+      },
+      {
+        "action": "carter_push",
+        "resource": "*",
+        "effect": "deny"
+      },
+      {
+        "action": "browser",
+        "resource": "*",
+        "effect": "deny"
+      }
+    ]
+  },
+  {
+    "id": "title",
+    "name": "Title",
+    "request": {
+      "settings": {},
+      "headers": {},
+      "body": {}
+    },
+    "mode": "primary",
+    "hidden": true,
+    "permissions": [
+      {
+        "action": "*",
+        "resource": "*",
+        "effect": "allow"
+      },
+      {
+        "action": "read",
+        "resource": "*.env",
+        "effect": "ask"
+      },
+      {
+        "action": "read",
+        "resource": "*.env.*",
+        "effect": "ask"
+      },
+      {
+        "action": "read",
+        "resource": "*.env.example",
+        "effect": "allow"
+      },
+      {
+        "action": "*",
+        "resource": "*",
+        "effect": "deny"
+      },
+      {
+        "action": "carter_push",
+        "resource": "*",
+        "effect": "deny"
+      },
+      {
+        "action": "browser",
+        "resource": "*",
+        "effect": "deny"
+      }
+    ]
+  },
+  {
+    "id": "carter-engineer",
+    "name": "carter-engineer",
+    "request": {
+      "settings": {},
+      "headers": {},
+      "body": {}
+    },
+    "description": "Software Engineer — code quality, testing, design patterns, and implementation best practices.",
+    "mode": "subagent",
+    "hidden": false,
+    "permissions": [
+      {
+        "action": "*",
+        "resource": "*",
+        "effect": "allow"
+      },
+      {
+        "action": "read",
+        "resource": "*.env",
+        "effect": "ask"
+      },
+      {
+        "action": "read",
+        "resource": "*.env.*",
+        "effect": "ask"
+      },
+      {
+        "action": "read",
+        "resource": "*.env.example",
+        "effect": "allow"
+      },
+      {
+        "action": "*",
+        "resource": "*",
+        "effect": "ask"
+      },
+      {
+        "action": "read",
+        "resource": "*",
+        "effect": "allow"
+      },
+      {
+        "action": "glob",
+        "resource": "*",
+        "effect": "allow"
+      },
+      {
+        "action": "grep",
+        "resource": "*",
+        "effect": "allow"
+      },
+      {
+        "action": "skill",
+        "resource": "*",
+        "effect": "allow"
+      },
+      {
+        "action": "question",
+        "resource": "*",
+        "effect": "allow"
+      },
+      {
+        "action": "read",
+        "resource": "*.env",
+        "effect": "ask"
+      },
+      {
+        "action": "read",
+        "resource": "*.env.*",
+        "effect": "ask"
+      },
+      {
+        "action": "read",
+        "resource": "*.env.example",
+        "effect": "allow"
+      },
+      {
+        "action": "external_directory",
+        "resource": "/home/user/.carter/*",
+        "effect": "allow"
+      },
+      {
+        "action": "read",
+        "resource": "/home/user/.carter/*",
+        "effect": "allow"
+      },
+      {
+        "action": "edit",
+        "resource": "/home/user/.carter/memories/*",
+        "effect": "allow"
+      },
+      {
+        "action": "subagent",
+        "resource": "*",
+        "effect": "deny"
+      },
+      {
+        "action": "carter_push",
+        "resource": "*",
+        "effect": "deny"
+      },
+      {
+        "action": "edit",
+        "resource": "*",
+        "effect": "allow"
+      },
+      {
+        "action": "shell",
+        "resource": "*",
+        "effect": "allow"
+      },
+      {
+        "action": "webfetch",
+        "resource": "*",
+        "effect": "allow"
+      },
+      {
+        "action": "shell",
+        "resource": "vault read *",
+        "effect": "deny"
+      },
+      {
+        "action": "shell",
+        "resource": "vault write *",
+        "effect": "deny"
+      },
+      {
+        "action": "shell",
+        "resource": "terraform apply *",
+        "effect": "deny"
+      },
+      {
+        "action": "shell",
+        "resource": "terraform destroy *",
+        "effect": "deny"
+      },
+      {
+        "action": "shell",
+        "resource": "kubectl apply *",
+        "effect": "deny"
+      },
+      {
+        "action": "shell",
+        "resource": "helm upgrade *",
+        "effect": "deny"
+      },
+      {
+        "action": "shell",
+        "resource": "rm -rf *",
+        "effect": "deny"
+      },
+      {
+        "action": "shell",
+        "resource": "git reset --hard *",
+        "effect": "deny"
+      },
+      {
+        "action": "shell",
+        "resource": "git push --force *",
+        "effect": "deny"
+      },
+      {
+        "action": "shell",
+        "resource": "git push *",
+        "effect": "deny"
+      },
+      {
+        "action": "shell",
+        "resource": "gh pr create *",
+        "effect": "deny"
+      },
+      {
+        "action": "shell",
+        "resource": "gh pr merge *",
+        "effect": "deny"
+      },
+      {
+        "action": "shell",
+        "resource": "gh pr comment *",
+        "effect": "deny"
+      },
+      {
+        "action": "shell",
+        "resource": "gh pr review *",
+        "effect": "deny"
+      },
+      {
+        "action": "shell",
+        "resource": "gh pr edit *",
+        "effect": "deny"
+      },
+      {
+        "action": "shell",
+        "resource": "gh issue create *",
+        "effect": "deny"
+      },
+      {
+        "action": "shell",
+        "resource": "gh issue comment *",
+        "effect": "deny"
+      },
+      {
+        "action": "shell",
+        "resource": "gh issue edit *",
+        "effect": "deny"
+      },
+      {
+        "action": "shell",
+        "resource": "gh release *",
+        "effect": "deny"
+      },
+      {
+        "action": "shell",
+        "resource": "gh api *",
+        "effect": "deny"
+      },
+      {
+        "action": "browser",
+        "resource": "*",
+        "effect": "deny"
+      }
+    ]
+  },
+  {
+    "id": "carter-devops",
+    "name": "carter-devops",
+    "request": {
+      "settings": {},
+      "headers": {},
+      "body": {}
+    },
+    "description": "DevOps Engineer — CI/CD, infrastructure as code, containers, deployment, and git workflows.",
+    "mode": "subagent",
+    "hidden": false,
+    "permissions": [
+      {
+        "action": "*",
+        "resource": "*",
+        "effect": "allow"
+      },
+      {
+        "action": "read",
+        "resource": "*.env",
+        "effect": "ask"
+      },
+      {
+        "action": "read",
+        "resource": "*.env.*",
+        "effect": "ask"
+      },
+      {
+        "action": "read",
+        "resource": "*.env.example",
+        "effect": "allow"
+      },
+      {
+        "action": "*",
+        "resource": "*",
+        "effect": "ask"
+      },
+      {
+        "action": "read",
+        "resource": "*",
+        "effect": "allow"
+      },
+      {
+        "action": "glob",
+        "resource": "*",
+        "effect": "allow"
+      },
+      {
+        "action": "grep",
+        "resource": "*",
+        "effect": "allow"
+      },
+      {
+        "action": "skill",
+        "resource": "*",
+        "effect": "allow"
+      },
+      {
+        "action": "question",
+        "resource": "*",
+        "effect": "allow"
+      },
+      {
+        "action": "read",
+        "resource": "*.env",
+        "effect": "ask"
+      },
+      {
+        "action": "read",
+        "resource": "*.env.*",
+        "effect": "ask"
+      },
+      {
+        "action": "read",
+        "resource": "*.env.example",
+        "effect": "allow"
+      },
+      {
+        "action": "external_directory",
+        "resource": "/home/user/.carter/*",
+        "effect": "allow"
+      },
+      {
+        "action": "read",
+        "resource": "/home/user/.carter/*",
+        "effect": "allow"
+      },
+      {
+        "action": "edit",
+        "resource": "/home/user/.carter/memories/*",
+        "effect": "allow"
+      },
+      {
+        "action": "subagent",
+        "resource": "*",
+        "effect": "deny"
+      },
+      {
+        "action": "edit",
+        "resource": "*",
+        "effect": "allow"
+      },
+      {
+        "action": "shell",
+        "resource": "*",
+        "effect": "allow"
+      },
+      {
+        "action": "webfetch",
+        "resource": "*",
+        "effect": "allow"
+      },
+      {
+        "action": "shell",
+        "resource": "vault read *",
+        "effect": "ask"
+      },
+      {
+        "action": "shell",
+        "resource": "vault write *",
+        "effect": "ask"
+      },
+      {
+        "action": "shell",
+        "resource": "terraform apply *",
+        "effect": "ask"
+      },
+      {
+        "action": "shell",
+        "resource": "terraform destroy *",
+        "effect": "ask"
+      },
+      {
+        "action": "shell",
+        "resource": "kubectl apply *",
+        "effect": "ask"
+      },
+      {
+        "action": "shell",
+        "resource": "helm upgrade *",
+        "effect": "ask"
+      },
+      {
+        "action": "shell",
+        "resource": "rm -rf *",
+        "effect": "ask"
+      },
+      {
+        "action": "shell",
+        "resource": "git reset --hard *",
+        "effect": "ask"
+      },
+      {
+        "action": "shell",
+        "resource": "git push --force *",
+        "effect": "ask"
+      },
+      {
+        "action": "shell",
+        "resource": "git push *",
+        "effect": "deny"
+      },
+      {
+        "action": "shell",
+        "resource": "gh pr create *",
+        "effect": "deny"
+      },
+      {
+        "action": "shell",
+        "resource": "gh pr merge *",
+        "effect": "deny"
+      },
+      {
+        "action": "shell",
+        "resource": "gh pr comment *",
+        "effect": "deny"
+      },
+      {
+        "action": "shell",
+        "resource": "gh pr review *",
+        "effect": "deny"
+      },
+      {
+        "action": "shell",
+        "resource": "gh pr edit *",
+        "effect": "deny"
+      },
+      {
+        "action": "shell",
+        "resource": "gh issue create *",
+        "effect": "deny"
+      },
+      {
+        "action": "shell",
+        "resource": "gh issue comment *",
+        "effect": "deny"
+      },
+      {
+        "action": "shell",
+        "resource": "gh issue edit *",
+        "effect": "deny"
+      },
+      {
+        "action": "shell",
+        "resource": "gh release *",
+        "effect": "deny"
+      },
+      {
+        "action": "shell",
+        "resource": "gh api *",
+        "effect": "deny"
+      },
+      {
+        "action": "browser",
+        "resource": "*",
+        "effect": "deny"
+      }
+    ]
+  }
+]

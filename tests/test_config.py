@@ -327,16 +327,15 @@ class TestShippedMapsAreDictShaped:
 
 
 class TestGithubWritesAreHumanOnly:
-    """Plan 003 step 12 (T12): remote-write keeps Jira/Slack/vault ``ask`` semantics for
-    devops, but every GitHub write verb is ``deny`` for every agent (RFC-0007 D31, C1)."""
+    """remote-write keeps Jira/Slack/vault ``ask`` semantics for
+    devops, but every GitHub write verb is ``deny`` for every agent."""
 
     VERBS = (
         "git push *",
-        "gh pr create *",
         "gh pr merge *",
-        "gh pr comment *",
+        "gh pr close *",
         "gh pr review *",
-        "gh pr edit *",
+        "gh pr ready *",
         "gh issue create *",
         "gh issue comment *",
         "gh issue edit *",
@@ -524,7 +523,7 @@ class TestDocsLanguage:
 
 class TestIdentityPolicyBlock:
     """``identity`` in carter.yaml is policy only: ``role`` and ``require_tier``
-    (plan 002 step 12). ``git_account``/``bot_name`` are deprecated and ignored."""
+    . ``git_account``/``bot_name`` are unknown keys since ."""
 
     @staticmethod
     def _load(tmp_path, identity):
@@ -574,14 +573,14 @@ class TestIdentityPolicyBlock:
 
     @pytest.mark.parametrize("value", [True, False])
     def test_nothing_in_carter_yaml_may_loosen_a_control(self, tmp_path, value):
-        # D52: the opt-out lives only in the edit-denied ~/.carter/config.toml.
+        # the opt-out lives only in the edit-denied ~/.carter/config.toml.
         with pytest.raises(ConfigError, match="allow_project_opencode_edit"):
             self._load(tmp_path, {"allow_project_opencode_edit": value})
 
 
 class TestIdentityIsOptional:
-    """Removing the deprecated keys leaves an empty block; dropping the block must
-    not make `carter check` fail with "Missing required keys: identity"."""
+    """An empty identity block, or none, must not make `carter check` fail with
+    "Missing required keys: identity"."""
 
     @staticmethod
     def _write(tmp_path, drop_identity=True, **identity):
@@ -608,7 +607,7 @@ class TestIdentityIsOptional:
         loaded = load_config(self._write(tmp_path, drop_identity=False))
         assert loaded["identity"] == {}
 
-    def test_policy_still_validates_without_the_deprecated_keys(self, tmp_path):
+    def test_policy_validates(self, tmp_path):
         path = self._write(tmp_path, drop_identity=False, role="author", require_tier="t1")
         assert load_config(path)["identity"] == {"role": "author", "require_tier": "t1"}
 
@@ -624,18 +623,6 @@ class TestIdentityIsOptional:
         path.write_text(yaml.dump(cfg))
         with pytest.raises(ConfigError, match="Missing required keys: agents"):
             load_config(path)
-
-    def test_deprecated_keys_still_warn(self, tmp_path):
-        from carter.config import identity_warnings
-
-        path = self._write(tmp_path, drop_identity=False, git_account="me", bot_name="b")
-        warnings = identity_warnings(load_config(path))
-        assert len(warnings) == 2 and all("deprecated" in w for w in warnings)
-
-    def test_no_identity_means_no_warning(self, tmp_path):
-        from carter.config import identity_warnings
-
-        assert identity_warnings(load_config(self._write(tmp_path))) == []
 
     def test_new_workspaces_do_not_write_an_identity_block(self):
         assert "identity" not in generate_default_config()
@@ -675,28 +662,3 @@ class TestIdentityIsOptional:
         assert runner.invoke(main, ["init", str(tmp_path), "--no-git-state"]).exit_code == 0
         result = runner.invoke(main, ["update", str(tmp_path), "--yes"])
         assert result.exit_code == 0, result.output
-
-
-class TestIdentityDeprecations:
-    def test_legacy_keys_warn_once_each_without_values(self):
-        from carter.config import identity_warnings
-
-        warnings = identity_warnings({"identity": {"git_account": "me-secret", "bot_name": "b"}})
-        assert len(warnings) == 2
-        assert any("identity.git_account" in w and "deprecated" in w for w in warnings)
-        assert any("identity.bot_name" in w for w in warnings)
-        assert "me-secret" not in " ".join(warnings)
-
-    def test_policy_keys_and_other_keys_do_not_warn(self):
-        from carter.config import identity_warnings
-
-        assert identity_warnings({"identity": {"role": "author", "require_tier": "t1"}}) == []
-        assert identity_warnings({"identity": {"git_org": "acme"}}) == []
-        assert identity_warnings({"identity": {}}) == []
-        assert identity_warnings({}) == []
-
-    def test_warning_says_where_the_identity_comes_from_now(self):
-        from carter.config import identity_warnings
-
-        (w,) = identity_warnings({"identity": {"bot_name": "x"}})
-        assert "~/.carter/config.toml" in w

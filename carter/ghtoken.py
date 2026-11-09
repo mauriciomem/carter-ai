@@ -1,4 +1,4 @@
-"""The read-only GitHub token: store it, check it (RFC-0007 App C.7; plan 003 step 16).
+"""The read-only GitHub token: store it, check it.
 
 Pure logic for ``carter github-token set|check``: no click, no subprocess, no printing.
 The token lives in ``~/.carter/secrets/gh-read.token`` (dir 0700, file 0600, written
@@ -7,7 +7,7 @@ atomically, no trailing newline) and is only ever sent in an ``Authorization`` h
 value that was supplied.
 
 ``check`` classifies the write probe (``POST repos/{o}/{r}/git/refs`` with an all-zero sha) by
-HTTP status and response text, never by an exit code. Strings are the ones recorded in spike 4
+HTTP status and response text, never by an exit code. Strings are the ones GitHub returns
 (2026-11-02) with a real fine-grained read-only token: 403 ``Resource not accessible by
 personal access token`` means the token cannot write; 422 (or 201) means it can.
 """
@@ -143,8 +143,6 @@ def _record(path: Path, base_dir: Path | None) -> tuple[bool, str]:
     cfg_path = carter_config_path(base_dir)
     try:
         current = load_identity(cfg_path)
-        if current.needs_migration:
-            return False, "config.toml is schema 1; run `carter install` to migrate it first"
         github = Github(read_token_file=str(path))
         write_config(replace(current, github=github, state="current"), cfg_path)
     except (ConfigError, WriterError, OSError):
@@ -219,12 +217,6 @@ def request(
             return Reply(exc.code, exc.read().decode("utf-8", "replace"), _lower(exc.headers))
     except (urllib.error.URLError, OSError, ValueError):
         return Reply(0, "", {})
-
-
-def stored_token(base_dir: Path | None = None) -> str | None:
-    """The stored token if the file passes every check (mode, owner, no link, outside a repo,
-    a ``github_pat_`` value), else ``None``. Callers decide what to say; this never explains."""
-    return _file_items(token_path(base_dir), required=False)[1]
 
 
 def _lower(headers: object) -> dict[str, str]:
@@ -343,7 +335,7 @@ def _probe(base: str, token: str, login: str, base_dir: Path | None) -> list[Ite
         )
     elif verdict == "writable":
         fix = (
-            "revoke it and create a read-only token (Contents and Pull requests: read), "
+            "revoke it and create a token with Contents: read and Pull requests: write, "
             "then run `carter github-token set`"
         )
         item = Item(
@@ -352,7 +344,27 @@ def _probe(base: str, token: str, login: str, base_dir: Path | None) -> list[Ite
     else:
         text = f"unprobed: unexpected answer for {which} (HTTP {reply.status})"
         item = Item("warn", "write probe", text)
-    return [*notes, item]
+    if verdict == "writable":
+        return [*notes, item]
+    return [*notes, item, _pull_request_item(base, token, repo)]
+
+
+def _pull_request_item(base: str, token: str, repo: str) -> Item:
+    """The PR probe: ``POST /pulls`` with an empty body can never create anything. GitHub
+    validates the permission first: 422 = the token may open PRs, 403 = it may not."""
+    reply = request(base, "POST", f"/repos/{repo}/pulls", token, {})
+    if reply.status in (201, 422):
+        return Item(
+            "ok", "pull requests", "agents can open PRs (the token holds Pull requests: write)"
+        )
+    if reply.status == 403 and _NOT_ACCESSIBLE in reply.text:
+        return Item(
+            "warn",
+            "pull requests",
+            "agents can't open PRs",
+            'add "Pull requests: write" to the token (Contents stays read)',
+        )
+    return Item("info", "pull requests", f"unprobed: unexpected answer (HTTP {reply.status})")
 
 
 def _file_items(path: Path, required: bool) -> tuple[list[Item], str | None]:

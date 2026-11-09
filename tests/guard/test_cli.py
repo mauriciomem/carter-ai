@@ -1,4 +1,4 @@
-"""``carter guard install | status | remove`` (plan 003 step 14; App C.6.2, freeze F7-F9).
+"""``carter guard install | status | remove``.
 
 Everything runs under the sandbox home with ``fake_opencode``; the real OpenCode config and
 ``~/.carter`` are never reachable (the session-end host guard would fail the run)."""
@@ -17,12 +17,15 @@ from click.testing import CliRunner, Result
 
 from carter.cli import main
 from carter.guard import gitconfig as gc
+from carter.guard import hooks
+from carter.guard.alias import ALIAS_KEY
 from carter.guard.state import load
 from carter.identity.errors import E_HUMAN_TERMINAL, E_POLICIES_MISSING, E_STATE_INVALID, registry
 from carter.identity.policyset import policy_statements
 from carter.install.mcp import config_target
 from carter.install.paths import backups_dir, carter_gitconfig_path, guard_state_path
-from guard.helpers import agents_json, debug_config, tree_hash
+from guard.conftest import REAL_GIT
+from guard.helpers import STAND_IN, agents_json, debug_config, decline, tree_hash, verbose
 
 BUILTINS = ["build", "plan", "general", "explore"]
 PAT_MESSAGE = (
@@ -41,7 +44,7 @@ SYNTHETIC = Path(__file__).resolve().parents[1] / "data" / "opencode-config-shap
 
 
 def guard(*args: str, input: str | None = None) -> Result:
-    return CliRunner().invoke(main, ["guard", *args], input=input, catch_exceptions=False)
+    return CliRunner().invoke(main, ["guard", *verbose(args)], input=input, catch_exceptions=False)
 
 
 def install_all(stack) -> Result:
@@ -66,18 +69,15 @@ class TestWhoMayRun:
         before = tree_hash(stack.home)
         res = guard(cmd, "--yes")
         assert res.exit_code == 1
-        assert f"Error: {E_HUMAN_TERMINAL}: " in res.output
+        assert E_HUMAN_TERMINAL in res.output
         assert registry()[E_HUMAN_TERMINAL].message in res.output
         assert tree_hash(stack.home) == before
 
-    def test_status_dry_run_and_print_policies_are_allowed_in_an_agent_shell(
-        self, stack, monkeypatch
-    ) -> None:
+    def test_status_and_dry_run_are_allowed_in_an_agent_shell(self, stack, monkeypatch) -> None:
         monkeypatch.setenv("OPENCODE_SESSION_ID", "ses_1")
         stack.fake()
         assert guard("status").exit_code == 0
         assert guard("install", "--dry-run").exit_code == 0
-        assert guard("install", "--print-policies").exit_code == 0
 
     def test_a_non_tty_install_without_yes_is_skipped_with_a_notice_and_exit_0(
         self, stack, human_tty
@@ -92,12 +92,13 @@ class TestWhoMayRun:
         assert not guard_state_path(None).exists() and not config_target(None).exists()
         assert not backups_dir(None).exists()
 
-    def test_a_non_tty_remove_without_yes_is_refused(self, stack, human_tty) -> None:
-        human_tty(False)
+    def test_remove_needs_no_terminal_and_asks_nothing(self, stack, human_tty) -> None:
+        human_tty(False)  # we have backups, so there is nothing to confirm
         install_all(stack)
+        stack.fake(before=debug_config(stack.live), after=debug_config())
         res = guard("remove")
-        assert res.exit_code == 1 and E_HUMAN_TERMINAL in res.output
-        assert guard_state_path(None).exists()
+        assert res.exit_code == 0, res.output
+        assert not guard_state_path(None).exists()
 
     def test_yes_is_the_scripted_path_without_a_tty(self, stack, human_tty) -> None:
         human_tty(False)
@@ -110,22 +111,23 @@ class TestDryRun:
         self, stack, human_tty, fake_opencode
     ) -> None:
         # `debug config` is left unconfigured: a dry run must never call it.
-        fake_opencode(agents_output=agents_json(*BUILTINS, "carter-engineer"))
+        bindir = fake_opencode(agents_output=agents_json(*BUILTINS, "carter-engineer"))
+        (bindir / "git").symlink_to(REAL_GIT)  # the dry run probes git for the hook groups
         before = tree_hash(stack.home)
         res = guard("install", "--dry-run")
         assert res.exit_code == 0, res.output
         out = res.output
         assert "dry run" in out
-        for group in ("g2", "sudo-docker", "read-edit-denies", "config-edit"):
+        for group in ("g2", "hooks", "sudo-docker", "read-edit-denies", "config-edit"):
             assert f"{group:<18} would ask" in out
-        for reserved in ("hooks", "alias", "repo_hooks"):
-            assert f"{reserved:<18} nothing to install in this version" in out
-        assert "+ deny-git-push" in out and "shell:git push *" in out
-        assert "+ allow-gh-pr-view" in out
+        assert f"{'alias':<18} optional, not part of --yes" in out
+        assert f"{'repo_hooks':<18} not on this machine: not needed" in out  # git >= 2.54 here
+        assert "Carter agents would carry" in out and "G2 rule(s)" in out
+        assert "+ deny-git-push" not in out  # no global policies any more
         assert "per-agent denies for built-in agents: build, plan, general, explore" in out
         assert "carter-engineer" not in out
-        assert "include.path: not needed yet (no Carter git keys; slice 2a)" in out
-        assert "plugin and isolation are not installed; literal denies only" in out
+        assert "guard script:" in out and "(would be written)" in out
+        assert "would write" in out and "isolation.json" in out and "plugins/carter/index.ts" in out
         assert tree_hash(stack.home) == before
         for path in (guard_state_path(None), config_target(None), backups_dir(None)):
             assert not path.exists()
@@ -133,13 +135,14 @@ class TestDryRun:
     def test_only_limits_the_preview(self, stack) -> None:
         stack.fake()
         out = guard("install", "--dry-run", "--only", "sudo-docker").output
-        assert "+ deny-sudo" in out and "deny-git-push" not in out
+        assert "would carry 2 G2 rule(s)" in out and "deny-git-push" not in out  # sudo, docker
         assert "per-agent" not in out
 
     def test_a_declined_group_stays_declined_in_the_preview(self, stack, human_tty) -> None:
         human_tty(True)
         stack.fake()
-        guard("install", input="y\nn\ny\ny\n")
+        decline("sudo-docker")
+        guard("install", "--yes")
         out = guard("install", "--dry-run").output
         assert "sudo-docker" in out and "declined earlier" in out
 
@@ -151,9 +154,8 @@ class TestDryRun:
         stack.fake()
         res = guard("install", "--dry-run")
         assert res.exit_code == 0
-        assert "  + deny-git-push" in res.output
+        assert "  + per-agent deny build:carter_push" in res.output
         assert "has comments and rewriting drops them" in res.output
-        assert "--print-policies" in res.output
         assert target.read_bytes() == before
         assert not target.with_name(target.name + ".carter-backup").exists()
 
@@ -173,30 +175,48 @@ class TestInstall:
     def test_with_consent_everything_is_written_and_recorded(self, stack) -> None:
         res = install_all(stack)
         cfg = config_data()
-        effects = [p["effect"] for p in cfg["policies"]]
-        assert effects == sorted(effects, key=lambda e: e == "allow")
-        assert len(cfg["policies"]) == len(stack.live)
+        assert "policies" not in cfg  # the deny set lives in the Carter agents
         assert sorted(cfg["agents"]) == sorted(BUILTINS)  # not carter-engineer
         for name in BUILTINS:
             actions = [r["action"] for r in cfg["agents"][name]["permissions"]]
-            assert actions == ["carter_push", "carter_pr"]
+            assert actions == ["carter_push"]
         state = load(guard_state_path(None))
         assert sorted(g for g, c in state.consents.items() if c["decision"] == "accepted") == [
-            "config-edit", "g2", "read-edit-denies", "sudo-docker",
+            "config-edit", "g2", "hooks", "read-edit-denies", "sudo-docker",
         ]  # fmt: skip
-        assert len(state.owned_policies()) == len(stack.live) and len(state.agent_permissions) == 8
+        assert state.opencode_policies == [] and len(state.agent_permissions) == 4
         assert state.opencode_config == str(config_target(None))
-        assert state.gitconfig is None and state.files == [] and state.guard_version is None
+        assert state.gitconfig is not None and state.guard_version == hooks.GUARD_VERSION
+        assert sorted(Path(f["path"]).name for f in state.files) == [
+            "broker.ts", "carter-guard", "core.ts", "gitconfig", "index.ts", "isolation.json",
+            "opencode-headless.json",
+        ]  # fmt: skip
         assert stat.S_IMODE(guard_state_path(None).stat().st_mode) == 0o600
-        assert "plugin and isolation are not installed; literal denies only" in res.output
-        assert "restart" not in res.output.lower()
-        assert "include.path: not needed yet" in res.output
+        assert "plugin installed:" in res.output and "restart the OpenCode server" in res.output
+        assert "git config: 8 key(s), mode include" in res.output
 
-    def test_nothing_is_written_to_the_real_git_config_in_1g(self, stack, home: Path) -> None:
-        before = Path(os.environ["GIT_CONFIG_GLOBAL"]).read_bytes()
+    def test_the_hooks_group_writes_the_script_the_gitconfig_and_one_include_line(
+        self, stack, home: Path
+    ) -> None:
+        before = Path(os.environ["GIT_CONFIG_GLOBAL"]).read_text()
         install_all(stack)
-        assert Path(os.environ["GIT_CONFIG_GLOBAL"]).read_bytes() == before
-        assert not carter_gitconfig_path(None).exists()
+        script = hooks.script_path(None)
+        assert stat.S_IMODE(script.stat().st_mode) == 0o755
+        got = subprocess.run(
+            ["git", "config", "--file", str(carter_gitconfig_path(None)), "--get-all",
+             "hook.carter-guard-pre-push.command"],
+            capture_output=True, text=True, check=True,
+        ).stdout  # fmt: skip
+        assert got.rstrip("\n") == hooks.hook_command(script)  # `;` and `#` survive the file
+        assert Path(os.environ["GIT_CONFIG_GLOBAL"]).read_text() == (
+            before + f"[include]\n\tpath = {carter_gitconfig_path(None)}\n"
+        )
+        state = load(guard_state_path(None))
+        assert state.gitconfig == {
+            "file": os.environ["GIT_CONFIG_GLOBAL"],
+            "key": "include.path",
+            "value": str(carter_gitconfig_path(None)),
+        }
 
     def test_a_second_run_changes_nothing(self, stack) -> None:
         install_all(stack)
@@ -206,57 +226,81 @@ class TestInstall:
         assert res.exit_code == 0 and "already up to date" in res.output
         assert (config_target(None).read_bytes(), guard_state_path(None).read_bytes()) == files
 
-    def test_a_tty_asks_per_group_with_the_effect_line(self, stack, human_tty) -> None:
+    def test_a_tty_gets_one_question_with_a_short_summary(self, stack, human_tty) -> None:
         human_tty(True)
         stack.fake()
-        res = guard("install", input="y\nn\ny\ny\n")
+        res = CliRunner().invoke(main, ["guard", "install"], input="y\n")  # no -v
         assert res.exit_code == 0, res.output
-        assert "g2: agents can't push or write to GitHub" in res.output
-        assert (
-            "sudo-docker: agents can't run sudo/docker; Packer docker builds must be typed"
-            in res.output
+        assert res.output.count("Install?") == 1 and "[Y/n]" in res.output
+        assert "Install this group?" not in res.output
+        head = res.output.split("Install?")[0]
+        assert len([ln for ln in head.splitlines() if ln.strip()]) <= 6  # a short summary
+        assert "Carter will set up: g2, hooks, sudo-docker" in head
+        state = load(guard_state_path(None))
+        assert {"g2", "hooks", "sudo-docker", "read-edit-denies", "config-edit"} <= set(
+            state.consents
         )
+        assert all(r["decision"] == "accepted" for r in state.consents.values())
+        assert "alias" not in state.consents  # optional: only --only brings it
+        assert res.output.splitlines()[-1].startswith("✓ guards installed")
+
+    def test_enter_is_yes_and_no_installs_nothing(self, stack, human_tty) -> None:
+        human_tty(True)
+        stack.fake()
+        before = tree_hash(stack.home)
+        no = guard("install", input="n\n")
+        assert no.exit_code == 0 and "Nothing installed" in no.output
+        assert tree_hash(stack.home) == before and not guard_state_path(None).exists()
+        assert guard("install", input="\n").exit_code == 0
+        assert load(guard_state_path(None)).consents
+
+    def test_yes_skips_the_question(self, stack, human_tty) -> None:
+        human_tty(True)
+        stack.fake()
+        res = guard("install", "--yes")  # no input: a question would abort
+        assert res.exit_code == 0 and "Install?" not in res.output
+
+    def test_a_declined_group_stays_declined_and_is_not_asked_again(self, stack, human_tty) -> None:
+        human_tty(True)
+        stack.fake()
+        decline("sudo-docker")
+        res = guard("install", input="y\n")
+        assert res.exit_code == 0, res.output
         state = load(guard_state_path(None))
         assert state.consents["sudo-docker"]["decision"] == "declined"
-        assert "deny-sudo" not in [p["id"] for p in state.opencode_policies]
-        assert "Declined: sudo-docker" in res.output
-        assert not [p for p in config_data()["policies"] if p["resource"].startswith("shell:sudo")]
+        assert "sudo-docker" not in res.output.split("Install?")[0].split("up: ")[1].split("\n")[0]
 
     def test_only_installs_just_those_groups(self, stack) -> None:
-        stack.fake(after=debug_config(policy_statements(("sudo-docker",), home=str(stack.home))))
+        stack.fake()
         res = guard("install", "--yes", "--only", "sudo-docker")
         assert res.exit_code == 0, res.output
         state = load(guard_state_path(None))
         assert list(state.consents) == ["sudo-docker"] and state.agent_permissions == []
-        assert "agents" not in config_data()
+        assert not config_target(None).exists()  # nothing global to write for this group
 
     def test_an_unknown_group_is_a_usage_error_naming_the_valid_ones(self, stack) -> None:
         res = guard("install", "--yes", "--only", "g2,nope")
         assert res.exit_code == 2
         assert "nope" in res.output and "valid groups: g2, hooks, sudo-docker" in res.output
 
-    def test_reserved_groups_are_noted_and_never_recorded(self, stack) -> None:
+    def test_unavailable_groups_are_noted_and_never_recorded(self, stack) -> None:
         stack.fake()
-        res = guard("install", "--yes", "--only", "hooks,alias,repo_hooks")
+        res = guard("install", "--yes", "--only", "repo_hooks")
         assert res.exit_code == 0
-        assert res.output.count("nothing to install for") == 3
+        assert "`repo_hooks`: not needed" in res.output  # git >= 2.54 on the test host
         assert not guard_state_path(None).exists() and not config_target(None).exists()
 
-    def test_print_policies_equals_the_block_and_writes_nothing(self, stack) -> None:
-        from carter.guard.policies import render_snippet
-
-        before = tree_hash(stack.home)
-        res = guard("install", "--print-policies")
-        assert res.exit_code == 0
-        assert res.output.rstrip("\n") == render_snippet(stack.live).rstrip("\n")
-        assert json.loads(res.output)["policies"]
-        assert tree_hash(stack.home) == before
-
-    def test_print_policies_respects_only(self, stack) -> None:
-        res = guard("install", "--print-policies", "--only", "sudo-docker")
-        assert [p["resource"] for p in json.loads(res.output)["policies"]] == [
-            "shell:sudo *", "shell:docker *",
-        ]  # fmt: skip
+    def test_the_optional_alias_is_installed_only_by_name(self, stack) -> None:
+        stack.fake()
+        bare = guard("install", "--yes", "--only", "hooks,alias")
+        assert bare.exit_code == 0, bare.output
+        state = load(guard_state_path(None))
+        assert state.consents["alias"]["decision"] == "accepted"
+        got = subprocess.run(
+            ["git", "config", "--file", str(carter_gitconfig_path(None)), "--get", ALIAS_KEY],
+            capture_output=True, text=True, check=True,
+        ).stdout  # fmt: skip
+        assert got.rstrip("\n") == '!cd "${GIT_PREFIX:-.}" && carter commit'
 
     def test_a_user_config_is_merged_comments_are_backed_up_and_providers_survive(
         self, stack
@@ -274,18 +318,6 @@ class TestInstall:
         backup = next(backups_dir(None).glob("*/" + target.name))
         assert backup.read_bytes() == original
 
-    def test_a_lost_statement_rolls_everything_back_and_leaves_the_state_alone(self, stack) -> None:
-        target = config_target(None)
-        target.parent.mkdir(parents=True)
-        target.write_text('{"model": "x"}\n')
-        original = target.read_bytes()
-        stack.fake(after=debug_config(stack.live[1:]))  # OpenCode dropped the first statement
-        res = guard("install", "--yes")
-        assert res.exit_code == 1
-        assert f"Error: {E_POLICIES_MISSING}" in res.output and "deny-git-push" in res.output
-        assert target.read_bytes() == original and not guard_state_path(None).exists()
-        assert "sk-SENTINEL" not in res.output  # provider settings never reach the terminal
-
     def test_a_lost_provider_rolls_back(self, stack) -> None:
         stack.fake(after=debug_config(stack.live, providers={}))
         res = guard("install", "--yes")
@@ -302,16 +334,14 @@ class TestInstall:
         res = guard("install", "--yes")  # no fake requested: the guard stub exits 97
         assert res.exit_code == 1 and not config_target(None).exists()
 
-    def test_a_preexisting_statement_is_left_and_recorded_as_yours(self, stack) -> None:
+    def test_a_statement_of_yours_in_the_config_is_never_touched(self, stack) -> None:
         mine = {"action": "tool.use", "resource": "shell:sudo *", "effect": "deny"}
         target = config_target(None)
         target.parent.mkdir(parents=True)
         target.write_text(json.dumps({"policies": [mine]}))
         install_all(stack)
-        state = load(guard_state_path(None))
-        flags = {p["id"]: p["preexisting"] for p in state.opencode_policies}
-        assert flags["deny-sudo"] is True and flags["deny-docker"] is False
-        assert config_data()["policies"][0] == mine
+        assert config_data()["policies"] == [mine]  # Carter adds and removes no policies
+        assert load(guard_state_path(None)).opencode_policies == []
 
 
 class TestStateGuards:
@@ -326,15 +356,18 @@ class TestStateGuards:
         assert len(moved) == 1 and moved[0].read_text() == "{broken"
         assert load(path).consents
 
-    def test_a_corrupt_state_stays_when_the_human_says_no(self, stack, human_tty) -> None:
+    def test_a_corrupt_state_is_moved_aside_without_a_second_question(
+        self, stack, human_tty
+    ) -> None:
         human_tty(True)
         path = guard_state_path(None)
         path.parent.mkdir(parents=True)
         path.write_text("{broken")
         stack.fake()
-        res = guard("install", input="n\n")
-        assert res.exit_code == 1 and path.read_text() == "{broken"
-        assert not list(path.parent.glob("*.corrupt-*")) and not config_target(None).exists()
+        res = guard("install", input="y\n")  # the one question; moving a file aside asks nothing
+        assert res.exit_code == 0 and res.output.count("Install?") == 1
+        moved = list(path.parent.glob("guard-state.json.corrupt-*"))
+        assert len(moved) == 1 and moved[0].read_text() == "{broken"
 
     def test_a_newer_schema_is_refused_and_never_rewritten(self, stack) -> None:
         path = guard_state_path(None)
@@ -342,16 +375,16 @@ class TestStateGuards:
         path.write_text('{"schema": 2}')
         stack.fake()
         res = guard("install", "--yes")
-        assert res.exit_code == 1 and f"Error: {E_STATE_INVALID}" in res.output
+        assert res.exit_code == 1 and E_STATE_INVALID in res.output
         assert path.read_text() == '{"schema": 2}' and not config_target(None).exists()
 
 
 class TestGitStepAtomicity:
-    """In 1G Carter has no git key, so these inject one to exercise the machinery."""
+    """Carter has no git key by default, so these inject one to exercise the machinery."""
 
     @pytest.fixture
     def with_entry(self, monkeypatch: pytest.MonkeyPatch):
-        monkeypatch.setattr(gc, "carter_git_entries", lambda: [("carter.tier", "t1")])
+        monkeypatch.setattr(gc, "carter_git_entries", STAND_IN)
 
     def test_the_git_step_writes_file_and_include_and_records_them(self, stack, with_entry) -> None:
         res = install_all(stack)
@@ -360,10 +393,10 @@ class TestGitStepAtomicity:
         state = load(guard_state_path(None))
         assert state.gitconfig["value"] == str(carter) and state.owned_unchanged(carter)
         out = subprocess.run(
-            ["git", "config", "--global", "--includes", "--get", "carter.tier"],
+            ["git", "config", "--global", "--includes", "--get", "alias.ai-commit"],
             capture_output=True, text=True,
         )  # fmt: skip
-        assert out.stdout.strip() == "t1"
+        assert out.stdout.strip() == "!true"
 
     def test_a_git_failure_restores_the_config_and_keeps_the_previous_state(
         self, stack, with_entry, monkeypatch
@@ -392,7 +425,7 @@ class TestGitStepAtomicity:
     def test_a_failure_keeps_earlier_ownership_intact(self, stack, monkeypatch) -> None:
         install_all(stack)
         before = guard_state_path(None).read_bytes()
-        monkeypatch.setattr(gc, "carter_git_entries", lambda: [("carter.tier", "t1")])
+        monkeypatch.setattr(gc, "carter_git_entries", STAND_IN)
         monkeypatch.setattr(gc, "add_include", _raises(gc.GitError("no")))
         stack.fake(before=debug_config(stack.live))
         assert guard("install", "--yes").exit_code == 1
@@ -412,34 +445,37 @@ class TestD52:
         ws = tmp_path / "proj"
         ws.mkdir()
         self.write_toml(home, ws)
-        from carter.guard import optout
+        stack.fake()
+        assert CliRunner().invoke(main, ["install", "--yes"], catch_exceptions=False).exit_code == 0
+        agent = home / ".config" / "opencode" / "agents" / "carter-engineer.md"
+        import yaml
 
-        extra = optout.optout_statements([str(ws.resolve())])
-        stack.live = stack.live + extra
-        install_all(stack)
-        data = config_data()
+        rules = yaml.safe_load(agent.read_text().split("---", 2)[1])["permissions"]
         allows = [
-            p["resource"]
-            for p in data["policies"]
-            if p["resource"].startswith(f"edit:{ws.resolve()}")
+            r["resource"]
+            for r in rules
+            if r["action"] == "edit"
+            and r["effect"] == "allow"
+            and r["resource"].startswith(str(ws.resolve()))
         ]
-        assert len(allows) == 3
+        assert len(allows) == 3  # the opt-out is part of the Carter agents' permissions
 
-    def test_a_no_to_the_question_skips_only_the_opt_outs(
+    def test_opt_outs_come_with_the_one_question_not_a_second_one(
         self, stack, home: Path, tmp_path: Path, human_tty
     ) -> None:
         human_tty(True)
         ws = tmp_path / "proj"
         ws.mkdir()
         self.write_toml(home, ws)
+        from carter.guard import optout
+
+        extra = optout.optout_statements([str(ws.resolve())])
+        stack.live = stack.live + extra
         stack.fake()
-        res = guard("install", input="y\ny\ny\ny\nn\n")
+        res = guard("install", input="y\n")
         assert res.exit_code == 0, res.output
-        assert "Active D52 opt-outs" in res.output and str(ws.resolve()) in res.output
-        assert "Opt-outs not applied." in res.output
-        assert not [
-            p for p in config_data()["policies"] if p["resource"].startswith(f"edit:{ws.resolve()}")
-        ]
+        assert res.output.count("Install?") == 1 and "Apply these opt-outs" not in res.output
+        assert "Active opt-outs" in res.output and str(ws.resolve()) in res.output
 
 
 class TestStatus:
@@ -447,7 +483,7 @@ class TestStatus:
         before = tree_hash(stack.home)
         res = guard("status")
         assert res.exit_code == 0 and "absent (nothing installed)" in res.output
-        assert "Plugin: not installed (slice 2a)" in res.output
+        assert "Plugin: not installed" in res.output
         assert tree_hash(stack.home) == before
 
     def test_after_install_lists_consents_and_loaded_statements(self, stack) -> None:
@@ -457,24 +493,19 @@ class TestStatus:
         res = guard("status")
         out = res.output
         assert res.exit_code == 0
-        assert "g2                 accepted" in out and "hooks, alias, repo_hooks: reserved" in out
-        assert "loaded   deny-git-push" in out and "MISSING" not in out
+        assert (
+            "g2                 accepted" in out
+            and "alias              optional, not installed" in out
+        )
+        assert "no global policies" in out and "MISSING" not in out
         assert "Per-agent denies recorded for: build, explore, general, plan" in out
-        assert "include.path: not needed yet" in out
+        assert "include.path: present in" in out and "ok      " in out
         assert tree_hash(stack.home) == before
 
-    def test_a_missing_statement_is_reported_per_statement(self, stack) -> None:
-        install_all(stack)
-        stack.fake(before=debug_config(stack.live[2:]))
-        out = guard("status").output
-        assert "MISSING  deny-git-push" in out and "MISSING  deny-git-send-pack" in out
-        assert "loaded   deny-gh" in out
-        assert "re-run `carter guard install`" in out
-
     def test_declined_groups_are_residuals(self, stack, human_tty) -> None:
-        human_tty(True)
         stack.fake()
-        guard("install", input="y\nn\ny\ny\n")
+        decline("sudo-docker")
+        guard("install", "--yes")
         out = guard("status").output
         assert "sudo-docker" in out and "declined" in out and "residual" in out
 
@@ -509,19 +540,13 @@ class TestStatus:
         f.unlink()
         assert f"MISSING {f}" in guard("status").output
 
-    def test_opencode_failing_is_reported_not_raised(self, stack, fake_opencode) -> None:
-        install_all(stack)
-        fake_opencode(config_output="boom", config_exit=1)
-        res = guard("status")
-        assert res.exit_code == 0 and "cannot verify" in res.output
-
 
 class TestRemove:
     def test_tears_down_policies_permissions_and_state(self, stack, human_tty) -> None:
         human_tty(True)
         install_all(stack)
         stack.fake(before=debug_config(stack.live), after=debug_config())
-        res = guard("remove", input="y\n")
+        res = guard("remove")  # no input: it asks nothing
         assert res.exit_code == 0, res.output
         assert config_data() == {}
         assert not guard_state_path(None).exists()
@@ -548,15 +573,19 @@ class TestRemove:
         stack.fake(before=debug_config(stack.live), after=debug_config())
         assert "gh-read.token" not in guard("remove", "--yes").output
 
-    def test_an_edited_statement_is_kept_and_reported(self, stack) -> None:
+    def test_an_edited_per_agent_deny_is_kept_and_reported(self, stack) -> None:
         install_all(stack)
         cfg = config_data()
-        cfg["policies"][0]["resource"] = "shell:git push --mine *"
+        cfg["agents"]["build"]["permissions"][0]["effect"] = "allow"
         config_target(None).write_text(json.dumps(cfg))
         stack.fake(before=debug_config(), after=debug_config())
         res = guard("remove", "--yes")
-        assert "kept deny-git-push: edited since Carter wrote it" in res.output
-        assert config_data()["policies"] == [cfg["policies"][0]]
+        assert "kept build:carter_push: edited since Carter wrote it" in res.output
+        assert config_data()["agents"] == {
+            "build": {
+                "permissions": [{"action": "carter_push", "resource": "*", "effect": "allow"}]
+            }
+        }
 
     def test_removing_twice_is_a_no_op(self, stack) -> None:
         install_all(stack)
@@ -571,23 +600,27 @@ class TestRemove:
         guard("remove", "--yes")
         stack.fake()
         assert guard("install", "--yes").exit_code == 0
-        assert len(load(guard_state_path(None)).owned_policies()) == len(stack.live)
+        assert len(load(guard_state_path(None)).agent_permissions) == 4
 
     def test_dry_run_writes_nothing(self, stack) -> None:
         install_all(stack)
         before = tree_hash(stack.home)
         stack.fake()
         res = guard("remove", "--dry-run")
-        assert res.exit_code == 0 and "dry run" in res.output and "- deny-git-push" in res.output
+        assert (
+            res.exit_code == 0 and "dry run" in res.output and "- build:carter_push" in res.output
+        )
         assert tree_hash(stack.home) == before
 
-    def test_a_no_answer_removes_nothing_and_exits_1(self, stack, human_tty) -> None:
+    def test_a_normal_run_is_one_line(self, stack, human_tty) -> None:
         human_tty(True)
         install_all(stack)
-        before = tree_hash(stack.home)
-        res = guard("remove", input="n\n")
-        assert res.exit_code == 1 and "Nothing was removed" in res.output
-        assert tree_hash(stack.home) == before
+        stack.fake(before=debug_config(stack.live), after=debug_config())
+        from carter import ui
+
+        ui.configure(verbose=False)  # install_all() above ran with -v
+        res = CliRunner().invoke(main, ["guard", "remove"], catch_exceptions=False)
+        assert res.exit_code == 0 and res.output == "✓ guards removed\n"
 
     def test_only_removes_one_group_and_its_consent(self, stack) -> None:
         install_all(stack)
@@ -597,7 +630,7 @@ class TestRemove:
         assert res.exit_code == 0, res.output
         state = load(guard_state_path(None))
         assert "sudo-docker" not in state.consents and "g2" in state.consents
-        assert not [p for p in config_data()["policies"] if p["resource"].startswith("shell:sudo")]
+        assert "policies" not in config_data()
 
     def test_a_corrupt_state_is_not_removed_blindly(self, stack) -> None:
         path = guard_state_path(None)
@@ -611,7 +644,7 @@ class TestRemove:
     ) -> None:
         install_all(stack)
         kept = home / ".carter" / "isolation.json"
-        kept.write_text("{}")  # not recorded as ours
+        kept.write_text("{}")  # recorded, but changed since: kept
         ours = home / ".carter" / "opencode-headless.json"
         ours.write_text("{}")
         state = load(guard_state_path(None))
@@ -622,10 +655,10 @@ class TestRemove:
         stack.fake(before=debug_config(stack.live), after=debug_config())
         out = guard("remove", "--yes").output
         assert kept.exists() and not ours.exists()
-        assert f"kept {kept}: not recorded as Carter's" in out and f"removed {ours}" in out
+        assert f"kept {kept}: changed since Carter wrote it" in out and f"removed {ours}" in out
 
     def test_git_config_is_undone_in_teardown_order(self, stack, monkeypatch) -> None:
-        monkeypatch.setattr(gc, "carter_git_entries", lambda: [("carter.tier", "t1")])
+        monkeypatch.setattr(gc, "carter_git_entries", STAND_IN)
         install_all(stack)
         carter = carter_gitconfig_path(None)
         global_cfg = Path(os.environ["GIT_CONFIG_GLOBAL"])
@@ -636,7 +669,7 @@ class TestRemove:
         assert str(carter) not in global_cfg.read_text()
 
     def test_a_user_edited_carter_gitconfig_is_kept(self, stack, monkeypatch) -> None:
-        monkeypatch.setattr(gc, "carter_git_entries", lambda: [("carter.tier", "t1")])
+        monkeypatch.setattr(gc, "carter_git_entries", STAND_IN)
         install_all(stack)
         carter = carter_gitconfig_path(None)
         carter.write_text(carter.read_text() + "[user]\n\tname = mine\n")
@@ -648,4 +681,4 @@ class TestRemove:
 def test_guard_help_lists_the_three_commands() -> None:
     out = CliRunner().invoke(main, ["guard", "--help"]).output
     assert all(cmd in out for cmd in ("install", "status", "remove"))
-    assert "reset-b" not in CliRunner().invoke(main, ["guard", "status", "--help"]).output
+    assert "--reset-b" in CliRunner().invoke(main, ["guard", "status", "--help"]).output

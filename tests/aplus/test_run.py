@@ -1,4 +1,4 @@
-"""The one subprocess entry of A+ (plan 003 step 18): a scrubbed environment, hardened git."""
+"""The one subprocess entry of `carter push`: a scrubbed environment, hardened git."""
 
 from __future__ import annotations
 

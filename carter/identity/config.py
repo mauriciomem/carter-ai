@@ -1,6 +1,6 @@
 """Read ``~/.carter/config.toml`` with ``tomllib``. Reads never write.
 
-Two entry points with separate failure modes (RFC-0007 §4.1, rv1-eng B5):
+Two entry points with separate failure modes:
 
 * ``load_identity()`` is strict. Anything wrong in a file that exists raises
   ``ConfigError`` (``E-CONFIG``) so callers disable agent commits; it never falls back
@@ -8,9 +8,8 @@ Two entry points with separate failure modes (RFC-0007 §4.1, rv1-eng B5):
 * ``load_footer()`` is lenient. The footer is not identity, so a broken file yields the
   default footer plus a warning.
 
-A schema-1 file (no ``schema`` key, or ``schema = 1``) is *recognised*, not read: the
-result has ``state == "needs_migration"`` and default (T0) identity. Nothing in it is
-reinterpreted as a schema-2 identity.
+A missing ``schema`` key is read as 2. Keys the model does not know are listed in
+``unknown_keys`` (``carter check --host`` reports them); they never fail the read.
 """
 
 from __future__ import annotations
@@ -33,6 +32,8 @@ from carter.identity.schema import (
 )
 
 DEFAULT_FOOTER = Attribution().footer
+
+
 _T = TypeVar("_T")
 
 
@@ -73,11 +74,10 @@ def read_document(path: Path) -> dict[str, Any] | None:
         raise ConfigError(f"TOML syntax error: {exc}") from exc
 
 
-def _schema_of(doc: dict[str, Any]) -> int:
-    value = doc.get(KEY_SCHEMA, 1)  # no key = schema 1
-    if isinstance(value, bool) or not isinstance(value, int) or value not in (1, SCHEMA_VERSION):
-        raise ConfigError(f"unsupported {KEY_SCHEMA} value (expected 1 or {SCHEMA_VERSION})")
-    return value
+def _check_schema(doc: dict[str, Any]) -> None:
+    value = doc.get(KEY_SCHEMA, SCHEMA_VERSION)  # no key = the current schema
+    if type(value) is not int or value != SCHEMA_VERSION:
+        raise ConfigError(f"unsupported {KEY_SCHEMA} value (expected {SCHEMA_VERSION})")
 
 
 def _type_ok(value: Any, hint: Any) -> bool:
@@ -129,14 +129,23 @@ def _known_tree() -> dict[str, Any]:
     return tree
 
 
-def _unknown_keys(doc: dict[str, Any]) -> tuple[str, ...]:
+def unknown_keys(doc: dict[str, Any]) -> tuple[str, ...]:
     """Dotted paths in ``doc`` that schema 2 does not model (a rewrite would lose them)."""
     unknown: list[str] = []
+
+    def leaves(node: dict[str, Any], prefix: str) -> None:
+        for key, value in node.items():
+            if isinstance(value, dict) and value:
+                leaves(value, f"{prefix}{key}.")
+            else:
+                unknown.append(f"{prefix}{key}")
 
     def walk(node: dict[str, Any], known: dict[str, Any], prefix: str) -> None:
         for key, value in node.items():
             if key not in known:
-                unknown.append(f"{prefix}{key}")
+                leaves(
+                    {key: value}, prefix
+                )  # a whole unknown table names its keys (git.signing_key)
             elif isinstance(known[key], dict) and isinstance(value, dict):
                 walk(value, known[key], f"{prefix}{key}.")
 
@@ -156,8 +165,7 @@ def parse_identity(doc: dict[str, Any] | None) -> IdentityConfig:
     """Build the typed config from a parsed TOML document (``None``/empty = no file)."""
     if not doc:
         return IdentityConfig(state="absent")
-    if _schema_of(doc) == 1:
-        return IdentityConfig(state="needs_migration", schema=1)
+    _check_schema(doc)
 
     parts: dict[str, Any] = {
         attr: _build(cls, _dig(doc, p), ".".join(p)) for attr, p, cls in SECTIONS
@@ -169,7 +177,7 @@ def parse_identity(doc: dict[str, Any] | None) -> IdentityConfig:
         key: _build(Workspace, table, f"{TABLE_WORKSPACES}.<path>") for key, table in raw_ws.items()
     }
     return IdentityConfig(
-        **parts, workspaces=workspaces, state="current", unknown_keys=_unknown_keys(doc)
+        **parts, workspaces=workspaces, state="current", unknown_keys=unknown_keys(doc)
     )
 
 
@@ -177,7 +185,8 @@ def load_footer(path: Path | None = None) -> FooterResult:
     """Load only the footer. Never raises: a broken file degrades to the default."""
     try:
         doc = read_document(path or default_path())
-        footer = _build(Attribution, _dig(doc or {}, ("attribution",)), "attribution").footer
+        built = _build(Attribution, _dig(doc or {}, ("attribution",)), "attribution")
+        footer = built.footer
     except ConfigError as exc:
         return FooterResult(DEFAULT_FOOTER, f"footer: using the default ({exc.detail})")
     return FooterResult(footer)

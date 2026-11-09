@@ -15,8 +15,10 @@ from pathlib import Path
 from typing import Any
 
 from carter.identity import ConfigError, load_footer, load_identity, resolve
+from carter.identity.coauthor import cached_link, human_identity
 from carter.identity.config import DEFAULT_FOOTER, default_path
-from carter.identity.trailer import coauthor_trailer
+from carter.identity.errors import E_HUMAN_IDENTITY
+from carter.identity.trailer import coauthor_trailer, noreply_email
 from carter.identity.workspace import workspace_key
 
 
@@ -32,7 +34,12 @@ class Config:
     role_source: str = ""
     commits: str = "refused"
     refusal_reason: str = ""
+    mode: str = "interactive"  # `review` in a CI review run (context E): commits are refused
     coauthor_trailer: str = ""
+    author: str = ""  # "human" or "llm": who git records as the author
+    committer: str = ""  # "human" below T2, "llm" at T2
+    signer_fpr: str = ""  # the LLM key's fingerprint at T2 (public), else ""
+    coauthor_linked: bool = False  # a Co-authored-by with a noreply address GitHub credits
     warnings: tuple[str, ...] = ()
 
     @classmethod
@@ -64,13 +71,37 @@ class Config:
             workspace=workspace if workspace is not None else workspace_key(),
             env=os.environ if env is None else env,
         )
+        trailer = coauthor_trailer(parsed, res)
+        warnings = list(res.warnings)
+        refusal, linked = res.refusal_reason, trailer.startswith("Co-authored-by:")
+        if res.role == "author" and res.tier == "t2" and res.commits == "allowed":
+            # Role author: the trailer credits the human, read from git config in the working
+            # directory; `linked` comes from the cache only (no network, no gh here).
+            human = human_identity(os.getcwd(), noreply_email(parsed))
+            if human.ok:
+                trailer = human.trailer
+                linked = bool(cached_link(human.email))
+                if not linked:
+                    warnings.append(
+                        "your git email is not known to be linked to a GitHub account: the "
+                        "Co-authored-by line may give you no credit (run `carter identity add` "
+                        "or `carter check --host` in your own terminal to check)"
+                    )
+            else:
+                trailer, refusal, linked = "", E_HUMAN_IDENTITY, False
+                warnings.append(f"human identity: {human.problem}")
         return cls(
             **common,
+            author="llm" if res.role == "author" and res.tier == "t2" and not refusal else "human",
+            committer="llm" if res.tier == "t2" and not refusal else "human",
+            signer_fpr=parsed.signing.fingerprint if res.tier == "t2" else "",
+            coauthor_linked=linked,
             tier=res.tier,
             role=res.role,
             role_source=res.role_source,
-            commits=res.commits,
-            refusal_reason=res.refusal_reason,
-            coauthor_trailer=coauthor_trailer(parsed, res),
-            warnings=res.warnings,
+            mode=res.mode,
+            commits="refused" if refusal else res.commits,
+            refusal_reason=refusal,
+            coauthor_trailer=trailer,
+            warnings=tuple(warnings),
         )

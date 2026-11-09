@@ -3,7 +3,7 @@
 ``carter check`` runs ``opencode debug agents`` in the workspace. On OpenCode 2.1.4
 that prints a JSON list of agents (``id``, ``permissions`` as ``{action, resource,
 effect}`` rules, ...). OpenCode silently drops an agent file it rejects (malformed
-YAML, a V1 ``tools:`` list, ...), so a missing id is the signal.
+YAML, an unknown key, ...), so a missing id is the signal.
 
 Behaviour notes:
 
@@ -29,6 +29,7 @@ Behaviour notes:
 
 from __future__ import annotations
 
+import fnmatch
 import json
 import os
 import shutil
@@ -138,7 +139,7 @@ def _diff(
         if loaded is None:
             missing.append(
                 f"{name}: not loaded by OpenCode — its agent file is likely malformed "
-                "or uses a key OpenCode rejects (e.g. a V1 `tools:` list). "
+                "or uses a key OpenCode rejects. "
                 "Run `carter update` to re-render it."
             )
             continue
@@ -238,7 +239,7 @@ class DebugConfigError(Exception):
     """``opencode debug config`` could not be read or parsed.
 
     The message never carries OpenCode's output: the resolved config holds provider
-    settings (RFC-0007 App C.6.3), so only exit codes and parser positions are reported."""
+    settings, so only exit codes and parser positions are reported."""
 
 
 def read_debug_config(
@@ -320,7 +321,7 @@ def _resolve(data: Any) -> dict[str, Any]:
         info = source.get("info")
         if not isinstance(info, dict):
             raise _bad("a config document has no info object")
-        for block in ("policies", "providers", "provider"):
+        for block in ("policies", "providers"):
             kind = list if block == "policies" else dict
             if block in info and not isinstance(info[block], kind):
                 raise _bad(f"`{block}` has an unexpected type")
@@ -329,32 +330,18 @@ def _resolve(data: Any) -> dict[str, Any]:
 
 
 def provider_ids(debug_config: Mapping[str, Any]) -> set[str]:
-    """Provider ids in a resolved config (V2 ``providers``; V1's ``provider`` is accepted)."""
-    ids: set[str] = set()
-    for key in ("providers", "provider"):
-        block = debug_config.get(key)
-        if isinstance(block, dict):
-            ids |= {str(k) for k in block}
-    return ids
+    """Provider ids in a resolved config (``providers``)."""
+    block = debug_config.get("providers")
+    return {str(k) for k in block} if isinstance(block, dict) else set()
 
 
 def policy_statements(debug_config: Mapping[str, Any]) -> list[dict[str, Any]]:
-    """The ``{action, resource, effect}`` statements OpenCode resolved, in order.
-
-    Reads ``policies`` and the older ``experimental.policies`` spelling."""
-    found: list[dict[str, Any]] = []
-    experimental = debug_config.get("experimental")
-    sources = [
-        debug_config.get("policies"),
-        experimental.get("policies") if isinstance(experimental, dict) else None,
-    ]
-    for block in sources:
-        if isinstance(block, list):
-            found += [s for s in block if isinstance(s, dict)]
-    return found
+    """The ``{action, resource, effect}`` statements OpenCode resolved, in order."""
+    block = debug_config.get("policies")
+    return [s for s in block if isinstance(s, dict)] if isinstance(block, list) else []
 
 
-def read_agent_ids(
+def read_agents(
     *,
     runner: Callable[..., Any] = subprocess.run,
     which: Callable[[str], str | None] | None = None,
@@ -363,14 +350,12 @@ def read_agent_ids(
     sleep: Callable[[float], None] | None = None,
     attempts: int = DEFAULT_ATTEMPTS,
     backoff: Sequence[float] = DEFAULT_BACKOFF,
-) -> list[str]:
-    """Ids of every agent OpenCode knows (`opencode debug agents`, cwd ``$HOME``), in order.
+) -> list[dict[str, Any]]:
+    """Every agent OpenCode knows, with its resolved ``permissions`` (`opencode debug agents`).
 
-    Used to find the built-in agents (`build`, `plan`, ...) that need Carter's per-agent
-    denies. The first call after OpenCode's service starts can print ``[]`` (observed on
-    2.1.4); an empty list is never real (the built-ins always exist), so it is retried with
-    the same bounded backoff as ``validate_agents``. Raises ``DebugConfigError`` (same typed
-    failure as the config reader)."""
+    The first call after OpenCode's service starts can print ``[]`` (observed on 2.1.4); an
+    empty list is never real (the built-ins always exist), so it is retried with the same
+    bounded backoff as ``validate_agents``. Raises ``DebugConfigError``."""
     opencode = (which or _which)("opencode")
     if not opencode:
         raise DebugConfigError("opencode not found on PATH")
@@ -385,7 +370,45 @@ def read_agent_ids(
             raise DebugConfigError(f"`opencode debug agents` timed out after {timeout:g}s") from exc
         except _CallError as exc:
             raise DebugConfigError(str(exc)) from exc
-        ids = [str(a["id"]) for a in agents if isinstance(a.get("id"), str)]
-        if ids:
-            return ids
+        if any(isinstance(a.get("id"), str) for a in agents):
+            return agents
     raise DebugConfigError(f"`opencode debug agents` listed no agents after {tries} attempts")
+
+
+def read_agent_ids(**kwargs: Any) -> list[str]:
+    """Ids of every agent OpenCode knows, in order (see ``read_agents``)."""
+    return [str(a["id"]) for a in read_agents(**kwargs) if isinstance(a.get("id"), str)]
+
+
+DENIED_ACTIONS = ("carter_push",)
+EXEMPT_AGENTS = ("carter-devops", "devops")
+
+
+def _action_matches(pattern: str, action: str) -> bool:
+    return fnmatch.fnmatchcase(action, pattern)
+
+
+def agent_deny_gaps(
+    agents: Sequence[Mapping[str, Any]], *, exempt: Sequence[str] = EXEMPT_AGENTS
+) -> list[tuple[str, str]]:
+    """``(agent, action)`` pairs where the effective rule is not ``deny`` (last matching rule
+    wins, resource ``*``), for every agent except ``exempt``."""
+    gaps: list[tuple[str, str]] = []
+    for agent in agents:
+        name = str(agent.get("id", ""))
+        if name in exempt:
+            continue
+        rules = [r for r in agent.get("permissions", []) if isinstance(r, dict)]
+        for action in DENIED_ACTIONS:
+            effect = None
+            for rule in rules:
+                if _action_matches(str(rule.get("action", "")), action) and rule.get(
+                    "resource"
+                ) in (
+                    "*",
+                    None,
+                ):
+                    effect = rule.get("effect")
+            if effect != "deny":
+                gaps.append((name, action))
+    return gaps

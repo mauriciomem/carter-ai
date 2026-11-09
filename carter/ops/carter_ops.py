@@ -1,8 +1,8 @@
 """Carter-ops — audit ledger and config helper for operational tasks.
 
-The model executes write operations (git, gh) directly in the terminal
-with bot attribution flags, following the ``carter-ops`` skill. This CLI only
-provides the deterministic side-channel around that:
+The model runs git and gh commands directly in the terminal, with the attribution that
+``config --emit`` prints, following the ``carter-ops`` skill. This CLI only provides the
+deterministic side-channel around that:
 
   - audit:           post-hoc audit logging after model-driven execution
   - policy-override: record a single-action strictness-policy override
@@ -17,7 +17,7 @@ Exit codes:
 Usage (via the ``carter`` CLI):
   carter ops audit --operation git-flow --params '{"branch":"x"}' --result success
   carter ops policy-override --category remote-write --action "vault read x" --tier native-ask
-  carter ops config --emit
+  carter ops config --emit [--field NAME]
 """
 
 from __future__ import annotations
@@ -26,15 +26,18 @@ import json
 import re
 import sys
 from datetime import UTC, datetime
+from pathlib import Path
 from typing import Any
 
-from carter.aplus.handoff import OWN_TERMINAL
+from carter.aplus.push import OWN_TERMINAL
+from carter.broker import audit as audit_store
 from carter.config import _BASH_COMMANDS, RISK_TAXONOMY
-from carter.home import carter_home
 from carter.identity.rules import forbidden_classes
 from carter.ops.config import Config
 
-AUDIT_LOG = carter_home() / "audit.log"
+# The ops log lives in ~/.carter/state/audit/ next to b.jsonl. It is resolved when
+# used, not at import; a test may still point AUDIT_LOG at a file of its own.
+AUDIT_LOG: Path | None = None
 
 USAGE = "Usage: carter ops {audit|policy-override|config --emit} [--key value ...]"
 
@@ -54,10 +57,13 @@ def emit_error(message: str) -> None:
 def _audit(entry: dict[str, Any]) -> None:
     """Append an entry to the audit log (JSONL)."""
     try:
-        AUDIT_LOG.parent.mkdir(parents=True, exist_ok=True)
-        with open(AUDIT_LOG, "a") as f:
-            f.write(json.dumps(entry) + "\n")
-    except OSError:
+        if AUDIT_LOG is not None:
+            AUDIT_LOG.parent.mkdir(parents=True, exist_ok=True)
+            with open(AUDIT_LOG, "a") as f:
+                f.write(json.dumps(entry) + "\n")
+        else:
+            audit_store.append_ops(entry)
+    except (OSError, audit_store.AuditError):
         pass  # Audit is best-effort
 
 
@@ -122,8 +128,7 @@ def _handle_audit(params: dict[str, Any]) -> int:
         except (json.JSONDecodeError, TypeError):
             entry["identifiers"] = {"raw": str(identifiers_json)}
 
-    _audit(entry)
-    emit({"status": "logged", "operation": operation, "result": result_status})
+    _audit(entry)  # silent on success: the agent does not echo a record nobody reads
     return 0
 
 
@@ -139,9 +144,7 @@ def _github_write_prefixes() -> list[list[str]]:
     """Word lists of every GitHub-write command: the ``github-write`` shell table (what the
     agent permissions deny) plus the ``push-verbs`` class of ``g2_rules.json``."""
     prefixes = [p.removesuffix(" *") for p in _BASH_COMMANDS["github-write"]]
-    prefixes += [
-        item for c in forbidden_classes(all_slices=True) if c.id == "push-verbs" for item in c.items
-    ]
+    prefixes += [item for c in forbidden_classes() if c.id == "push-verbs" for item in c.items]
     return [p.lower().split() for p in dict.fromkeys(prefixes)]
 
 
@@ -203,7 +206,8 @@ def _handle_policy_override(params: dict[str, Any]) -> int:
         return 1
 
     if is_github_write(action):
-        # Every GitHub write is human-only (RFC-0007 D31): the ledger must not suggest otherwise.
+        # Every GitHub write is human-only: the ledger must not suggest
+        # otherwise. Opening, editing and commenting on a PR are not writes of that kind.
         _audit(
             {
                 "timestamp": datetime.now(UTC).isoformat(),
@@ -215,7 +219,8 @@ def _handle_policy_override(params: dict[str, Any]) -> int:
             }
         )
         emit_error(
-            "GitHub writes (push, PR, issue, comment, release, API) are human-only; "
+            "GitHub writes (push, merging or reviewing a PR, issues, releases, the API) are "
+            "human-only; "
             f"policy-override cannot change that. {OWN_TERMINAL}"
         )
         return 1
@@ -243,23 +248,37 @@ def _handle_policy_override(params: dict[str, Any]) -> int:
     return 0
 
 
-def _handle_config_emit() -> int:
-    """Print config values for model consumption."""
+def _handle_config_emit(field: str | None = None) -> int:
+    """Print config values for model consumption (``field``: just that one, as plain text)."""
     cfg = Config.load()
     for warning in (cfg.footer_warning, *cfg.warnings):
         if warning:
             emit_error(warning)
-    emit(
-        {
-            "tier": cfg.tier,
-            "role": cfg.role,
-            "role_source": cfg.role_source,
-            "coauthor_trailer": cfg.coauthor_trailer,
-            "commits": cfg.commits,
-            "refusal_reason": cfg.refusal_reason,
-            "footer": cfg.footer,
-            "has_github_token": bool(cfg.github_token),
-        }
+    data = {
+        "tier": cfg.tier,
+        "role": cfg.role,
+        "role_source": cfg.role_source,
+        "mode": cfg.mode,
+        "author": cfg.author,
+        "committer": cfg.committer,
+        "signer_fpr": cfg.signer_fpr,
+        "coauthor_trailer": cfg.coauthor_trailer,
+        "coauthor_linked": cfg.coauthor_linked,
+        "commits": cfg.commits,
+        "refusal_reason": cfg.refusal_reason,
+        "footer": cfg.footer,
+        "has_github_token": bool(cfg.github_token),
+    }
+    if field is None:
+        emit(data)
+        return 0
+    if field not in data:
+        emit_error(f"--field must be one of: {', '.join(data)}")
+        return 1
+    value = data[field]
+    # one value, no JSON: the agent reads it without printing the whole record
+    print(
+        "true" if value is True else "false" if value is False else "" if value is None else value
     )
     return 0
 
@@ -283,8 +302,13 @@ def main(argv: list[str] | None = None) -> int:
 
     if command == "config":
         if "--emit" in rest:
-            return _handle_config_emit()
-        emit_error("Usage: carter ops config --emit")
+            flags = _parse_flags([a for a in rest if a != "--emit"])
+            field = flags.get("field")
+            if "field" in flags and not isinstance(field, str):
+                emit_error("--field needs a name")
+                return 1
+            return _handle_config_emit(field)
+        emit_error("Usage: carter ops config --emit [--field NAME]")
         return 1
 
     emit_error(f"Unknown subcommand: {command}" if command else "Missing subcommand")

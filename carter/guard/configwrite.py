@@ -1,4 +1,4 @@
-"""One safe edit of the user's live OpenCode config (RFC-0007 App C.6.3).
+"""One safe edit of the user's live OpenCode config.
 
 A broken config drops *all* policies and the providers, so every edit follows the same
 transaction: parse → mutate a copy → (if it changed) read ``opencode debug config`` →
@@ -146,7 +146,7 @@ def transact(
     if commented and result.changed:
         result.warnings.append(
             f"{target.name} has comments and rewriting drops them (the original is kept as "
-            f"{target.name}{BACKUP_SUFFIX}); to paste by hand instead, use --print-policies"
+            f"{target.name}{BACKUP_SUFFIX})"
         )
     if dry_run:
         return result

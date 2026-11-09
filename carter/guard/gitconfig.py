@@ -1,9 +1,9 @@
-"""Carter's own git config, pulled in by ONE ``include.path`` line (RFC-0007 C.6.4, D61).
+"""Carter's own git config, pulled in by ONE ``include.path`` line.
 
 Every global git key Carter owns lives in ``~/.carter/gitconfig``. The user's global config
 gets a single ``include.path = <abs>/.carter/gitconfig`` line; Carter rewrites only its own
 file (atomically, hash-tracked) and removal is ``git config --fixed-value --unset-all
-include.path <that value>``. Rules, from the plan-003 freeze:
+include.path <that value>``. Rules:
 
 - The include value is **absolute and unresolved** (a relative path breaks through a
   symlinked ``~/.gitconfig``; a resolved one would not match ``--fixed-value --unset``).
@@ -13,12 +13,12 @@ include.path <that value>``. Rules, from the plan-003 freeze:
   ``include`` (global: use the include), ``direct`` (hooks work but not as ``global``:
   write the keys straight into the global config, tracked key by key) or
   ``no-config-hooks`` (git < 2.54: plain keys still use the include, hook entries need the
-  per-repo fallback of slice 2a). No version parsing.
-- 1G ships **no** Carter git key (hooks are 2a, ``carter.tier`` and the alias 2b), so
-  ``carter_git_entries()`` is empty and the real host gets neither file nor include line.
-  The machinery is built and tested under a fake HOME so 2a only has to add entries.
+  per-repo fallback). No version parsing.
+- Carter's keys come under the ``hooks`` consent (the hook entries), ``repo_hooks``
+  (``init.templateDir``) and ``alias``. With no entry accepted there is no file and no include
+  line: the include line is written with the first key, under that key's consent.
 - A missing or even absent Carter file never breaks git: ``include.path`` to a missing file
-  is silent (spike 1), so a half-installed state cannot block the human's commit or push.
+  is silent, so a half-installed state cannot block the human's commit or push.
 
 Every git call names its config file explicitly (``--file``), so tests and ``--dry-run``
 never reach the default global config.
@@ -118,7 +118,7 @@ def hook_scopes(
 
 
 def probe_scope(*, runner: Runner | None = None) -> Mode:
-    """Behavioural D61 detection in a scratch config (never the real one, never the real HOME)."""
+    """Behavioural detection in a scratch config (never the real one, never the real HOME)."""
     run = runner or run_git
     scratch = Path(tempfile.mkdtemp(prefix="carter-probe-"))
     try:
@@ -229,6 +229,29 @@ def remove_include(path: Path, value: str) -> IncludeResult:
     return IncludeResult("removed")
 
 
+def manual_include_state(base_dir: Path | None, env: Mapping[str, str] | None = None) -> str:
+    """For a hook install whose include line Carter did not write (dotfiles, read-only):
+    ``present`` (the human added it), ``missing`` or ``unknown`` (git cannot say)."""
+    value = str(carter_gitconfig_path(base_dir))
+    try:
+        target = global_config_path(env)
+    except GitError:
+        return "unknown"
+    if target.exists() and has_include_line(target, value):
+        return "present"
+    return "missing"
+
+
+def include_line(base_dir: Path | None) -> str:
+    value = shlex.quote(str(carter_gitconfig_path(base_dir)))
+    return f"git config --global --add {INCLUDE_KEY} {value}"
+
+
+def unset_line(base_dir: Path | None) -> str:
+    value = shlex.quote(str(carter_gitconfig_path(base_dir)))
+    return f"git config --global --fixed-value --unset-all {INCLUDE_KEY} {value}"
+
+
 def record_include(state: GuardState, path: Path, value: str, result: IncludeResult) -> None:
     """Own the include line only when Carter added it or found exactly it already there."""
     if result.status in ("added", "present"):
@@ -251,23 +274,41 @@ def render_gitconfig(entries: Sequence[Entry]) -> str:
         shutil.rmtree(scratch, ignore_errors=True)
 
 
+def validate_content(content: str) -> None:
+    """Raise ``GitError`` unless git can read ``content`` as a config file: a malformed included
+    file would make EVERY git command fail, so it is checked before it is moved into place."""
+    scratch = Path(tempfile.mkdtemp(prefix="carter-validate-"))
+    try:
+        probe = scratch / "gitconfig"
+        probe.write_text(content)
+        if not parses(probe):
+            raise GitError("the rendered Carter gitconfig is not valid git config; nothing written")
+    finally:
+        shutil.rmtree(scratch, ignore_errors=True)
+
+
 def install_file(
-    path: Path, content: str, state: GuardState, *, overwrite_edited: bool = False
+    path: Path,
+    content: str,
+    state: GuardState,
+    *,
+    overwrite_edited: bool = False,
+    mode: int = 0o600,
 ) -> Literal["created", "updated", "unchanged", "edited-kept"]:
-    """Write Carter's file atomically (0600) and record its hash.
+    """Write Carter's file atomically (0600 unless ``mode``) and record its hash.
 
     A file the user edited, or one Carter has no record of, is kept as it is unless the
     explicit human install passes ``overwrite_edited``."""
     data = content.encode()
     if not path.exists():
-        atomic_write_bytes(path, data)
+        atomic_write_bytes(path, data, mode=mode)
         state.record_file(path, data)
         return "created"
     if path.read_bytes() == data:
         state.record_file(path, data)
         return "unchanged"
     if state.owned_unchanged(path) or overwrite_edited:
-        atomic_write_bytes(path, data)
+        atomic_write_bytes(path, data, mode=mode)
         state.record_file(path, data)
         return "updated"
     return "edited-kept"
@@ -280,10 +321,20 @@ class FileRemoval:
 
 
 def remove_files(base_dir: Path | None, state: GuardState) -> FileRemoval:
-    """Delete Carter's file and its ``gitconfig.d`` fragments, each only if still unchanged."""
+    """Delete Carter's file and its ``gitconfig.d`` fragments, each only if still unchanged.
+
+    While the file holds the ``carter.*`` tier mirror it is rewritten with the mirror alone
+    (fragments stay): removing the guards must not blind the guard's own tier source."""
     out = FileRemoval()
     main = carter_gitconfig_path(base_dir)
     frags = main.with_name(main.name + ".d")
+    if mirror := carried_mirror(base_dir):  # `identity remove` owns the mirror, not `guard remove`
+        if state.owned_unchanged(main):
+            install_file(main, render_gitconfig(mirror), state)
+            out.removed.append(f"{main} (hook and alias entries; the tier mirror stays)")
+        else:
+            out.kept.append(str(main))
+        return out
     candidates = [main] + (sorted(frags.iterdir()) if frags.is_dir() else [])
     for path in candidates:
         if not path.exists():
@@ -354,35 +405,40 @@ def remove_direct(path: Path, state: GuardState) -> DirectRemoval:
     return out
 
 
-# -- single-valued keys ---------------------------------------------------------------------
+def carter_git_entries(
+    accepted: Sequence[str] = (),
+    *,
+    base_dir: Path | None = None,
+    template_dir: Path | None = None,
+    hooks_rev: int = 2,
+    alias: bool = False,
+) -> list[Entry]:
+    """The global git keys Carter owns for the accepted consent groups.
+
+    ``hooks`` gives the hook entries for the accepted revision (1: ``pre-push``; 2: all four
+    events; each a self-contained command, see ``hooks``); ``template_dir`` (decided by
+    ``repohooks``: only when the user has none) gives ``init.templateDir``; ``alias`` (decided by
+    ``guard.alias``: only when the user has none) gives ``alias.ai-commit``. Nothing accepted,
+    nothing returned."""
+    from carter.guard import alias as alias_mod  # noqa: PLC0415 - these import this module
+    from carter.guard import hooks  # noqa: PLC0415
+
+    out: list[Entry] = []
+    if "hooks" in accepted:
+        out += hooks.hook_entries(hooks.script_path(base_dir), hooks.events_for_rev(hooks_rev))
+    if template_dir is not None and "repo_hooks" in accepted:
+        out.append(("init.templateDir", str(template_dir)))
+    if alias and "alias" in accepted:
+        out.append((alias_mod.ALIAS_KEY, alias_mod.ALIAS_VALUE))
+    return out
 
 
-@dataclass
-class SingleResult:
-    status: Literal["set", "kept-user-value"]
-    snippet: str = ""
+def carried_mirror(base_dir: Path | None) -> list[Entry]:
+    """The ``carter.*`` mirror entries of Carter's file, kept when hook entries are rewritten."""
+    from carter.guard import mirror_io  # noqa: PLC0415 - mirror_io imports this module
 
-
-def set_single_valued(path: Path, key: str, value: str) -> SingleResult:
-    """Set ``init.templateDir`` / ``alias.ai-commit`` only if the user's config has none
-    (includes followed); otherwise leave theirs and return the snippet to chain by hand."""
-    have = _file_git(str(path), "--includes", "--get", key)
-    if have.returncode == 0:
-        snippet = (
-            f"{key} is already set in your git config; Carter kept it. "
-            f"To use Carter's too, chain it yourself: {key} = {value}"
-        )
-        return SingleResult("kept-user-value", snippet)
-    _checked(str(path), key, value)
-    return SingleResult("set")
-
-
-# -- the whole step ---------------------------------------------------------------------------
-
-
-def carter_git_entries() -> list[Entry]:
-    """The global git keys Carter owns in this version: none in 1G (hooks: 2a; tier, alias: 2b)."""
-    return []
+    mine, _ = mirror_io.split(mirror_io.read_entries(carter_gitconfig_path(base_dir)))
+    return mine
 
 
 @dataclass
@@ -417,9 +473,11 @@ def apply_keys(
     if not plain:
         return out
     carter_file = carter_gitconfig_path(base_dir)
-    out.file = install_file(
-        carter_file, render_gitconfig(plain), state, overwrite_edited=overwrite_edited
-    )
+    named = {k for k, _ in plain}
+    carried = [e for e in carried_mirror(base_dir) if e[0] not in named]
+    content = render_gitconfig([*carried, *plain])
+    validate_content(content)
+    out.file = install_file(carter_file, content, state, overwrite_edited=overwrite_edited)
     out.include = add_include(target, str(carter_file))
     record_include(state, target, str(carter_file), out.include)
     return out
@@ -433,7 +491,7 @@ class RemoveAll:
 
 
 def remove_all(base_dir: Path | None, state: GuardState) -> RemoveAll:
-    """Teardown order (C.6.2): the include line, then the file and fragments, then direct keys."""
+    """Teardown order: the include line, then the file and fragments, then direct keys."""
     out = RemoveAll()
     if state.gitconfig:
         rec = state.gitconfig

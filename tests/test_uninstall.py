@@ -35,7 +35,8 @@ def test_edited_knowledge_is_kept(installed: Path, capsys) -> None:
     f.write_text(f.read_text() + "\nmy note\n")
     uninstall(installed)
     assert f.exists()
-    assert "Kept" in capsys.readouterr().out
+    got = capsys.readouterr()
+    assert "Kept" in got.out + got.err
 
 
 def test_untouched_seed_knowledge_is_removed(installed: Path) -> None:
@@ -93,7 +94,8 @@ def test_edited_agent_and_skill_kept_unmodified_removed(installed: Path, capsys)
     assert edited_skill.exists()
     assert not other_agent.exists()
     assert not any(d.is_dir() and not any(d.iterdir()) for d in (oc / "skills").iterdir())
-    out = capsys.readouterr().out
+    got = capsys.readouterr()
+    out = got.out + got.err
     assert "carter-engineer.md" in out and "Kept" in out
 
 
@@ -138,4 +140,4 @@ def test_install_summary_counts_skill_directories(
     fake_opencode()
     orchestrator.run(base_dir=base_dir, verbosity=1)
     shipped = sum(1 for d in (paths.REPO_ROOT / "skills").iterdir() if (d / "SKILL.md").exists())
-    assert f"  Skills: {shipped}\n" in capsys.readouterr().out
+    assert f"{shipped} skills" in capsys.readouterr().out

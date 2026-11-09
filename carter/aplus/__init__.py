@@ -1,6 +1,6 @@
-"""A+: human-run ``carter push`` / ``carter pr`` and their building blocks (RFC-0007 C.6.6).
+"""`carter push`: human-run ``carter push`` and its building blocks.
 
 The modules here are pure where they can be (they return findings and print nothing), so
-slice B's broker can import them later: ``handoff``, ``secretscan``, ``repocfg``,
-``sshcfg``, ``sigcheck``, ``rangecalc``. None imports click.
+the broker imports them: ``repocfg``, ``sshcfg``, ``sigcheck``, ``rangecalc``. None imports
+click.
 """

@@ -14,6 +14,7 @@ import subprocess
 from pathlib import Path
 
 from carter.home import tilde
+from carter.identity.errors import E_OPENCODE_VERSION
 from carter.install.console import _log, log_ok, log_step, log_warn
 from carter.install.paths import token_path
 
@@ -25,6 +26,10 @@ REQUIRED_ENV_VARS = ("TFE_TOKEN",)
 
 # Minimum supported OpenCode release (the first with V2 permissions).
 MIN_OPENCODE = (2, 1)
+# The newest OpenCode the Carter plugin was proven against. Older 2.1.x
+# and newer releases still install, with a warning: G2 relies on the plugin's self-test there.
+TESTED_OPENCODE = (2, 1, 4)
+FIRST_PLUGIN_BAND = (2, 1, 4)
 
 _VERSION_RE = re.compile(r"\bv?(\d+)\.(\d+)(?:\.(\d+))?")
 
@@ -44,6 +49,15 @@ def parse_opencode_version(output: str) -> tuple[int, int, int] | None:
         return None
     major, minor, patch = match.groups()
     return int(major), int(minor), int(patch or 0)
+
+
+def version_band(version: tuple[int, int, int]) -> str:
+    """``too-old`` (< 2.1), ``untested-low`` (2.1.0 to 2.1.3), ``tested``, ``above`` (newer)."""
+    if version[:2] < MIN_OPENCODE:
+        return "too-old"
+    if version < FIRST_PLUGIN_BAND:
+        return "untested-low"
+    return "above" if version > TESTED_OPENCODE else "tested"
 
 
 def require_opencode() -> tuple[int, int, int]:
@@ -67,7 +81,14 @@ def require_opencode() -> tuple[int, int, int]:
     if version[:2] < MIN_OPENCODE:
         shown = ".".join(map(str, version))
         raise PrerequisiteError(f"OpenCode {shown} is too old. {hint}")
-    log_ok("opencode", ".".join(map(str, version)))
+    shown = ".".join(map(str, version))
+    if version_band(version) in ("untested-low", "above"):
+        log_warn(
+            "opencode",
+            f"G2 untested on {shown}; relying on the plugin self-test ({E_OPENCODE_VERSION})",
+        )
+    else:
+        log_ok("opencode", shown)
     return version
 
 
@@ -96,7 +117,7 @@ def detect_environment() -> None:
     log_step("Detecting environment...")
     uv_ver = _cmd_version("uv", "--version")
     uv = uv_ver.replace("uv ", "") if uv_ver else "not found"
-    _log(f"  OS: {platform.system()} | Python: {platform.python_version()} | uv: {uv}")
+    _log(f"OS: {platform.system()} | Python: {platform.python_version()} | uv: {uv}", level=2)
 
 
 def check_credentials(base_dir: Path | None = None) -> None:

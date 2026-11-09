@@ -8,8 +8,7 @@ workspace's ``.carter/state/plans/``.
 
 Design: pure functions returning human-readable strings, mirroring the existing
 ``carter check`` error-collection style. Plan validation returns a ``PlanValidation``
-with two channels: ``errors`` (fail ``carter check``) and ``warnings`` (printed, never
-fail it). No I/O beyond reading the plan files passed in.
+whose ``errors`` fail ``carter check``. No I/O beyond reading the plan files passed in.
 """
 
 from __future__ import annotations
@@ -34,13 +33,9 @@ _DATE_STR_RE = re.compile(r"^\d{4}-\d{2}-\d{2}([T ].*)?$")
 
 VALID_PLAN_STATUS = {"proposed", "active", "blocked", "completed", "abandoned"}
 VALID_STEP_STATUS = {"pending", "in-progress", "done", "blocked"}
-# Optional provenance marker on plans, the checkpoint and records (RFC-0007 §4.2).
+# Optional provenance marker on plans, the checkpoint and records.
 AI_USAGE_KEY = "ai-usage"
 VALID_AI_USAGE = ("ai-assisted", "ai-generated", "human-only")
-
-# Deprecated (RFC-0007 §4.8): accepted and ignored for one minor version, with a warning.
-# Never required and its value is not checked.
-DEPRECATED_PUSH_POLICY_KEY = "push_policy"
 
 # Terminal statuses belong in completed/; non-terminal (in-progress) statuses
 # belong in active/. The maestro reads active/ for "plans in progress", so a
@@ -61,15 +56,13 @@ DEFAULT_THRESHOLDS: dict[str, Any] = {
 
 @dataclass
 class PlanValidation:
-    """Outcome of validating plans: ``errors`` fail the check, ``warnings`` never do."""
+    """Outcome of validating plans: ``errors`` fail the check."""
 
     errors: list[str] = field(default_factory=list)
-    warnings: list[str] = field(default_factory=list)
 
     def extend(self, other: PlanValidation) -> None:
-        """Append another result's errors and warnings."""
+        """Append another result's errors."""
         self.errors.extend(other.errors)
-        self.warnings.extend(other.warnings)
 
 
 def _ai_usage_error(fm: dict[str, Any], label: str) -> str | None:
@@ -238,7 +231,6 @@ def _validate_plan_dir(
         return PlanValidation([f"{name}/README.md: missing or malformed YAML frontmatter"]), None
 
     errors: list[str] = []
-    warnings: list[str] = []
 
     for key in REQUIRED_PLAN_KEYS:
         if key not in fm:
@@ -259,12 +251,6 @@ def _validate_plan_dir(
     status = fm.get("status")
     if "status" in fm and status not in VALID_PLAN_STATUS:
         errors.append(f"{name}/README.md: status {status!r} not in {sorted(VALID_PLAN_STATUS)}")
-
-    if DEPRECATED_PUSH_POLICY_KEY in fm:
-        warnings.append(
-            f"{name}/README.md: {DEPRECATED_PUSH_POLICY_KEY} is deprecated and ignored; "
-            f"remove it (push approval is not a plan setting any more)"
-        )
 
     ai_usage_error = _ai_usage_error(fm, f"{name}/README.md")
     if ai_usage_error:
@@ -326,7 +312,7 @@ def _validate_plan_dir(
     for step_file in step_files:
         errors.extend(_validate_step_file(step_file, name, th))
 
-    return PlanValidation(errors, warnings), fm
+    return PlanValidation(errors), fm
 
 
 def validate_plans_dir(
@@ -339,8 +325,7 @@ def validate_plans_dir(
     coherent with its bucket (``completed/`` holds only terminal statuses), and a
     plan number (NNN) must be unique **globally**, not just within one bucket.
 
-    Returns both channels: ``.errors`` fail ``carter check``, ``.warnings`` (e.g. the
-    deprecated ``push_policy`` key) are reported but never change its exit code.
+    ``.errors`` fail ``carter check``.
     """
     result = PlanValidation()
     seen: dict[str, list[str]] = {}  # NNN -> ["<bucket>/<name>", ...], global

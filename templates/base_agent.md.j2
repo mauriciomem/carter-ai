@@ -1,7 +1,6 @@
 {# Base agent template — all agents inherit from this. #}
 {# Required blocks: frontmatter, identity, role, boundaries #}
-{# Frontmatter is OpenCode V2 only: description, mode, model, permissions. #}
-{# No V1 keys (`temperature`, `tools`, `permission`, ...) and no policy comment. #}
+{# Frontmatter: description, mode, model, permissions. #}
 ---
 {% block frontmatter %}{% endblock %}
 {{ policy_frontmatter(config, agent) }}

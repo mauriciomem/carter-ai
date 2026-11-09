@@ -54,8 +54,9 @@ git pull
 
 # Create branch, make changes and commit — use the carter-ops skill (`ops:` prefix):
 # ops: create branch feature/PROJ-123-add-auth, commit src/auth.py with "feat: ..."
-# Pushing and opening the pull request are human-only: write the handoff file
-# (`carter-ops` skill) and tell the user: Run `carter push` and then `carter pr` in your own terminal, not through an agent.
+# Pushing is human-only: tell the user: Run `carter push` yourself, in your terminal or as `!carter push` in OpenCode, not through an agent.
+# Then open the pull request yourself: gh pr create --head feature/PROJ-123-add-auth --base main --title "feat: ..." --body "..."
+
 
 # Stay current with main (read operation — run directly)
 git fetch origin
@@ -187,7 +188,7 @@ git tag -a v1.0.0 -m "Release 1.0.0"  # annotated tag (preferred)
 ```
 
 Pushing a tag is a push: it is human-only (the user does it in their own terminal). An agent
-creates the tag locally and says so in the handoff.
+creates the tag locally and says so.
 
 ## Safety Rules
 

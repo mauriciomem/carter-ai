@@ -21,3 +21,13 @@ def prefixed(prefix: str, tag: str = "SENTINEL") -> str:
     """A fake classic/app token such as ``ghp_`` + 36 characters containing ``tag``."""
     assert prefix in {"ghp_", "gho_", "ghu_", "ghs_", "ghr_"}
     return prefix + (tag + _FILLER)[:36]
+
+
+def passphrase(tag: str = "SENTINEL") -> str:
+    """A fake key passphrase made of random hex at call time, greppable through ``tag``.
+
+    Tests type it into a PTY and then assert it appears in no argv, env, log, exception or return
+    value. It is never a literal in the source, so it cannot be mistaken for a real secret."""
+    import secrets
+
+    return f"pw-{tag}-{secrets.token_hex(6)}"

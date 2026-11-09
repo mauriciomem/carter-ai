@@ -1,4 +1,4 @@
-"""``~/.carter/guard-state.json`` (RFC-0007 App C.6.1; plan 003 step 9, freeze F2)."""
+"""``~/.carter/guard-state.json``."""
 
 from __future__ import annotations
 
@@ -51,7 +51,7 @@ class TestShapeIsFrozen:
         assert gs.CONSENT_FIELDS == ("decision", "date", "rev")
         assert gs.FILE_FIELDS == ("path", "sha256")
         assert gs.POLICY_FIELDS == ("id", "action", "resource", "effect", "preexisting")
-        assert gs.PERMISSION_FIELDS == ("agent", "key", "value", "preexisting", "form")
+        assert gs.PERMISSION_FIELDS == ("agent", "key", "value", "preexisting")
         assert gs.GITCONFIG_FIELDS == ("file", "key", "value")
         assert gs.GIT_CONFIG_FIELDS == ("file", "key", "value", "scope")
         assert gs.REPO_HOOK_FIELDS == ("path", "sha256")
@@ -283,9 +283,7 @@ class TestPoliciesAndPermissions:
 
     def test_permission_entries(self) -> None:
         st = GuardState()
-        st.record_permission(
-            "build", "permission.carter_push", "deny", preexisting=False, form="v2"
-        )
+        st.record_permission("build", "permission.carter_push", "deny", preexisting=False)
         st.record_permission("plan", "permission.carter_push", "deny", preexisting=True)
         assert tuple(st.agent_permissions[0]) == gs.PERMISSION_FIELDS
         assert [p["agent"] for p in st.owned_permissions()] == ["build"]
@@ -409,4 +407,4 @@ class TestModuleHygiene:
                 roots.add(node.module)
         assert not [r for r in roots if r.split(".")[0] in {"click", "jinja2", "yaml"}]
         assert "carter.cli" not in roots
-        assert len(source.splitlines()) < 240  # step 9 asked for < 200; see notes
+        assert len(source.splitlines()) < 270

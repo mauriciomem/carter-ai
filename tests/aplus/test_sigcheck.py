@@ -1,4 +1,4 @@
-"""The shared signature choke point (RFC-0007 C.5 / C.6.6; plan 003 step 18): every commit
+"""The shared signature choke point: every commit
 in the range whose committer is the LLM must verify (``%G?`` = ``G``) with a key whose
 ``%GF`` fingerprint is one Carter stored. Real throwaway ed25519 keys, in tmp only."""
 

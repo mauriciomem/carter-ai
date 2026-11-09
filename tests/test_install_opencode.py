@@ -1,6 +1,6 @@
 """OpenCode-only installer behaviour.
 
-Covers the OpenCode >= 2.1 hard gate, the V2 MCP shape and V1 entry migration.
+Covers the OpenCode >= 2.1 hard gate and the MCP wiring.
 """
 
 from __future__ import annotations
@@ -12,7 +12,7 @@ import pytest
 from click.testing import CliRunner
 
 from carter.cli import main
-from carter.install.mcp import configure_mcp_servers, merge_mcp_servers, to_v2_server
+from carter.install.mcp import configure_mcp_servers, merge_mcp_servers
 from carter.install.prereqs import PrerequisiteError, parse_opencode_version, require_opencode
 
 
@@ -148,24 +148,6 @@ class TestV2McpShape:
         with pytest.raises(ValueError, match="bogus"):
             configure_mcp_servers(tmp_path, {}, servers=["bogus"])
 
-    @pytest.mark.parametrize(
-        ("v1", "v2"),
-        [
-            ({"type": "local", "enabled": True}, {"type": "local"}),
-            ({"type": "local", "enabled": False}, {"type": "local", "disabled": True}),
-            (
-                {"type": "local", "timeout": 30000},
-                {"type": "local", "timeout": {"catalog": 30000, "execution": 30000}},
-            ),
-            (
-                {"type": "local", "timeout": {"catalog": 5}},
-                {"type": "local", "timeout": {"catalog": 5}},
-            ),
-        ],
-    )
-    def test_to_v2_server(self, v1: dict, v2: dict) -> None:
-        assert to_v2_server(v1) == v2
-
 
 class TestMergeIntoUserConfig:
     def _cfg(self, tmp_path: Path, content: str) -> Path:
@@ -194,18 +176,6 @@ class TestMergeIntoUserConfig:
         assert data["mcp"]["legacy-mine"] == {"type": "local", "command": ["x"]}
         assert set(data["mcp"]["servers"]) == {"mine", "carter-github"}
 
-    def test_v1_carter_entry_migrated(self, tmp_path: Path) -> None:
-        path = self._cfg(
-            tmp_path,
-            json.dumps(
-                {"mcp": {"carter-github": {"type": "local", "command": ["old"], "enabled": True}}}
-            ),
-        )
-        merge_mcp_servers(path, {"carter-github": {"type": "local", "command": ["new"]}})
-        mcp = json.loads(path.read_text())["mcp"]
-        assert "carter-github" not in mcp
-        assert mcp["servers"]["carter-github"] == {"type": "local", "command": ["new"]}
-
     def test_jsonc_with_comments_and_trailing_commas(self, tmp_path: Path) -> None:
         path = self._cfg(tmp_path, '{\n  // mine\n  "theme": "x",\n  "mcp": {},\n}\n')
         merge_mcp_servers(path, {"carter-github": {"type": "local", "command": ["d"]}})
@@ -225,13 +195,12 @@ class TestMergeIntoUserConfig:
 
 
 class TestUninstallV2:
-    def test_removes_v1_and_v2_carter_entries_only(self, fake_opencode, tmp_path: Path) -> None:
+    def test_removes_carter_entries_only(self, fake_opencode, tmp_path: Path) -> None:
         fake_opencode()
         base = tmp_path / "home"
         assert _install(base, "--mcp").exit_code == 0
         cfg = base / "opencode" / "opencode.json"
         data = json.loads(cfg.read_text())
-        data["mcp"]["carter-old"] = {"type": "local", "command": ["x"]}
         data["mcp"]["servers"]["mine"] = {"type": "remote", "url": "https://a"}
         cfg.write_text(json.dumps(data))
 
@@ -309,7 +278,7 @@ class TestJsoncTarget:
         assert _install(base, "--mcp").exit_code == 0
         cfg = oc / "opencode.jsonc"
         text = cfg.read_text().replace(
-            '"servers": {', '"carter-old": {"type": "local"}, "servers": {'
+            '"servers": {', '"servers": {"carter-old": {"type": "local"}, '
         )
         cfg.write_text("// keep\n" + text)
         assert not (oc / "opencode.json").exists()
@@ -323,58 +292,10 @@ class TestJsoncTarget:
         assert "comments" in result.output
 
 
-class TestBotNameFlagIsDeprecated:
-    """``--bot-name`` still parses, warns, and has no effect (plan 002 step 9)."""
+class TestRetiredInstallFlags:
+    """``--bot-name`` is gone, not deprecated."""
 
-    def test_flag_warns_and_is_ignored(self, fake_opencode, base_dir: Path) -> None:
-        fake_opencode("opencode v2.1.4")
-        result = _install(base_dir, "--bot-name", "acme-bot")
-
-        assert result.exit_code == 0, result.output
-        assert "--bot-name is deprecated" in result.output
-        config = (base_dir / "carter" / "config.toml").read_text()
-        assert "acme-bot" not in config
-        assert "schema = 2" in config
-
-    def test_value_does_not_reach_any_installed_file(self, fake_opencode, base_dir: Path) -> None:
-        fake_opencode("opencode v2.1.4")
-        _install(base_dir, "--bot-name", "acme-bot-ZZZ")
-        leaked = [
-            str(p) for p in base_dir.rglob("*") if p.is_file() and "acme-bot-ZZZ" in p.read_text()
-        ]
-        assert leaked == []
-
-    def test_no_warning_without_the_flag(self, fake_opencode, base_dir: Path) -> None:
-        fake_opencode("opencode v2.1.4")
-        result = _install(base_dir)
-        assert result.exit_code == 0, result.output
-        assert "deprecated" not in result.output
-
-    def test_help_marks_the_flag_deprecated(self) -> None:
+    def test_the_flag_is_not_an_option(self) -> None:
         result = CliRunner().invoke(main, ["install", "--help"])
-        assert "deprecated" in result.output.lower()
-
-
-class TestUpgradeNoteThroughTheCli:
-    def test_install_with_a_modified_global_file_prints_and_writes_the_note(
-        self, fake_opencode, base_dir: Path
-    ) -> None:
-        from carter import __version__
-        from carter.install.components import _ATTRIBUTION_RULE
-
-        fake_opencode("opencode v2.1.4")
-        agents_md = base_dir / "opencode" / "AGENTS.md"
-        agents_md.parent.mkdir(parents=True)
-        agents_md.write_text("# my own global rules\n")
-
-        result = _install(base_dir)
-
-        assert result.exit_code == 0, result.output
-        assert _ATTRIBUTION_RULE in result.output
-        assert agents_md.read_text() == "# my own global rules\n"
-        assert (base_dir / "carter" / "upgrade-notes" / f"{__version__}.md").is_file()
-
-    def test_a_fresh_install_writes_no_note(self, fake_opencode, base_dir: Path) -> None:
-        fake_opencode("opencode v2.1.4")
-        assert _install(base_dir).exit_code == 0
-        assert not (base_dir / "carter" / "upgrade-notes").exists()
+        assert "--bot-name" not in result.output
+        assert CliRunner().invoke(main, ["install", "--bot-name", "x"]).exit_code == 2

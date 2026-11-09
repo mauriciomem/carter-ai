@@ -1,8 +1,8 @@
-"""Helpers behind the hermetic fixture's host and network guards (plan 003, step 5).
+"""Helpers behind the hermetic fixture's host and network guards.
 
 Pure functions, so the guard logic itself can be unit-tested without touching anything real:
 
-- ``digest_host`` / ``changed`` fingerprint the files a bug in slice 1G could rewrite
+- ``digest_host`` / ``changed`` fingerprint the files a bug in the guards could rewrite
   (the human's git config, the OpenCode config, Carter's own state). Only hashes are kept,
   never contents.
 - ``is_local_host`` / ``is_allowed_connect`` decide what a unit test may open a socket to.
@@ -16,7 +16,7 @@ import os
 import socket
 from pathlib import Path
 
-# Relative to the home directory. Keep in sync with what 1G writes (RFC-0007 §4.4, §4.7).
+# Relative to the home directory. Keep in sync with what the guards write.
 HOST_FILES = (
     ".gitconfig",
     ".config/opencode/opencode.json",
@@ -33,6 +33,43 @@ HOST_FILES = (
 STAT_ONLY_FILES = (".carter/secrets/gh-read.token",)
 
 ABSENT = "absent"
+
+# Extra roots a test may open unix sockets under besides pytest's temp tree: the short base
+# directories of the ``real_ssh_agent`` fixtures. Registered for the length of
+# one fixture only; the real ``SSH_AUTH_SOCK`` is never under one of them.
+_UNIX_ROOTS: list[Path] = []
+
+
+def allow_unix_root(path: Path) -> None:
+    _UNIX_ROOTS.append(path.resolve())
+
+
+def forget_unix_root(path: Path) -> None:
+    resolved = path.resolve()
+    if resolved in _UNIX_ROOTS:
+        _UNIX_ROOTS.remove(resolved)
+
+
+def ssh_surface(home: Path, auth_sock: str | None) -> dict[str, str]:
+    """What exists and with which mode/owner at ``~/.ssh`` and ``$SSH_AUTH_SOCK``: ``lstat`` only.
+
+    Nothing is opened, listed or hashed, and no timestamps are kept (the user's own ssh sessions
+    touch them while a long test run is going). A test that changed the mode, owner or presence of
+    either is a bug in the fixtures."""
+    surface: dict[str, str] = {}
+    for label, path in (("~/.ssh", home / ".ssh"), ("$SSH_AUTH_SOCK", Path(auth_sock or ""))):
+        if label == "$SSH_AUTH_SOCK" and not auth_sock:
+            surface[label] = "unset"
+            continue
+        try:
+            st = path.lstat()
+        except FileNotFoundError:
+            surface[label] = ABSENT
+        except OSError as exc:
+            surface[label] = f"unreadable:{type(exc).__name__}"
+        else:
+            surface[label] = f"mode:{st.st_mode:o}:uid:{st.st_uid}"
+    return surface
 
 
 class NetworkBlockedError(AssertionError):
@@ -109,7 +146,8 @@ def is_allowed_connect(address: object, family: int, unix_root: Path) -> bool:
             address = os.fsdecode(address)
         if not isinstance(address, str) or address.startswith("\0"):
             return False
-        return Path(address).resolve().is_relative_to(unix_root.resolve())
+        target = Path(address).resolve()
+        return any(target.is_relative_to(root.resolve()) for root in (unix_root, *_UNIX_ROOTS))
     if isinstance(address, tuple) and address:
         return is_local_host(address[0])
     return False

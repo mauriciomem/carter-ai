@@ -35,7 +35,7 @@ jobs:
         with:
           fetch-depth: 0 # full history + tags so PSR can compute the bump
 
-      - name: Python Semantic Release
+      - name: Release
         uses: python-semantic-release/python-semantic-release@b700dbeb1f431a0fcc30a79f3f0869407fe07278 # v10.7.0
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}

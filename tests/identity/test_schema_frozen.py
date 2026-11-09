@@ -1,4 +1,4 @@
-"""The schema-2 names are frozen (plan 002 step 7). Changing this file is deliberate:
+"""The schema-2 names are frozen. Changing this file is deliberate:
 a rename or a new default needs an architect review and a writer/migration update."""
 
 from __future__ import annotations
@@ -8,6 +8,7 @@ from dataclasses import fields
 from carter.identity import schema
 from carter.identity.schema import (
     Attribution,
+    Broker,
     Disclosure,
     Github,
     Identity,
@@ -29,11 +30,13 @@ FROZEN_NAMES = {
         "agent_socket",
         "program",
         "ttl",
+        "mode",
         "ssh_bin_dir",
     ),
     "identity.disclosure": ("assisted_by",),
     "attribution": ("footer",),
     "github": ("read_token_file", "probe_repo"),
+    "broker": ("min_dwell_ms",),  # slice B optional table)
     'workspaces."<abs path>"': (
         "allow_project_opencode_edit",
         "max_tier",
@@ -61,12 +64,14 @@ FROZEN_SPEC = {
         "previous_public_keys": ((), None),
         "agent_socket": ("", None),
         "program": ("", None),
-        "ttl": ("8h", None),
+        "ttl": ("", None),
+        "mode": ("", ("file", "agent")),
         "ssh_bin_dir": ("/usr/bin", None),
     },
     Disclosure: {"assisted_by": (False, None)},
     Attribution: {"footer": ("_This comment was generated with Carter._", None)},
     Github: {"read_token_file": ("", None), "probe_repo": ("", None)},
+    Broker: {"min_dwell_ms": (500, None)},
     Workspace: {
         "allow_project_opencode_edit": (False, None),
         "max_tier": ("", ("t0", "t1")),

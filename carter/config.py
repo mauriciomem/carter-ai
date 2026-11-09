@@ -16,7 +16,7 @@ from carter.identity.policyset import (
 )
 
 # `identity` is optional policy (role, require_tier), not a required key: a workspace
-# with no policy, or one that dropped the deprecated keys, has no block at all.
+# with no policy has no block at all.
 REQUIRED_KEYS = {"version", "workspace", "agents"}
 
 # agent_suffix becomes part of scaffolded agent filenames/names
@@ -32,9 +32,8 @@ DEFAULT_CONFIG: dict[str, Any] = {
         "name": "my-workspace",
         "mode": "umbrella",
     },
-    # No `identity` default on purpose: it is optional policy (plan 002, D62: `role`
+    # No `identity` default on purpose: it is optional policy (`role`
     # and `require_tier`, pinned by `carter update`), so new workspaces do not write
-    # it. `git_account` and `bot_name` are deprecated: still accepted, ignored.
     "personality": {
         "skepticism": "scaled",
         "style": "reviewer",
@@ -112,7 +111,6 @@ class ConfigError(Exception):
 
 IDENTITY_ROLES = ("co-author", "author")
 IDENTITY_TIERS = ("t0", "t1", "t2")
-_DEPRECATED_IDENTITY_KEYS = ("git_account", "bot_name")
 
 
 def _validate_identity(identity: Any) -> None:
@@ -120,7 +118,7 @@ def _validate_identity(identity: Any) -> None:
 
     ``role`` and ``require_tier`` are optional (``null`` means unset). Nothing in this
     file may loosen a control: ``allow_project_opencode_edit`` belongs to the edit-denied
-    ``~/.carter/config.toml`` (D52). Other keys keep today's behaviour (carried through).
+    ``~/.carter/config.toml``. Other keys keep today's behaviour (carried through).
     """
     if identity is None:
         return
@@ -129,7 +127,7 @@ def _validate_identity(identity: Any) -> None:
     if "allow_project_opencode_edit" in identity:
         raise ConfigError(
             "identity.allow_project_opencode_edit is not accepted in carter.yaml: "
-            "loosening a control is set only in ~/.carter/config.toml (D52)."
+            "loosening a control is set only in ~/.carter/config.toml."
         )
     for key, allowed in (("role", IDENTITY_ROLES), ("require_tier", IDENTITY_TIERS)):
         value = identity.get(key)
@@ -137,19 +135,6 @@ def _validate_identity(identity: Any) -> None:
             raise ConfigError(
                 f"Invalid identity.{key}: {value!r}. Must be one of: {', '.join(allowed)}."
             )
-
-
-def identity_warnings(config: dict[str, Any]) -> list[str]:
-    """Deprecation warnings for the ``identity`` block (key names only, never values)."""
-    identity = config.get("identity")
-    if not isinstance(identity, dict):
-        return []
-    return [
-        f"identity.{key} is deprecated and ignored: attribution comes from the LLM identity "
-        "in ~/.carter/config.toml"
-        for key in _DEPRECATED_IDENTITY_KEYS
-        if key in identity
-    ]
 
 
 def _validate_agent_suffix(suffix: Any) -> None:
@@ -218,10 +203,8 @@ def _validate_policy(policy: Any, agents: list[str] | None = None) -> None:
     if not isinstance(policy, dict):
         raise ConfigError(f"Invalid policy block: {policy!r} (must be a mapping)")
     level = policy.get("level", "guarded")
-    # Strictness is `guarded`/`strict` only. Any level outside that
-    # set — a stale value from a prior install, or anything unrecognized — normalizes
-    # to the `guarded` default in-place, silently (no notice, no dedicated migration
-    # branch) so it resolves via the normal default path everywhere downstream.
+    # Strictness is `guarded`/`strict` only. Any other level normalizes to the `guarded`
+    # default in place, silently, so it resolves via the normal default path downstream.
     if level not in POLICY_LEVELS:
         policy["level"] = level = "guarded"
     for cat, gate in (policy.get("overrides") or {}).items():
@@ -349,9 +332,9 @@ RISK_TAXONOMY: dict[str, dict[str, str]] = {
 # for an agent is denied for that agent (deny-by-default). dict-of-dicts so user
 # tweaks deep-merge. Encodes the sole-holder invariant structurally: devops is the
 # sole holder of `remote-write` (Jira/Slack/vault, `ask`) and `dangerous`. No agent pushes
-# or writes to GitHub from its shell (RFC-0007 D31/C1): those verbs are denied for
+# or writes to GitHub from its shell: those verbs are denied for
 # everyone, including devops, and devops is the sole caller of the broker tools
-# `carter_push`/`carter_pr` (slice B); see `_BASH_COMMANDS["github-write"]`.
+# `carter_push`; see `_BASH_COMMANDS["github-write"]`.
 # The narrator is first-class — {read, local-write} like pm/engineer — and reaches
 # `remote-write` only by handing off to devops, never by holding the category. (The
 # redaction pass before that handoff is prompt-level guidance, not harness-enforced.)
@@ -459,11 +442,6 @@ def effective_allowlist(config: dict[str, Any]) -> dict[str, dict[str, bool]]:
 # an ordered V2 `permissions:` rule list (last match wins). That list is the single
 # enforceable truth; `carter check` compares it with what carter.yaml generates.
 
-# V1 agent frontmatter keys. A file carrying V2 `permissions` is read as V2 and these
-# are ignored with a warning (https://opencode.ai/v2/docs/migrate-v1/), so Carter
-# never emits them and the lint rejects them.
-V1_AGENT_KEYS: tuple[str, ...] = ("permission", "tools", "bash", "task", "name", "temperature")
-
 # V2 effects are allow/deny/ask only, so Carter `gate` is emitted as `ask`.
 _OPENCODE_GATE: dict[str, str] = {
     "allow": "allow",
@@ -478,10 +456,12 @@ _OPENCODE_GATE: dict[str, str] = {
 # broad `shell` rule. `vault read *` is a secret read, hence remote-write.
 #
 # `github-write` is not a risk category and has no allowlist entry: every GitHub write
-# is human-only (RFC-0007 §4.5, D31), so these are `deny` for EVERY agent, devops
+# is human-only, so these are `deny` for EVERY agent, devops
 # included. It comes last so no earlier rule (e.g. `git push --force *` under
-# `dangerous`) can re-open a verb: last match wins. devops hands off (A+ handoff file)
-# or, in slice B, calls the broker tool; it never pushes from its shell.
+# `dangerous`) can re-open a verb: last match wins. devops asks the human to run
+# `carter push` or calls the broker tool; it never pushes from its shell.
+# Opening, editing and commenting on a PR with `gh` is allowed; merging, closing,
+# reviewing and marking ready stay with the human.
 _BASH_COMMANDS: dict[str, tuple[str, ...]] = {
     "remote-write": (
         "vault read *",
@@ -498,11 +478,10 @@ _BASH_COMMANDS: dict[str, tuple[str, ...]] = {
     ),
     "github-write": (
         "git push *",
-        "gh pr create *",
         "gh pr merge *",
-        "gh pr comment *",
+        "gh pr close *",
         "gh pr review *",
-        "gh pr edit *",
+        "gh pr ready *",
         "gh issue create *",
         "gh issue comment *",
         "gh issue edit *",
@@ -514,7 +493,7 @@ _BASH_COMMANDS: dict[str, tuple[str, ...]] = {
 # Categories in `_BASH_COMMANDS` that are denied outright instead of gated.
 _ALWAYS_DENY: frozenset[str] = frozenset({"github-write"})
 
-# Actions every agent may use without prompting (step 2 of `permission_rules`).
+# Actions every agent may use without prompting (rule 2 of `permission_rules`).
 _DISCOVERY_ACTIONS: tuple[str, ...] = ("read", "glob", "grep", "skill", "question")
 
 # The primary orchestrator — the only agent allowed to launch subagents (flat chain).
@@ -538,9 +517,9 @@ def _gates_for(
 
 
 def _broker_denies(role: str) -> list[Rule]:
-    """Per-agent denies of the broker tools (D46) and, for roles that do not need it, of the
-    GitHub MCP tools (C14). Data comes from ``g2_rules.json``. They are agent permissions,
-    never global policies: devops must stay able to call ``carter_push``/``carter_pr``."""
+    """Per-agent denies of the broker tools and, for roles that do not need it, of the
+    GitHub MCP tools. Data comes from ``g2_rules.json``. They are agent permissions,
+    never global policies: devops must stay able to call ``carter_push``."""
     rules: list[Rule] = []
     if role not in agent_permission_exempt():
         rules += [_rule(tool, "*", "deny") for tool in agent_permission_denies()]
@@ -555,14 +534,16 @@ def permission_rules(config: dict[str, Any], role: str) -> list[Rule]:
 
     1. ``* *`` ask baseline (overrides V2's ``*:*:allow`` base).
     2. Discovery actions allowed.
-    3. The base ``.env`` read rules re-appended (step 2 would shadow them).
+    3. The base ``.env`` read rules re-appended (rule 2 would shadow them).
     4. Carter state under ``~/.carter``: readable by all, memories editable by
        ``local-write`` holders.
     5. ``subagent * → deny``; the maestro alone then allows ``carter-*``.
-       Then the per-agent broker denies (``carter_push``/``carter_pr``, every role but
+       Then the per-agent broker denies (``carter_push``, every role but
        devops) and the GitHub-MCP deny for roles that do not need it (see ``_broker_denies``).
     6. Category rules from the allowlist x gates; ``gate`` emitted as ``ask``. The
-       ``github-write`` shell verbs are denied for every role, last.
+       ``github-write`` shell verbs are denied for every role.
+    7. G2's consented deny set: ``config["guard_rules"]``, last, so it wins over
+       everything above (see ``carter.guard.agent_rules``). Absent = nothing is installed.
     Anything else (MCP tools, websearch, execute) falls to the baseline ask.
     """
     policy = config.get("policy") or {}
@@ -596,7 +577,13 @@ def permission_rules(config: dict[str, Any], role: str) -> list[Rule]:
         else:
             effect = _OPENCODE_GATE[gates[cat]] if cat in allowed else "deny"
         rules += [_rule("shell", cmd, effect) for cmd in commands]
+    rules += [dict(rule) for rule in config.get("guard_rules") or ()]
     return rules
+
+
+def with_guard_rules(config: dict[str, Any], rules: list[Rule]) -> dict[str, Any]:
+    """A copy of ``config`` that carries G2's rules for rendering (never written to disk)."""
+    return {**config, "guard_rules": list(rules)}
 
 
 def policy_native_keys(config: dict[str, Any], role: str) -> dict[str, Any]:

@@ -1,6 +1,6 @@
 """The `opencode debug config` / `debug agents` contract of OpenCode 2.1.4.
 
-Recorded from the real binary in an isolated HOME (plan 003 step 26 spike; fixtures in
+Recorded from the real binary in an isolated HOME spike; fixtures in
 ``tests/data/opencode-2.1.4-*.json``, all values made up). What the real thing does, as found:
 
 - ``debug config`` prints a JSON **list of config sources**, not one merged object:
@@ -201,3 +201,70 @@ class TestAgentIdsRetryTheColdStart:
             harness.read_agent_ids(
                 runner=run, which=lambda _c: "/x/opencode", sleep=lambda _s: None
             )
+
+
+class TestPerAgentDeniesInDebugAgents:
+    """What ``opencode debug agents`` carries once Carter's per-agent denies are installed.
+
+    recorded from the real 2.1.4 after ``carter install --yes`` in an
+    isolated HOME (fixture ``debug-agents-denies``, trimmed, all values made up):
+
+    - the rule ``{"action": "carter_push", "resource": "*", "effect": "deny"}`` is in
+      the ``permissions`` of **14 of 15** agents: every built-in (build, plan, general, explore,
+      compaction, summary, title) and every Carter agent except devops, which is exempt;
+    - it sits just before OpenCode's last rule (``browser`` deny), so it is the last rule that
+      matches ``carter_push`` (last match wins);
+    - an agent whose ``agents.<name>`` entry holds one invalid rule loses the whole entry: it is
+      then simply missing from ``debug config`` ``info.agents`` and from the effective rules
+      (``debug-config-agent-dropped``), and OpenCode logs a ``configuration normalization
+      diagnostic`` for ``$.agents.<name>`` with no rule detail.
+
+    ``harness.agent_deny_gaps`` is what ``check --host`` uses; the strict
+    ``xfail`` markers written in step 5 were removed when it landed.
+    """
+
+    @staticmethod
+    def agents() -> list[dict]:
+        return json.loads(fixture_text("debug-agents-denies"))
+
+    @staticmethod
+    def gaps(agents: list[dict], **kw):
+        return harness.agent_deny_gaps(agents, **kw)
+
+    def test_the_fixture_has_the_denies_everywhere_but_devops(self) -> None:
+        deny = {"carter_push": False}
+        for agent in self.agents():
+            rules = {(r["action"], r["resource"], r["effect"]) for r in agent["permissions"]}
+            has = {a: (a, "*", "deny") in rules for a in deny}
+            if agent["id"] == "carter-devops":
+                assert not any(has.values())
+            else:
+                assert all(has.values()), agent["id"]
+            assert agent["permissions"][-1]["action"] == "browser"
+
+    def test_a_complete_install_has_no_gaps(self) -> None:
+        assert self.gaps(self.agents(), exempt=("carter-devops",)) == []
+
+    def test_a_missing_rule_names_the_agent_and_the_action(self) -> None:
+        agents = self.agents()
+        build = next(a for a in agents if a["id"] == "build")
+        build["permissions"] = [r for r in build["permissions"] if r["action"] != "carter_push"]
+        assert self.gaps(agents, exempt=("carter-devops",)) == [("build", "carter_push")]
+
+    def test_the_last_matching_rule_wins_so_a_later_allow_is_a_gap(self) -> None:
+        agents = self.agents()
+        plan = next(a for a in agents if a["id"] == "plan")
+        plan["permissions"].append({"action": "carter_*", "resource": "*", "effect": "allow"})
+        assert self.gaps(agents, exempt=("carter-devops",)) == [
+            ("plan", "carter_push"),
+        ]
+
+    def test_devops_is_a_gap_unless_it_is_exempt(self) -> None:
+        assert self.gaps(self.agents(), exempt=()) == [
+            ("carter-devops", "carter_push"),
+        ]
+
+    def test_a_dropped_agent_entry_is_visible_in_debug_config(self) -> None:
+        sources = json.loads(fixture_text("debug-config-agent-dropped"))
+        merged = harness._resolve(sources)  # the reader's merge, reused
+        assert set(merged["agents"]) == {"plan"}  # `build` was written but is gone

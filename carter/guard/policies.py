@@ -1,20 +1,15 @@
-"""Carter's statements in the top-level ``policies`` of the OpenCode config.
+"""The OpenCode config writes of ``carter guard``.
 
-RFC-0007 App C.6.3. Carter's statements form one contiguous block at the **tail** (denies,
-then the gh allows, then any D52 opt-out allows): policies are last-match-wins and an
-``allow`` only lifts an earlier deny, so a later user ``allow`` of ``git push`` would
-defeat ours if our block were not last. Every run removes the tuples it recorded and
-re-appends the wanted ones, which also moves a displaced block back to the tail and is a
-no-op when nothing changed.
-
-A statement the user already has verbatim stays where it is and is recorded
-``preexisting``: Carter never removes it. A recorded statement the user edited is no
-longer ours and is left alone.
+Since Carter writes no global ``policies``: G2's deny set lives in the Carter agents' own
+``permissions:`` (``agent_rules``). ``apply`` is kept for what remains: it takes out the
+statements an earlier Carter recorded (owned tuples only; a statement the user already had
+verbatim was recorded ``preexisting`` and is never touched, and a recorded statement the user
+edited is no longer ours) and converges the per-agent ``carter_push`` denies of the built-in
+agents, all in one verified write.
 """
 
 from __future__ import annotations
 
-import json
 from collections.abc import Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -40,7 +35,6 @@ __all__ = [
     "apply",
     "missing_statements",
     "remove",
-    "render_snippet",
     "target_path",
 ]
 
@@ -72,12 +66,6 @@ class RemoveResult:
     removed: list[str] = field(default_factory=list)
     kept_edited: list[str] = field(default_factory=list)  # recorded, but no longer as written
     perms: permissions.PermDiff = field(default_factory=permissions.PermDiff)
-
-
-def render_snippet(statements: Sequence[Statement]) -> str:
-    """What ``--print-policies`` shows: byte-for-byte the file Carter would write when the
-    config is absent, and the block to paste at the tail of an existing ``policies`` list."""
-    return json.dumps({"policies": render_policies(statements)}, indent=2) + "\n"
 
 
 def _policies_list(config: dict[str, Any]) -> list[dict[str, Any]]:
@@ -115,7 +103,7 @@ def apply(
     agents: Sequence[str] = (),
 ) -> ApplyResult:
     """Converge the config onto ``statements`` (ordered: denies, then allows) and onto the
-    per-agent ``carter_push``/``carter_pr`` denies for ``agents`` (built-ins; D46), in ONE
+    per-agent ``carter_push`` denies for ``agents`` (built-ins), in ONE
     atomic, verified write. Agents recorded earlier but not listed any more are un-denied.
 
     Raises ``PolicyWriteError`` (nothing or the original restored) or ``IdentityError``

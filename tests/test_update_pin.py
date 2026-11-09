@@ -1,4 +1,4 @@
-"""``carter update`` pins ``carter.yaml identity.role``/``require_tier`` (D62, step 12).
+"""``carter update`` pins ``carter.yaml identity.role``/``require_tier``.
 
 Nothing in carter.yaml changes attribution at runtime: only a human-run ``update`` copies
 the policy into ``~/.carter/config.toml [workspaces."<abs path>"]``.
@@ -48,8 +48,9 @@ def set_policy(ws: Path, **identity) -> None:
     yml.write_text(yaml.dump(data))
 
 
-def update(ws: Path, *args: str, input: str | None = None):
-    return CliRunner().invoke(main, ["update", str(ws), *args], input=input)
+def update(ws: Path, *args: str, env: dict[str, str] | None = None):
+    """``carter update`` asks nothing (); ``-v`` shows the details these tests read."""
+    return CliRunner().invoke(main, ["update", "-v", str(ws), *args], env=env)
 
 
 def pinned(cfg_path: Path, ws: Path) -> dict:
@@ -204,37 +205,26 @@ class TestConfirmation:
         update(ws, "--dry-run", "--yes")
         assert not cfg_path.exists()
 
-    def test_non_tty_without_yes_skips_pinning_with_a_notice(self, ws, cfg_path):
+    def test_it_asks_nothing_so_no_terminal_and_no_yes_are_needed(self, ws, cfg_path):
         set_policy(ws, role="author")
 
-        result = update(ws)
+        result = update(ws)  # no --yes, no TTY, no question
 
-        assert result.exit_code == 0
-        assert not cfg_path.exists()
-        assert "not pinned" in result.output.lower()
-        assert "--yes" in result.output
-        assert "Templates re-rendered" in result.output  # the rest of update still runs
-
-    def test_tty_prompt_accept(self, ws, cfg_path, monkeypatch):
-        monkeypatch.setattr("carter.cli._stdin_is_tty", lambda: True)
-        set_policy(ws, role="author")
-        result = update(ws, input="y\n")
         assert result.exit_code == 0, result.output
         assert pinned(cfg_path, ws)["role"] == "author"
+        assert "[y/N]" not in result.output
+        assert "✓ updated" in result.output  # the rest of update runs too
 
-    def test_tty_prompt_decline(self, ws, cfg_path, monkeypatch):
-        monkeypatch.setattr("carter.cli._stdin_is_tty", lambda: True)
+    def test_an_agent_shell_never_pins(self, ws, cfg_path):
         set_policy(ws, role="author")
-        result = update(ws, input="n\n")
+        result = update(ws, env={"AGENT": "1"})
         assert result.exit_code == 0
-        assert not cfg_path.exists()
-        assert "not pinned" in result.output.lower()
+        assert not cfg_path.exists() and "agent shells never pin" in result.output
 
-    def test_no_prompt_when_nothing_changes(self, ws, cfg_path, monkeypatch):
-        monkeypatch.setattr("carter.cli._stdin_is_tty", lambda: True)
+    def test_nothing_is_asked_when_nothing_changes(self, ws, cfg_path):
         set_policy(ws, role="author")
-        update(ws, "--yes")
-        result = update(ws, input="")  # a prompt would hit EOF and abort
+        update(ws)
+        result = update(ws)
         assert result.exit_code == 0 and "already pinned" in result.output.lower()
 
 
@@ -250,6 +240,32 @@ class TestRefusals:
         assert result.exit_code == 1
         assert "max_tier" in result.output and "require_tier" in result.output
         assert snap(cfg_path) == before
+
+    def test_role_author_next_to_a_cap_is_refused_and_nothing_is_written(self, ws, cfg_path):
+        """role author needs T2, a cap is always below it; never downgraded."""
+        cfg_path.parent.mkdir(parents=True)
+        cfg_path.write_text(T1 + f'[workspaces."{ws.resolve()}"]\nmax_tier = "t1"\n')
+        before = snap(cfg_path)
+        set_policy(ws, role="author")
+
+        result = update(ws, "--yes")
+
+        assert result.exit_code == 1
+        assert "E-ROLE-B-TIER" in result.output and "max_tier" in result.output
+        assert snap(cfg_path) == before
+
+    def test_a_cap_added_by_hand_after_the_pin_is_refused_by_the_mirror_step(self, ws, cfg_path):
+        cfg_path.parent.mkdir(parents=True)
+        cfg_path.write_text(T1)
+        set_policy(ws, role="author")
+        assert update(ws, "--yes").exit_code == 0
+        cfg_path.write_text(
+            cfg_path.read_text().replace('role = "author"', 'role = "author"\nmax_tier = "t1"')
+        )
+
+        result = update(ws, "--yes")
+
+        assert result.exit_code == 1 and "E-ROLE-B-TIER" in result.output
 
     def test_cap_equal_to_require_tier_is_fine(self, ws, cfg_path):
         cfg_path.parent.mkdir(parents=True)
@@ -283,14 +299,14 @@ class TestRefusals:
         cfg_path.write_text("schema = 2\n[identity\n")
         assert update(ws, "--yes").exit_code == 0
 
-    def test_schema_1_config_asks_for_install_first(self, ws, cfg_path):
+    def test_a_config_with_old_keys_is_not_rewritten_and_the_keys_are_named(self, ws, cfg_path):
         cfg_path.parent.mkdir(parents=True)
         legacy = '[attribution]\nname = "x"\n'
         cfg_path.write_text(legacy)
         set_policy(ws, role="author")
         result = update(ws, "--yes")
         assert result.exit_code == 1
-        assert "carter install" in result.output
+        assert "unknown key(s) `attribution.name`" in result.output
         assert cfg_path.read_text() == legacy
 
     def test_invalid_yaml_policy_stops_update(self, ws, cfg_path):
@@ -324,27 +340,29 @@ class TestWorkspaceKey:
         assert (res.role, res.role_source) == ("author", "workspace")
 
 
-class TestDeprecationsAreShown:
-    def test_update_and_check_warn_about_legacy_keys_without_failing(self, ws):
+class TestRetiredKeysAreReported:
+    def test_update_and_check_report_retired_keys_without_failing(self, ws):
         set_policy(ws, git_account="me", bot_name="acme-bot")
+        yaml_path = ws / ".carter" / "carter.yaml"
 
         up = update(ws, "--yes")
         chk = CliRunner().invoke(main, ["check", str(ws), "--no-harness"])
 
         assert up.exit_code == 0, up.output
-        assert "identity.bot_name" in up.output and "deprecated" in up.output
-        assert "identity.git_account" in chk.output and "deprecated" in chk.output
-        assert "Workspace OK" in chk.output  # a warning, never an error
+        assert f"unknown key `identity.bot_name` in {yaml_path} → delete it" in up.output
+        assert f"unknown key `identity.git_account` in {yaml_path} → delete it" in chk.output
+        assert "Workspace OK" in chk.output  # a report, never an error
+        assert "deprecated" not in up.output + chk.output
 
     def test_check_is_silent_for_a_policy_only_block(self, ws):
         set_policy(ws, role="author", require_tier="t1")
         chk = CliRunner().invoke(main, ["check", str(ws), "--no-harness"])
-        assert "deprecated" not in chk.output
+        assert "unknown key" not in chk.output
 
 
 class TestWorkspaceLevelNoteOnly:
     """`carter update` mentions the workspace AGENTS.md only; the global note belongs to
-    `carter install` (plan 002 step 17)."""
+    `carter install`."""
 
     OLD = (
         "- **Commits**: The user is the author (signed `-S`); credit Carter only with a "
@@ -372,7 +390,7 @@ class TestWorkspaceLevelNoteOnly:
         assert "not rewritten" not in update(ws, "--yes").output
 
     def test_a_workspace_with_the_commit_rule_but_no_push_rule_gets_the_push_rule(self, ws):
-        from carter.aplus.handoff import OWN_TERMINAL
+        from carter.aplus.push import OWN_TERMINAL
 
         agents = ws / "AGENTS.md"
         agents.write_text("# Mine\n- **Commits**: use the coauthor_trailer.\n")
@@ -384,7 +402,7 @@ class TestWorkspaceLevelNoteOnly:
         assert agents.read_text() == "# Mine\n- **Commits**: use the coauthor_trailer.\n"
 
     def test_a_current_workspace_file_gets_no_note(self, ws):
-        from carter.aplus.handoff import OWN_TERMINAL
+        from carter.aplus.push import OWN_TERMINAL
 
         agents = ws / "AGENTS.md"
         agents.write_text(f"# Mine\ncoauthor_trailer\n{OWN_TERMINAL}\n")

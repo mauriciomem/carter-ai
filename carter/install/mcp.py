@@ -1,11 +1,7 @@
-"""MCP server wiring for OpenCode V2.
+"""MCP server wiring for OpenCode.
 
 Carter servers are written under ``mcp.servers.<name>`` in the global
-``opencode.json`` (https://opencode.ai/v2/docs/mcp-servers/). V1 fields are
-normalized per https://opencode.ai/v2/docs/migrate-v1/: ``enabled`` becomes the
-inverse ``disabled`` and a scalar ``timeout`` becomes ``{catalog, execution}``.
-A V1 ``mcp.<carter-name>`` entry left by an older Carter is replaced by the V2
-entry, so the two forms never conflict.
+``opencode.json`` (https://opencode.ai/v2/docs/mcp-servers/).
 
 The global config may be ``opencode.json`` or ``opencode.jsonc``
 (https://opencode.ai/v2/docs/config/#locations). OpenCode 2.1 loads both when
@@ -33,23 +29,6 @@ from carter.install.paths import REPO_ROOT, _opencode_base
 # The MCP servers Carter ships. Single source of truth so the install and
 # uninstall paths can never diverge.
 MCP_SERVERS = ("github", "terraform", "atlassian")
-
-# Keys under `mcp` that are V2 structure, never V1 server names.
-_V2_MCP_KEYS = frozenset({"servers", "timeout"})
-
-
-def to_v2_server(entry: dict[str, Any]) -> dict[str, Any]:
-    """Return ``entry`` in the V2 server shape (``disabled``, timeout object)."""
-    out = dict(entry)
-    if "enabled" in out:
-        enabled = out.pop("enabled")
-        if enabled is False:
-            out["disabled"] = True
-    timeout = out.get("timeout")
-    if isinstance(timeout, int) and not isinstance(timeout, bool):
-        out["timeout"] = {"catalog": timeout, "execution": timeout}
-    return out
-
 
 BACKUP_SUFFIX = ".carter-backup"
 
@@ -96,9 +75,8 @@ def merge_mcp_servers(
 ) -> bool:
     """Merge ``entries`` into ``mcp.servers`` of an OpenCode config file.
 
-    Unrelated keys (and unrelated servers, V1 or V2) are preserved. A V1
-    ``mcp.<name>`` entry with the same name as a Carter entry is removed: the V2
-    entry replaces it. Returns False (file untouched) when the file can't be parsed.
+    Unrelated keys and servers are preserved. Returns False (file untouched) when the file
+    can't be parsed.
     """
     data = _load_config(file_path)
     if data is None:
@@ -109,23 +87,20 @@ def merge_mcp_servers(
     mcp = data.setdefault("mcp", {})
     servers = mcp.setdefault("servers", {})
     for name, entry in entries.items():
-        if name in mcp and name not in _V2_MCP_KEYS:
-            del mcp[name]
-            log_ok(f"Migrated {name} from V1 mcp.{name} to mcp.servers.{name}")
         base_name = name.removeprefix("carter-")
-        if base_name in servers or base_name in mcp:
+        if base_name in servers:
             log_warn(
                 f'Existing "{base_name}" server found in {file_path.name}',
                 f'Carter will install as "{name}" (separate entry). '
                 f'You may want to remove "{base_name}" to avoid duplicate tools.',
             )
-        servers[name] = to_v2_server(entry)
+        servers[name] = dict(entry)
     _save_config(file_path, data)
     return True
 
 
 def remove_carter_servers(file_path: Path) -> list[str]:
-    """Remove every ``carter-*`` server (V2 ``mcp.servers`` and V1 ``mcp``)."""
+    """Remove every ``carter-*`` server from ``mcp.servers``."""
     if not file_path.exists():
         return []
     data = _load_config(file_path)
@@ -134,9 +109,7 @@ def remove_carter_servers(file_path: Path) -> list[str]:
     mcp = data.get("mcp")
     if not isinstance(mcp, dict):
         return []
-    removed = [k for k in list(mcp) if k.startswith("carter-")]
-    for k in removed:
-        del mcp[k]
+    removed: list[str] = []
     servers = mcp.get("servers")
     if isinstance(servers, dict):
         for k in [k for k in list(servers) if k.startswith("carter-")]:
@@ -152,11 +125,10 @@ def _carter_server_names(file_path: Path) -> set[str]:
     mcp = data.get("mcp") if isinstance(data, dict) else None
     if not isinstance(mcp, dict):
         return set()
-    names = {k for k in mcp if k.startswith("carter-")}
     servers = mcp.get("servers")
     if isinstance(servers, dict):
-        names |= {k for k in servers if k.startswith("carter-")}
-    return names
+        return {k for k in servers if k.startswith("carter-")}
+    return set()
 
 
 def configure_mcp_servers(

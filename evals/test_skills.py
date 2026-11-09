@@ -44,9 +44,9 @@ class TestCarterOpsSkillContent:
         assert "--author=" not in ops_skill and "--author '" not in ops_skill
 
     def test_recipe_never_signs_and_verifies_the_commit(self, ops_skill: str) -> None:
-        """No `git commit -S`; the recipe checks author, committer and signature status."""
+        """No `git commit -S`; the recipe checks the signature with one quiet exit code."""
         assert "git commit -S" not in ops_skill
-        assert "git log -1 --format='%an|%cn|%G?'" in ops_skill
+        assert "carter identity verify --commit HEAD --quiet" in ops_skill
 
     def test_recipe_stages_explicit_paths(self, ops_skill: str) -> None:
         assert "git add <file1> <file2>" in ops_skill
@@ -98,7 +98,7 @@ class TestCarterOpsSkillContent:
     def test_has_footer_for_github(self, ops_skill: str) -> None:
         """Must teach appending the emitted footer to GitHub body fields."""
         assert "footer" in ops_skill.lower()
-        assert "`footer` from `carter ops config --emit`" in ops_skill
+        assert "carter ops config --emit --field footer" in ops_skill
 
     def test_has_jira_operations(self, ops_skill: str) -> None:
         """Jira goes through the carter-atlassian MCP server, never curl/REST."""
@@ -106,13 +106,15 @@ class TestCarterOpsSkillContent:
         assert "carter-atlassian" in ops_skill
         assert "rest/api/" not in ops_skill
 
-    def test_no_legacy_cli_invocations(self, ops_skill: str) -> None:
-        """Skill should not teach the legacy CLI as primary execution method."""
-        # These are legacy patterns that should not be the taught approach
-        # The `carter-ops` binary no longer exists; the CLI is `carter ops`, and it
-        # has no git/gh/jira operations — the model runs those commands directly.
-        for legacy in ("carter-ops git-", "carter-ops gh-", "carter-ops jira-", "carter-ops audit"):
-            assert legacy not in ops_skill
+    def test_the_skill_teaches_direct_commands(self, ops_skill: str) -> None:
+        """The skill has the model run git/gh/jira commands directly; `carter ops` has none."""
+        for command in (
+            "carter-ops git-",
+            "carter-ops gh-",
+            "carter-ops jira-",
+            "carter-ops audit",
+        ):
+            assert command not in ops_skill
         for op in ("git-", "gh-", "jira-"):
             assert f"carter ops {op}" not in ops_skill
 

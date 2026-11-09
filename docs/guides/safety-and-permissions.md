@@ -16,8 +16,11 @@ Three ideas decide the effect for any action:
 1. **Everything asks by default.** Only what is explicitly allowed runs silently.
 2. **Actions fall into four risk categories.**
 3. **Each agent is granted only the categories its job needs.** Risky commands in a
-   category the agent doesn't hold are denied. Agents without local-write still
-   can edit files, run shell commands and fetch web pages, but OpenCode asks first.
+   category the agent doesn't hold are denied. Agents without local-write can still
+   edit files, run shell commands and fetch web pages, but OpenCode asks first.
+
+On top of that, the [guards](install.md#guards) isolate Carter agents' shells from your
+credentials and refuse pushes in any spelling.
 
 ## The four risk categories
 
@@ -25,10 +28,11 @@ Three ideas decide the effect for any action:
 |----------|----------|---------------------|----------|
 | **read** | read and search files, `git status`, `git diff` | allow | allow |
 | **local-write** | edit files, run commands and tests, `git commit` | allow | allow |
-| **remote-write** | Jira and Slack writes, `vault read` (the `git push` and `gh` write commands are denied to every agent) | ask | ask |
-| **dangerous** | `terraform apply`, `kubectl apply`, `helm upgrade`, `rm -rf`, `git push --force` | ask | **deny** |
+| **remote-write** | Jira and Slack writes, `vault read` | ask | ask |
+| **dangerous** | `terraform apply`, `kubectl apply`, `helm upgrade`, `rm -rf` | ask | **deny** |
 
-The exact command patterns are in the
+Pushing, merging and the `gh` writes other than opening, editing and commenting on a pull
+request are denied to every agent whatever the level. The exact command patterns are in the
 [permissions reference](../reference/permissions.md).
 
 ## Who can do what
@@ -41,12 +45,21 @@ The exact command patterns are in the
 
 What that means in practice:
 
-- **Nobody pushes.** `git push` and the `gh` write commands are denied to every agent,
-  DevOps included; you push with `carter push` and open the pull request with
-  `carter pr`, in your own terminal ([Write operations](write-operations.md#pushing-and-pull-requests-the-handoff)).
-  A finished branch is handed over as a file.
+- **Nobody pushes or merges.** `git push` and the `gh` writes other than opening, editing and
+  commenting on a pull request are denied to every agent, DevOps included. You push with
+  `carter push` (in your terminal or as `!carter push` in OpenCode). Agents open, edit and comment on pull requests with `gh pr create|edit|comment`
+  ([Write operations](write-operations.md#pushing-and-pull-requests)). Merging, closing,
+  reviewing and marking a pull request ready are yours. **One optional exception:** DevOps alone
+  has a tool, `carter_push`, that *asks you to approve each use*
+  ([Write operations](write-operations.md#letting-devops-ask-you-to-push)).
+- **The guards bind Carter's agents only.** The deny rules sit in each Carter agent's own
+  permissions, and the plugin and gate act for Carter agents and Carter workspaces
+  ([Install: scope](install.md#scope-only-carter-agents-and-carter-workspaces)). Other OpenCode
+  agents, such as `build`, are not restricted by Carter.
+- **A CI review run commits nothing.** The optional [review-only CI](ci-review.md) workflow gives
+  its model read tools only, has `contents: read`, and Carter refuses commits in a detected CI.
 - **Only DevOps can change infrastructure** and send Jira and Slack text.
-- **Read-only agents still can, but must ask.** Maestro, Architect and Learner get a
+- **Agents without local-write still can, but must ask.** Maestro, Architect and Learner get a
   prompt before they edit a file or run a shell command, including `git commit`.
 - **Remote and dangerous commands are denied** to every agent except DevOps.
 - **Reading `.env` files asks** for every agent. `.env.example` is allowed.
@@ -70,8 +83,8 @@ carter update
 | `guarded` | Day-to-day work. Remote and destructive actions wait for you |
 | `strict` | Regulated or production-critical repositories. Destructive and infrastructure-changing commands are blocked outright |
 
-A missing or unknown level counts as `guarded`. The global agents from
-`carter install` always use `guarded`.
+A missing or unknown level counts as `guarded`. The global agents from `carter install` always
+use `guarded`.
 
 ## Know the limits
 
@@ -92,6 +105,46 @@ A missing or unknown level counts as `guarded`. The global agents from
   out.
 - **`deny` is a hard stop.** If an ask is not enough, use `strict` or a `deny`
   override (below).
+
+## What the guards cannot do
+
+With the plugin installed, the isolation (no SSH agent, a read-only token, no `git push` in any
+spelling) does the real work. The command gate is a speed bump in front of it, not a sandbox.
+
+- **Same-user evasion.** Agents run as you. The gate parses the command line; it does not
+  read a script or program the agent writes and runs by path (`python3 tool.py`,
+  `bash run.sh`, a sourced file), and it cannot see through every way of building a command at
+  run time. What an evaded gate still cannot do is reach your SSH keys or write to GitHub.
+  Until Carter runs agents in a sandbox, a determined process running as you is not contained.
+- **Outside Carter there are no guards.** Other agents (`build`, `plan`, your own) and sessions
+  outside a Carter workspace are not gated, not isolated and not read- or edit-denied. With the
+  plugin not loaded, nothing stops their `git push` but the credentials they have.
+- **`carter_push` can be forged by a same-user agent.** An agent running as you, with the OpenCode
+  server password, can answer its approval prompt through the server API after any delay. The
+  prompt and the dwell rule stop a careless agent and an auto-accepting client, not a hostile one
+  ([Write operations](write-operations.md#what-this-does-not-stop)).
+- **`git push --no-verify` skips the `pre-push` hook.** The hook is the backstop for pushes
+  the gate never saw; the gate itself rejects every `git push`.
+- **Shell writes outside Carter's own files are not gated:** the global OpenCode config,
+  `~/.gitconfig`, `~/.config/git/`, a repository's `.opencode/`, `opencode.json[c]`, `.git/hooks/`
+  and `.git/config`. The edit tool is denied there; a shell command can still write them. A plugin
+  planted in a project's `.opencode/` would load into the OpenCode server, and a planted
+  `.git/hooks/pre-commit` runs in your terminal with your credentials. `carter check --host` lists
+  project config that can run code and plugin files Carter did not write; review them.
+- **The read-only token is visible to the model.** It is in the environment of the agent's shell
+  (`GH_TOKEN`), so it is only as safe as a fine-grained token without **Contents** write is: give it
+  the fewest repositories you can.
+- **Agent commits are unsigned below T2.** Author and committer are you, and the trailer credits
+  Carter. At T2 the LLM identity signs; if it cannot, the commit fails and stays staged. Set
+  `max_tier = "t1"` in a workspace's table of `~/.carter/config.toml` to allow unsigned agent
+  commits there. A squash merge drops the signature from `main`. The limits of signing itself are in
+  [Identity and signing](identity-and-signing.md#what-signing-does-not-protect).
+- **A false self-test failure is conservative.** If another plugin rejects a command after
+  Carter's, the self-test can end `failed`; then every shell, yours in the `!` prompt
+  included, is treated as an agent shell until you restart OpenCode.
+- **Fail closed.** If the gate, the plugin or `isolation.json` breaks, agent shells are
+  refused; your terminal and the `!` prompt keep working, and
+  `carter guard remove --only plugin` is yours to run.
 
 ## Customize
 
@@ -137,7 +190,8 @@ carter ops policy-override \
 ```
 
 This **records** the exception; it doesn't lift any rule. One entry covers one
-action. See [Write operations](write-operations.md#audit-log) for the log format.
+action, and a GitHub write cannot be recorded this way. See
+[Write operations](write-operations.md#audit-log) for the log format.
 
 ## Next
 

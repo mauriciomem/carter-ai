@@ -1,0 +1,2157 @@
+{
+ "git": "2.56",
+ "events": [
+  "pre-commit",
+  "prepare-commit-msg",
+  "commit-msg",
+  "post-commit",
+  "pre-merge-commit",
+  "post-merge",
+  "post-rewrite",
+  "applypatch-msg",
+  "post-applypatch",
+  "reference-transaction"
+ ],
+ "modes": [
+  "default",
+  "no-verify",
+  "hooksPath=/dev/null"
+ ],
+ "ops": {
+  "commit -m": {
+   "default": {
+    "rc": [
+     0
+    ],
+    "hooks": [
+     "pre-commit",
+     "prepare-commit-msg:message",
+     "commit-msg",
+     "post-commit"
+    ],
+    "refs": [
+     "refs/heads/main"
+    ],
+    "new": [
+     {
+      "llm": true,
+      "signed": true,
+      "post_commit": true
+     }
+    ]
+   },
+   "no-verify": {
+    "rc": [
+     0
+    ],
+    "hooks": [
+     "prepare-commit-msg:message",
+     "post-commit"
+    ],
+    "refs": [
+     "refs/heads/main"
+    ],
+    "new": [
+     {
+      "llm": true,
+      "signed": true,
+      "post_commit": true
+     }
+    ]
+   },
+   "hooksPath=/dev/null": {
+    "rc": [
+     0
+    ],
+    "hooks": [
+     "pre-commit",
+     "prepare-commit-msg:message",
+     "commit-msg",
+     "post-commit"
+    ],
+    "refs": [
+     "refs/heads/main"
+    ],
+    "new": [
+     {
+      "llm": true,
+      "signed": true,
+      "post_commit": true
+     }
+    ]
+   }
+  },
+  "commit -F file": {
+   "default": {
+    "rc": [
+     0
+    ],
+    "hooks": [
+     "pre-commit",
+     "prepare-commit-msg:message",
+     "commit-msg",
+     "post-commit"
+    ],
+    "refs": [
+     "refs/heads/main"
+    ],
+    "new": [
+     {
+      "llm": true,
+      "signed": true,
+      "post_commit": true
+     }
+    ]
+   },
+   "no-verify": {
+    "rc": [
+     0
+    ],
+    "hooks": [
+     "prepare-commit-msg:message",
+     "post-commit"
+    ],
+    "refs": [
+     "refs/heads/main"
+    ],
+    "new": [
+     {
+      "llm": true,
+      "signed": true,
+      "post_commit": true
+     }
+    ]
+   },
+   "hooksPath=/dev/null": {
+    "rc": [
+     0
+    ],
+    "hooks": [
+     "pre-commit",
+     "prepare-commit-msg:message",
+     "commit-msg",
+     "post-commit"
+    ],
+    "refs": [
+     "refs/heads/main"
+    ],
+    "new": [
+     {
+      "llm": true,
+      "signed": true,
+      "post_commit": true
+     }
+    ]
+   }
+  },
+  "commit (editor)": {
+   "default": {
+    "rc": [
+     0
+    ],
+    "hooks": [
+     "pre-commit",
+     "prepare-commit-msg:message",
+     "commit-msg",
+     "post-commit"
+    ],
+    "refs": [
+     "refs/heads/main"
+    ],
+    "new": [
+     {
+      "llm": true,
+      "signed": true,
+      "post_commit": true
+     }
+    ]
+   },
+   "no-verify": {
+    "rc": [
+     0
+    ],
+    "hooks": [
+     "prepare-commit-msg:message",
+     "post-commit"
+    ],
+    "refs": [
+     "refs/heads/main"
+    ],
+    "new": [
+     {
+      "llm": true,
+      "signed": true,
+      "post_commit": true
+     }
+    ]
+   },
+   "hooksPath=/dev/null": {
+    "rc": [
+     0
+    ],
+    "hooks": [
+     "pre-commit",
+     "prepare-commit-msg:message",
+     "commit-msg",
+     "post-commit"
+    ],
+    "refs": [
+     "refs/heads/main"
+    ],
+    "new": [
+     {
+      "llm": true,
+      "signed": true,
+      "post_commit": true
+     }
+    ]
+   }
+  },
+  "commit -t template": {
+   "default": {
+    "rc": [
+     0
+    ],
+    "hooks": [
+     "pre-commit",
+     "prepare-commit-msg:template",
+     "commit-msg",
+     "post-commit"
+    ],
+    "refs": [
+     "refs/heads/main"
+    ],
+    "new": [
+     {
+      "llm": true,
+      "signed": true,
+      "post_commit": true
+     }
+    ]
+   },
+   "no-verify": {
+    "rc": [
+     0
+    ],
+    "hooks": [
+     "prepare-commit-msg:template",
+     "post-commit"
+    ],
+    "refs": [
+     "refs/heads/main"
+    ],
+    "new": [
+     {
+      "llm": true,
+      "signed": true,
+      "post_commit": true
+     }
+    ]
+   },
+   "hooksPath=/dev/null": {
+    "rc": [
+     0
+    ],
+    "hooks": [
+     "pre-commit",
+     "prepare-commit-msg:template",
+     "commit-msg",
+     "post-commit"
+    ],
+    "refs": [
+     "refs/heads/main"
+    ],
+    "new": [
+     {
+      "llm": true,
+      "signed": true,
+      "post_commit": true
+     }
+    ]
+   }
+  },
+  "commit -C HEAD": {
+   "default": {
+    "rc": [
+     0
+    ],
+    "hooks": [
+     "pre-commit",
+     "prepare-commit-msg:commit",
+     "commit-msg",
+     "post-commit"
+    ],
+    "refs": [
+     "refs/heads/main"
+    ],
+    "new": [
+     {
+      "llm": true,
+      "signed": true,
+      "post_commit": true
+     }
+    ]
+   },
+   "no-verify": {
+    "rc": [
+     0
+    ],
+    "hooks": [
+     "prepare-commit-msg:commit",
+     "post-commit"
+    ],
+    "refs": [
+     "refs/heads/main"
+    ],
+    "new": [
+     {
+      "llm": true,
+      "signed": true,
+      "post_commit": true
+     }
+    ]
+   },
+   "hooksPath=/dev/null": {
+    "rc": [
+     0
+    ],
+    "hooks": [
+     "pre-commit",
+     "prepare-commit-msg:commit",
+     "commit-msg",
+     "post-commit"
+    ],
+    "refs": [
+     "refs/heads/main"
+    ],
+    "new": [
+     {
+      "llm": true,
+      "signed": true,
+      "post_commit": true
+     }
+    ]
+   }
+  },
+  "commit --amend": {
+   "default": {
+    "rc": [
+     0
+    ],
+    "hooks": [
+     "pre-commit",
+     "prepare-commit-msg:message",
+     "commit-msg",
+     "post-commit",
+     "post-rewrite:amend"
+    ],
+    "refs": [
+     "refs/heads/main"
+    ],
+    "new": [
+     {
+      "llm": true,
+      "signed": true,
+      "post_commit": true
+     }
+    ]
+   },
+   "no-verify": {
+    "rc": [
+     0
+    ],
+    "hooks": [
+     "prepare-commit-msg:message",
+     "post-commit",
+     "post-rewrite:amend"
+    ],
+    "refs": [
+     "refs/heads/main"
+    ],
+    "new": [
+     {
+      "llm": true,
+      "signed": true,
+      "post_commit": true
+     }
+    ]
+   },
+   "hooksPath=/dev/null": {
+    "rc": [
+     0
+    ],
+    "hooks": [
+     "pre-commit",
+     "prepare-commit-msg:message",
+     "commit-msg",
+     "post-commit",
+     "post-rewrite:amend"
+    ],
+    "refs": [
+     "refs/heads/main"
+    ],
+    "new": [
+     {
+      "llm": true,
+      "signed": true,
+      "post_commit": true
+     }
+    ]
+   }
+  },
+  "commit --amend --no-edit": {
+   "default": {
+    "rc": [
+     0
+    ],
+    "hooks": [
+     "pre-commit",
+     "prepare-commit-msg:commit",
+     "commit-msg",
+     "post-commit",
+     "post-rewrite:amend"
+    ],
+    "refs": [
+     "refs/heads/main"
+    ],
+    "new": [
+     {
+      "llm": true,
+      "signed": true,
+      "post_commit": true
+     }
+    ]
+   },
+   "no-verify": {
+    "rc": [
+     0
+    ],
+    "hooks": [
+     "prepare-commit-msg:commit",
+     "post-commit",
+     "post-rewrite:amend"
+    ],
+    "refs": [
+     "refs/heads/main"
+    ],
+    "new": [
+     {
+      "llm": true,
+      "signed": true,
+      "post_commit": true
+     }
+    ]
+   },
+   "hooksPath=/dev/null": {
+    "rc": [
+     0
+    ],
+    "hooks": [
+     "pre-commit",
+     "prepare-commit-msg:commit",
+     "commit-msg",
+     "post-commit",
+     "post-rewrite:amend"
+    ],
+    "refs": [
+     "refs/heads/main"
+    ],
+    "new": [
+     {
+      "llm": true,
+      "signed": true,
+      "post_commit": true
+     }
+    ]
+   }
+  },
+  "commit --amend --reset-author": {
+   "default": {
+    "rc": [
+     0
+    ],
+    "hooks": [
+     "pre-commit",
+     "prepare-commit-msg:commit",
+     "commit-msg",
+     "post-commit",
+     "post-rewrite:amend"
+    ],
+    "refs": [
+     "refs/heads/main"
+    ],
+    "new": [
+     {
+      "llm": true,
+      "signed": true,
+      "post_commit": true
+     }
+    ]
+   },
+   "no-verify": {
+    "rc": [
+     0
+    ],
+    "hooks": [
+     "prepare-commit-msg:commit",
+     "post-commit",
+     "post-rewrite:amend"
+    ],
+    "refs": [
+     "refs/heads/main"
+    ],
+    "new": [
+     {
+      "llm": true,
+      "signed": true,
+      "post_commit": true
+     }
+    ]
+   },
+   "hooksPath=/dev/null": {
+    "rc": [
+     0
+    ],
+    "hooks": [
+     "pre-commit",
+     "prepare-commit-msg:commit",
+     "commit-msg",
+     "post-commit",
+     "post-rewrite:amend"
+    ],
+    "refs": [
+     "refs/heads/main"
+    ],
+    "new": [
+     {
+      "llm": true,
+      "signed": true,
+      "post_commit": true
+     }
+    ]
+   }
+  },
+  "commit --fixup": {
+   "default": {
+    "rc": [
+     0
+    ],
+    "hooks": [
+     "pre-commit",
+     "prepare-commit-msg:message",
+     "commit-msg",
+     "post-commit"
+    ],
+    "refs": [
+     "refs/heads/main"
+    ],
+    "new": [
+     {
+      "llm": true,
+      "signed": true,
+      "post_commit": true
+     }
+    ]
+   },
+   "no-verify": {
+    "rc": [
+     0
+    ],
+    "hooks": [
+     "prepare-commit-msg:message",
+     "post-commit"
+    ],
+    "refs": [
+     "refs/heads/main"
+    ],
+    "new": [
+     {
+      "llm": true,
+      "signed": true,
+      "post_commit": true
+     }
+    ]
+   },
+   "hooksPath=/dev/null": {
+    "rc": [
+     0
+    ],
+    "hooks": [
+     "pre-commit",
+     "prepare-commit-msg:message",
+     "commit-msg",
+     "post-commit"
+    ],
+    "refs": [
+     "refs/heads/main"
+    ],
+    "new": [
+     {
+      "llm": true,
+      "signed": true,
+      "post_commit": true
+     }
+    ]
+   }
+  },
+  "commit --allow-empty": {
+   "default": {
+    "rc": [
+     0
+    ],
+    "hooks": [
+     "pre-commit",
+     "prepare-commit-msg:message",
+     "commit-msg",
+     "post-commit"
+    ],
+    "refs": [
+     "refs/heads/main"
+    ],
+    "new": [
+     {
+      "llm": true,
+      "signed": true,
+      "post_commit": true
+     }
+    ]
+   },
+   "no-verify": {
+    "rc": [
+     0
+    ],
+    "hooks": [
+     "prepare-commit-msg:message",
+     "post-commit"
+    ],
+    "refs": [
+     "refs/heads/main"
+    ],
+    "new": [
+     {
+      "llm": true,
+      "signed": true,
+      "post_commit": true
+     }
+    ]
+   },
+   "hooksPath=/dev/null": {
+    "rc": [
+     0
+    ],
+    "hooks": [
+     "pre-commit",
+     "prepare-commit-msg:message",
+     "commit-msg",
+     "post-commit"
+    ],
+    "refs": [
+     "refs/heads/main"
+    ],
+    "new": [
+     {
+      "llm": true,
+      "signed": true,
+      "post_commit": true
+     }
+    ]
+   }
+  },
+  "merge fast-forward": {
+   "default": {
+    "rc": [
+     0
+    ],
+    "hooks": [
+     "post-merge"
+    ],
+    "refs": [
+     "refs/heads/main"
+    ],
+    "new": []
+   },
+   "no-verify": {
+    "rc": [
+     0
+    ],
+    "hooks": [
+     "post-merge"
+    ],
+    "refs": [
+     "refs/heads/main"
+    ],
+    "new": []
+   },
+   "hooksPath=/dev/null": {
+    "rc": [
+     0
+    ],
+    "hooks": [
+     "post-merge"
+    ],
+    "refs": [
+     "refs/heads/main"
+    ],
+    "new": []
+   }
+  },
+  "merge --no-ff": {
+   "default": {
+    "rc": [
+     0
+    ],
+    "hooks": [
+     "pre-merge-commit",
+     "prepare-commit-msg:merge",
+     "commit-msg",
+     "post-merge"
+    ],
+    "refs": [
+     "refs/heads/main"
+    ],
+    "new": [
+     {
+      "llm": true,
+      "signed": true,
+      "post_commit": false
+     }
+    ]
+   },
+   "no-verify": {
+    "rc": [
+     0
+    ],
+    "hooks": [
+     "prepare-commit-msg:merge",
+     "post-merge"
+    ],
+    "refs": [
+     "refs/heads/main"
+    ],
+    "new": [
+     {
+      "llm": true,
+      "signed": true,
+      "post_commit": false
+     }
+    ]
+   },
+   "hooksPath=/dev/null": {
+    "rc": [
+     0
+    ],
+    "hooks": [
+     "pre-merge-commit",
+     "prepare-commit-msg:merge",
+     "commit-msg",
+     "post-merge"
+    ],
+    "refs": [
+     "refs/heads/main"
+    ],
+    "new": [
+     {
+      "llm": true,
+      "signed": true,
+      "post_commit": false
+     }
+    ]
+   }
+  },
+  "merge --no-ff (editor)": {
+   "default": {
+    "rc": [
+     0
+    ],
+    "hooks": [
+     "pre-merge-commit",
+     "prepare-commit-msg:merge",
+     "commit-msg",
+     "post-merge"
+    ],
+    "refs": [
+     "refs/heads/main"
+    ],
+    "new": [
+     {
+      "llm": true,
+      "signed": true,
+      "post_commit": false
+     }
+    ]
+   },
+   "no-verify": {
+    "rc": [
+     0
+    ],
+    "hooks": [
+     "prepare-commit-msg:merge",
+     "post-merge"
+    ],
+    "refs": [
+     "refs/heads/main"
+    ],
+    "new": [
+     {
+      "llm": true,
+      "signed": true,
+      "post_commit": false
+     }
+    ]
+   },
+   "hooksPath=/dev/null": {
+    "rc": [
+     0
+    ],
+    "hooks": [
+     "pre-merge-commit",
+     "prepare-commit-msg:merge",
+     "commit-msg",
+     "post-merge"
+    ],
+    "refs": [
+     "refs/heads/main"
+    ],
+    "new": [
+     {
+      "llm": true,
+      "signed": true,
+      "post_commit": false
+     }
+    ]
+   }
+  },
+  "merge conflict + merge --continue": {
+   "default": {
+    "rc": [
+     1,
+     0
+    ],
+    "hooks": [
+     "pre-commit",
+     "prepare-commit-msg:merge",
+     "commit-msg",
+     "post-commit"
+    ],
+    "refs": [
+     "refs/heads/main"
+    ],
+    "new": [
+     {
+      "llm": true,
+      "signed": true,
+      "post_commit": true
+     }
+    ]
+   },
+   "no-verify": {
+    "rc": [
+     1,
+     0
+    ],
+    "hooks": [
+     "pre-commit",
+     "prepare-commit-msg:merge",
+     "commit-msg",
+     "post-commit"
+    ],
+    "refs": [
+     "refs/heads/main"
+    ],
+    "new": [
+     {
+      "llm": true,
+      "signed": true,
+      "post_commit": true
+     }
+    ]
+   },
+   "hooksPath=/dev/null": {
+    "rc": [
+     1,
+     0
+    ],
+    "hooks": [
+     "pre-commit",
+     "prepare-commit-msg:merge",
+     "commit-msg",
+     "post-commit"
+    ],
+    "refs": [
+     "refs/heads/main"
+    ],
+    "new": [
+     {
+      "llm": true,
+      "signed": true,
+      "post_commit": true
+     }
+    ]
+   }
+  },
+  "merge conflict + commit": {
+   "default": {
+    "rc": [
+     1,
+     0
+    ],
+    "hooks": [
+     "pre-commit",
+     "prepare-commit-msg:merge",
+     "commit-msg",
+     "post-commit"
+    ],
+    "refs": [
+     "refs/heads/main"
+    ],
+    "new": [
+     {
+      "llm": true,
+      "signed": true,
+      "post_commit": true
+     }
+    ]
+   },
+   "no-verify": {
+    "rc": [
+     1,
+     0
+    ],
+    "hooks": [
+     "prepare-commit-msg:merge",
+     "post-commit"
+    ],
+    "refs": [
+     "refs/heads/main"
+    ],
+    "new": [
+     {
+      "llm": true,
+      "signed": true,
+      "post_commit": true
+     }
+    ]
+   },
+   "hooksPath=/dev/null": {
+    "rc": [
+     1,
+     0
+    ],
+    "hooks": [
+     "pre-commit",
+     "prepare-commit-msg:merge",
+     "commit-msg",
+     "post-commit"
+    ],
+    "refs": [
+     "refs/heads/main"
+    ],
+    "new": [
+     {
+      "llm": true,
+      "signed": true,
+      "post_commit": true
+     }
+    ]
+   }
+  },
+  "merge --squash + commit": {
+   "default": {
+    "rc": [
+     0,
+     0
+    ],
+    "hooks": [
+     "post-merge",
+     "pre-commit",
+     "prepare-commit-msg:squash",
+     "commit-msg",
+     "post-commit"
+    ],
+    "refs": [
+     "refs/heads/main"
+    ],
+    "new": [
+     {
+      "llm": true,
+      "signed": true,
+      "post_commit": true
+     }
+    ]
+   },
+   "no-verify": {
+    "rc": [
+     0,
+     0
+    ],
+    "hooks": [
+     "post-merge",
+     "prepare-commit-msg:squash",
+     "post-commit"
+    ],
+    "refs": [
+     "refs/heads/main"
+    ],
+    "new": [
+     {
+      "llm": true,
+      "signed": true,
+      "post_commit": true
+     }
+    ]
+   },
+   "hooksPath=/dev/null": {
+    "rc": [
+     0,
+     0
+    ],
+    "hooks": [
+     "post-merge",
+     "pre-commit",
+     "prepare-commit-msg:squash",
+     "commit-msg",
+     "post-commit"
+    ],
+    "refs": [
+     "refs/heads/main"
+    ],
+    "new": [
+     {
+      "llm": true,
+      "signed": true,
+      "post_commit": true
+     }
+    ]
+   }
+  },
+  "cherry-pick": {
+   "default": {
+    "rc": [
+     0
+    ],
+    "hooks": [
+     "prepare-commit-msg:message",
+     "post-commit"
+    ],
+    "refs": [
+     "refs/heads/main"
+    ],
+    "new": [
+     {
+      "llm": true,
+      "signed": true,
+      "post_commit": true
+     }
+    ]
+   },
+   "no-verify": {
+    "rc": [
+     0
+    ],
+    "hooks": [
+     "prepare-commit-msg:message",
+     "post-commit"
+    ],
+    "refs": [
+     "refs/heads/main"
+    ],
+    "new": [
+     {
+      "llm": true,
+      "signed": true,
+      "post_commit": true
+     }
+    ]
+   },
+   "hooksPath=/dev/null": {
+    "rc": [
+     0
+    ],
+    "hooks": [
+     "prepare-commit-msg:message",
+     "post-commit"
+    ],
+    "refs": [
+     "refs/heads/main"
+    ],
+    "new": [
+     {
+      "llm": true,
+      "signed": true,
+      "post_commit": true
+     }
+    ]
+   }
+  },
+  "cherry-pick -e": {
+   "default": {
+    "rc": [
+     0
+    ],
+    "hooks": [
+     "prepare-commit-msg:merge",
+     "post-commit"
+    ],
+    "refs": [
+     "refs/heads/main"
+    ],
+    "new": [
+     {
+      "llm": true,
+      "signed": true,
+      "post_commit": true
+     }
+    ]
+   },
+   "no-verify": {
+    "rc": [
+     0
+    ],
+    "hooks": [
+     "prepare-commit-msg:merge",
+     "post-commit"
+    ],
+    "refs": [
+     "refs/heads/main"
+    ],
+    "new": [
+     {
+      "llm": true,
+      "signed": true,
+      "post_commit": true
+     }
+    ]
+   },
+   "hooksPath=/dev/null": {
+    "rc": [
+     0
+    ],
+    "hooks": [
+     "prepare-commit-msg:merge",
+     "post-commit"
+    ],
+    "refs": [
+     "refs/heads/main"
+    ],
+    "new": [
+     {
+      "llm": true,
+      "signed": true,
+      "post_commit": true
+     }
+    ]
+   }
+  },
+  "cherry-pick conflict + --continue": {
+   "default": {
+    "rc": [
+     1,
+     0
+    ],
+    "hooks": [
+     "pre-commit",
+     "prepare-commit-msg:merge",
+     "commit-msg",
+     "post-commit"
+    ],
+    "refs": [
+     "refs/heads/main"
+    ],
+    "new": [
+     {
+      "llm": true,
+      "signed": true,
+      "post_commit": true
+     }
+    ]
+   },
+   "no-verify": {
+    "rc": [
+     1,
+     0
+    ],
+    "hooks": [
+     "pre-commit",
+     "prepare-commit-msg:merge",
+     "commit-msg",
+     "post-commit"
+    ],
+    "refs": [
+     "refs/heads/main"
+    ],
+    "new": [
+     {
+      "llm": true,
+      "signed": true,
+      "post_commit": true
+     }
+    ]
+   },
+   "hooksPath=/dev/null": {
+    "rc": [
+     1,
+     0
+    ],
+    "hooks": [
+     "pre-commit",
+     "prepare-commit-msg:merge",
+     "commit-msg",
+     "post-commit"
+    ],
+    "refs": [
+     "refs/heads/main"
+    ],
+    "new": [
+     {
+      "llm": true,
+      "signed": true,
+      "post_commit": true
+     }
+    ]
+   }
+  },
+  "cherry-pick -n + commit": {
+   "default": {
+    "rc": [
+     0,
+     0
+    ],
+    "hooks": [
+     "pre-commit",
+     "prepare-commit-msg:message",
+     "commit-msg",
+     "post-commit"
+    ],
+    "refs": [
+     "refs/heads/main"
+    ],
+    "new": [
+     {
+      "llm": true,
+      "signed": true,
+      "post_commit": true
+     }
+    ]
+   },
+   "no-verify": {
+    "rc": [
+     0,
+     0
+    ],
+    "hooks": [
+     "prepare-commit-msg:message",
+     "post-commit"
+    ],
+    "refs": [
+     "refs/heads/main"
+    ],
+    "new": [
+     {
+      "llm": true,
+      "signed": true,
+      "post_commit": true
+     }
+    ]
+   },
+   "hooksPath=/dev/null": {
+    "rc": [
+     0,
+     0
+    ],
+    "hooks": [
+     "pre-commit",
+     "prepare-commit-msg:message",
+     "commit-msg",
+     "post-commit"
+    ],
+    "refs": [
+     "refs/heads/main"
+    ],
+    "new": [
+     {
+      "llm": true,
+      "signed": true,
+      "post_commit": true
+     }
+    ]
+   }
+  },
+  "revert": {
+   "default": {
+    "rc": [
+     0
+    ],
+    "hooks": [
+     "prepare-commit-msg:message",
+     "post-commit"
+    ],
+    "refs": [
+     "refs/heads/main"
+    ],
+    "new": [
+     {
+      "llm": true,
+      "signed": true,
+      "post_commit": true
+     }
+    ]
+   },
+   "no-verify": {
+    "rc": [
+     0
+    ],
+    "hooks": [
+     "prepare-commit-msg:message",
+     "post-commit"
+    ],
+    "refs": [
+     "refs/heads/main"
+    ],
+    "new": [
+     {
+      "llm": true,
+      "signed": true,
+      "post_commit": true
+     }
+    ]
+   },
+   "hooksPath=/dev/null": {
+    "rc": [
+     0
+    ],
+    "hooks": [
+     "prepare-commit-msg:message",
+     "post-commit"
+    ],
+    "refs": [
+     "refs/heads/main"
+    ],
+    "new": [
+     {
+      "llm": true,
+      "signed": true,
+      "post_commit": true
+     }
+    ]
+   }
+  },
+  "revert -e": {
+   "default": {
+    "rc": [
+     0
+    ],
+    "hooks": [
+     "prepare-commit-msg:merge",
+     "post-commit"
+    ],
+    "refs": [
+     "refs/heads/main"
+    ],
+    "new": [
+     {
+      "llm": true,
+      "signed": true,
+      "post_commit": true
+     }
+    ]
+   },
+   "no-verify": {
+    "rc": [
+     0
+    ],
+    "hooks": [
+     "prepare-commit-msg:merge",
+     "post-commit"
+    ],
+    "refs": [
+     "refs/heads/main"
+    ],
+    "new": [
+     {
+      "llm": true,
+      "signed": true,
+      "post_commit": true
+     }
+    ]
+   },
+   "hooksPath=/dev/null": {
+    "rc": [
+     0
+    ],
+    "hooks": [
+     "prepare-commit-msg:merge",
+     "post-commit"
+    ],
+    "refs": [
+     "refs/heads/main"
+    ],
+    "new": [
+     {
+      "llm": true,
+      "signed": true,
+      "post_commit": true
+     }
+    ]
+   }
+  },
+  "rebase (non-interactive)": {
+   "default": {
+    "rc": [
+     0
+    ],
+    "hooks": [
+     "prepare-commit-msg:message",
+     "post-commit",
+     "prepare-commit-msg:message",
+     "post-commit",
+     "post-rewrite:rebase"
+    ],
+    "refs": [
+     "refs/heads/feat"
+    ],
+    "new": [
+     {
+      "llm": true,
+      "signed": true,
+      "post_commit": true
+     },
+     {
+      "llm": true,
+      "signed": true,
+      "post_commit": true
+     }
+    ]
+   },
+   "no-verify": {
+    "rc": [
+     0
+    ],
+    "hooks": [
+     "prepare-commit-msg:message",
+     "post-commit",
+     "prepare-commit-msg:message",
+     "post-commit",
+     "post-rewrite:rebase"
+    ],
+    "refs": [
+     "refs/heads/feat"
+    ],
+    "new": [
+     {
+      "llm": true,
+      "signed": true,
+      "post_commit": true
+     },
+     {
+      "llm": true,
+      "signed": true,
+      "post_commit": true
+     }
+    ]
+   },
+   "hooksPath=/dev/null": {
+    "rc": [
+     0
+    ],
+    "hooks": [
+     "prepare-commit-msg:message",
+     "post-commit",
+     "prepare-commit-msg:message",
+     "post-commit",
+     "post-rewrite:rebase"
+    ],
+    "refs": [
+     "refs/heads/feat"
+    ],
+    "new": [
+     {
+      "llm": true,
+      "signed": true,
+      "post_commit": true
+     },
+     {
+      "llm": true,
+      "signed": true,
+      "post_commit": true
+     }
+    ]
+   }
+  },
+  "rebase -i reword": {
+   "default": {
+    "rc": [
+     0
+    ],
+    "hooks": [
+     "prepare-commit-msg:message",
+     "post-commit",
+     "pre-commit",
+     "prepare-commit-msg:commit",
+     "commit-msg",
+     "post-commit",
+     "post-rewrite:amend",
+     "prepare-commit-msg:message",
+     "post-commit",
+     "post-rewrite:rebase"
+    ],
+    "refs": [
+     "refs/heads/feat"
+    ],
+    "new": [
+     {
+      "llm": true,
+      "signed": true,
+      "post_commit": true
+     },
+     {
+      "llm": true,
+      "signed": true,
+      "post_commit": true
+     },
+     {
+      "llm": true,
+      "signed": true,
+      "post_commit": true
+     }
+    ]
+   },
+   "no-verify": {
+    "rc": [
+     0
+    ],
+    "hooks": [
+     "prepare-commit-msg:message",
+     "post-commit",
+     "pre-commit",
+     "prepare-commit-msg:commit",
+     "commit-msg",
+     "post-commit",
+     "post-rewrite:amend",
+     "prepare-commit-msg:message",
+     "post-commit",
+     "post-rewrite:rebase"
+    ],
+    "refs": [
+     "refs/heads/feat"
+    ],
+    "new": [
+     {
+      "llm": true,
+      "signed": true,
+      "post_commit": true
+     },
+     {
+      "llm": true,
+      "signed": true,
+      "post_commit": true
+     },
+     {
+      "llm": true,
+      "signed": true,
+      "post_commit": true
+     }
+    ]
+   },
+   "hooksPath=/dev/null": {
+    "rc": [
+     0
+    ],
+    "hooks": [
+     "prepare-commit-msg:message",
+     "post-commit",
+     "pre-commit",
+     "prepare-commit-msg:commit",
+     "commit-msg",
+     "post-commit",
+     "post-rewrite:amend",
+     "prepare-commit-msg:message",
+     "post-commit",
+     "post-rewrite:rebase"
+    ],
+    "refs": [
+     "refs/heads/feat"
+    ],
+    "new": [
+     {
+      "llm": true,
+      "signed": true,
+      "post_commit": true
+     },
+     {
+      "llm": true,
+      "signed": true,
+      "post_commit": true
+     },
+     {
+      "llm": true,
+      "signed": true,
+      "post_commit": true
+     }
+    ]
+   }
+  },
+  "rebase -i squash": {
+   "default": {
+    "rc": [
+     0
+    ],
+    "hooks": [
+     "prepare-commit-msg:message",
+     "post-commit",
+     "prepare-commit-msg:message",
+     "post-commit",
+     "post-rewrite:amend",
+     "post-rewrite:rebase"
+    ],
+    "refs": [
+     "refs/heads/feat"
+    ],
+    "new": [
+     {
+      "llm": true,
+      "signed": true,
+      "post_commit": true
+     },
+     {
+      "llm": true,
+      "signed": true,
+      "post_commit": true
+     }
+    ]
+   },
+   "no-verify": {
+    "rc": [
+     0
+    ],
+    "hooks": [
+     "prepare-commit-msg:message",
+     "post-commit",
+     "prepare-commit-msg:message",
+     "post-commit",
+     "post-rewrite:amend",
+     "post-rewrite:rebase"
+    ],
+    "refs": [
+     "refs/heads/feat"
+    ],
+    "new": [
+     {
+      "llm": true,
+      "signed": true,
+      "post_commit": true
+     },
+     {
+      "llm": true,
+      "signed": true,
+      "post_commit": true
+     }
+    ]
+   },
+   "hooksPath=/dev/null": {
+    "rc": [
+     0
+    ],
+    "hooks": [
+     "prepare-commit-msg:message",
+     "post-commit",
+     "prepare-commit-msg:message",
+     "post-commit",
+     "post-rewrite:amend",
+     "post-rewrite:rebase"
+    ],
+    "refs": [
+     "refs/heads/feat"
+    ],
+    "new": [
+     {
+      "llm": true,
+      "signed": true,
+      "post_commit": true
+     },
+     {
+      "llm": true,
+      "signed": true,
+      "post_commit": true
+     }
+    ]
+   }
+  },
+  "rebase -i fixup": {
+   "default": {
+    "rc": [
+     0
+    ],
+    "hooks": [
+     "prepare-commit-msg:message",
+     "post-commit",
+     "prepare-commit-msg:message",
+     "post-commit",
+     "post-rewrite:amend",
+     "post-rewrite:rebase"
+    ],
+    "refs": [
+     "refs/heads/feat"
+    ],
+    "new": [
+     {
+      "llm": true,
+      "signed": true,
+      "post_commit": true
+     },
+     {
+      "llm": true,
+      "signed": true,
+      "post_commit": true
+     }
+    ]
+   },
+   "no-verify": {
+    "rc": [
+     0
+    ],
+    "hooks": [
+     "prepare-commit-msg:message",
+     "post-commit",
+     "prepare-commit-msg:message",
+     "post-commit",
+     "post-rewrite:amend",
+     "post-rewrite:rebase"
+    ],
+    "refs": [
+     "refs/heads/feat"
+    ],
+    "new": [
+     {
+      "llm": true,
+      "signed": true,
+      "post_commit": true
+     },
+     {
+      "llm": true,
+      "signed": true,
+      "post_commit": true
+     }
+    ]
+   },
+   "hooksPath=/dev/null": {
+    "rc": [
+     0
+    ],
+    "hooks": [
+     "prepare-commit-msg:message",
+     "post-commit",
+     "prepare-commit-msg:message",
+     "post-commit",
+     "post-rewrite:amend",
+     "post-rewrite:rebase"
+    ],
+    "refs": [
+     "refs/heads/feat"
+    ],
+    "new": [
+     {
+      "llm": true,
+      "signed": true,
+      "post_commit": true
+     },
+     {
+      "llm": true,
+      "signed": true,
+      "post_commit": true
+     }
+    ]
+   }
+  },
+  "rebase -i pick only": {
+   "default": {
+    "rc": [
+     0
+    ],
+    "hooks": [
+     "prepare-commit-msg:message",
+     "post-commit",
+     "prepare-commit-msg:message",
+     "post-commit",
+     "post-rewrite:rebase"
+    ],
+    "refs": [
+     "refs/heads/feat"
+    ],
+    "new": [
+     {
+      "llm": true,
+      "signed": true,
+      "post_commit": true
+     },
+     {
+      "llm": true,
+      "signed": true,
+      "post_commit": true
+     }
+    ]
+   },
+   "no-verify": {
+    "rc": [
+     0
+    ],
+    "hooks": [
+     "prepare-commit-msg:message",
+     "post-commit",
+     "prepare-commit-msg:message",
+     "post-commit",
+     "post-rewrite:rebase"
+    ],
+    "refs": [
+     "refs/heads/feat"
+    ],
+    "new": [
+     {
+      "llm": true,
+      "signed": true,
+      "post_commit": true
+     },
+     {
+      "llm": true,
+      "signed": true,
+      "post_commit": true
+     }
+    ]
+   },
+   "hooksPath=/dev/null": {
+    "rc": [
+     0
+    ],
+    "hooks": [
+     "prepare-commit-msg:message",
+     "post-commit",
+     "prepare-commit-msg:message",
+     "post-commit",
+     "post-rewrite:rebase"
+    ],
+    "refs": [
+     "refs/heads/feat"
+    ],
+    "new": [
+     {
+      "llm": true,
+      "signed": true,
+      "post_commit": true
+     },
+     {
+      "llm": true,
+      "signed": true,
+      "post_commit": true
+     }
+    ]
+   }
+  },
+  "stash push": {
+   "default": {
+    "rc": [
+     0
+    ],
+    "hooks": [],
+    "refs": [
+     "refs/heads/main",
+     "refs/stash"
+    ],
+    "new": [
+     {
+      "llm": true,
+      "signed": false,
+      "post_commit": false
+     },
+     {
+      "llm": true,
+      "signed": false,
+      "post_commit": false
+     }
+    ]
+   },
+   "hooksPath=/dev/null": {
+    "rc": [
+     0
+    ],
+    "hooks": [],
+    "refs": [
+     "refs/heads/main",
+     "refs/stash"
+    ],
+    "new": [
+     {
+      "llm": true,
+      "signed": false,
+      "post_commit": false
+     },
+     {
+      "llm": true,
+      "signed": false,
+      "post_commit": false
+     }
+    ]
+   }
+  },
+  "stash push + pop": {
+   "default": {
+    "rc": [
+     0,
+     0
+    ],
+    "hooks": [],
+    "refs": [
+     "refs/heads/main",
+     "refs/stash"
+    ],
+    "new": []
+   },
+   "hooksPath=/dev/null": {
+    "rc": [
+     0,
+     0
+    ],
+    "hooks": [],
+    "refs": [
+     "refs/heads/main",
+     "refs/stash"
+    ],
+    "new": []
+   }
+  },
+  "commit-tree": {
+   "default": {
+    "rc": [
+     0
+    ],
+    "hooks": [],
+    "refs": [],
+    "new": [
+     {
+      "llm": true,
+      "signed": false,
+      "post_commit": false
+     }
+    ]
+   },
+   "hooksPath=/dev/null": {
+    "rc": [
+     0
+    ],
+    "hooks": [],
+    "refs": [],
+    "new": [
+     {
+      "llm": true,
+      "signed": false,
+      "post_commit": false
+     }
+    ]
+   }
+  },
+  "commit-tree -S": {
+   "default": {
+    "rc": [
+     0
+    ],
+    "hooks": [],
+    "refs": [],
+    "new": [
+     {
+      "llm": true,
+      "signed": true,
+      "post_commit": false
+     }
+    ]
+   },
+   "hooksPath=/dev/null": {
+    "rc": [
+     0
+    ],
+    "hooks": [],
+    "refs": [],
+    "new": [
+     {
+      "llm": true,
+      "signed": true,
+      "post_commit": false
+     }
+    ]
+   }
+  },
+  "notes add": {
+   "default": {
+    "rc": [
+     0
+    ],
+    "hooks": [],
+    "refs": [
+     "refs/notes/commits"
+    ],
+    "new": [
+     {
+      "llm": true,
+      "signed": false,
+      "post_commit": false
+     }
+    ]
+   },
+   "hooksPath=/dev/null": {
+    "rc": [
+     0
+    ],
+    "hooks": [],
+    "refs": [
+     "refs/notes/commits"
+    ],
+    "new": [
+     {
+      "llm": true,
+      "signed": false,
+      "post_commit": false
+     }
+    ]
+   }
+  },
+  "am": {
+   "default": {
+    "rc": [
+     0
+    ],
+    "hooks": [
+     "applypatch-msg",
+     "post-applypatch"
+    ],
+    "refs": [
+     "refs/heads/main"
+    ],
+    "new": [
+     {
+      "llm": true,
+      "signed": true,
+      "post_commit": false
+     }
+    ]
+   },
+   "no-verify": {
+    "rc": [
+     0
+    ],
+    "hooks": [
+     "post-applypatch"
+    ],
+    "refs": [
+     "refs/heads/main"
+    ],
+    "new": [
+     {
+      "llm": true,
+      "signed": true,
+      "post_commit": false
+     }
+    ]
+   },
+   "hooksPath=/dev/null": {
+    "rc": [
+     0
+    ],
+    "hooks": [
+     "applypatch-msg",
+     "post-applypatch"
+    ],
+    "refs": [
+     "refs/heads/main"
+    ],
+    "new": [
+     {
+      "llm": true,
+      "signed": true,
+      "post_commit": false
+     }
+    ]
+   }
+  },
+  "tag -a (no commit)": {
+   "default": {
+    "rc": [
+     0
+    ],
+    "hooks": [],
+    "refs": [
+     "refs/tags/t1"
+    ],
+    "new": []
+   },
+   "hooksPath=/dev/null": {
+    "rc": [
+     0
+    ],
+    "hooks": [],
+    "refs": [
+     "refs/tags/t1"
+    ],
+    "new": []
+   }
+  },
+  "tag -s": {
+   "default": {
+    "rc": [
+     0
+    ],
+    "hooks": [],
+    "refs": [
+     "refs/tags/t2"
+    ],
+    "new": []
+   },
+   "hooksPath=/dev/null": {
+    "rc": [
+     0
+    ],
+    "hooks": [],
+    "refs": [
+     "refs/tags/t2"
+    ],
+    "new": []
+   }
+  }
+ },
+ "unhooked": {
+  "no_commit_msg": [
+   "cherry-pick",
+   "cherry-pick -e",
+   "revert",
+   "revert -e",
+   "rebase (non-interactive)",
+   "rebase -i squash",
+   "rebase -i fixup",
+   "rebase -i pick only",
+   "stash push",
+   "commit-tree",
+   "commit-tree -S",
+   "notes add",
+   "am"
+  ],
+  "no_prepare_commit_msg": [
+   "stash push",
+   "commit-tree",
+   "commit-tree -S",
+   "notes add",
+   "am"
+  ],
+  "no_post_commit": [
+   "merge --no-ff",
+   "merge --no-ff (editor)",
+   "stash push",
+   "commit-tree",
+   "commit-tree -S",
+   "notes add",
+   "am"
+  ],
+  "no_carter_hook_at_all": [
+   "stash push",
+   "commit-tree",
+   "commit-tree -S",
+   "notes add",
+   "am"
+  ]
+ }
+}

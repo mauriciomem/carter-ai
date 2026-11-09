@@ -1,6 +1,6 @@
 # Permissions reference
 
-The exact permission rules Carter writes into every agent file. For the concepts
+The exact permission rules Carter writes into every Carter agent file. For the concepts
 and how to change them, read [Safety and permissions](../guides/safety-and-permissions.md).
 
 ## Agent file format
@@ -30,8 +30,10 @@ OpenCode applies the **last matching rule**, so later rules refine earlier ones
 | 4 | `edit` / `~/.carter/memories/*` (agents with local-write only) | allow |
 | 5 | `subagent` / `*` | deny |
 | 5 | `subagent` / `carter-*` (Maestro only) | allow |
+| 5 | `carter_push` / `*` (every agent except DevOps) | deny |
 | 6 | `edit`, `shell`, `webfetch` / `*` | allow with local-write, otherwise ask |
 | 7 | `shell` / each risky command below | the category's effect if the agent holds it, otherwise deny |
+| 8 | G2's deny set, once you installed the guards: pushes, `gh` (with the allowlist lifted again), `sudo`/`docker`, reads of credentials, edits of OpenCode, git and Carter config | deny (the `gh` allowlist and the `allow_project_opencode_edit` opt-outs: allow) |
 
 Anything not listed (MCP tools, `websearch`, other tools) falls back to rule 1 and
 asks.
@@ -40,16 +42,18 @@ asks.
 
 | Category | Commands |
 |----------|----------|
-| remote-write | `git push *`, `gh pr create *`, `gh pr merge *`, `gh pr comment *`, `gh pr review *`, `gh pr edit *`, `gh issue create *`, `gh issue comment *`, `gh issue edit *`, `gh release *`, `gh api *`, `vault read *`, `vault write *` |
+| remote-write | `vault read *`, `vault write *` |
+| github-write (denied to every agent) | `git push *`, `gh pr merge *`, `gh pr close *`, `gh pr review *`, `gh pr ready *`, `gh issue create *`, `gh issue comment *`, `gh issue edit *`, `gh release *`, `gh api *` |
 | dangerous | `terraform apply *`, `terraform destroy *`, `kubectl apply *`, `helm upgrade *`, `rm -rf *`, `git reset --hard *`, `git push --force *` |
 
 A pattern ending in ` *` also matches the bare command (`git push *` matches
 `git push`). This is a list of common risky commands, not a sandbox: anything else
 falls to rule 6.
 
-`git push *`, the `gh` write commands and `gh api *` are denied to every agent, DevOps
-included, and `gh api` is denied even for reads. Pushing and pull requests are done by you with
-`carter push` and `carter pr`.
+`git push *`, merging, closing, reviewing and readying a pull request, issue and release
+writes and `gh api *` are denied to every agent, DevOps included, and `gh api` is denied even for
+reads. Opening, editing and commenting on a pull request (`gh pr create|edit|comment`) is allowed
+Pushing is done by you with `carter push`.
 
 ## Effects per level
 
@@ -123,8 +127,6 @@ For DevOps, rule 6 is `allow`, and the risky commands get `ask` instead of `deny
 
 - Each agent's `permissions` and `model` equal what `carter.yaml` generates, in the
   same order. A hand edit shows up as drift.
-- No agent file carries old-style keys (`permission`, `tools`, `bash`, `task`,
-  `name`, `temperature`), which OpenCode ignores next to `permissions`.
 - OpenCode loads every agent with the same description, model and rules
   (`opencode debug agents`).
 

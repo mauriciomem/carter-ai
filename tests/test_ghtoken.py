@@ -1,8 +1,8 @@
-"""``carter github-token set|check`` (RFC-0007 App C.7; plan 003 step 16).
+"""``carter github-token set|check``.
 
 The token in these tests is a made-up sentinel, never a real credential, and the real
 ``~/.carter/secrets`` is never reachable (the sandbox home). ``check`` talks to a loopback
-fake of api.github.com whose 403/422 bodies are the strings recorded in spike 4."""
+fake of api.github.com whose 403/422 bodies are the strings recorded in."""
 
 from __future__ import annotations
 
@@ -194,7 +194,7 @@ class TestStore:
         assert cfg.exists() and "schema = 2" in cfg.read_text()
         assert stat.S_IMODE(cfg.stat().st_mode) == 0o600
 
-    def test_a_schema_1_config_is_left_alone_and_the_token_is_still_stored(
+    def test_a_config_of_old_keys_is_left_alone_and_the_token_is_still_stored(
         self, tmp_path: Path
     ) -> None:
         cfg = tmp_path / "carter" / "config.toml"
@@ -202,7 +202,7 @@ class TestStore:
         cfg.write_text('[git]\nsigning_key = "x"\n')
         before = cfg.read_bytes()
         res = ghtoken.store_token(TOKEN, tmp_path)
-        assert res.recorded is False and "carter install" in res.note
+        assert res.recorded is False and "left unchanged" in res.note
         assert cfg.read_bytes() == before and token_path(tmp_path).read_text() == TOKEN
 
     def test_a_broken_config_is_left_alone_too(self, tmp_path: Path) -> None:
@@ -237,7 +237,7 @@ class TestSetCommand:
         assert res.exit_code == 0, res.output
         assert token_path(tmp_path).read_text() == TOKEN
         assert str(token_path(tmp_path)) in res.output
-        assert "not printed" in res.output and "not injected into agent shells yet" in res.output
+        assert "token stored" in res.output and "carter github-token check" in res.output
         assert leaks(TOKEN[11:], res.output) == []
 
     def test_a_terminal_on_stdin_uses_a_hidden_prompt(
@@ -257,7 +257,7 @@ class TestSetCommand:
         human_tty(True)
         classic = "ghp_" + "Z" * 36
         res = self.run("--base-dir", str(tmp_path), input=classic)
-        assert res.exit_code == 1 and "Error: E-PAT-TYPE" in res.output and "`ghp_`" in res.output
+        assert res.exit_code == 1 and "E-PAT-TYPE" in res.output and "`ghp_`" in res.output
         assert "ZZZZZ" not in res.output
         assert not token_path(tmp_path).exists()
 
@@ -267,7 +267,7 @@ class TestSetCommand:
         human_tty(True)
         monkeypatch.setenv("AGENT", "x")
         res = self.run("--base-dir", str(tmp_path), input=TOKEN)
-        assert res.exit_code == 1 and f"Error: {E_HUMAN_TERMINAL}" in res.output
+        assert res.exit_code == 1 and E_HUMAN_TERMINAL in res.output
         assert not token_path(tmp_path).exists() and TAIL not in res.output
 
     def test_it_needs_a_terminal_on_stderr(self, human_tty, tmp_path) -> None:
@@ -362,9 +362,10 @@ class TestCheck:
             ("GET", "/user"),
             ("GET", "/user/repos"),
             ("POST", f"/repos/{OWNED}/git/refs"),
+            ("POST", f"/repos/{OWNED}/pulls"),  # the PR probe, an empty body
         ]
         assert github_api.unexpected == []
-        post = github_api.requests[-1]
+        post = github_api.requests[-2]
         assert json.loads(post.body) == {"ref": "refs/heads/carter-write-probe", "sha": ZERO_SHA}
         assert ZERO_SHA == "0" * 40
 
@@ -558,7 +559,7 @@ class TestCheckCommand:
         github_api.readonly_token_world(expiry="2027-01-31 15:17:13 UTC")
         res = self.run(tmp_path)
         assert res.exit_code == 0, res.output
-        assert "Token OK" in res.output and leaks(TOKEN[11:], res.output) == []
+        assert "✓ token" in res.output and leaks(TOKEN[11:], res.output) == []
 
     def test_a_writable_token_exits_1(self, tmp_path, github_api, human_tty) -> None:
         human_tty(True)
@@ -622,7 +623,12 @@ class TestProbeRepository:
         return tmp_path
 
     def posts(self, github_api) -> list[str]:
-        return [r.path for r in github_api.requests if r.method == "POST"]
+        # the write probe only; the PR probe has its own tests (tests/test_pull_requests.py)
+        return [
+            r.path
+            for r in github_api.requests
+            if r.method == "POST" and r.path.endswith("/git/refs")
+        ]
 
     def test_the_listing_asks_for_repositories_you_own_most_recently_updated_first(
         self, stored, github_api
@@ -748,7 +754,7 @@ class TestProbeRepository:
         human_tty(True)
         github_api.readonly_token_world()
         res = CliRunner().invoke(
-            main, ["github-token", "check", "--base-dir", str(stored)], catch_exceptions=False
+            main, ["github-token", "check", "-v", "--base-dir", str(stored)], catch_exceptions=False
         )
         assert res.exit_code == 0 and "a repository you own" in res.output
         assert "zz-probe-repo" not in res.output and "carter-llm" not in res.output

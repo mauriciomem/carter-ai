@@ -8,15 +8,15 @@ from typing import Any
 
 from jinja2 import Environment, FileSystemLoader
 
-from carter.aplus.handoff import OWN_TERMINAL
+from carter.aplus.push import OWN_TERMINAL
 from carter.config import (
     PRIMARY_ROLE,
-    V1_AGENT_KEYS,
     ConfigError,
     policy_frontmatter,
     policy_gate_table,
     policy_native_keys,
     resolve_model,
+    with_guard_rules,
 )
 from carter.resources import templates_dir
 
@@ -38,7 +38,7 @@ def create_env(templates_dir: Path = TEMPLATES_DIR) -> Environment:
     env.globals["policy_frontmatter"] = policy_frontmatter
     env.globals["policy_gate_table"] = policy_gate_table
     env.globals["docs_language_phrase"] = docs_language_phrase
-    # The one sentence that tells the user where pushing happens (handoff.OWN_TERMINAL).
+    # The one sentence that tells the user where pushing happens (push.OWN_TERMINAL).
     env.globals["own_terminal"] = OWN_TERMINAL
     # Only the primary orchestrator dispatches (flat one-level chain), so only it
     # renders the <agents> roster.
@@ -135,12 +135,25 @@ def model_advisory(config: dict[str, Any]) -> str:
 # Policy lint
 # ──────────────────────────────────────────────────────────────────────────────
 # `carter check` runs `lint_policy` to verify each emitted agent's `permissions:` and
-# `model` still equal what carter.yaml generates, and that no V1 key is present. This
+# `model` still equal what carter.yaml generates. This
 # is a *config* lint: it proves what Carter wrote equals what Carter declared; it
 # cannot verify runtime denial.
 
 
-def lint_policy(config: dict[str, Any], installed: dict[str, dict[str, Any]]) -> list[str]:
+def _guard_rules(rules: list[dict[str, str]] | None) -> list[dict[str, str]]:
+    """G2's rules for the agent files: the given ones, else this machine's guard state."""
+    if rules is not None:
+        return rules
+    from carter.guard.agent_rules import current_rules  # noqa: PLC0415
+
+    return current_rules()
+
+
+def lint_policy(
+    config: dict[str, Any],
+    installed: dict[str, dict[str, Any]],
+    guard_rules: list[dict[str, str]] | None = None,
+) -> list[str]:
     """Lint emitted agent frontmatter against carter.yaml; returns the errors.
 
     ``installed`` maps each role to its parsed agent-file frontmatter. A role absent
@@ -149,14 +162,9 @@ def lint_policy(config: dict[str, Any], installed: dict[str, dict[str, Any]]) ->
     ``permissions:`` must equal the expected list exactly.
     """
     errors: list[str] = []
+    config = with_guard_rules(config, _guard_rules(guard_rules))
     for role, frontmatter in installed.items():
         fm = frontmatter or {}
-        v1 = [key for key in V1_AGENT_KEYS if key in fm]
-        if v1:
-            errors.append(
-                f"{role}: V1 frontmatter key(s) {v1} present — OpenCode ignores them "
-                "next to 'permissions'; run `carter update`"
-            )
         expected = policy_native_keys(config, role)
         for key in ("permissions", "model"):
             if key not in fm:
@@ -187,8 +195,15 @@ def _apply_agent_suffix(content: str, roles: list[str], suffix: str) -> str:
     return content
 
 
-def render_agents(config: dict[str, Any], env: Environment) -> dict[str, str]:
+def render_agents(
+    config: dict[str, Any],
+    env: Environment,
+    guard_rules: list[dict[str, str]] | None = None,
+) -> dict[str, str]:
     """Render all configured agent templates.
+
+    ``guard_rules`` are G2's consented deny rules; ``None`` reads this machine's guard
+    state, so a workspace render and the global one carry the same set.
 
     Returns a dict of {filename: rendered_content}. Filenames and internal
     ``carter-<role>`` references honor ``config["agent_suffix"]`` so workspace
@@ -198,6 +213,7 @@ def render_agents(config: dict[str, Any], env: Environment) -> dict[str, str]:
     assert isinstance(env.loader, FileSystemLoader)  # always created via create_env
     templates_dir = Path(env.loader.searchpath[0])
     _validate_agents(config["agents"], templates_dir)
+    config = with_guard_rules(config, _guard_rules(guard_rules))
 
     suffix = _suffix_token(config)
     roles = config["agents"]

@@ -1,7 +1,7 @@
-"""The repo-config check of RFC-0007 App C.5 as A+ uses it (plan 003 step 18).
+"""The repo-config check that `carter push` runs.
 
-A+ **shows** these findings and asks; it does not refuse on them (B does). Each row of the
-C.5 table is a test. Findings carry scope, key and origin file, never a value."""
+`carter push` **shows** these findings and asks; it does not refuse on them (the broker does).
+Each row of the table is a test. Findings carry scope, key and origin file, never a value."""
 
 from __future__ import annotations
 
@@ -52,7 +52,7 @@ class TestCleanAndAllowlist:
         self, repo: Path, global_git, carter_gitconfig: Path
     ) -> None:
         global_git("include.path", str(carter_gitconfig), add=True)
-        # a non-Carter global include is not refused by itself (C.5): only its keys count
+        # a non-Carter global include is not refused by itself: only its keys count
         assert check(repo) == []
 
     def test_a_local_include_of_carters_own_value_passes(

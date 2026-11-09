@@ -1,4 +1,4 @@
-"""The pure tier and role resolver (RFC-0007 §4.1: tiers, D20/D22/D62, D64 cap)."""
+"""The pure tier and role resolver (tiers, cap)."""
 
 from __future__ import annotations
 
@@ -109,24 +109,21 @@ class TestConfiguredTier:
         assert configured_tier(cfg(identity=T1_ID, signing=T2_SIGNING)) == "t2"
 
     def test_public_key_path_alone_is_not_the_public_half(self):
-        # Architect (step 7): the reader cannot open the file; the shim works on the blob.
+        # Architect: the reader cannot open the file; the shim works on the blob.
         signing = Signing(fingerprint="SHA256:abc", public_key_path="~/.ssh/k.pub")
         assert configured_tier(cfg(identity=T1_ID, signing=signing)) == "t0"
 
     def test_custody_fields_are_not_part_of_the_tier(self):
-        # private_key_path / agent_socket / program fail at signing time (2b), not here.
+        # private_key_path / agent_socket / program fail at signing time, not here.
         bare = Signing(**KEY)
         with_agent = Signing(**KEY, agent_socket="/run/a.sock", program="op-ssh-sign")
         assert configured_tier(cfg(identity=T1_ID, signing=bare)) == "t2"
         assert configured_tier(cfg(identity=T1_ID, signing=with_agent)) == "t2"
 
-    def test_schema1_config_is_t0(self):
-        assert configured_tier(cfg(state="needs_migration")) == "t0"
-
 
 class TestT2FailsClosed:
-    """RFC §4.1: once signing is configured, a broken config disables agent commits;
-    it never falls back to T1 or T0 (architect, step 7, Q3)."""
+    """Once signing is configured, a broken config disables agent commits;
+    it never falls back to T1 or T0."""
 
     MATERIAL = [
         {"public_key": "ssh-ed25519 AAAA"},
@@ -201,9 +198,6 @@ class TestT2FailsClosed:
         assert exc.value.code == "E-CONFIG"
         assert "disabled" in str(exc.value)
         assert "identity.signing.public_key" in exc.value.detail
-
-    def test_schema1_config_with_nothing_is_not_refused(self):
-        assert resolve(cfg(state="needs_migration"), workspace=WS, env={}).commits == "allowed"
 
 
 class TestT1Warning:
@@ -367,10 +361,6 @@ class TestResolve:
         r = resolve(c, workspace=WS, env={})
         assert r.require_tier == "t2"
         assert r.commits == "allowed"  # E-TIER-REQUIRED is enforced by 2a/2b
-
-    def test_schema1_config_resolves_to_t0_and_flags_migration(self):
-        r = resolve(cfg(state="needs_migration"), workspace=WS, env={})
-        assert (r.tier, r.migration_needed) == ("t0", True)
 
     def test_ensure_commits_allowed_raises_with_the_registry_code(self):
         c = cfg(workspaces={WS: Workspace(role="author")})

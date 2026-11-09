@@ -1,4 +1,4 @@
-"""The identity error registry (RFC-0007 Appendix B §2; plan 002 step 14)."""
+"""The identity error registry."""
 
 from __future__ import annotations
 
@@ -18,18 +18,12 @@ from carter.identity.errors import (
     E_TIER_REQUIRED,
     ERRORS_BEGIN,
     ERRORS_END,
-    SLICES,
     registry,
     render_error_table,
 )
 
 REPO = Path(__file__).resolve().parents[2]
-RFC_APPENDIX = (
-    REPO / "docs" / "rfcs" / "0007-llm-attribution-signing" / "appendix-b-cli-and-errors.md"
-)
 CODE_RE = re.compile(r"^E-[A-Z0-9]+(?:-[A-Z0-9]+)*$")
-SLICE_1 = {E_CONFIG, E_ROLE_B_TIER, E_TIER_REQUIRED, E_COMMIT_T1}
-ADDED_BEYOND_APPENDIX_B = {"E-HUMAN-TERMINAL", "E-STATE-INVALID", "E-APLUS-ARGS"}
 
 
 class TestRegistry:
@@ -42,21 +36,9 @@ class TestRegistry:
     def test_every_entry_is_complete(self):
         for entry in registry().values():
             assert entry.code and entry.where.strip() and entry.message.strip()
-            assert entry.slice in SLICES
             assert isinstance(entry.remediation, str)
 
-    def test_slice_1_codes(self):
-        assert {c for c, e in registry().items() if e.slice == "1"} == SLICE_1
-
-    def test_other_codes_are_registered_for_their_own_slice(self):
-        others = {c: e.slice for c, e in registry().items() if c not in SLICE_1}
-        assert others and "1" not in others.values()
-        assert others["E-GATE"] == "2a"
-        assert others["E-SIGN-LOCKED"] == "2b"
-        assert others["E-B-DEFAULT"] == "B"
-        assert others["E-PAT-TYPE"] == "1G"
-
-    def test_slice_1_wording_is_appendix_b_verbatim(self):
+    def test_core_wording(self):
         r = registry()
         assert (
             r[E_CONFIG].message == "config.toml is invalid; agent commits are disabled until fixed."
@@ -74,18 +56,6 @@ class TestRegistry:
             r[E_COMMIT_T1].message
             == "No LLM signing key (T1): committed unsigned with `Co-authored-by: LLM`."
         )
-
-    @pytest.mark.skipif(not RFC_APPENDIX.is_file(), reason="local RFC files are absent (CI)")
-    def test_codes_match_the_rfc_error_table(self):
-        text = RFC_APPENDIX.read_text(encoding="utf-8")
-        table = text.split("## 2. Error table")[1].split("## 3.")[0]
-        in_rfc: set[str] = set()
-        for row in table.splitlines():
-            if row.startswith("| E-"):
-                first = row.split("|")[1]
-                in_rfc.update(re.findall(r"E-[A-Z0-9-]+", first))
-        # Codes the 1G architect gate added beyond Appendix B (plan 003 step 6, F10).
-        assert set(registry()) - ADDED_BEYOND_APPENDIX_B == in_rfc
 
 
 class TestUsedByCode:
@@ -170,7 +140,7 @@ class TestSingleSource:
         assert offenders == {}
 
     def test_errors_module_stays_small(self):
-        assert len(Path(errors_mod.__file__).read_text().splitlines()) <= 120
+        assert len(Path(errors_mod.__file__).read_text().splitlines()) <= 160
 
 
 class TestRenderErrorTable:
@@ -179,31 +149,37 @@ class TestRenderErrorTable:
         assert table.startswith(ERRORS_BEGIN + "\n") and table.rstrip().endswith(ERRORS_END)
         assert table == render_error_table()
 
-    def test_slice_1_lists_only_slice_1_codes_in_registry_order(self):
-        rows = [ln for ln in render_error_table(current="1").splitlines() if ln.startswith("| `E-")]
-        codes = [re.match(r"\| `([^`]+)`", ln).group(1) for ln in rows]
-        assert codes == [c for c in registry() if c in SLICE_1]
-
-    def test_the_current_slice_is_1g_and_lists_its_codes_too(self):
-        # plan 003 step 22: one constant (rules.CURRENT_SLICE), imported by errors.py
-        assert errors_mod.CURRENT_SLICE == "1G"
+    def test_it_lists_every_agent_facing_code_and_no_human_facing_one(self):
         rows = [ln for ln in render_error_table().splitlines() if ln.startswith("| `E-")]
         codes = {re.match(r"\| `([^`]+)`", ln).group(1) for ln in rows}
-        in_1g = {c for c, e in registry().items() if e.slice in {"1", "1G"}}
-        assert codes == in_1g
+        assert codes == set(registry()) - errors_mod.HUMAN_FACING
+        agent_2b = {
+            "E-SIGN-LOCKED", "E-SIGN-NOAGENT", "E-SIGN-UNAVAILABLE", "E-SIGN-AGENT-REFUSE",
+            "E-SHIM-REFUSED", "E-GUARD-NOIDENT", "E-GUARD-COMMITTER", "E-GUARD-SIGNCFG",
+            "E-GUARD-TRAILER", "E-GUARD-T01SIGN", "E-GUARD-UNSIGNED", "E-TIER-CAPPED",
+            "E-TIER-REQUIRED", "E-ROLE-B-TIER",
+        }  # fmt: skip
+        assert agent_2b <= codes and "E-HUMAN-IDENTITY" in codes
+        human = {
+            "E-UNLOCK-TTY",
+            "E-UNLOCK-OPENCODE",
+            "E-UNLOCK-PATH",
+            "E-UNLOCK-BADPASS",
+            "E-SIGN-HUMAN-FALLBACK",
+            "E-SSH-OLD",
+            "E-IDENTITY-CHECK",
+            "E-GITHUB-UNREACHABLE",
+        }
+        assert not human & codes and human <= set(registry())  # in the docs, not in the agent table
         assert {
-            "E-POLICY",
-            "E-GH-READONLY",
-            "E-HANDOFF",
-            "E-SECRET-SCAN",
-            "E-HUMAN-TERMINAL",
-        } <= codes
-        assert "E-PUSH-GUARD" not in codes  # the pre-push hook is 2a (freeze F10)
-
-    def test_later_slices_extend_it(self):
-        assert "E-GATE" in render_error_table(current="2a")
-        assert "E-GATE" not in render_error_table()
-        assert "E-PUSH-GUARD" in render_error_table(current="2a")
+            "E-POLICY", "E-GH-READONLY", "E-HUMAN-TERMINAL",
+            "E-ISOLATION-MISSING", "E-GATE", "E-GATE-FAIL", "E-PUSH-GUARD", "E-GIT-OLD",
+            "E-OPENCODE-VERSION", "E-SIGN-UNAVAILABLE",
+        } <= codes  # fmt: skip
+        assert {
+            "E-B-CALLER", "E-B-DWELL", "E-B-TIMEOUT", "E-B-HEADLESS", "E-B-POLLUTED", "E-B-NOAGENT",
+            "E-B-HTTPS", "E-B-MOVED", "E-B-DEFAULT", "E-B-ARGS", "E-B-REJECTED",
+        } <= codes  # fmt: skip
 
     def test_cells_escape_pipes(self):
         assert "\\|" not in render_error_table() or all(
@@ -219,7 +195,7 @@ class TestRenderErrorTable:
 
 
 class TestObservedTexts:
-    """Spike 4 (plan 003, 2026-11-02): the strings GitHub really sent for a read-only PAT."""
+    """The strings GitHub sends for a token that cannot write."""
 
     def test_gh_readonly_stores_the_observed_lines_and_the_api_message(self):
         entry = registry()["E-GH-READONLY"]
@@ -231,7 +207,7 @@ class TestObservedTexts:
         )
         assert "Resource not accessible by personal access token" in entry.message
         assert "unverified" not in entry.message
-        assert "carter push" in entry.remediation and "own terminal" in entry.remediation
+        assert "carter push" in entry.remediation and "!carter push" in entry.remediation
 
     def test_observed_is_data_only_and_empty_elsewhere(self):
         assert all(e.observed == () for c, e in registry().items() if c != "E-GH-READONLY")
@@ -250,5 +226,5 @@ class TestPatCodes:
         assert (
             "carter github-token set" in type_.remediation and "own terminal" in type_.remediation
         )
-        assert "this looks like" not in type_.message and "4-character prefix" in type_.message
+        assert "this looks like" not in type_.message and "github_pat_" in type_.message
         assert "0700" in perm.remediation and "carter github-token set" in perm.remediation

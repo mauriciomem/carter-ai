@@ -1,17 +1,14 @@
-"""The statements Carter writes into the OpenCode config, from ``g2_rules.json``.
+"""The statements Carter renders into its agents' permissions, from ``g2_rules.json``.
 
-RFC-0007 App C.1 (``policy_set``, ``gh_read_allowlist``) and C.6.3. The data file is the
-only source: the policy writer, ``check --host`` and the parity tests all read it through
-here. Stdlib-only, like the rest of ``carter.identity``.
-
-Shapes (plan 003, step 6 F3-F6):
+The data file is the only source: the rule renderer, ``check --host`` and the parity tests all
+read it through here. Stdlib-only, like the rest of ``carter.identity``.
 
 - ``policy_set`` entries are ``tool.use`` **denies** with a stable ``id`` and a consent
   ``group``; ``<home>`` in a resource is replaced at render time.
 - The gh allows are *generated* from ``gh_read_allowlist`` (id ``allow-gh-<verb-slug>``),
   not repeated in ``policy_set``. They belong to ``g2`` and come last: denies, then allows
-  (OpenCode policies are last-match-wins, so an allow only lifts an earlier deny).
-- Per-agent ``carter_push``/``carter_pr`` denies are *not* policies (D46): see
+  (last match wins, so an allow only lifts an earlier deny).
+- The per-agent ``carter_push`` denies for OpenCode's own agents are not statements: see
   ``agent_permission_denies``.
 """
 
@@ -35,21 +32,21 @@ class Statement:
     action: str
     resource: str
     effect: str
-    rfc: str
 
 
 @dataclass(frozen=True)
 class ConsentGroup:
     id: str
-    live: bool
     effect: str
+    rev: int = 1  # bumped when a group gains content that needs a fresh yes
+    explain: tuple[str, ...] = ()  # printed before the question when this revision is offered
+    optional: bool = False  # never accepted by a bare --yes, only by --only <id> or a TTY yes
 
 
 @dataclass(frozen=True)
 class GhVerb:
     verb: str
     pattern: str
-    pending: str = ""
 
     @property
     def slug(self) -> str:
@@ -63,8 +60,17 @@ def _data() -> dict[str, Any]:
 
 
 def consent_groups() -> tuple[ConsentGroup, ...]:
-    """The seven consent groups of C.6.1, in order; ``live`` ones have content in 1G."""
-    return tuple(ConsentGroup(g["id"], g["live"], g["effect"]) for g in _data()["consent_groups"])
+    """The consent groups, in order."""
+    return tuple(
+        ConsentGroup(
+            g["id"],
+            g["effect"],
+            g.get("rev", 1),
+            tuple(g.get("explain", ())),
+            g.get("optional", False),
+        )  # fmt: skip
+        for g in _data()["consent_groups"]
+    )
 
 
 def policy_set() -> tuple[Statement, ...]:
@@ -73,9 +79,7 @@ def policy_set() -> tuple[Statement, ...]:
 
 
 def gh_allowlist() -> tuple[GhVerb, ...]:
-    return tuple(
-        GhVerb(e["verb"], e["pattern"], e.get("pending", "")) for e in _data()["gh_read_allowlist"]
-    )
+    return tuple(GhVerb(e["verb"], e["pattern"]) for e in _data()["gh_read_allowlist"])
 
 
 def _check_home(home: str) -> str:
@@ -87,12 +91,12 @@ def _check_home(home: str) -> str:
 
 
 def policy_statements(groups: Iterable[str] | None = None, *, home: str) -> tuple[Statement, ...]:
-    """Rendered statements for ``groups`` (default: every live group), denies then gh allows.
+    """Rendered statements for ``groups`` (default: every group), denies then gh allows.
 
     Raises ``ValueError`` for an unknown group or a ``home`` that is not absolute or holds
-    a glob character. A reserved group (no content in this version) yields nothing."""
+    a glob character."""
     known = {g.id for g in consent_groups()}
-    chosen = list(dict.fromkeys(groups if groups is not None else _live_ids()))
+    chosen = list(dict.fromkeys(groups if groups is not None else [g.id for g in consent_groups()]))
     unknown = [g for g in chosen if g not in known]
     if unknown:
         raise ValueError(f"unknown consent group(s): {', '.join(unknown)}")
@@ -111,15 +115,10 @@ def policy_statements(groups: Iterable[str] | None = None, *, home: str) -> tupl
                 "tool.use",
                 f"shell:{v.pattern}",
                 "allow",
-                "4.5 gh read allowlist",
             )  # fmt: skip
             for v in gh_allowlist()
         )
     return denies + allows
-
-
-def _live_ids() -> list[str]:
-    return [g.id for g in consent_groups() if g.live]
 
 
 def render_policies(statements: Iterable[Statement]) -> list[dict[str, str]]:
@@ -128,12 +127,12 @@ def render_policies(statements: Iterable[Statement]) -> list[dict[str, str]]:
 
 
 def agent_permission_denies() -> tuple[str, ...]:
-    """Tool names denied per agent (D46), not as global policies."""
+    """Tool names denied per agent, not as global policies."""
     return tuple(_data()["agent_permission_denies"])
 
 
 def agent_permission_exempt() -> tuple[str, ...]:
-    """Roles that keep the tools in ``agent_permission_denies`` (devops, the only B caller)."""
+    """Roles that keep the tools in ``agent_permission_denies`` (devops, the push tool caller)."""
     return tuple(_data()["agent_permission_exempt"])
 
 

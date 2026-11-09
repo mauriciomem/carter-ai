@@ -1,7 +1,7 @@
-"""``carter check --host`` (plan 003 step 21; RFC-0007 App B §3): the items that exist in 1G.
+"""``carter check --host``: the host items.
 
 Read-only, names only, and honest: what needs the plugin or hooks is reported as not
-installed in this slice, never as green. The token items reuse ``github-token check`` (step 16).
+installed, never as green. The token items reuse ``github-token check``.
 """
 
 from __future__ import annotations
@@ -17,24 +17,31 @@ from carter import hostcheck
 from carter.cli import main
 from carter.guard import gitconfig as gc
 from carter.guard.state import load, save
-from carter.identity.errors import E_POLICIES_MISSING, E_STATE_INVALID
+from carter.identity.errors import E_STATE_INVALID
 from carter.install.mcp import config_target
 from carter.install.paths import carter_gitconfig_path, guard_state_path
-from guard.helpers import debug_config, tree_hash
+from guard.helpers import STAND_IN, debug_config, decline, tree_hash, verbose
+from rows import check_host
 from sentinels import fine_grained, prefixed
 
 
 def guard(*args: str):
-    return CliRunner().invoke(main, ["guard", *args], catch_exceptions=False)
+    return CliRunner().invoke(main, ["guard", *verbose(args)], catch_exceptions=False)
 
 
 def host(*extra: str):
-    return CliRunner().invoke(main, ["check", "--host", *extra], catch_exceptions=False)
+    return check_host(*extra)
 
 
 def installed(stack) -> None:
     stack.fake()
     assert guard("install", "--yes").exit_code == 0
+
+
+def installed_with_agents(stack) -> None:
+    """``carter install --yes``: the Carter agent files carry G2's rules ()."""
+    stack.fake()
+    assert CliRunner().invoke(main, ["install", "--yes"], catch_exceptions=False).exit_code == 0
 
 
 def levels(output: str) -> dict[str, list[str]]:
@@ -48,34 +55,45 @@ def levels(output: str) -> dict[str, list[str]]:
 
 class TestHealthyInstall:
     def test_all_green_or_only_the_documented_warns(self, stack) -> None:
-        installed(stack)
+        installed_with_agents(stack)
         stack.fake(before=debug_config(stack.live))
         res = host()
         assert res.exit_code == 0, res.output
         found = levels(res.output)
         assert "RED" not in found
-        assert any("statement(s) loaded" in t for t in found["OK"])
+        assert any("carry the G2 rules" in t for t in found["OK"])
         warns = " ".join(found["WARN"])
-        assert "plugin not installed (slice 2a)" in warns  # always, once g2 is consented
-        assert "gate, isolation and signing guards are inactive" in warns
-        assert "literal denies only" in warns
+        assert "not loaded yet: start OpenCode" in warns  # installed, no server has loaded it
         assert "not provisioned" in warns  # no token yet: a WARN, never a failure
-        assert res.output.rstrip().endswith("Host OK (2 WARN).")
+        assert "plugin and isolation.json match (hash)" in " ".join(found["OK"])
+        assert res.output.rstrip().endswith("✓ host  2 warnings")
 
-    def test_the_git_items_say_not_applicable_in_this_slice(self, stack) -> None:
+    def test_a_pre_2a_user_keeps_the_1g_wording_and_sees_rev_2_pending(self, stack) -> None:
+        installed(stack)
+        path = guard_state_path(None)
+        state = load(path)
+        state.consent("g2", "accepted", "2026-11-01", 1)  # what an early install left behind
+        save(state, path)
+        stack.fake(before=debug_config(stack.live))
+        found = levels(host().output)
+        warns = " ".join(found["WARN"])
+        assert "plugin not installed: gate, isolation and signing guards are inactive" in warns
+        assert "literal denies only" in warns
+        assert any("g2 update pending" in t for t in found["INFO"])
+
+    def test_the_git_items_report_the_hook_and_say_keys_are_not_applicable(self, stack) -> None:
         installed(stack)
         stack.fake(before=debug_config(stack.live))
         out = host().output
-        assert "include.path: not needed yet (no Carter git keys; slice 2a)" in out
-        assert "Carter installs no hooks in this slice" in out
-        assert "not applicable in this slice" in out
+        assert "pre-push config hook installed" in out and "include.path for" in out
+        assert "not applicable" in out
 
-    def test_the_env_item_is_honest_about_what_is_not_checked(self, stack) -> None:
+    def test_the_env_item_says_when_no_server_runs(self, stack) -> None:
         installed(stack)
         stack.fake(before=debug_config(stack.live))
         out = host().output
         assert "TOKEN_CHECK_PENDING" not in out and not hasattr(hostcheck, "TOKEN_CHECK_PENDING")
-        assert "pollution (agent signals, isolation markers) not checked: slice 2a" in out
+        assert "no running OpenCode server found" in out
 
     def test_it_is_allowed_in_an_agent_shell_because_it_is_read_only(
         self, stack, monkeypatch: pytest.MonkeyPatch
@@ -85,9 +103,9 @@ class TestHealthyInstall:
         monkeypatch.setenv("AGENT", "x")
         assert host().exit_code == 0
 
-    def test_check_probe_is_not_registered_in_1g(self) -> None:
+    def test_check_probe_is_registered_since_2a_and_refuses_outside_an_agent_shell(self) -> None:
         res = CliRunner().invoke(main, ["check", "--probe"])
-        assert res.exit_code == 2 and "No such option" in res.output
+        assert res.exit_code == 1 and "E-PROBE-SCOPE" in res.output
 
     def test_the_workspace_check_is_unchanged(self, tmp_path: Path) -> None:
         runner = CliRunner()
@@ -108,20 +126,16 @@ class TestNothingInstalled:
 
 
 class TestRedItems:
-    def test_a_missing_statement_names_it_with_the_registry_code(self, stack) -> None:
-        installed(stack)
-        stack.fake(before=debug_config(stack.live[1:]))  # OpenCode dropped deny-git-push
+    def test_a_changed_agent_file_names_the_file(self, stack, home: Path) -> None:
+        installed_with_agents(stack)
+        path = home / ".config" / "opencode" / "agents" / "carter-pm.md"
+        path.write_text(path.read_text().replace("git send-pack *", "git send-pack --x *"))
+        stack.fake(before=debug_config())
         res = host()
         assert res.exit_code == 1
-        assert f"{E_POLICIES_MISSING}: `deny-git-push` is not loaded" in res.output
-        assert "deny-git-send-pack is" not in res.output
-        assert "drops all policies and your providers" in res.output
-
-    def test_each_missing_statement_is_its_own_line(self, stack) -> None:
-        installed(stack)
-        stack.fake(before=debug_config(stack.live[2:]))
-        reds = levels(host().output)["RED"]
-        assert sum("is not loaded" in r for r in reds) == 2
+        assert "carter-pm.md: its permissions differ from what Carter renders" in res.output
+        reds = levels(res.output)["RED"]
+        assert sum("differ from what Carter renders" in r for r in reds) == 1  # its own line
 
     def test_a_lost_provider_is_red(self, stack) -> None:
         target = config_target(None)
@@ -142,11 +156,9 @@ class TestRedItems:
     def test_a_declined_group_is_listed_not_failed(self, stack, human_tty) -> None:
         from carter.identity.policyset import policy_statements
 
-        human_tty(True)
         stack.fake()
-        res = CliRunner().invoke(
-            main, ["guard", "install"], input="y\nn\ny\ny\n", catch_exceptions=False
-        )
+        decline("sudo-docker")
+        res = CliRunner().invoke(main, ["guard", "install", "--yes"], catch_exceptions=False)
         assert res.exit_code == 0, res.output
         accepted = policy_statements(
             ("g2", "read-edit-denies", "config-edit"), home=str(stack.home)
@@ -193,18 +205,18 @@ class TestRedItems:
         assert res.exit_code == 1 and "newer" in res.output
 
     def test_one_broken_check_does_not_hide_the_others(self, stack, monkeypatch) -> None:
-        installed(stack)
+        installed_with_agents(stack)
         stack.fake(before=debug_config(stack.live))
         monkeypatch.setattr(hostcheck, "_files", lambda s: (_ for _ in ()).throw(RuntimeError("x")))
         res = host()
         assert res.exit_code == 1 and "check could not run (RuntimeError)" in res.output
-        assert "statement(s) loaded" in res.output
+        assert "carry the G2 rules" in res.output
 
 
 class TestGitIncludeLine:
     @pytest.fixture
     def with_key(self, monkeypatch: pytest.MonkeyPatch):
-        monkeypatch.setattr(gc, "carter_git_entries", lambda: [("carter.tier", "t1")])
+        monkeypatch.setattr(gc, "carter_git_entries", STAND_IN)
 
     def test_present_is_ok(self, stack, with_key) -> None:
         installed(stack)
@@ -252,7 +264,7 @@ class TestWarnsAndLists:
             json.dumps({"plugins": ["x"], "mcp": {"servers": {"s": {"command": ["SECRETCMD"]}}}})
         )
         stack.fake()
-        res = CliRunner().invoke(main, ["check", "--host", str(proj)], catch_exceptions=False)
+        res = check_host(str(proj))
         assert "project-scope OpenCode config can run code" in res.output
         assert "opencode.json (mcp, plugins)" in res.output and ".opencode/plugins/" in res.output
         assert "SECRETCMD" not in res.output and res.exit_code == 0
@@ -267,7 +279,7 @@ class TestWarnsAndLists:
         yaml_path = ws / ".carter" / "carter.yaml"
         yaml_path.write_text(yaml_path.read_text() + "identity:\n  require_tier: t1\n")
         stack.fake()
-        res = runner.invoke(main, ["check", "--host", str(ws)], catch_exceptions=False)
+        res = check_host(str(ws))
         assert "carter.yaml and config.toml differ on: require_tier" in res.output
         assert "carter update" in res.output and res.exit_code == 0
 
@@ -298,7 +310,7 @@ class TestReadOnlyAndQuiet:
         monkeypatch.setenv("GH_TOKEN", prefixed("ghp_", "ENVSENTINEL"))
         monkeypatch.setenv("GITHUB_TOKEN", fine_grained("ENVSENTINEL"))
         stack.fake(before=debug_config(stack.live[1:]))  # provider settings carry sk-SENTINEL
-        res = CliRunner().invoke(main, ["check", "--host"], catch_exceptions=False)
+        res = check_host()
         assert "SENTINEL" not in res.output and "SENTINEL" not in (res.stderr_bytes or b"").decode()
 
     def test_no_provider_settings_in_the_debug_config_path(self) -> None:
@@ -324,7 +336,7 @@ OWNED = "carter-llm/zz-probe-repo"
 
 
 class TestToken:
-    """The token items of ``check --host`` (step 21): the same checks as ``github-token check``."""
+    """The token items of ``check --host``: the same checks as ``github-token check``."""
 
     TOKEN = fine_grained("HOSTSENTINEL")
 
@@ -343,7 +355,7 @@ class TestToken:
         assert res.exit_code == 0 and "RED" not in found
         oks = " ".join(found["OK"])
         assert "gh-read.token" in oks and "the token is read-only" in oks
-        assert res.output.rstrip().endswith("Host OK (1 WARN).")  # only the plugin line
+        assert res.output.rstrip().endswith("✓ host  1 warning")  # only the plugin line
         assert "HOSTSENTINEL" not in res.output
 
     def test_a_writable_token_is_red(self, stack, github_api) -> None:

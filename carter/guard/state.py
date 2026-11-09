@@ -1,7 +1,7 @@
 """``~/.carter/guard-state.json``: everything Carter owns on the user's machine for G2.
 
-RFC-0007 App C.6.1, freeze F2. It lives apart from ``manifest.json`` so an older installer
-(which rebuilds the manifest) can never drop it. It is updated in place: ``load`` →
+It lives apart from ``manifest.json`` so an installer that rebuilds the manifest can
+never drop it. It is updated in place: ``load`` →
 change → ``save``, never rebuilt from scratch. Unknown top-level keys from a newer Carter
 are carried forward. A file that cannot be read, or that has a newer ``schema``, is
 refused (``E-STATE-INVALID``) and never overwritten.
@@ -31,7 +31,7 @@ STATE_KEYS = (
 CONSENT_FIELDS = ("decision", "date", "rev")
 FILE_FIELDS = ("path", "sha256")
 POLICY_FIELDS = ("id", "action", "resource", "effect", "preexisting")
-PERMISSION_FIELDS = ("agent", "key", "value", "preexisting", "form")
+PERMISSION_FIELDS = ("agent", "key", "value", "preexisting")
 GITCONFIG_FIELDS = ("file", "key", "value")
 GIT_CONFIG_FIELDS = ("file", "key", "value", "scope")
 REPO_HOOK_FIELDS = ("path", "sha256")
@@ -90,6 +90,39 @@ class GuardState:
         except OSError:  # missing, a directory, unreadable
             return False
 
+    # -- consent offers: a declined re-ask is an additive top-level key ----------------
+    def offer(self, group: str) -> dict[str, Any] | None:
+        found = (self.extra.get("consent_offers") or {}).get(group)
+        return found if isinstance(found, dict) else None
+
+    def record_offer(self, group: str, rev: int, decision: str, on: str) -> None:
+        date.fromisoformat(on)
+        offers = dict(self.extra.get("consent_offers") or {})
+        offers[group] = {"rev": rev, "decision": decision, "date": on}
+        self.extra["consent_offers"] = offers
+
+    def clear_offer(self, group: str) -> None:
+        offers = {k: v for k, v in (self.extra.get("consent_offers") or {}).items() if k != group}
+        if offers:
+            self.extra["consent_offers"] = offers
+        else:
+            self.extra.pop("consent_offers", None)
+
+    # -- per-repo hooks (git < 2.54) --------------------------------------------------
+    def record_repo_hook(self, path: Path | str, data: bytes) -> None:
+        _upsert(self.repo_hooks, {"path": str(path), "sha256": sha256_bytes(data)}, "path")
+
+    def forget_repo_hook(self, path: Path | str) -> None:
+        self.repo_hooks = [h for h in self.repo_hooks if h["path"] != str(path)]
+
+    def repo_hook_unchanged(self, path: Path | str) -> bool:
+        """True only if ``path`` is a recorded repo hook with its recorded hash."""
+        recorded = next((h["sha256"] for h in self.repo_hooks if h["path"] == str(path)), None)
+        try:
+            return recorded is not None and sha256_bytes(Path(path).read_bytes()) == recorded
+        except OSError:
+            return False
+
     # -- OpenCode config -----------------------------------------------------------
     def record_policy(
         self, id: str, action: str, resource: str, effect: str, *, preexisting: bool
@@ -100,10 +133,8 @@ class GuardState:
     def owned_policies(self) -> list[dict[str, Any]]:
         return [p for p in self.opencode_policies if not p["preexisting"]]
 
-    def record_permission(
-        self, agent: str, key: str, value: str, *, preexisting: bool, form: str = "v2"
-    ) -> None:
-        entry = dict(zip(PERMISSION_FIELDS, (agent, key, value, preexisting, form), strict=True))
+    def record_permission(self, agent: str, key: str, value: str, *, preexisting: bool) -> None:
+        entry = dict(zip(PERMISSION_FIELDS, (agent, key, value, preexisting), strict=True))
         _upsert(self.agent_permissions, entry, "agent", "key")
 
     def owned_permissions(self) -> list[dict[str, Any]]:

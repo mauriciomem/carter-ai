@@ -5,9 +5,10 @@ from __future__ import annotations
 import shutil
 from pathlib import Path
 
+from carter import ui
 from carter.home import tilde
 from carter.install.components import read_manifest
-from carter.install.console import _log, bold, green, log_ok, log_step, log_warn
+from carter.install.console import log_ok, log_step, log_warn
 from carter.install.mcp import global_config_files, remove_carter_servers
 from carter.install.ownership import _hash_matches, _within
 from carter.install.paths import (
@@ -26,7 +27,7 @@ def _remove_if_owned(
 
     * Outside the managed roots (path-component check, not string prefix) → ignored.
     * Recorded hash → delete only if the content still matches; else keep + warn.
-    * No recorded hash (manifests from older versions) → delete only ``carter-*``
+    * No recorded hash → delete only ``carter-*``
       agent/skill files, which are Carter-owned by name. Knowledge files and
       ``AGENTS.md`` are user data and are kept.
     """
@@ -65,9 +66,10 @@ def uninstall(base_dir: Path | None, *, keep_guards: bool = False, assume_yes: b
     log_step("Uninstalling Carter...")
     guard_code = 0
     if not keep_guards:
-        from carter.guard.wiring import uninstall_guards
+        from carter.guard.wiring import uninstall_guards, uninstall_identity
 
         guard_code = uninstall_guards(base_dir, assume_yes=assume_yes)
+        uninstall_identity(base_dir, assume_yes=assume_yes)  # independent of the guards
     manifest = read_manifest(base_dir)
     opencode_base = _opencode_base(base_dir)
     managed_roots = _managed_roots(base_dir)
@@ -100,5 +102,5 @@ def uninstall(base_dir: Path | None, *, keep_guards: bool = False, assume_yes: b
         path.unlink()
         log_ok("Removed manifest")
 
-    _log(f"\n{green('✓')} {bold('Uninstall complete')}")
+    ui.ok("uninstalled")
     return guard_code

@@ -31,6 +31,7 @@ dependencies = [
     "jinja2>=3.1",
     "pyyaml>=6.0",
     "click>=8.1",
+    "rich>=13.7",
 ]
 
 [project.urls]
@@ -69,6 +70,9 @@ testpaths = ["tests"]
 # `pytest tests evals` run uses this config and would warn "unknown mark live".
 markers = [
     "live: marks tests as requiring an API key for live model calls (deselect with '-m \"not live\"')",
+    "e2e: starts a real OpenCode in an isolated HOME; opt-in with CARTER_E2E=1",
+    "gitold: the per-repo pre-push fallback; the CI git-old job runs these on a real git < 2.54",
+    "real_ssh_agent: starts real ssh-agent processes under /tmp/c2b-<pid>-*; the slow signed hook matrix is opt-in with CARTER_SSH_MATRIX=1",
 ]
 
 [tool.ruff]

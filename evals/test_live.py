@@ -284,11 +284,11 @@ class TestLiveCarterOps:
         for cmd in scenario["expect"]["commands_not_contain"]:
             assert cmd.lower() not in response.lower(), f"Found forbidden '{cmd}' in response"
 
-    def test_devops_push_request_writes_a_handoff_not_a_push(
+    def test_devops_push_request_tells_the_user_not_a_push(
         self, ops_skill_content: str, ops_scenarios: list[dict]
     ) -> None:
         scenario = next(
-            s for s in ops_scenarios if s["name"] == "devops_push_this_branch_is_a_handoff"
+            s for s in ops_scenarios if s["name"] == "devops_push_this_branch_is_human_only"
         )
         system = _build_system_prompt(ops_skill_content)
 
@@ -301,7 +301,7 @@ class TestLiveCarterOps:
         for cmd in scenario["expect"]["commands_not_contain"]:
             assert cmd not in fenced, f"Found forbidden command '{cmd}' in a code block"
 
-    def test_non_devops_push_is_a_handoff(
+    def test_non_devops_push_is_human_only(
         self, ops_skill_content: str, ops_scenarios: list[dict]
     ) -> None:
         scenario = next(s for s in ops_scenarios if s["name"] == "push_from_non_devops_hands_off")
@@ -311,7 +311,42 @@ class TestLiveCarterOps:
 
         for needle in scenario["expect"]["mentions"]:
             assert needle.lower() in response.lower(), f"Missing '{needle}' in response"
-        assert "git push" not in response.split("```")[0] or "handoff" in response.lower()
+        assert "git push" not in response.split("```")[0] or "carter push" in response.lower()
+
+    @pytest.mark.parametrize(
+        "name",
+        ["b_non_devops_asks_for_a_push_hands_off", "b_a_rejected_approval_is_final_not_rephrased"],
+    )
+    def test_b_tools_rules_hold(
+        self, name: str, ops_skill_content: str, ops_scenarios: list[dict]
+    ) -> None:
+        """Only devops has a push tool; no push tool for others; a rejection is not retried."""
+        scenario = next(s for s in ops_scenarios if s["name"] == name)
+        system = _build_system_prompt(ops_skill_content)
+
+        response = _call_model(system, f"{scenario['input']}\n\n{_emit_context(scenario)}")
+
+        for needle in scenario["expect"]["mentions"]:
+            assert needle.lower() in response.lower(), f"Missing '{needle}' in response"
+        fenced = "\n".join(response.split("```")[1::2])
+        for cmd in scenario["expect"]["commands_not_contain"]:
+            assert cmd not in fenced, f"Found forbidden '{cmd}' in a code block"
+
+
+class TestLiveReviewRun:
+    def test_a_review_run_reports_and_does_not_commit(
+        self, ops_skill_content: str, ops_scenarios: list[dict]
+    ) -> None:
+        scenario = next(s for s in ops_scenarios if s["name"] == "ci_review_run_makes_no_commits")
+        system = _build_system_prompt(ops_skill_content)
+
+        response = _call_model(system, f"{scenario['input']}\n\n{_emit_context(scenario)}")
+
+        for needle in scenario["expect"]["mentions"]:
+            assert needle.lower() in response.lower(), f"Missing '{needle}' in response"
+        fenced = "\n".join(response.split("```")[1::2])
+        for cmd in scenario["expect"]["commands_not_contain"]:
+            assert cmd not in fenced, f"Found forbidden command '{cmd}' in a code block"
 
 
 class TestLiveSkillCorrectness:

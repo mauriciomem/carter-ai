@@ -13,8 +13,10 @@ until you need it.
 
 | Page | Read it when you want to… |
 |------|---------------------------|
-| [Safety and permissions](guides/safety-and-permissions.md) | Understand what each agent may do, and choose `guarded` or `strict` |
-| [Write operations (`ops:`)](guides/write-operations.md) | Let Carter commit and comment on Jira with your approval, and see how you push and open PRs |
+| [Safety and permissions](guides/safety-and-permissions.md) | Understand what each agent may do, choose `guarded` or `strict`, and see what the guards cannot do |
+| [Write operations (`ops:`)](guides/write-operations.md) | Let Carter commit and comment on Jira with your approval, push with `carter push`, let agents open PRs, and let devops *ask* you to approve a push |
+| [Review-only CI](guides/ci-review.md) | Have Carter review every pull request in GitHub Actions with no write access and no commits |
+| [Identity and signing](guides/identity-and-signing.md) | Give agents their own GitHub identity and signed commits, and undo it |
 | [MCP servers](guides/mcp-servers.md) | Give agents read access to GitHub, Terraform or Jira/Confluence |
 | [Memory and plans](guides/memory-and-plans.md) | Keep lessons, decisions and multi-session plans |
 | [Cost and models](guides/cost-and-models.md) | Pick models per agent and keep your token bill down |

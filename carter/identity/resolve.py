@@ -1,12 +1,11 @@
-"""Pure tier and role resolution (RFC-0007 §4.1). No I/O, no environment reads.
+"""Pure tier and role resolution. No I/O, no environment reads.
 
 The caller passes the parsed config, the workspace path and the environment mapping, so
 the same inputs always give the same answer and nothing here can write or run git.
-Slice 1 only *reports* the result; wiring it to commits is slice 2b.
 
 ``carter.yaml`` is deliberately not an input: its ``identity.role`` and
 ``identity.require_tier`` reach this module only after a human runs ``carter update``
-and pins them under ``[workspaces."<path>"]`` (D62).
+and pins them under ``[workspaces."<path>"]``.
 """
 
 from __future__ import annotations
@@ -17,12 +16,15 @@ from dataclasses import dataclass
 from typing import Literal
 
 from carter.identity.errors import (
+    E_CI_REVIEW,
     E_CONFIG,
     E_ROLE_B_TIER,
+    MSG_CI_REVIEW,
     MSG_CONFIG,
     MSG_ROLE_B_TIER,
     IdentityError,
 )
+from carter.identity.mode import resolve_mode
 from carter.identity.schema import ROLES, TIERS, IdentityConfig, Workspace
 
 ENV_ROLE = "CARTER_IDENTITY_ROLE"
@@ -94,10 +96,9 @@ def _missing_for_t2(cfg: IdentityConfig) -> tuple[str, ...]:
 def configured_tier(cfg: IdentityConfig) -> str:
     """T0 nothing usable, T1 a consistent login/id/noreply identity, T2 plus a signing key.
 
-    A broken signing setup is not T1: ``resolve`` refuses it (E-CONFIG). A schema-1 file
-    (``needs_migration``) carries no identity, so it is T0.
+    A broken signing setup is not T1: ``resolve`` refuses it (E-CONFIG).
     """
-    if cfg.needs_migration or not _has_identity(cfg):
+    if not _has_identity(cfg):
         return "t0"
     if _has_signing_material(cfg):
         return "t2" if _has_signing_key(cfg) else "t0"
@@ -105,7 +106,7 @@ def configured_tier(cfg: IdentityConfig) -> str:
 
 
 def effective_tier(configured: str, cap: str) -> str:
-    """``min(configured, cap)`` (D64). An empty cap means none; an unknown cap fails safe
+    """``min(configured, cap)``. An empty cap means none; an unknown cap fails safe
     to T0. A cap never raises the tier."""
     if not cap:
         return configured
@@ -126,17 +127,24 @@ def resolve_role(
 ) -> RoleResolution:
     """Pinned workspace role > ``CARTER_IDENTITY_ROLE`` > ``[identity] role`` > co-author."""
     pinned = _workspace(cfg, workspace).role
-    if pinned:
-        return RoleResolution(pinned, "workspace")
-    warnings: tuple[str, ...] = ()
     session = env.get(ENV_ROLE, "")
-    if session in ROLES:
-        return RoleResolution(session, "env")
-    if session:  # a typo must not silently pick another role; never echo the value
-        warnings = (f"{ENV_ROLE} is not one of {list(ROLES)}; ignored",)
-    if cfg.identity.role != "co-author":
-        return RoleResolution(cfg.identity.role, "config", warnings)
-    return RoleResolution("co-author", "default", warnings)
+    warnings: list[str] = []
+    if session and session not in ROLES:  # a typo must not silently pick another role
+        warnings.append(f"{ENV_ROLE} is not one of {list(ROLES)}; ignored")  # never echo it
+        session = ""
+    configured = cfg.identity.role if cfg.identity.role != "co-author" else ""
+    # a lower source that differs is reported (source names only), never obeyed or refused.
+    winner, source = (pinned, "workspace") if pinned else (session, "env") if session else ("", "")
+    if pinned and session and session != pinned:
+        warnings.append(f"{ENV_ROLE} asks for another role; the workspace pin wins")
+    if winner and configured and configured != winner:
+        by = "the workspace pin" if source == "workspace" else ENV_ROLE
+        warnings.append(f"[identity] role in config.toml differs; {by} wins")
+    if winner:
+        return RoleResolution(winner, source, tuple(warnings))  # type: ignore[arg-type]
+    return RoleResolution(
+        configured or "co-author", "config" if configured else "default", tuple(warnings)
+    )
 
 
 def _workspace(cfg: IdentityConfig, path: str | None) -> Workspace:
@@ -154,38 +162,58 @@ class Resolution:
     role_source: RoleSource
     commits: Literal["allowed", "refused"]
     refusal_reason: str  # an error code, "" when allowed
-    require_tier: str  # pinned minimum; enforced by the plugin and `carter commit` (2a/2b)
-    migration_needed: bool
+    require_tier: str  # pinned minimum; enforced by the plugin and `carter commit`
     warnings: tuple[str, ...] = ()
     refusal_detail: str = ""  # key names only, never values
+    mode: str = (
+        "interactive"  # `interactive` or `review` (CI context E); "" when the mode is invalid
+    )
+    mode_source: str = "default"  # env | config | auto | default
 
     def ensure_commits_allowed(self) -> None:
         """Raise ``IdentityError`` carrying the refusal code if commits are refused."""
         if self.refusal_reason == E_ROLE_B_TIER:
             raise IdentityError(E_ROLE_B_TIER, MSG_ROLE_B_TIER)
+        if self.refusal_reason == E_CI_REVIEW:
+            raise IdentityError(E_CI_REVIEW, MSG_CI_REVIEW)
         if self.refusal_reason == E_CONFIG:
             raise IdentityError(E_CONFIG, MSG_CONFIG, self.refusal_detail)
 
 
-def resolve(cfg: IdentityConfig, *, workspace: str | None, env: Mapping[str, str]) -> Resolution:
-    """Resolve tier and role.
+def resolve(
+    cfg: IdentityConfig,
+    *,
+    workspace: str | None,
+    env: Mapping[str, str],
+    force_role: str | None = None,
+) -> Resolution:
+    """Resolve tier and role. ``force_role`` skips the role precedence (``carter commit`` ignores
+    the role: it passes ``co-author``).
 
     Refusals, in order: a signing setup that is not a complete T2 (E-CONFIG, no fallback
-    to T1/T0, RFC §4.1), then role ``author`` below T2 (E-ROLE-B-TIER, never downgraded).
+    to T1/T0), then role ``author`` below T2 (E-ROLE-B-TIER, never downgraded).
     """
     ws = _workspace(cfg, workspace)
     configured = configured_tier(cfg)
     tier = effective_tier(configured, ws.max_tier)
-    role = resolve_role(cfg, workspace, env)
+    role = (
+        RoleResolution(force_role, "default") if force_role else resolve_role(cfg, workspace, env)
+    )
     warnings = list(role.warnings)
     reason, detail = "", ""
     missing = _missing_for_t2(cfg)
-    if not cfg.needs_migration and _has_signing_material(cfg) and missing:
+    chosen = resolve_mode(cfg.identity.mode, env)
+    if chosen.error:  # an invalid mode never falls back to anything that may commit
+        reason, detail = E_CONFIG, chosen.error
+        warnings.append(detail)
+    elif _has_signing_material(cfg) and missing:
         reason = E_CONFIG
         detail = "signing is configured but incomplete; missing or inconsistent: " + ", ".join(
             missing
         )
         warnings.append(detail)
+    elif chosen.mode == "review":
+        reason = E_CI_REVIEW  # context E: read, review, report; never commit
     elif role.role == "author" and tier != "t2":
         reason = E_ROLE_B_TIER
     if reason != E_CONFIG and configured == "t0" and _identity_touched(cfg):
@@ -199,7 +227,8 @@ def resolve(cfg: IdentityConfig, *, workspace: str | None, env: Mapping[str, str
         commits="refused" if reason else "allowed",
         refusal_reason=reason,
         require_tier=ws.require_tier,
-        migration_needed=cfg.needs_migration,
         warnings=tuple(warnings),
         refusal_detail=detail,
+        mode=chosen.mode,
+        mode_source=chosen.source,
     )

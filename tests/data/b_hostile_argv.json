@@ -1,0 +1,973 @@
+{
+ "_about": "Hostile B push operands run against real git 2.56 with a fake ssh (plan 007 step 4). 'reaches_transport_or_changes_remote' = git started ssh, exited 0 or changed the remote WITHOUT a validator; '--' alone blocked the rest. <SHA> = the pinned commit, <MARK> = a path whose creation proves code ran, <BARE> a local bare repo. expect_validator is the contract for step 8. 'no-dashdash' rows are shapes the builder must never produce.",
+ "git_version": "2.56.0",
+ "cases": [
+  {
+   "kind": "remote",
+   "id": "good-scp",
+   "variant": "dashdash",
+   "operands": [
+    "git@github.com:o/r.git",
+    "<SHA>:refs/heads/feat/x"
+   ],
+   "dashdash": true,
+   "git_rc": 0,
+   "reaches_transport_or_changes_remote": true,
+   "expect_validator": "accept",
+   "validator_note": ""
+  },
+  {
+   "kind": "remote",
+   "id": "good-ssh-url",
+   "variant": "dashdash",
+   "operands": [
+    "ssh://git@github.com/o/r.git",
+    "<SHA>:refs/heads/feat/x"
+   ],
+   "dashdash": true,
+   "git_rc": 0,
+   "reaches_transport_or_changes_remote": true,
+   "expect_validator": "accept",
+   "validator_note": ""
+  },
+  {
+   "kind": "remote",
+   "id": "recv-pack",
+   "variant": "dashdash",
+   "operands": [
+    "--receive-pack=touch <MARK>",
+    "<SHA>:refs/heads/feat/x"
+   ],
+   "dashdash": true,
+   "git_rc": 128,
+   "reaches_transport_or_changes_remote": false,
+   "expect_validator": "refuse",
+   "validator_note": ""
+  },
+  {
+   "kind": "remote",
+   "id": "repo-opt",
+   "variant": "dashdash",
+   "operands": [
+    "--repo=x",
+    "<SHA>:refs/heads/feat/x"
+   ],
+   "dashdash": true,
+   "git_rc": 128,
+   "reaches_transport_or_changes_remote": false,
+   "expect_validator": "refuse",
+   "validator_note": ""
+  },
+  {
+   "kind": "remote",
+   "id": "dash-o",
+   "variant": "dashdash",
+   "operands": [
+    "-oProxyCommand=touch <MARK>",
+    "<SHA>:refs/heads/feat/x"
+   ],
+   "dashdash": true,
+   "git_rc": 128,
+   "reaches_transport_or_changes_remote": false,
+   "expect_validator": "refuse",
+   "validator_note": ""
+  },
+  {
+   "kind": "remote",
+   "id": "dash-u",
+   "variant": "dashdash",
+   "operands": [
+    "-u",
+    "<SHA>:refs/heads/feat/x"
+   ],
+   "dashdash": true,
+   "git_rc": 128,
+   "reaches_transport_or_changes_remote": false,
+   "expect_validator": "refuse",
+   "validator_note": ""
+  },
+  {
+   "kind": "remote",
+   "id": "ssh-dashhost",
+   "variant": "dashdash",
+   "operands": [
+    "ssh://-oProxyCommand=touch <MARK>/x",
+    "<SHA>:refs/heads/feat/x"
+   ],
+   "dashdash": true,
+   "git_rc": 128,
+   "reaches_transport_or_changes_remote": false,
+   "expect_validator": "refuse",
+   "validator_note": ""
+  },
+  {
+   "kind": "remote",
+   "id": "scp-dashhost",
+   "variant": "dashdash",
+   "operands": [
+    "git@-oProxyCommand=touch <MARK>:o/r.git",
+    "<SHA>:refs/heads/feat/x"
+   ],
+   "dashdash": true,
+   "git_rc": 128,
+   "reaches_transport_or_changes_remote": false,
+   "expect_validator": "refuse",
+   "validator_note": ""
+  },
+  {
+   "kind": "remote",
+   "id": "ext",
+   "variant": "dashdash",
+   "operands": [
+    "ext::sh -c touch <MARK>",
+    "<SHA>:refs/heads/feat/x"
+   ],
+   "dashdash": true,
+   "git_rc": 128,
+   "reaches_transport_or_changes_remote": false,
+   "expect_validator": "refuse",
+   "validator_note": ""
+  },
+  {
+   "kind": "remote",
+   "id": "file-url",
+   "variant": "dashdash",
+   "operands": [
+    "file://<BARE>",
+    "<SHA>:refs/heads/feat/x"
+   ],
+   "dashdash": true,
+   "git_rc": 0,
+   "reaches_transport_or_changes_remote": true,
+   "expect_validator": "refuse",
+   "validator_note": ""
+  },
+  {
+   "kind": "remote",
+   "id": "local-path",
+   "variant": "dashdash",
+   "operands": [
+    "<BARE>",
+    "<SHA>:refs/heads/feat/x"
+   ],
+   "dashdash": true,
+   "git_rc": 0,
+   "reaches_transport_or_changes_remote": true,
+   "expect_validator": "refuse",
+   "validator_note": ""
+  },
+  {
+   "kind": "remote",
+   "id": "origin-name",
+   "variant": "dashdash",
+   "operands": [
+    "origin",
+    "<SHA>:refs/heads/feat/x"
+   ],
+   "dashdash": true,
+   "git_rc": 128,
+   "reaches_transport_or_changes_remote": false,
+   "expect_validator": "refuse",
+   "validator_note": ""
+  },
+  {
+   "kind": "remote",
+   "id": "userinfo",
+   "variant": "dashdash",
+   "operands": [
+    "ssh://git:pw@github.com/o/r.git",
+    "<SHA>:refs/heads/feat/x"
+   ],
+   "dashdash": true,
+   "git_rc": 0,
+   "reaches_transport_or_changes_remote": true,
+   "expect_validator": "refuse",
+   "validator_note": ""
+  },
+  {
+   "kind": "remote",
+   "id": "other-user",
+   "variant": "dashdash",
+   "operands": [
+    "ssh://root@github.com/o/r.git",
+    "<SHA>:refs/heads/feat/x"
+   ],
+   "dashdash": true,
+   "git_rc": 0,
+   "reaches_transport_or_changes_remote": true,
+   "expect_validator": "refuse",
+   "validator_note": ""
+  },
+  {
+   "kind": "remote",
+   "id": "port",
+   "variant": "dashdash",
+   "operands": [
+    "ssh://git@github.com:2222/o/r.git",
+    "<SHA>:refs/heads/feat/x"
+   ],
+   "dashdash": true,
+   "git_rc": 0,
+   "reaches_transport_or_changes_remote": true,
+   "expect_validator": "refuse",
+   "validator_note": ""
+  },
+  {
+   "kind": "remote",
+   "id": "dotdot-path",
+   "variant": "dashdash",
+   "operands": [
+    "git@github.com:../../etc/passwd",
+    "<SHA>:refs/heads/feat/x"
+   ],
+   "dashdash": true,
+   "git_rc": 128,
+   "reaches_transport_or_changes_remote": true,
+   "expect_validator": "refuse",
+   "validator_note": ""
+  },
+  {
+   "kind": "remote",
+   "id": "evil-host",
+   "variant": "dashdash",
+   "operands": [
+    "git@github.com.evil.example:o/r.git",
+    "<SHA>:refs/heads/feat/x"
+   ],
+   "dashdash": true,
+   "git_rc": 0,
+   "reaches_transport_or_changes_remote": true,
+   "expect_validator": "refuse",
+   "validator_note": ""
+  },
+  {
+   "kind": "remote",
+   "id": "upper-host",
+   "variant": "dashdash",
+   "operands": [
+    "git@GitHub.com:o/r.git",
+    "<SHA>:refs/heads/feat/x"
+   ],
+   "dashdash": true,
+   "git_rc": 0,
+   "reaches_transport_or_changes_remote": true,
+   "expect_validator": "refuse",
+   "validator_note": ""
+  },
+  {
+   "kind": "remote",
+   "id": "quote-inject",
+   "variant": "dashdash",
+   "operands": [
+    "ssh://git@github.com/o/r';touch <MARK>;'",
+    "<SHA>:refs/heads/feat/x"
+   ],
+   "dashdash": true,
+   "git_rc": 128,
+   "reaches_transport_or_changes_remote": true,
+   "expect_validator": "refuse",
+   "validator_note": ""
+  },
+  {
+   "kind": "remote",
+   "id": "no-user",
+   "variant": "dashdash",
+   "operands": [
+    "github.com:o/r.git",
+    "<SHA>:refs/heads/feat/x"
+   ],
+   "dashdash": true,
+   "git_rc": 0,
+   "reaches_transport_or_changes_remote": true,
+   "expect_validator": "refuse",
+   "validator_note": ""
+  },
+  {
+   "kind": "remote",
+   "id": "space",
+   "variant": "dashdash",
+   "operands": [
+    "git@github.com:o/r.git --receive-pack=x",
+    "<SHA>:refs/heads/feat/x"
+   ],
+   "dashdash": true,
+   "git_rc": 128,
+   "reaches_transport_or_changes_remote": true,
+   "expect_validator": "refuse",
+   "validator_note": ""
+  },
+  {
+   "kind": "remote",
+   "id": "https",
+   "variant": "dashdash",
+   "operands": [
+    "https://github.com/o/r.git",
+    "<SHA>:refs/heads/feat/x"
+   ],
+   "dashdash": true,
+   "git_rc": 128,
+   "reaches_transport_or_changes_remote": false,
+   "expect_validator": "refuse",
+   "validator_note": ""
+  },
+  {
+   "kind": "remote",
+   "id": "empty",
+   "variant": "dashdash",
+   "operands": [
+    "",
+    "<SHA>:refs/heads/feat/x"
+   ],
+   "dashdash": true,
+   "git_rc": 128,
+   "reaches_transport_or_changes_remote": false,
+   "expect_validator": "refuse",
+   "validator_note": ""
+  },
+  {
+   "kind": "remote",
+   "id": "newline",
+   "variant": "dashdash",
+   "operands": [
+    "git@github.com:o/r.git\nx",
+    "<SHA>:refs/heads/feat/x"
+   ],
+   "dashdash": true,
+   "git_rc": 128,
+   "reaches_transport_or_changes_remote": true,
+   "expect_validator": "refuse",
+   "validator_note": ""
+  },
+  {
+   "kind": "remote",
+   "id": "recv-pack",
+   "variant": "no-dashdash",
+   "operands": [
+    "--receive-pack=touch <MARK>",
+    "<SHA>:refs/heads/feat/x"
+   ],
+   "dashdash": false,
+   "git_rc": 128,
+   "reaches_transport_or_changes_remote": true,
+   "expect_validator": "refuse",
+   "validator_note": "the argv builder must never emit this shape: without '--' git parses the operand as an option (or the refspec as a host)"
+  },
+  {
+   "kind": "remote",
+   "id": "repo-opt",
+   "variant": "no-dashdash",
+   "operands": [
+    "--repo=x",
+    "<SHA>:refs/heads/feat/x"
+   ],
+   "dashdash": false,
+   "git_rc": 128,
+   "reaches_transport_or_changes_remote": true,
+   "expect_validator": "refuse",
+   "validator_note": "the argv builder must never emit this shape: without '--' git parses the operand as an option (or the refspec as a host)"
+  },
+  {
+   "kind": "remote",
+   "id": "dash-o",
+   "variant": "no-dashdash",
+   "operands": [
+    "-oProxyCommand=touch <MARK>",
+    "<SHA>:refs/heads/feat/x"
+   ],
+   "dashdash": false,
+   "git_rc": 128,
+   "reaches_transport_or_changes_remote": true,
+   "expect_validator": "refuse",
+   "validator_note": "the argv builder must never emit this shape: without '--' git parses the operand as an option (or the refspec as a host)"
+  },
+  {
+   "kind": "remote",
+   "id": "dash-u",
+   "variant": "no-dashdash",
+   "operands": [
+    "-u",
+    "<SHA>:refs/heads/feat/x"
+   ],
+   "dashdash": false,
+   "git_rc": 128,
+   "reaches_transport_or_changes_remote": true,
+   "expect_validator": "refuse",
+   "validator_note": "the argv builder must never emit this shape: without '--' git parses the operand as an option (or the refspec as a host)"
+  },
+  {
+   "kind": "refspec",
+   "id": "good",
+   "variant": "dashdash",
+   "operands": [
+    "git@github.com:o/r.git",
+    "<SHA>:refs/heads/feat/x"
+   ],
+   "dashdash": true,
+   "git_rc": 0,
+   "reaches_transport_or_changes_remote": true,
+   "expect_validator": "accept",
+   "validator_note": ""
+  },
+  {
+   "kind": "refspec",
+   "id": "force-plus",
+   "variant": "dashdash",
+   "operands": [
+    "git@github.com:o/r.git",
+    "+<SHA>:refs/heads/feat/x"
+   ],
+   "dashdash": true,
+   "git_rc": 0,
+   "reaches_transport_or_changes_remote": true,
+   "expect_validator": "refuse",
+   "validator_note": ""
+  },
+  {
+   "kind": "refspec",
+   "id": "delete",
+   "variant": "dashdash",
+   "operands": [
+    "git@github.com:o/r.git",
+    ":refs/heads/feat/x"
+   ],
+   "dashdash": true,
+   "git_rc": 0,
+   "reaches_transport_or_changes_remote": true,
+   "expect_validator": "refuse",
+   "validator_note": ""
+  },
+  {
+   "kind": "refspec",
+   "id": "glob-dst",
+   "variant": "dashdash",
+   "operands": [
+    "git@github.com:o/r.git",
+    "<SHA>:refs/heads/*"
+   ],
+   "dashdash": true,
+   "git_rc": 128,
+   "reaches_transport_or_changes_remote": false,
+   "expect_validator": "refuse",
+   "validator_note": ""
+  },
+  {
+   "kind": "refspec",
+   "id": "glob-all",
+   "variant": "dashdash",
+   "operands": [
+    "git@github.com:o/r.git",
+    "*:*"
+   ],
+   "dashdash": true,
+   "git_rc": 0,
+   "reaches_transport_or_changes_remote": true,
+   "expect_validator": "refuse",
+   "validator_note": ""
+  },
+  {
+   "kind": "refspec",
+   "id": "tag",
+   "variant": "dashdash",
+   "operands": [
+    "git@github.com:o/r.git",
+    "<SHA>:refs/tags/v1"
+   ],
+   "dashdash": true,
+   "git_rc": 0,
+   "reaches_transport_or_changes_remote": true,
+   "expect_validator": "refuse",
+   "validator_note": ""
+  },
+  {
+   "kind": "refspec",
+   "id": "default-branch",
+   "variant": "dashdash",
+   "operands": [
+    "git@github.com:o/r.git",
+    "<SHA>:refs/heads/main"
+   ],
+   "dashdash": true,
+   "git_rc": 0,
+   "reaches_transport_or_changes_remote": true,
+   "expect_validator": "accept",
+   "validator_note": "valid refspec; refused by the plan (E-B-DEFAULT), not by the validator"
+  },
+  {
+   "kind": "refspec",
+   "id": "head-sym",
+   "variant": "dashdash",
+   "operands": [
+    "git@github.com:o/r.git",
+    "HEAD:refs/heads/feat/x"
+   ],
+   "dashdash": true,
+   "git_rc": 0,
+   "reaches_transport_or_changes_remote": true,
+   "expect_validator": "refuse",
+   "validator_note": ""
+  },
+  {
+   "kind": "refspec",
+   "id": "short-dst",
+   "variant": "dashdash",
+   "operands": [
+    "git@github.com:o/r.git",
+    "<SHA>:feat/x"
+   ],
+   "dashdash": true,
+   "git_rc": 1,
+   "reaches_transport_or_changes_remote": true,
+   "expect_validator": "refuse",
+   "validator_note": ""
+  },
+  {
+   "kind": "refspec",
+   "id": "extra-colon",
+   "variant": "dashdash",
+   "operands": [
+    "git@github.com:o/r.git",
+    "<SHA>:refs/heads/feat/x:y"
+   ],
+   "dashdash": true,
+   "git_rc": 1,
+   "reaches_transport_or_changes_remote": false,
+   "expect_validator": "refuse",
+   "validator_note": ""
+  },
+  {
+   "kind": "refspec",
+   "id": "dash-branch",
+   "variant": "dashdash",
+   "operands": [
+    "git@github.com:o/r.git",
+    "<SHA>:refs/heads/--x"
+   ],
+   "dashdash": true,
+   "git_rc": 0,
+   "reaches_transport_or_changes_remote": true,
+   "expect_validator": "refuse",
+   "validator_note": ""
+  },
+  {
+   "kind": "refspec",
+   "id": "dotdot",
+   "variant": "dashdash",
+   "operands": [
+    "git@github.com:o/r.git",
+    "<SHA>:refs/heads/a..b"
+   ],
+   "dashdash": true,
+   "git_rc": 128,
+   "reaches_transport_or_changes_remote": false,
+   "expect_validator": "refuse",
+   "validator_note": ""
+  },
+  {
+   "kind": "refspec",
+   "id": "space",
+   "variant": "dashdash",
+   "operands": [
+    "git@github.com:o/r.git",
+    "<SHA>:refs/heads/x y"
+   ],
+   "dashdash": true,
+   "git_rc": 128,
+   "reaches_transport_or_changes_remote": false,
+   "expect_validator": "refuse",
+   "validator_note": ""
+  },
+  {
+   "kind": "refspec",
+   "id": "gerrit",
+   "variant": "dashdash",
+   "operands": [
+    "git@github.com:o/r.git",
+    "<SHA>:refs/for/main"
+   ],
+   "dashdash": true,
+   "git_rc": 0,
+   "reaches_transport_or_changes_remote": true,
+   "expect_validator": "refuse",
+   "validator_note": ""
+  },
+  {
+   "kind": "refspec",
+   "id": "flag-force",
+   "variant": "dashdash",
+   "operands": [
+    "git@github.com:o/r.git",
+    "-f"
+   ],
+   "dashdash": true,
+   "git_rc": 1,
+   "reaches_transport_or_changes_remote": false,
+   "expect_validator": "refuse",
+   "validator_note": ""
+  },
+  {
+   "kind": "refspec",
+   "id": "flag-force-long",
+   "variant": "dashdash",
+   "operands": [
+    "git@github.com:o/r.git",
+    "--force"
+   ],
+   "dashdash": true,
+   "git_rc": 1,
+   "reaches_transport_or_changes_remote": false,
+   "expect_validator": "refuse",
+   "validator_note": ""
+  },
+  {
+   "kind": "refspec",
+   "id": "flag-mirror",
+   "variant": "dashdash",
+   "operands": [
+    "git@github.com:o/r.git",
+    "--mirror"
+   ],
+   "dashdash": true,
+   "git_rc": 1,
+   "reaches_transport_or_changes_remote": false,
+   "expect_validator": "refuse",
+   "validator_note": ""
+  },
+  {
+   "kind": "refspec",
+   "id": "flag-delete",
+   "variant": "dashdash",
+   "operands": [
+    "git@github.com:o/r.git",
+    "--delete"
+   ],
+   "dashdash": true,
+   "git_rc": 1,
+   "reaches_transport_or_changes_remote": false,
+   "expect_validator": "refuse",
+   "validator_note": ""
+  },
+  {
+   "kind": "refspec",
+   "id": "flag-all",
+   "variant": "dashdash",
+   "operands": [
+    "git@github.com:o/r.git",
+    "--all"
+   ],
+   "dashdash": true,
+   "git_rc": 1,
+   "reaches_transport_or_changes_remote": false,
+   "expect_validator": "refuse",
+   "validator_note": ""
+  },
+  {
+   "kind": "refspec",
+   "id": "flag-tags",
+   "variant": "dashdash",
+   "operands": [
+    "git@github.com:o/r.git",
+    "--tags"
+   ],
+   "dashdash": true,
+   "git_rc": 1,
+   "reaches_transport_or_changes_remote": false,
+   "expect_validator": "refuse",
+   "validator_note": ""
+  },
+  {
+   "kind": "refspec",
+   "id": "force-with-lease",
+   "variant": "dashdash",
+   "operands": [
+    "git@github.com:o/r.git",
+    "--force-with-lease"
+   ],
+   "dashdash": true,
+   "git_rc": 1,
+   "reaches_transport_or_changes_remote": false,
+   "expect_validator": "refuse",
+   "validator_note": ""
+  },
+  {
+   "kind": "refspec",
+   "id": "push-option",
+   "variant": "dashdash",
+   "operands": [
+    "git@github.com:o/r.git",
+    "--push-option=x"
+   ],
+   "dashdash": true,
+   "git_rc": 1,
+   "reaches_transport_or_changes_remote": false,
+   "expect_validator": "refuse",
+   "validator_note": ""
+  },
+  {
+   "kind": "refspec",
+   "id": "exec-opt",
+   "variant": "dashdash",
+   "operands": [
+    "git@github.com:o/r.git",
+    "--exec=touch <MARK>"
+   ],
+   "dashdash": true,
+   "git_rc": 128,
+   "reaches_transport_or_changes_remote": false,
+   "expect_validator": "refuse",
+   "validator_note": ""
+  },
+  {
+   "kind": "refspec",
+   "id": "receive-pack-ref",
+   "variant": "dashdash",
+   "operands": [
+    "git@github.com:o/r.git",
+    "--receive-pack=touch <MARK>"
+   ],
+   "dashdash": true,
+   "git_rc": 128,
+   "reaches_transport_or_changes_remote": false,
+   "expect_validator": "refuse",
+   "validator_note": ""
+  },
+  {
+   "kind": "refspec",
+   "id": "nonff",
+   "variant": "dashdash",
+   "operands": [
+    "git@github.com:o/r.git",
+    "<OTHER>:refs/heads/main"
+   ],
+   "dashdash": true,
+   "git_rc": 1,
+   "reaches_transport_or_changes_remote": true,
+   "expect_validator": "accept",
+   "validator_note": "syntactically a valid pinned refspec; non-fast-forward is git's refusal (and the plan's), not the validator's"
+  },
+  {
+   "kind": "refspec",
+   "id": "main-ff-ok",
+   "variant": "dashdash",
+   "operands": [
+    "git@github.com:o/r.git",
+    "<SHA>:refs/heads/main"
+   ],
+   "dashdash": true,
+   "git_rc": 0,
+   "reaches_transport_or_changes_remote": true,
+   "expect_validator": "accept",
+   "validator_note": "same: default branch is refused by the plan"
+  },
+  {
+   "kind": "refspec",
+   "id": "branch-name-only",
+   "variant": "dashdash",
+   "operands": [
+    "git@github.com:o/r.git",
+    "feat/x"
+   ],
+   "dashdash": true,
+   "git_rc": 0,
+   "reaches_transport_or_changes_remote": true,
+   "expect_validator": "refuse",
+   "validator_note": ""
+  },
+  {
+   "kind": "refspec",
+   "id": "caret",
+   "variant": "dashdash",
+   "operands": [
+    "git@github.com:o/r.git",
+    "<SHA>^:refs/heads/feat/x"
+   ],
+   "dashdash": true,
+   "git_rc": 0,
+   "reaches_transport_or_changes_remote": true,
+   "expect_validator": "refuse",
+   "validator_note": ""
+  },
+  {
+   "kind": "refspec",
+   "id": "other-ns",
+   "variant": "dashdash",
+   "operands": [
+    "git@github.com:o/r.git",
+    "<SHA>:refs/notes/x"
+   ],
+   "dashdash": true,
+   "git_rc": 0,
+   "reaches_transport_or_changes_remote": true,
+   "expect_validator": "refuse",
+   "validator_note": ""
+  },
+  {
+   "kind": "refspec",
+   "id": "pull-ref",
+   "variant": "dashdash",
+   "operands": [
+    "git@github.com:o/r.git",
+    "<SHA>:refs/pull/1/head"
+   ],
+   "dashdash": true,
+   "git_rc": 0,
+   "reaches_transport_or_changes_remote": true,
+   "expect_validator": "refuse",
+   "validator_note": ""
+  },
+  {
+   "kind": "refspec",
+   "id": "flag-force",
+   "variant": "no-dashdash",
+   "operands": [
+    "git@github.com:o/r.git",
+    "-f"
+   ],
+   "dashdash": false,
+   "git_rc": 0,
+   "reaches_transport_or_changes_remote": true,
+   "expect_validator": "refuse",
+   "validator_note": "the argv builder must never emit this shape: without '--' git parses the operand as an option (or the refspec as a host)"
+  },
+  {
+   "kind": "refspec",
+   "id": "flag-force-long",
+   "variant": "no-dashdash",
+   "operands": [
+    "git@github.com:o/r.git",
+    "--force"
+   ],
+   "dashdash": false,
+   "git_rc": 0,
+   "reaches_transport_or_changes_remote": true,
+   "expect_validator": "refuse",
+   "validator_note": "the argv builder must never emit this shape: without '--' git parses the operand as an option (or the refspec as a host)"
+  },
+  {
+   "kind": "refspec",
+   "id": "flag-mirror",
+   "variant": "no-dashdash",
+   "operands": [
+    "git@github.com:o/r.git",
+    "--mirror"
+   ],
+   "dashdash": false,
+   "git_rc": 0,
+   "reaches_transport_or_changes_remote": true,
+   "expect_validator": "refuse",
+   "validator_note": "the argv builder must never emit this shape: without '--' git parses the operand as an option (or the refspec as a host)"
+  },
+  {
+   "kind": "refspec",
+   "id": "flag-delete",
+   "variant": "no-dashdash",
+   "operands": [
+    "git@github.com:o/r.git",
+    "--delete"
+   ],
+   "dashdash": false,
+   "git_rc": 128,
+   "reaches_transport_or_changes_remote": false,
+   "expect_validator": "refuse",
+   "validator_note": "the argv builder must never emit this shape: without '--' git parses the operand as an option (or the refspec as a host)"
+  },
+  {
+   "kind": "refspec",
+   "id": "flag-all",
+   "variant": "no-dashdash",
+   "operands": [
+    "git@github.com:o/r.git",
+    "--all"
+   ],
+   "dashdash": false,
+   "git_rc": 0,
+   "reaches_transport_or_changes_remote": true,
+   "expect_validator": "refuse",
+   "validator_note": "the argv builder must never emit this shape: without '--' git parses the operand as an option (or the refspec as a host)"
+  },
+  {
+   "kind": "refspec",
+   "id": "flag-tags",
+   "variant": "no-dashdash",
+   "operands": [
+    "git@github.com:o/r.git",
+    "--tags"
+   ],
+   "dashdash": false,
+   "git_rc": 0,
+   "reaches_transport_or_changes_remote": true,
+   "expect_validator": "refuse",
+   "validator_note": "the argv builder must never emit this shape: without '--' git parses the operand as an option (or the refspec as a host)"
+  },
+  {
+   "kind": "refspec",
+   "id": "force-with-lease",
+   "variant": "no-dashdash",
+   "operands": [
+    "git@github.com:o/r.git",
+    "--force-with-lease"
+   ],
+   "dashdash": false,
+   "git_rc": 0,
+   "reaches_transport_or_changes_remote": true,
+   "expect_validator": "refuse",
+   "validator_note": "the argv builder must never emit this shape: without '--' git parses the operand as an option (or the refspec as a host)"
+  },
+  {
+   "kind": "refspec",
+   "id": "push-option",
+   "variant": "no-dashdash",
+   "operands": [
+    "git@github.com:o/r.git",
+    "--push-option=x"
+   ],
+   "dashdash": false,
+   "git_rc": 128,
+   "reaches_transport_or_changes_remote": true,
+   "expect_validator": "refuse",
+   "validator_note": "the argv builder must never emit this shape: without '--' git parses the operand as an option (or the refspec as a host)"
+  },
+  {
+   "kind": "refspec",
+   "id": "exec-opt",
+   "variant": "no-dashdash",
+   "operands": [
+    "git@github.com:o/r.git",
+    "--exec=touch <MARK>"
+   ],
+   "dashdash": false,
+   "git_rc": 128,
+   "reaches_transport_or_changes_remote": true,
+   "expect_validator": "refuse",
+   "validator_note": "the argv builder must never emit this shape: without '--' git parses the operand as an option (or the refspec as a host)"
+  },
+  {
+   "kind": "refspec",
+   "id": "receive-pack-ref",
+   "variant": "no-dashdash",
+   "operands": [
+    "git@github.com:o/r.git",
+    "--receive-pack=touch <MARK>"
+   ],
+   "dashdash": false,
+   "git_rc": 128,
+   "reaches_transport_or_changes_remote": true,
+   "expect_validator": "refuse",
+   "validator_note": "the argv builder must never emit this shape: without '--' git parses the operand as an option (or the refspec as a host)"
+  },
+  {
+   "kind": "option",
+   "id": "receive-pack-before",
+   "variant": "dashdash",
+   "operands": [
+    "--receive-pack=touch <MARK>",
+    "git@github.com:o/r.git",
+    "<SHA>:refs/heads/feat/x"
+   ],
+   "dashdash": false,
+   "git_rc": 128,
+   "reaches_transport_or_changes_remote": true,
+   "expect_validator": "refuse",
+   "validator_note": ""
+  }
+ ]
+}

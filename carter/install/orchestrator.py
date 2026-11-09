@@ -9,7 +9,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from pathlib import Path
 
-from carter import __version__
+from carter import __version__, ui, unknownkeys
 from carter.home import tilde
 from carter.install.components import (
     install_agents,
@@ -22,7 +22,7 @@ from carter.install.components import (
     remove_retired_skills,
     write_manifest,
 )
-from carter.install.console import _log, bold, green, log_debug, log_step, set_verbosity
+from carter.install.console import _log, log_debug, log_step, set_verbosity
 from carter.install.mcp import configure_mcp_servers
 from carter.install.paths import backups_dir
 from carter.install.prereqs import (
@@ -55,11 +55,10 @@ def run(
     """
     set_verbosity(verbosity)
 
-    _log(f"\n {bold('Carter Installer')}")
     _mcp_label = "no (use --mcp to install)"
     if mcp:
         _mcp_label = "yes" + (f" ({', '.join(mcp_servers)})" if mcp_servers else " (all)")
-    _log(f" MCP servers: {_mcp_label}")
+    _log(f"MCP servers: {_mcp_label}", level=2)
 
     detect_environment()
     log_step("Checking prerequisites...")
@@ -106,26 +105,27 @@ def run(
 
     total_agents = agent_stats["created"] + agent_stats["updated"] + agent_stats["unchanged"]
 
-    _log(f"\n{green('✓')} {bold('Installation complete')}")
-    _log(f"  Agents: {total_agents}")
-    _log(f"  Skills: {skill_stats['skills']}")
-    _log(f"  Ops config: {'created or migrated' if ops_created else 'kept'}")
-    _log(f"  MCP servers: {mcp_count}")
-    _log(f"  Knowledge files: {knowledge_count} new")
-    _log(f"  Memory dirs: {memory_count} new")
-    _log(f"  Manifest: {tilde(manifest_path)}")
+    if verbosity >= 1:
+        ui.ok("installed", f"{total_agents} agents · {skill_stats['skills']} skills")
+    _log(f"Ops config: {'created' if ops_created else 'kept'}", level=2)
+    _log(f"MCP servers: {mcp_count}", level=2)
+    _log(f"Knowledge files: {knowledge_count} new · memory dirs: {memory_count} new", level=2)
+    _log(f"Manifest: {tilde(manifest_path)}", level=2)
 
     updated = agent_stats["updated"] + skill_stats["updated"]
     unchanged = agent_stats["unchanged"] + skill_stats["unchanged"]
     if updated > 0 or unchanged > 0:
         _log(
-            f"  Changes: {agent_stats['created'] + skill_stats['created']} created, "
+            f"Changes: {agent_stats['created'] + skill_stats['created']} created, "
             f"{updated} updated, {unchanged} unchanged",
             level=2,
         )
 
-    if not guards:
-        return 0
-    from carter.guard.wiring import install_guards
+    code = 0
+    if guards:
+        from carter.guard.wiring import install_guards
 
-    return install_guards(base_dir, assume_yes=assume_yes)
+        code = install_guards(base_dir, assume_yes=assume_yes)
+    # leftover keys Carter no longer reads, once per key, after everything else
+    unknownkeys.report(unknownkeys.once_per_key(unknownkeys.host(base_dir)))
+    return code

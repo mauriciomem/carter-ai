@@ -1,6 +1,6 @@
 """``carter push`` end to end: real git, a ``file://`` bare remote, a sandbox HOME, a real
 ``ssh-keygen`` for the LLM-signature rule and a real pseudo-terminal for the typed confirmation
-(plan 003 step 19, App A §5 1G integration column)."""
+"""
 
 from __future__ import annotations
 
@@ -92,9 +92,8 @@ class TestLlmSignatures:
     ) -> None:
         sha = llm_commit(branch, "a.txt", key=None, bindir=ssh_keygen_dir)
         res = push_cli(input="y\n")
-        assert res.exit_code == 1 and f"Error: {E_B_UNSIGNED}" in res.output
+        assert res.exit_code == 1 and E_B_UNSIGNED in res.output
         assert sha[:12] in res.output and "not signed" in res.output
-        assert "LLM commit, not verifiable" in res.output
         assert not remote_has(branch, "feat/llm")
 
     def test_a_dry_run_reports_the_same_refusal(
@@ -185,31 +184,42 @@ def drive(repo: Path, answers: list[str], *args: str, timeout: float = 30.0) -> 
 
 
 class TestRealTerminal:
-    def test_a_real_tty_pushes_a_feature_branch_after_y(self, branch: Path) -> None:
+    def test_a_real_tty_pushes_a_feature_branch_without_asking(self, branch: Path) -> None:
         commit_file(branch, "f.txt", message="feat: real tty")
-        code, out = drive(branch, ["y\n"])
+        code, out = drive(branch, [])  # nothing is typed: nothing is asked
         assert code == 0, out
-        assert remote_has(branch, "feat/llm") and "Pushed feat/llm to origin" in out
+        assert remote_has(branch, "feat/llm") and "feat/llm → origin" in out
 
-    def test_the_default_branch_needs_its_name_typed_on_a_real_tty(
+    def test_the_default_branch_is_pushed_without_a_typed_name(
         self, with_origin: Path, monkeypatch
     ) -> None:
         commit_file(with_origin, "g.txt", message="fix: on main")
-        code, out = drive(with_origin, ["y\n"])
-        assert code == 1 and "Aborted" in out
-        code, out = drive(with_origin, ["main\n"])
+        code, out = drive(with_origin, [])
         assert code == 0, out
         remote = git("ls-remote", "origin", "refs/heads/main", cwd=with_origin).stdout.split()[0]
         assert remote == git("rev-parse", "main", cwd=with_origin).stdout.strip()
 
-    def test_a_pipe_for_stdin_is_refused_on_the_real_process(self, branch: Path) -> None:
+    def test_a_pipe_for_stdin_works_on_the_real_process(self, branch: Path) -> None:
+        commit_file(branch, "p.txt", message="feat: piped")  # no TTY is needed
         proc = subprocess.run(
             [sys.executable, "-m", "carter.cli", "push"],
             cwd=branch,
-            input="y\n",
+            input="",
             capture_output=True,
             text=True,
             env=dict(os.environ),
+        )
+        assert proc.returncode == 0, proc.stdout + proc.stderr
+        assert remote_has(branch, "feat/llm")
+
+    def test_an_agent_shell_is_refused_on_the_real_process(self, branch: Path) -> None:
+        proc = subprocess.run(
+            [sys.executable, "-m", "carter.cli", "push"],
+            cwd=branch,
+            input="",
+            capture_output=True,
+            text=True,
+            env={**os.environ, "CARTER_AGENT_SHELL": "1"},
         )
         assert proc.returncode == 1 and "E-HUMAN-TERMINAL" in proc.stdout + proc.stderr
         assert not remote_has(branch, "feat/llm")

@@ -1,41 +1,46 @@
-"""``carter push``: validated push of the current branch to ``origin`` (RFC-0007 C.6.6, A+).
+"""``carter push``: validated push of the current branch to ``origin``.
 
-Human terminal only; the click layer (``carter.aplus.cli``) enforces that before anything here
-runs. There is no passthrough: the only choices are ``--dry-run`` and ``--set-upstream``.
-Nothing can be forced, no tag, other branch or other remote can be named, and the refspec is
-always ``HEAD:refs/heads/<current branch>`` on ``origin``.
+Runs for a human: in their terminal, or in OpenCode's ``!`` shell when the plugin tagged it human
+(AD1; the click layer enforces that before anything here runs). It asks nothing. There is no
+passthrough: the only choices are ``--dry-run`` and ``--set-upstream``. Nothing can be forced, no
+tag, other branch or other remote can be named, and the refspec is always
+``HEAD:refs/heads/<current branch>`` on ``origin``.
 
 Order (nothing touches the network before the local checks, because ``fetch`` itself would
 run a repository-configured credential helper or SSH command):
 
 1. branch and push URL; 2. repo config (hooks, helpers, URL rewrites) and SSH config: findings
-are shown in red and you decide (the broker refuses them, A+ does not); 3. fetch the target ref;
-4. the commit range; 5. signature check of LLM-committed commits (a failure is shown with the
-commit list and refuses); 6. the commits, files, sensitive paths and GitHub's protection notes;
-7. ask (``y``, or the typed branch name on the default branch); 8. push.
+are one warning line (the broker refuses them, `carter push` does not); 3. fetch the target
+ref; 4. the
+commit range; 5. signature check of LLM-committed commits (a failure refuses, with the commits);
+6. push. A normal run ends in one line; ``-v`` adds the commits, the files and git's own output.
 
 ``fetch`` and ``push`` use the human's own credentials (``run.network_git``) but never run
 repository hooks.
-
-I/O goes through ``Io`` so this module imports no click.
 """
 
 from __future__ import annotations
 
 import re
-from collections.abc import Callable
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 
-from carter.aplus import protection, rangecalc, repocfg, run, sigcheck, sshcfg
+from carter import ui
+from carter.aplus import rangecalc, repocfg, run, sigcheck, sshcfg
 from carter.aplus.findings import Finding, mask_userinfo
-from carter.aplus.handoff import OWN_TERMINAL
 from carter.guard.state import GuardState, load_or_empty_readonly
 from carter.identity import load_identity
 from carter.identity.errors import E_APLUS_ARGS, IdentityError
 from carter.identity.schema import IdentityConfig
 from carter.install.paths import carter_config_path, guard_state_path
 
+# The one sentence that says who pushes and where (templates, skills and the global rule use it).
+# the human may also run it in OpenCode's `!` shell (no TTY needed), never through an agent.
+OWN_TERMINAL = (
+    "Run `carter push` yourself, in your terminal or as `!carter push` in OpenCode, "
+    "not through an agent."
+)
+NOISE = ("To ", "error: failed to push some refs")  # git lines that only repeat the URL
 MAX_COMMITS_SHOWN = 50
 MAX_CHANGES_SHOWN = 20
 REMOTE = "origin"
@@ -48,13 +53,6 @@ _SCP_URL = re.compile(r"(?:[^@/\s]+@)?([^:/\s]+):(?!//)")
 class Options:
     dry_run: bool = False
     set_upstream: bool = False
-
-
-@dataclass
-class Io:
-    echo: Callable[[str], None]
-    ask: Callable[[str], str]  # raises EOFError at end of input
-    red: Callable[[str], str] = field(default=lambda text: text)
 
 
 def _args(detail: str) -> IdentityError:
@@ -94,35 +92,25 @@ def _default_branch(repo: Path) -> str | None:
     return ref.removeprefix(f"{REMOTE}/") if ref else None
 
 
-def _commit_lines(
-    repo: Path, commits: tuple[str, ...], unsigned: set[str], red: Callable[[str], str]
-) -> list[str]:
+def _commit_lines(repo: Path, commits: tuple[str, ...]) -> list[str]:
     lines = []
     for sha in commits[:MAX_COMMITS_SHOWN]:
         raw = run.git(["cat-file", "commit", sha], repo).stdout
         head, _, body = raw.partition("\n\n")
         signed = any(ln.startswith("gpgsig") for ln in head.splitlines())
         mark = "signed  " if signed else "unsigned"
-        text = f"  {sha[:12]}  {mark}  {clean(body.split(chr(10), 1)[0], 72)}"
-        lines.append(red(text + "   <- LLM commit, not verifiable") if sha in unsigned else text)
+        lines.append(f"{sha[:12]}  {mark}  {clean(body.split(chr(10), 1)[0], 72)}")
     if len(commits) > MAX_COMMITS_SHOWN:
-        lines.append(f"  ... and {len(commits) - MAX_COMMITS_SHOWN} more")
+        lines.append(f"... and {len(commits) - MAX_COMMITS_SHOWN} more")
     return lines
 
 
-def confirmed(io: Io, prompt: str, *, expect: str = "y") -> bool:
-    """Did the human type ``expect`` (``y`` in any case, or the exact branch name)? EOF is no."""
-    try:
-        answer = io.ask(prompt).strip()
-    except EOFError:
-        return False
-    return answer == expect if expect != "y" else answer.lower() == "y"
-
-
-def _prompt(branch: str, typed: bool) -> str:
-    if typed:
-        return f"`{branch}` is the default branch. Type its name to push to {REMOTE}: "
-    return f"Push {branch} to {REMOTE}? [y/N] "
+def _signed_count(repo: Path, commits: tuple[str, ...]) -> int:
+    count = 0
+    for sha in commits:
+        head = run.git(["cat-file", "commit", sha], repo).stdout.partition("\n\n")[0]
+        count += any(ln.startswith("gpgsig") for ln in head.splitlines())
+    return count
 
 
 def _identity_and_owned(base_dir: Path | None) -> tuple[IdentityConfig, repocfg.CarterOwned]:
@@ -147,62 +135,45 @@ def _local_checks(
 
 
 def vet_local(
-    repo: Path, url: str, io: Io, *, base_dir: Path | None, home: Path, dry_run: bool = False
+    repo: Path, url: str, *, base_dir: Path | None, home: Path, dry_run: bool = False
 ) -> tuple[IdentityConfig, int | None]:
     """Repo-config and SSH-config checks before anything touches the network.
 
-    Findings are shown in red and you decide, as in RFC-0007 C.6.6 (the broker refuses them).
-    Returns the identity config and ``None`` to go on, or an exit code to stop with."""
+    Findings are one warning line (the broker refuses them; `carter push` goes on, as the user's own
+    command). With ``--dry-run`` nothing is fetched, because fetching would run them. Returns the
+    identity config and ``None`` to go on, or an exit code to stop with."""
     cfg, found = _local_checks(repo, url, base_dir, home)
     if not found:
         return cfg, None
-    io.echo(io.red("These settings could run code with your credentials or reroute the push:"))
+    names = ", ".join(dict.fromkeys(f"{f.scope} {f.key}" for f in found[:3]))
+    more = f" (+{len(found) - 3})" if len(found) > 3 else ""
+    ui.warn(f"settings could run code with your credentials or reroute the push: {names}{more}")
     for finding in found:
-        io.echo(io.red(f"  {finding.render()}"))
+        ui.detail(finding.render())
     if dry_run:
-        io.echo("Dry run: nothing was fetched or pushed (fetching would run them). Review them.")
+        ui.info("dry run: nothing was fetched or pushed (fetching would run those settings)")
         return cfg, 0
-    if not confirmed(io, f"Fetch from and push to {REMOTE} anyway? [y/N] "):
-        io.echo("Aborted: nothing was fetched or pushed.")
-        return cfg, 1
     return cfg, None
 
 
 def run_push(
-    repo: Path,
-    opts: Options,
-    io: Io,
-    *,
-    base_dir: Path | None = None,
-    home: Path | None = None,
-    notes: Callable[[str, str], list[str]] | None = None,
+    repo: Path, opts: Options, *, base_dir: Path | None = None, home: Path | None = None
 ) -> int:
-    """Run the flow in ``repo``; 0 = pushed, dry run or nothing to push, 1 = declined or failed."""
+    """Run the flow in ``repo``; 0 = pushed, dry run or nothing to push, 1 = failed."""
     try:
-        return _flow(repo, opts, io, base_dir, home or Path.home(), notes or _notes(base_dir))
+        return _flow(repo, opts, base_dir, home or Path.home())
     except (run.RunError, sigcheck.SigCheckError) as exc:
         raise _args(str(exc)) from exc
 
 
-def _notes(base_dir: Path | None) -> Callable[[str, str], list[str]]:
-    return lambda url, branch: protection.branch_notes(url, branch, base_dir)
-
-
-def _flow(
-    repo: Path,
-    opts: Options,
-    io: Io,
-    base_dir: Path | None,
-    home: Path,
-    notes: Callable[[str, str], list[str]],
-) -> int:
+def _flow(repo: Path, opts: Options, base_dir: Path | None, home: Path) -> int:
     branch = _out(repo, ["symbolic-ref", "--short", "-q", "HEAD"])
     if not branch:
         raise _args("detached HEAD: check out the branch you want to push")
     url = _out(repo, ["remote", "get-url", "--push", REMOTE])
     if url is None:
         raise _args(f"no remote named {REMOTE}")
-    cfg, stop = vet_local(repo, url, io, base_dir=base_dir, home=home, dry_run=opts.dry_run)
+    cfg, stop = vet_local(repo, url, base_dir=base_dir, home=home, dry_run=opts.dry_run)
     if stop is not None:
         return stop
     _fetch_target(repo, branch)
@@ -212,56 +183,60 @@ def _flow(
             f"non-fast-forward: {REMOTE}/{branch} has commits you do not have; "
             "fetch and rebase (carter push never forces)"
         )
-    io.echo(f"carter push: {branch} -> {REMOTE} ({mask_userinfo(url)})")
+    ui.detail(f"{branch} -> {REMOTE} ({mask_userinfo(url)})")
+    where = f"{branch} → {REMOTE}"
     if not rng.commits:
-        io.echo(f"Nothing to push: no commits beyond {rng.base_ref}.")
+        ui.summary(where, f"up to date, no commits beyond {rng.base_ref}")
         return 0
     failed = sigcheck.check_signatures(repo, rng.commits, sigcheck.SigIdentity.from_config(cfg))
-    io.echo(f"{len(rng.commits)} commit(s), {rng.base_label}:")
-    for line in _commit_lines(repo, rng.commits, {f.key for f in failed}, io.red):
-        io.echo(line)
-    _show_changes(rng, io)
-    for note in notes(url, branch):
-        io.echo(note)
+    for line in _commit_lines(repo, rng.commits):
+        ui.detail(line)
+    _show_changes(rng)
     if error := sigcheck.to_error(failed):
         raise error
-    default = _default_branch(repo)
-    typed = default is None or default == branch
+    count = len(rng.commits)
+    ui.detail(f"{count} commit(s), {rng.base_label}")
+    noun = f"{count} commit{'s' if count != 1 else ''}"
     if opts.dry_run:
-        io.echo(f"Dry run: nothing was pushed. It would ask: {_prompt(branch, typed)}".rstrip())
+        ui.summary(where, noun, "dry run: nothing pushed")
         return 0
-    if not confirmed(io, _prompt(branch, typed), expect=branch if typed else "y"):
-        io.echo("Aborted: nothing was pushed.")
-        return 1
-    return _push(repo, branch, opts, io)
+    return _push(repo, branch, opts, where, noun, _signed_count(repo, rng.commits), count)
 
 
-def _show_changes(rng: rangecalc.RangeInfo, io: Io) -> None:
-    io.echo(f"{len(rng.changes)} file(s) changed:")
+def _show_changes(rng: rangecalc.RangeInfo) -> None:
     for change in rng.changes[:MAX_CHANGES_SHOWN]:
-        io.echo(f"  {change.status} {clean(change.path)}")
+        ui.detail(f"{change.status} {clean(change.path)}")
     if len(rng.changes) > MAX_CHANGES_SHOWN:
-        io.echo(f"  ... and {len(rng.changes) - MAX_CHANGES_SHOWN} more")
+        ui.detail(f"... and {len(rng.changes) - MAX_CHANGES_SHOWN} more files")
     if rng.sensitive:
-        io.echo(io.red("These paths can run code on someone's machine or in CI; read them:"))
-        for change in rng.sensitive:
-            old = f" (was {clean(change.old_path)})" if change.old_path else ""
-            io.echo(io.red(f"  {change.status} {clean(change.path)}{old}"))
+        shown = ", ".join(clean(c.path, 60) for c in rng.sensitive[:3])
+        more = f" (+{len(rng.sensitive) - 3})" if len(rng.sensitive) > 3 else ""
+        ui.warn(f"changes paths that can run code on someone's machine or in CI: {shown}{more}")
 
 
-def _push(repo: Path, branch: str, opts: Options, io: Io) -> int:
+def _push(
+    repo: Path, branch: str, opts: Options, where: str, noun: str, signed: int, count: int
+) -> int:
     args = ["push", "--recurse-submodules=no"]
     if opts.set_upstream:
         args.append("--set-upstream")
     args += [REMOTE, f"HEAD:refs/heads/{branch}"]
     proc = run.network_git(args, repo)
-    for line in (proc.stdout + proc.stderr).splitlines():
-        io.echo(f"  git: {mask_userinfo(clean(line, 300))}")
+    lines = [mask_userinfo(clean(ln, 300)) for ln in (proc.stdout + proc.stderr).splitlines()]
+    for line in lines:
+        ui.detail(f"git: {line}")
     if proc.returncode != 0:
-        io.echo(f"git push failed (exit {proc.returncode}). Nothing was forced.")
+        # the "To <url>" and "error: failed to push some refs to <url>" lines only repeat the
+        # URL (long in a deep checkout); they must not push the remote's own message out
+        reasons = [ln.strip() for ln in lines if ln.strip() and not ln.startswith(NOISE)]
+        why = " | ".join(reasons)[-300:]
+        ui.fail(f"git push failed (exit {proc.returncode}): {why}", "nothing was forced")
         return 1
-    io.echo(f"Pushed {branch} to {REMOTE}. Next: `carter pr` (it uses the agent's handoff).")
+    state = (
+        "signed" if signed == count else "unsigned" if not signed else f"{count - signed} unsigned"
+    )
+    ui.summary(where, f"{noun} ({state})")
     return 0
 
 
-__all__ = ["OWN_TERMINAL", "Io", "Options", "run_push", "ssh_host"]
+__all__ = ["OWN_TERMINAL", "Options", "run_push", "ssh_host"]

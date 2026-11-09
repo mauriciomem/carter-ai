@@ -1,0 +1,15 @@
+# expect: CI001 CI002 CI003 CI004 CI005 CI006 CI007 CI008 CI009 CI010 CI011 CI012 (the classic: secrets and write on code from a fork)
+name: dangerous
+on:
+  pull_request_target:
+permissions: write-all
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+      - run: echo "${{ github.event.pull_request.title }}"
+        env:
+          TOKEN: ${{ secrets.DEPLOY_KEY }}

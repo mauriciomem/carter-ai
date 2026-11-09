@@ -10,7 +10,7 @@ permissions:
 
 jobs:
   lint:
-    name: lint (ruff)
+    name: lint
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -20,16 +20,16 @@ jobs:
         with:
           python-version: "3.14"
 
-      - name: Install locked deps (with dev extra)
+      - name: Install dependencies
         run: uv sync --locked --extra dev
 
-      - name: ruff check
+      - name: Ruff check
         run: uv run ruff check .
 
-      - name: ruff format --check
+      - name: Ruff format
         run: uv run ruff format --check .
 
-      - name: mypy
+      - name: Mypy
         run: uv run mypy
 
   test:
@@ -47,23 +47,280 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
 
-      - name: Install locked deps (with dev extra)
+      - name: Install dependencies
         run: uv sync --locked --extra dev
 
-      - name: Run unit tests
+      - name: Unit tests
         run: uv run pytest tests/ -q
 
-      - name: Run offline evals
+      - name: Offline evals
         # Offline only — the implementer-adherence replay (test_adherence.py) grades a
         # RECORDED Sonnet 4.6 transcript fixture deterministically, so the per-PR gate
         # never hits the billed API. The LIVE adherence run is the weekly evals-live
         # cron (carries the `live` marker, excluded by -m "not live").
         run: uv run pytest evals/ -m "not live" -q
 
+  plugin:
+    # The TypeScript plugin has no npm dependencies and no build: Node strips the types itself
+    # (>= 22.18; 24 is the target). The Python side checks the plugin's parity, hygiene and runner.
+    name: plugin (node ${{ matrix.node }}, ${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+        node: ["24", "22.18"]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up Node
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: ${{ matrix.node }}
+
+      - name: Plugin tests (node)
+        run: node --test "tests/plugin/*.test.ts"
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2
+        with:
+          python-version: "3.14"
+
+      - name: Install dependencies
+        run: uv sync --locked --extra dev
+
+      - name: Plugin tests (pytest)
+        run: uv run pytest tests/test_plugin_parity.py tests/test_plugin_hygiene.py tests/test_plugin_runner.py tests/test_plugin_entry_roundtrip.py -q
+
+  identity-ssh:
+    # The signing chain against the OpenSSH of the runner (Apple's /usr/bin tools
+    # on macOS): the shim, the dedicated ssh-agent, unlock/lock on a pty, the commit hooks and the
+    # commit core, under the system /bin/sh. The last step runs even on failure: no agent of ours
+    # may outlive the job.
+    name: identity-ssh (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2
+        with:
+          python-version: "3.14"
+
+      - name: Install dependencies
+        run: uv sync --locked --extra dev
+
+      - name: Tool versions
+        run: |
+          /usr/bin/ssh -V
+          /usr/bin/git --version
+          uv run python -c "from pathlib import Path; from carter.identity.agent_paths import socket_path; print('socket path length', len(str(socket_path(Path.home()))))"
+
+      - name: Identity and signing tests
+        run: uv run pytest tests/identity tests/guard/test_carter_guard_commit_events.py tests/guard/test_carter_guard_role_author.py tests/guard/test_git_behaviour_role_author.py tests/guard/test_remove_identity.py tests/test_commit_cli.py tests/test_plugin_entry_roundtrip.py -q
+
+      - name: Check for stray ssh-agents
+        if: always()
+        run: |
+          if pgrep -fl 'ssh-agent.*(c2b-|/carter/agent\.sock|\.carter/run)'; then
+            echo "::error::a test left an ssh-agent running"
+            exit 1
+          fi
+
+  broker:
+    # The push broker's Python core against the OS's own git and OpenSSH (Apple's
+    # /usr/bin tools on macOS): the validators and hostile-operand table, the repo-config and
+    # ssh -G checks, push --plan/--exec through a fake ssh into a bare remote, the counter, the
+    # audit store, consent revision 3 and the push tool items of check --host.
+    # The step after them runs the real `ssh -G` on this runner. No network, no credentials.
+    name: broker (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2
+        with:
+          python-version: "3.14"
+
+      - name: Install dependencies
+        run: uv sync --locked --extra dev
+
+      - name: Tool versions
+        run: |
+          /usr/bin/ssh -V
+          /usr/bin/git --version
+
+      - name: Broker tests
+        run: uv run pytest tests/broker tests/aplus tests/guard/test_consent_rev3.py tests/guard/test_hostcheck_broker.py tests/guard/test_status_reset_b.py tests/guard/test_names.py -q
+
+      - name: Real ssh -G check
+        run: uv run pytest tests/broker/test_ssh_g_live.py -q
+
+  ci-template:
+    # The review-only workflow template that `carter ci install review` writes to users'
+    # repositories. Both variants are rendered and checked by Carter's structural checker (no
+    # write permission, SHA pins, pull_request only, no script injection...) and by actionlint;
+    # this repository's own workflows are linted too. No secrets and no network beyond
+    # installing actionlint.
+    name: ci-template
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2
+        with:
+          python-version: "3.14"
+
+      - name: Install dependencies
+        run: uv sync --locked --extra dev
+
+      - name: Install actionlint
+        run: |
+          uv tool install "actionlint-py==1.7.12.25"
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+          "$HOME/.local/bin/actionlint" -version
+
+      - name: Check the templates and workflows
+        run: |
+          uv run python - <<'PY'
+          import os
+          from carter.ci import template
+          out = os.environ["RUNNER_TEMP"]
+          for name, comment in (("review.yml", False), ("review-comment.yml", True)):
+              open(os.path.join(out, name), "w").write(template.render(comment=comment))
+          PY
+          uv run carter ci check "$RUNNER_TEMP/review.yml"
+          uv run carter ci check "$RUNNER_TEMP/review-comment.yml"
+          actionlint "$RUNNER_TEMP/review.yml" "$RUNNER_TEMP/review-comment.yml"
+          actionlint .github/workflows/*.yml
+
+      - name: Checker and template tests
+        run: uv run pytest tests/ci tests/identity/test_mode.py -q
+
+  gate-budget:
+    # p95 < 100 ms per gate call, interpreter start-up included, measured on the
+    # installed tool (`uv tool install .`) the plugin will really call. Required check. If it
+    # fails, apply the documented fallback (alias cache per repo mtime) before raising the budget.
+    name: gate-budget (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0 # hatch-vcs needs full history + tags to derive the version
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2
+        with:
+          python-version: "3.14"
+
+      - name: Install dependencies
+        run: uv sync --locked --extra dev
+
+      - name: Install carter as a uv tool
+        run: |
+          uv tool install .
+          echo "CARTER_GATE_PYTHON=$(uv tool dir)/carter-ai/bin/python" >> "$GITHUB_ENV"
+
+      - name: Gate p95 (warm and cold)
+        env:
+          CARTER_PERF: "1"
+        run: |
+          uv run pytest tests/gate/test_budget.py -s -q -k p95 | tee budget.txt
+          { echo '### Gate p95 (${{ matrix.os }})'; echo '```'; grep -E '^gate (warm|cold)' budget.txt || true; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+
+  git-old:
+    # The < 2.54 axis without Docker on any developer machine: Debian bookworm ships git 2.39.
+    name: git-old (git 2.39)
+    runs-on: ubuntu-latest
+    container: debian:bookworm
+    permissions:
+      contents: read
+    steps:
+      - name: Install git, curl and procps
+        # before checkout, so that it can use real git
+        run: apt-get update && apt-get install -y --no-install-recommends git ca-certificates curl procps
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Show git version
+        run: git --version
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2
+        with:
+          python-version: "3.14"
+
+      - name: Install dependencies
+        run: uv sync --locked --extra dev
+
+      - name: Per-repo hook tests
+        run: uv run pytest -m gitold -q
+
+      - name: Commit hook and signing tests
+        # test_hook_matrix replays config hooks and skips itself below 2.54; the per-repo events and
+        # the git >= 2.40 refusal are what this axis proves.
+        run: uv run pytest tests/guard/test_repohooks_commit_hooks.py tests/guard/test_old_git_signing.py tests/guard/test_hook_matrix.py tests/guard/test_carter_guard_role_author.py tests/guard/test_git_behaviour_role_author.py -q
+
+  macos-sh:
+    # The POSIX guard script under macOS /bin/sh and Apple's /usr/bin/git (Xcode git, < 2.54).
+    name: macos-sh (apple git)
+    runs-on: macos-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2
+        with:
+          python-version: "3.14"
+
+      - name: Install dependencies
+        run: uv sync --locked --extra dev
+
+      - name: Guard script tests
+        env:
+          CARTER_SHELL_TESTS: /bin/sh
+        run: |
+          /usr/bin/git --version
+          PATH="/usr/bin:$PATH" uv run pytest tests/guard/test_carter_guard.py tests/guard/test_prepush_e2e.py tests/guard/test_repohooks.py -q
+
+      - name: Shim, commit hook and unlock tests
+        env:
+          CARTER_SHELL_TESTS: /bin/sh
+        run: |
+          /usr/bin/ssh -V
+          uv run python -c "from pathlib import Path; from carter.identity.agent_paths import socket_path; print('socket path length', len(str(socket_path(Path.home()))))"
+          PATH="/usr/bin:$PATH" uv run pytest tests/identity/test_shim.py tests/identity/test_unlock_cli.py tests/guard/test_carter_guard_commit_events.py tests/guard/test_carter_guard_role_author.py -q
+
   install-smoke:
     # `floor` = minimum supported OpenCode (required). `latest` = newest 2.x
     # (informational; allowed to fail so upstream drift doesn't block PRs).
-    name: install-smoke (${{ matrix.os }}, opencode ${{ matrix.label }} ${{ matrix.opencode }})
+    name: install-smoke (${{ matrix.os }}, opencode ${{ matrix.label }})
     runs-on: ${{ matrix.os }}
     continue-on-error: ${{ matrix.experimental }}
     permissions:
@@ -91,7 +348,7 @@ jobs:
         with:
           node-version: "lts/*"
 
-      - name: Install OpenCode ${{ matrix.opencode }} (npm, official V2 method)
+      - name: Install OpenCode
         run: |
           npm install -g "@opencode/cli@${{ matrix.opencode }}"
           opencode --version
@@ -99,12 +356,12 @@ jobs:
       - name: Install uv
         uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2
 
-      - name: Install carter as a real uv tool
+      - name: Install carter as a uv tool
         run: |
           uv tool install .
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
 
-      - name: carter --version (PEP 440)
+      - name: Check the version
         run: |
           carter --version
           python3 - <<'PY'
@@ -118,15 +375,30 @@ jobs:
           print("version OK:", ver)
           PY
 
-      - name: carter init + check (fresh workspace)
+      - name: Init and check a workspace
         run: |
           mkdir -p "$RUNNER_TEMP/smoke-ws"
           carter init "$RUNNER_TEMP/smoke-ws"
           carter check "$RUNNER_TEMP/smoke-ws"
 
-      - name: carter install (throwaway home) + assert files
+      - name: Install into a throwaway home
         run: |
           carter install --base-dir "$RUNNER_TEMP/fake-home"
           count=$(find "$RUNNER_TEMP/fake-home/opencode/agents" -maxdepth 1 -name '*.md' 2>/dev/null | wc -l)
           echo "opencode agents: $count"
           test "$count" -ge 8 || { echo "::error::expected >=8 opencode agent files"; exit 1; }
+
+      - name: Guard install dry run
+        run: carter guard install --dry-run
+
+      - name: Check the package contents
+        run: |
+          py="$(uv tool dir)/carter-ai/bin/python"
+          "$py" -I - <<'PY'
+          import pathlib, carter
+          import carter.broker_cli, carter.broker.execute, carter.broker.plan
+          root = pathlib.Path(carter.__file__).parent
+          for name in ("index.ts", "core.ts", "broker.ts"):
+              assert (root / "plugin" / name).is_file(), name
+          print("broker and plugin files ok")
+          PY

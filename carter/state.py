@@ -155,30 +155,6 @@ def _has_git_identity(cwd: Path) -> bool:
     return all(_run_git(["config", key], cwd).stdout.strip() for key in ("user.name", "user.email"))
 
 
-# Never part of the state repo (plan 003 step 17, C26): handoff files hold PR bodies that may
-# carry unredacted text. An ``info/exclude`` entry survives ``git add -A`` (unlike a pathspec
-# on one call); ``untrack`` removes files an older Carter already committed, from the index
-# only, so nothing is deleted from disk.
-HANDOFF_EXCLUDE = "state/handoff/"
-
-
-def _exclude_handoff(carter_dir: Path) -> None:
-    exclude = carter_dir / ".git" / "info" / "exclude"
-    try:
-        current = exclude.read_text() if exclude.exists() else ""
-        if HANDOFF_EXCLUDE not in current.splitlines():
-            exclude.parent.mkdir(parents=True, exist_ok=True)
-            sep = "" if current.endswith("\n") or not current else "\n"
-            exclude.write_text(f"{current}{sep}{HANDOFF_EXCLUDE}\n")
-    except OSError as exc:
-        raise StateError(f"cannot exclude {HANDOFF_EXCLUDE} in {carter_dir}: {exc}") from exc
-    untrack = _run_git(
-        ["rm", "-r", "--cached", "--ignore-unmatch", "-q", HANDOFF_EXCLUDE], carter_dir
-    )
-    if untrack.returncode != 0:
-        raise StateError(f"git rm --cached failed in {carter_dir}: {untrack.stderr.strip()}")
-
-
 def commit_state(carter_dir: Path, message: str, *, allow_empty: bool = False) -> bool:
     """Commit the ``.carter/`` state repo — the workspace recovery primitive.
 
@@ -193,7 +169,6 @@ def commit_state(carter_dir: Path, message: str, *, allow_empty: bool = False) -
     if not (carter_dir / ".git").exists():
         return False
 
-    _exclude_handoff(carter_dir)
     add = _run_git(["add", "-A"], carter_dir)
     if add.returncode != 0:
         raise StateError(f"git add failed in {carter_dir}: {add.stderr.strip()}")
