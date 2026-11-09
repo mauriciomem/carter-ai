@@ -2,6 +2,15 @@
 
 <!-- version list -->
 
+## v0.19.2 (2026-11-09)
+
+### Bug Fixes
+
+- Plain words instead of T0/T1/T2 in everything users and agents read; keep the agent tag out of
+  Carter's own state commits ([#47](https://github.com/mauriciomem/carter-ai/pull/47),
+  [`1034680`](https://github.com/mauriciomem/carter-ai/commit/1034680c5a1653f6274c8783e55c4baca20dbff7))
+
+
 ## v0.19.1 (2026-11-09)
 
 ### Bug Fixes
