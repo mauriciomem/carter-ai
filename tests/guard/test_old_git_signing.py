@@ -41,9 +41,15 @@ def test_identity_add_writes_nothing_on_git_below_2_40(tmp_path, monkeypatch) ->
     from pathlib import Path
 
     from carter import identity_add
+    from carter.identity import github
 
+    def no_network(*_args: object) -> None:
+        raise AssertionError("the old git must be refused before any GitHub call")
+
+    monkeypatch.setattr(github, "get_user", no_network)
     home = Path(os.environ["HOME"])
     before = sorted(p.name for p in home.rglob("*"))
-    with pytest.raises(IdentityError):
+    with pytest.raises(IdentityError) as err:
         identity_add.plan_add(identity_add.AddRequest("octocat", "key::ssh-ed25519 AAAA", "/x/k"))
+    assert err.value.code == E_GIT_OLD
     assert sorted(p.name for p in home.rglob("*")) == before

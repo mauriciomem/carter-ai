@@ -19,6 +19,7 @@ import yaml
 ROOT = Path(__file__).resolve().parents[1]
 WORKFLOWS = sorted((ROOT / ".github" / "workflows").glob("*.yml"))
 CI = ROOT / ".github" / "workflows" / "ci.yml"
+E2E = ROOT / ".github" / "workflows" / "e2e.yml"
 SHA_PIN = re.compile(r"^[\w.-]+/[\w./-]+@[0-9a-f]{40}(\s+#.*)?$")
 PATH_WORDS = re.compile(r"(?<![\w$/{.-])((?:tests|evals|carter|scripts)/[\w./*-]+)")
 
@@ -36,6 +37,11 @@ def ci() -> dict:
     return load(CI)
 
 
+@pytest.fixture(scope="module")
+def e2e() -> dict:
+    return load(E2E)
+
+
 class TestJobs:
     @pytest.mark.parametrize(
         "name",
@@ -44,7 +50,6 @@ class TestJobs:
             "test",
             "plugin",
             "gate-budget",
-            "e2e-contract",
             "git-old",
             "macos-sh",
             "install-smoke",
@@ -80,9 +85,12 @@ class TestJobs:
         assert "tests/gate/test_budget.py" in text and "GITHUB_STEP_SUMMARY" in text
         assert not job.get("continue-on-error")
 
-    def test_e2e_is_manual_and_latest_may_fail(self, ci: dict) -> None:
-        job = ci["jobs"]["e2e-contract"]
-        assert job["if"] == "github.event_name == 'workflow_dispatch'"
+    def test_e2e_is_its_own_manual_workflow_and_latest_may_fail(self, ci: dict, e2e: dict) -> None:
+        assert "e2e-contract" not in ci["jobs"]  # a skipped matrix job shows its raw title
+        assert (e2e.get("on") or e2e.get(True)) == {"workflow_dispatch": None}
+        assert "workflow_dispatch" not in (ci.get("on") or ci.get(True))
+        job = e2e["jobs"]["contract"]
+        assert "if" not in job
         text = yaml.dump(job)
         assert "tests/e2e/run.sh" in text and "unshare -rn" in text
         entries = {m["label"]: m for m in job["strategy"]["matrix"]["include"]}
@@ -90,7 +98,6 @@ class TestJobs:
             entries["tested"]["experimental"] is False and entries["tested"]["version"] == "2.1.4"
         )
         assert entries["latest"]["experimental"] is True
-        assert "workflow_dispatch" in (ci.get("on") or ci.get(True))
 
     def test_identity_ssh_runs_on_both_systems_and_always_checks_for_stray_agents(
         self, ci: dict
@@ -107,19 +114,24 @@ class TestJobs:
         last = job["steps"][-1]
         assert last["if"] == "always()" and "pgrep" in last["run"]
 
-    def test_every_job_that_starts_agents_has_the_if_always_cleanup_check(self, ci: dict) -> None:
-        for name in ("identity-ssh", "e2e-contract"):
-            last = ci["jobs"][name]["steps"][-1]
+    def test_every_job_that_starts_agents_has_the_if_always_cleanup_check(
+        self, ci: dict, e2e: dict
+    ) -> None:
+        for name, job in (
+            ("identity-ssh", ci["jobs"]["identity-ssh"]),
+            ("contract", e2e["jobs"]["contract"]),
+        ):
+            last = job["steps"][-1]
             assert last.get("if") == "always()" and "ssh-agent" in last["run"], name
 
-    def test_the_signing_checks_are_in_the_existing_jobs(self, ci: dict) -> None:
+    def test_the_signing_checks_are_in_the_existing_jobs(self, ci: dict, e2e: dict) -> None:
         text = lambda name: yaml.dump(ci["jobs"][name])  # noqa: E731
         assert "test_plugin_entry_roundtrip.py" in text("plugin")
         assert "test_repohooks_commit_hooks.py" in text(
             "git-old"
         ) and "test_hook_matrix.py" in text("git-old")
         assert "test_shim.py" in text("macos-sh") and "socket path length" in text("macos-sh")
-        assert "includes the signing scenarios" in " ".join(text("e2e-contract").split())
+        assert "tests/e2e/run.sh" in yaml.dump(e2e["jobs"]["contract"])
 
     def test_git_old_runs_the_marker_in_a_bookworm_container(self, ci: dict) -> None:
         job = ci["jobs"]["git-old"]
@@ -170,6 +182,27 @@ class TestEveryWorkflow:
                     if not glob.glob(str(ROOT / word)):
                         missing.append((name, word))
         assert missing == []
+
+
+STALE_TERMS = re.compile(r"\bA\+|\bslice\b|\bRFC\b|\bplan 0|\brevision [0-9]\b|\b[12][abc]\b", re.I)
+
+
+@pytest.mark.parametrize("path", WORKFLOWS, ids=lambda p: p.name)
+def test_job_and_step_names_are_short_current_and_expand_on_their_own(path: Path) -> None:
+    """A matrix job skipped by ``if:`` shows its raw ``${{ matrix.x }}`` title, so only
+    always-running jobs may put a matrix value in a name."""
+    doc = load(path)
+    assert doc["name"] and len(doc["name"]) <= 20
+    for job_id, job in doc["jobs"].items():
+        name = job["name"]
+        shown = re.sub(r"\$\{\{.*?\}\}", "x" * 8, name)  # a matrix value is short
+        assert len(shown) <= 60 and not STALE_TERMS.search(name), (job_id, name)
+        if "${{" in name:
+            assert "if" not in job and "matrix" in job.get("strategy", {}), (job_id, name)
+        for step in steps(job):
+            label = step.get("name", "")
+            assert len(label) <= 60 and not STALE_TERMS.search(label), (job_id, label)
+            assert "${{" not in label, (job_id, label)
 
 
 def test_every_carter_module_a_run_command_imports_exists() -> None:

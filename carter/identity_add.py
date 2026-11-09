@@ -20,6 +20,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import NamedTuple
 
 from carter.guard import gitconfig, mirror_io
 from carter.guard.state import GuardState, load_or_empty_readonly, save
@@ -36,7 +37,7 @@ from carter.identity.errors import (
 )
 from carter.identity.isolation import resolve_false
 from carter.identity.payload import fingerprint_of, public_blob, shim_path
-from carter.identity.schema import IdentityConfig
+from carter.identity.schema import IdentityConfig, Signing
 from carter.identity.writer import dumps, write_config
 from carter.install.paths import backups_dir, guard_state_path
 
@@ -166,6 +167,46 @@ def ssh_fingerprint(blob: str, bin_dir: str) -> str:
     return parts[1]
 
 
+class _LocalKey(NamedTuple):
+    blob: str
+    fingerprint: str
+    private: str  # "" when the key is managed elsewhere (agent socket or signing program)
+    mode: str  # "file", "agent" or "" (managed)
+
+
+def _local_key_checks(
+    req: AddRequest, old: Signing, managed: bool, env: Mapping[str, str] | None
+) -> _LocalKey:
+    """Everything about the key that needs no network: tools, files, passphrase, own-key check.
+
+    It runs before the first GitHub call, so a refusal (git older than 2.40, OpenSSH too old, a
+    bad key file) is instant and offline.
+    """
+    bin_dir = old.ssh_bin_dir
+    shim.check_git()
+    shim.check_openssh(bin_dir)
+    pub_value, private = key_paths(req.ssh_public_key or "", req.private_key)
+    blob = read_public_key(pub_value)
+    fingerprint = ssh_fingerprint(blob, bin_dir)
+    if blob in human_key_blobs(env):
+        raise fail(
+            E_IDENTITY_CHECK,
+            "that is your own signing key; the LLM needs its own key",
+            "make one for it: ssh-keygen -t ed25519 -f ~/.ssh/carter_llm",
+        )
+    if managed:
+        return _LocalKey(blob, fingerprint, "", "")
+    if not private:
+        raise fail(
+            E_IDENTITY_CHECK,
+            "a key:: literal needs --private-key PATH (or --agent-socket / --signing-program)",
+        )
+    problem, passphrase_free = agent_setup.key_file_problem(private, bin_dir, blob)
+    if problem:
+        raise fail(E_IDENTITY_CHECK, _PRIVATE_PROBLEMS[problem].format(path=private))
+    return _LocalKey(blob, fingerprint, private, "file" if passphrase_free else "agent")
+
+
 # -- the plan ------------------------------------------------------------------------------------
 
 
@@ -190,6 +231,22 @@ def plan_add(
         current = load_identity(home / ".carter" / "config.toml")
     except ConfigError as exc:
         raise IdentityError(E_CONFIG, detail=exc.detail) from None
+    old = current.signing
+    has_old = bool(old.public_key)
+    managed = bool(req.agent_socket or req.signing_program)
+    role_only = False
+    if req.ssh_public_key is None:
+        # A role-only change on an existing T2 identity needs no key arguments.
+        role_only = bool(req.role) and has_old and not managed and not req.private_key
+        if (has_old or managed or req.private_key) and not role_only:
+            raise fail(
+                E_IDENTITY_CHECK, "a signing key is configured; pass --ssh-public-key to change it"
+            )
+        if req.role == "author" and not has_old:
+            raise IdentityError(E_ROLE_B_TIER)  # role author needs T2: nothing is written
+        key = None
+    else:
+        key = _local_key_checks(req, old, managed, env)  # the old git refuses here, offline
     user = _github(github.get_user, req.login, env)
     ident = current.identity
     base_url = github.api_base(env)
@@ -210,18 +267,7 @@ def plan_add(
     )
     if req.role:
         new_ident = replace(new_ident, role=req.role)
-    old = current.signing
-    has_old = bool(old.public_key)
-    managed = bool(req.agent_socket or req.signing_program)
-    if req.ssh_public_key is None:
-        # A role-only change on an existing T2 identity needs no key arguments.
-        role_only = bool(req.role) and has_old and not managed and not req.private_key
-        if (has_old or managed or req.private_key) and not role_only:
-            raise fail(
-                E_IDENTITY_CHECK, "a signing key is configured; pass --ssh-public-key to change it"
-            )
-        if req.role == "author" and not has_old:
-            raise IdentityError(E_ROLE_B_TIER)  # role author needs T2: nothing is written
+    if key is None:
         if role_only:
             return _finish(
                 AddPlan(
@@ -248,18 +294,7 @@ def plan_add(
             ),
             home,
         )
-    bin_dir = old.ssh_bin_dir
-    shim.check_git()
-    shim.check_openssh(bin_dir)
-    pub_value, private = key_paths(req.ssh_public_key, req.private_key)
-    blob = read_public_key(pub_value)
-    fingerprint = ssh_fingerprint(blob, bin_dir)
-    if blob in human_key_blobs(env):
-        raise fail(
-            E_IDENTITY_CHECK,
-            "that is your own signing key; the LLM needs its own key",
-            "make one for it: ssh-keygen -t ed25519 -f ~/.ssh/carter_llm",
-        )
+    blob, fingerprint, private, mode = key.blob, key.fingerprint, key.private, key.mode
     if blob not in [k.blob for k in _github(github.get_signing_keys, user.login, env)]:
         raise fail(
             E_IDENTITY_CHECK,
@@ -285,30 +320,17 @@ def plan_add(
         old,
         public_key=blob,
         fingerprint=fingerprint,
-        private_key_path=private,
         agent_socket=req.agent_socket or "",
         program=req.signing_program or "",
         previous_public_keys=tuple(p for p in previous if p != blob),
+        private_key_path=private,
+        mode=mode,
     )
     rotated = (
         fingerprint_of(public_blob(old.public_key))
         if has_old and public_blob(old.public_key) != blob
         else ""
     )
-    mode = ""
-    if managed:
-        private = ""
-    else:
-        if not private:
-            raise fail(
-                E_IDENTITY_CHECK,
-                "a key:: literal needs --private-key PATH (or --agent-socket / --signing-program)",
-            )
-        problem, passphrase_free = agent_setup.key_file_problem(private, bin_dir, blob)
-        if problem:
-            raise fail(E_IDENTITY_CHECK, _PRIVATE_PROBLEMS[problem].format(path=private))
-        mode = "file" if passphrase_free else "agent"
-    signing = replace(signing, private_key_path=private, mode=mode)
     plan = AddPlan(
         replace(current, identity=new_ident, signing=signing, state="current"),
         user.login,

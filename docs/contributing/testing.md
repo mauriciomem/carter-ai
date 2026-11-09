@@ -44,7 +44,8 @@ Tests are grouped into classes named after the behavior they cover, for example
 
 | Workflow | When | Needs a key | Checks |
 |----------|------|-------------|--------|
-| [`ci.yml`](../../.github/workflows/ci.yml) | Every push to `main` and every PR | No | ruff and mypy (Python 3.14); unit tests and offline evals on Python 3.11, 3.14 and 3.15; an install smoke test |
+| [`ci.yml`](../../.github/workflows/ci.yml) | Every push to `main` and every PR | No | ruff and mypy (Python 3.14); unit tests and offline evals on Python 3.11, 3.14 and 3.15; the plugin on Node 22.18 and 24; the signing and push-broker tests on Linux and macOS; git 2.39 and macOS `/bin/sh` jobs; the gate time budget; the review workflow template; an install smoke test |
+| [`e2e.yml`](../../.github/workflows/e2e.yml) | Manually (Actions → e2e → Run workflow) | No | The contract suite against a real OpenCode (the tested version must pass, the newest may fail) |
 | [`evals-live.yml`](../../.github/workflows/evals-live.yml) | Mondays 06:00 UTC, or manually | Yes (repo secret) | Live evals against a low-cost model, with token and cost metrics |
 | [`release.yml`](../../.github/workflows/release.yml) | Every push to `main` | No | Tags and publishes a release ([details](development.md#releases)) |
 

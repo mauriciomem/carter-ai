@@ -31,6 +31,8 @@ from carter.identity.errors import (
     E_GITHUB_UNREACHABLE,
     E_HUMAN_TERMINAL,
     E_IDENTITY_CHECK,
+    E_ROLE_B_TIER,
+    E_SSH_OLD,
     IdentityError,
 )
 from carter.identity.payload import shim_path, shim_state
@@ -396,6 +398,27 @@ class TestChecksWriteNothing:
 
         monkeypatch.setattr(shim, "check_git", too_old)
         self.refused(home, request(key), E_GIT_OLD, "2.40")
+        assert fake.requests == []
+
+    def test_every_local_refusal_is_made_before_any_network_call(
+        self, fake: FakeGitHub, home: Path, key: KeyPair, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        register(fake, key.blob)
+        self.refused(home, request(key, ssh_public_key="not a key"), E_IDENTITY_CHECK, "")
+        literal = request(key, ssh_public_key=f"key::{key.blob}", private_key=None)
+        self.refused(home, literal, E_IDENTITY_CHECK, "--private-key")
+        key.path.chmod(0o644)
+        self.refused(home, request(key), E_IDENTITY_CHECK, "chmod 600")
+        key.path.chmod(0o600)
+        self.refused(home, identity_add.AddRequest(LOGIN, role="author"), E_ROLE_B_TIER, "")
+        assert fake.requests == []
+
+        def too_old_openssh(*_a: object) -> None:
+            raise IdentityError(E_SSH_OLD, detail="found 8.0")
+
+        monkeypatch.setattr(shim, "check_openssh", too_old_openssh)
+        self.refused(home, request(key), E_SSH_OLD, "")
+        assert fake.requests == []
 
     def test_a_broken_config_or_state_is_refused(
         self, fake: FakeGitHub, home: Path, key: KeyPair
