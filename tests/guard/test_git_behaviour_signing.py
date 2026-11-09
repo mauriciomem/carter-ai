@@ -642,7 +642,9 @@ class TestSigningContract:
         assert lab.git("commit", "-q", "-m", "s").returncode == 0
         first, second = self._argv(log, rig.root)[:2]
         assert "[-U]" not in first and f"[{pub}]".replace(str(rig.root), "<root>") in first
-        assert second.endswith(" spike")  # a .pub path keeps its comment: the shim must refuse it
+        assert second.endswith(
+            " keycomment"
+        )  # a .pub path keeps its comment: the shim must refuse it
         log.write_text("")
         lab2 = self._repo(tmp_path, env)
         kind, blob = pub.read_text().split()[:2]

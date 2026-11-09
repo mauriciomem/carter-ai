@@ -2,8 +2,8 @@
 
 Refusals are tested in-process with a faked terminal (``CliRunner`` has none); the flows run the
 real command on a real PTY against a real dedicated agent in the ``/tmp/c2b-*`` base. The one thing
-that cannot be driven headless, the human typing into OpenCode's integrated terminal, is listed
-for step 33.
+that cannot be driven headless, the human typing into OpenCode's integrated terminal, is
+left to manual checks.
 """
 
 # ruff: noqa: E501

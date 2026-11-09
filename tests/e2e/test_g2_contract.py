@@ -139,7 +139,7 @@ class TestSelfTestAndPollution:
     def test_a_second_plugin_that_rejects_after_ours_ends_in_failed(
         self, rig_factory, opencode_bin
     ) -> None:
-        """Accepted residual E12 (g3): the self-test cannot tell this from a broken
+        """Accepted limit: the plugin's own check cannot tell this from a broken
         order. The consequence is conservative: every shell, the human's ``!`` too, is tagged
         as an agent's."""
         files = install_files()

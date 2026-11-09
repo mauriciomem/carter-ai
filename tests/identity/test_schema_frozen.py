@@ -36,7 +36,7 @@ FROZEN_NAMES = {
     "identity.disclosure": ("assisted_by",),
     "attribution": ("footer",),
     "github": ("read_token_file", "probe_repo"),
-    "broker": ("min_dwell_ms",),  # slice B optional table)
+    "broker": ("min_dwell_ms",),  # optional table
     'workspaces."<abs path>"': (
         "allow_project_opencode_edit",
         "max_tier",

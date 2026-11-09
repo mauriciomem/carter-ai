@@ -74,7 +74,7 @@ test("schema mismatches with a correct hash are refused: required keys, unknown 
   const edits: [string, (d: any) => void][] = [
     ["missing top key", (d) => delete d.env],
     ["unknown top key", (d) => (d.extra = 1)],
-    ["schema version (a 2a file)", (d) => (d.schema_version = 1)],
+    ["schema version (an old file)", (d) => (d.schema_version = 1)],
     ["schema version (a future file)", (d) => (d.schema_version = 3)],
     ["b_enabled type", (d) => (d.plugin.b_enabled = "yes")],
     ["b_caller empty", (d) => (d.plugin.b_caller = "")],

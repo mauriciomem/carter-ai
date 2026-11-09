@@ -411,7 +411,7 @@ def apply_add(plan: AddPlan, *, home: Path | None = None) -> list[str]:
         notices += [f"kept {k}: edited since Carter wrote it" for k in sync.kept]
         save(state, guard_state_path(None))
         if not state.consents:
-            notices.append("guards not installed: `carter check --host` shows G2 off")
+            notices.append("guards not installed: `carter check --host` shows the guards off")
     except BaseException:
         for path, data in snapshot.items():
             if data is None:

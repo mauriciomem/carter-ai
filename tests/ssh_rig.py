@@ -64,7 +64,7 @@ def signed_matrix(cls: type) -> type:
 
 
 def classify_key(rc: int, stderr: str) -> str:
-    """Spike-A oracle: what ``ssh-keygen -y -P '' -f KEY`` meant on OpenSSH 10.2.
+    """What ``ssh-keygen -y -P '' -f KEY`` meant on OpenSSH 10.2.
 
     Exit 0 = no passphrase; every failure is 255 and only the phrase tells a passphrase from an
     unusable file. The product rule is *exit code only*; this stays as the record of why.
@@ -94,7 +94,7 @@ def alive(pid: int) -> bool:
     return state != "Z"
 
 
-_alive = alive  # the M1 name
+_alive = alive  # the old name
 
 
 def ssh_agents() -> list[tuple[int, str]]:
@@ -271,7 +271,7 @@ class Rig:
         kind: str = "ed25519",
         passphrase: str = "",
         *extra: str,
-        comment: str = "spike",
+        comment: str = "keycomment",
     ) -> Path:
         path = self.root / "keys" / name
         argv = [str(SSH_BIN / "ssh-keygen"), "-q", "-t", kind, "-N", passphrase, "-C", comment]

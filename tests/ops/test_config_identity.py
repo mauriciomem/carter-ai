@@ -92,7 +92,7 @@ class TestNoHumanKey:
             for p in (REPO / "carter").rglob("*.py")
             if "_data" not in p.parts and pattern.search(p.read_text(encoding="utf-8"))
         }
-        # 2b: the *LLM's* signing block names the git key it sets; it never reads one.
+        # the *LLM's* signing block names the git key it sets; it never reads one.
         block = offenders.pop("carter/identity/payload.py", [])
         # ... and `identity add` compares the LLM key with the human's `user.signingkey` so it can
         # refuse it: it reads only a `key::` literal or a `.pub` file, never a private key

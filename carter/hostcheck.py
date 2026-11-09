@@ -30,9 +30,7 @@ from carter.install.mcp import config_target
 from carter.install.paths import guard_state_path
 
 STATE_HINT = "Carter does not rebuild it: fix or move the file, then run `carter guard install`."
-CARTER_KEYS_NA = (
-    "carter.tier, carter.llmEmail, carter.llmFingerprint and the cap mirror: not applicable"
-)
+CARTER_KEYS_NA = "the tier values the hooks read (carter.tier and the cap): not applicable"
 HOOK_MODES = {
     "include": "hooks from an included file are reported `global` here",
     "direct": "hooks work but not via include: the direct-write fallback would be used",
@@ -54,7 +52,7 @@ def render(items: list[Item]) -> list[str]:
 
 
 def _policies(state: GuardState, reader: Reader | None, base_dir: Path | None) -> list[Item]:
-    """G2's rules are in the Carter agent files; the OpenCode config holds no policies, only
+    """The guard rules are in the Carter agent files; the OpenCode config holds no policies, only
     the per-agent ``carter_push`` denies and the user's providers."""
     items: list[Item] = []
     accepted = consent.accepted_groups(state)
@@ -66,23 +64,23 @@ def _policies(state: GuardState, reader: Reader | None, base_dir: Path | None) -
         items.append(
             Item(
                 "warn",
-                "policies",
+                "agent files",
                 text,
-                "Run `carter guard install`: G2 now applies only to Carter agents "
+                "Run `carter guard install`: the guards now apply only to Carter agents "
                 "and Carter workspaces.",
             )
         )
     current, drifted = agent_rules.agent_file_state(base_dir)
     for name in drifted:
-        text = f"{name}: its permissions differ from what Carter renders (the G2 rules)"
-        items.append(Item("red", "policies", text, "Run `carter guard install`."))
+        text = f"{name}: its permissions differ from what Carter writes"
+        items.append(Item("red", "agent files", text, "Run `carter guard install`."))
     if current and not drifted and accepted:
-        text = f"{len(current)} Carter agent file(s) carry the G2 rules ({', '.join(accepted)})"
-        items.append(Item("ok", "policies", text))
+        text = f"{len(current)} Carter agent file(s) carry the guard rules ({', '.join(accepted)})"
+        items.append(Item("ok", "agent files", text))
     try:
         loaded = (reader or harness.read_debug_config)()
     except harness.DebugConfigError as exc:
-        return [*items, Item("red", "policies", f"cannot read `opencode debug config` ({exc})")]
+        return [*items, Item("red", "agent files", f"cannot read `opencode debug config` ({exc})")]
     path = Path(state.opencode_config) if state.opencode_config else target_path(None)
     config = _load_jsonc(path) if path.exists() else None
     if isinstance(config, dict):
@@ -93,7 +91,9 @@ def _policies(state: GuardState, reader: Reader | None, base_dir: Path | None) -
         for rec in state.owned_permissions():
             if not permissions.present(config, rec):
                 label = f"{rec['agent']}:{rec['key'].removeprefix(permissions.KEY_PREFIX)}"
-                items.append(Item("red", "per-agent denies", f"{label} is missing from the config"))
+                items.append(
+                    Item("red", "agent permissions", f"{label} is missing from the config")
+                )
     return items
 
 
@@ -224,7 +224,11 @@ def _pending_pins(cwd: Path) -> list[Item]:
 def _declined(state: GuardState) -> list[Item]:
     groups = {g.id: g.effect for g in consent_groups()}
     return [
-        Item("info", "declined", f"{g}: not installed ({groups[g]})")
+        Item(
+            "info",
+            "declined",
+            f"{g}: not installed ({groups[g]}); `carter guard install --only {g}` asks again",
+        )
         for g in consent.declined_groups(state)
     ]
 
@@ -258,7 +262,11 @@ def _env(server_env: Mapping[str, str]) -> list[Item]:
     if not names:
         return []
     return [
-        Item("warn", "server env", f"{', '.join(names)} set in the server environment (names only)")
+        Item(
+            "warn",
+            "server environment",
+            f"{', '.join(names)} set in the server environment (names only)",
+        )
     ]
 
 
@@ -300,10 +308,15 @@ def run_host_checks(
         items.append(Item("red", "guard state", text, STATE_HINT))
     elif read.status == "absent":
         items.append(
-            Item("warn", "guard", "G2 off: no guards are installed", "Run `carter guard install`.")
+            Item(
+                "warn",
+                "guard",
+                "the guards are off: none is installed",
+                "Run `carter guard install`.",
+            )
         )
     else:
-        guarded("policies", lambda: _policies(state, reader, base_dir))
+        guarded("agent files", lambda: _policies(state, reader, base_dir))
         guarded("guard files", lambda: _files(state))
         guarded("consent", lambda: _declined(state))
         if "g2" in consent.accepted_groups(state):
@@ -313,14 +326,14 @@ def run_host_checks(
             guarded("plugin", lambda: g2.status_items(state, base_dir, opencode_version))
             guarded("consent", lambda: g2.g2_items(state, base_dir))
         else:
-            items.append(Item("warn", "guard", "G2 off: group g2 was not installed"))
+            items.append(Item("warn", "guard", "the guards are off: group g2 was not installed"))
         if agents_reader is not None:
             loaded = _safe_loaded(reader)
             guarded(
-                "per-agent denies",
+                "agent permissions",
                 lambda: g2.agent_items(state, agents_reader, loaded, str(target_path(None))),
             )
-    guarded("B", lambda: _broker(state, base_dir, where, servers, home))
+    guarded("push tool", lambda: _broker(state, base_dir, where, servers, home))
     guarded("git", lambda: _git(state))
     if git_ok:
         guarded("git", lambda: g2.include_items(state, base_dir))
@@ -341,11 +354,11 @@ def run_host_checks(
     guarded("unknown key", lambda: unknownkeys.host_items(base_dir))
     guarded("token", lambda: _token(base_dir))
     if servers is not None:
-        guarded("server env", lambda: g2.pollution_items(servers, home or str(Path.home())))
+        guarded("server environment", lambda: g2.pollution_items(servers, home or str(Path.home())))
     else:
-        items.append(Item("info", "server env", "pollution not checked (no server reader given)"))
+        items.append(Item("info", "server environment", "OpenCode servers were not checked"))
     items += _env(server_env or {})
-    items += g2.residual_items()
+    items += g2.limits_items()
     return items
 
 

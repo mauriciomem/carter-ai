@@ -306,7 +306,7 @@ class TestExpiry:
 
 
 class TestClassifyProbe:
-    """The recorded spike-4 strings, classified by status and text (never an exit code)."""
+    """The recorded strings, classified by status and text (never an exit code)."""
 
     def test_the_recorded_403_is_read_only(self) -> None:
         assert ghtoken.classify_probe(403, SPIKE_403) == "read-only"

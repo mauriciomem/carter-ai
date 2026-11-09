@@ -371,7 +371,7 @@ class TestNoAgentPushes:
     """no agent pushes; devops is the sole caller of B.
 
     Structural half: the rendered frontmatter of every Carter agent. The prose half (the
-    devops template no longer claims it pushes) lands with step 23, so this step ends green.
+    devops template does not claim it pushes) is in the next test.
     """
 
     PUSH_VERBS = ("git push", "gh pr create", "gh pr merge", "gh api", "gh release")
@@ -607,7 +607,7 @@ class TestPushProse:
     def test_devops_describes_the_b_tool_as_an_approval_request_and_nobody_else_does(
         self, rendered_agents_dir: Path
     ) -> None:
-        """Slice B: only devops names the tool; every use asks the human."""
+        """Only devops names the tool; every use asks the human."""
         body = self._body(rendered_agents_dir, "devops")
         assert "`carter_push`" in body and "carter_pr" not in body
         assert "opens a prompt" in body and "A rejection is final" in body

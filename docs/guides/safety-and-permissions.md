@@ -139,8 +139,8 @@ spelling) does the real work. The command gate is a speed bump in front of it, n
   `max_tier = "t1"` in a workspace's table of `~/.carter/config.toml` to allow unsigned agent
   commits there. A squash merge drops the signature from `main`. The limits of signing itself are in
   [Identity and signing](identity-and-signing.md#what-signing-does-not-protect).
-- **A false self-test failure is conservative.** If another plugin rejects a command after
-  Carter's, the self-test can end `failed`; then every shell, yours in the `!` prompt
+- **A false failure of the plugin's own check is conservative.** If another plugin rejects a command after
+  Carter's, the check can end `failed`; then every shell, yours in the `!` prompt
   included, is treated as an agent shell until you restart OpenCode.
 - **Fail closed.** If the gate, the plugin or `isolation.json` breaks, agent shells are
   refused; your terminal and the `!` prompt keep working, and

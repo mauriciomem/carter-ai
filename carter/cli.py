@@ -289,20 +289,20 @@ def _sync_mirror(*, dry_run: bool) -> None:
     try:
         cfg = load_identity()
     except ConfigError:
-        ui.warn("config.toml is invalid; the tier mirror was not refreshed")
+        ui.warn("config.toml is invalid; the hook tier was not refreshed")
         return
     plan = update_mirror.plan(None, cfg)
     if plan.refusal:
-        raise click.ClickException(f"Tier mirror not written: {plan.refusal}.")
+        raise click.ClickException(f"Hook tier not written: {plan.refusal}.")
     if not plan.changes:
         return
     for line in plan.lines():
         ui.detail(line.strip())
     if dry_run:
-        ui.info("would write the tier mirror (dry run: nothing written)")
+        ui.info("would write the hook tier (dry run: nothing written)")
         return
     if is_agent_shell():
-        ui.warn("tier mirror not written: agent shells never change it", "run `carter update`")
+        ui.warn("hook tier not written: agent shells never change it", "run `carter update`")
         return
     try:
         update_mirror.apply(None, cfg)
@@ -310,8 +310,8 @@ def _sync_mirror(*, dry_run: bool) -> None:
         from carter.guard.engine import format_error
 
         text = format_error(exc) or str(exc)
-        raise click.ClickException(f"Tier mirror not written: {text}") from exc
-    ui.ok("tier mirror written")
+        raise click.ClickException(f"Hook tier not written: {text}") from exc
+    ui.ok("hook tier written")
     hint = update_mirror.include_hint(None)
     if hint:
         ui.warn("add Carter's include line to your git config yourself", hint)

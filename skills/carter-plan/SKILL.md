@@ -16,7 +16,7 @@ makes session recovery and the quality gate work.
 The frontmatter schema is defined once in
 [docs/reference/frontmatter.md](../../docs/reference/frontmatter.md). Follow it
 exactly; `carter check` validates every plan against it and **rejects an
-`active` plan that has empty `must_haves`** (the O6 rule). When in doubt, run
+`active` plan that has empty `must_haves`** (a plan cannot be activated without them). When in doubt, run
 `carter check` and fix what it reports.
 </canonical-schema>
 

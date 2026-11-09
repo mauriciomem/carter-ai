@@ -146,7 +146,7 @@ class TestUpgradeFromRevision1:
 
 
 class TestRemoveKeepsTheMirror:
-    """`guard remove` takes the hooks away but never the tier mirror (`identity remove` does)."""
+    """`guard remove` takes the hooks away but never the hook tier (`identity remove` does)."""
 
     def test_remove_rewrites_the_file_with_the_mirror_alone(self, stack) -> None:
         from carter.guard import mirror_io

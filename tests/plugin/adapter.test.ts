@@ -92,7 +92,7 @@ exit $(cat $S/gate.rc)
   f.tier(JSON.stringify({ schema_version: 1, tier: "t0", cap: null, effective: "t0", require_tier: null, reason: null }))
   const hooks: Fixture["hooks"] = {}
   const sessions: string[] = []
-  // Slice B registers the broker tools (transform) and the evaluate hook; nothing else of ctx.
+  // The push tool registers its tools (transform) and the evaluate hook; nothing else of ctx.
   const transforms: any[] = []
   const reloads: number[] = []
   const forbid = (name: string) => new Proxy({}, { get: () => { throw new Error(`the plugin must not use ctx.${name}`) } })
@@ -135,7 +135,7 @@ async function withPlugin(opts: Parameters<typeof fixture>[0], body: (f: Fixture
 }
 const call = (command: string, extra: Record<string, unknown> = {}, tool = "shell") => ({ tool, sessionID: "ses_1", input: { command, ...extra } })
 
-test("it registers the three hooks of 2a/B and touches nothing else of ctx", async () => {
+test("it registers the three hooks and touches nothing else of ctx", async () => {
   await withPlugin({}, async (f) => {
     assert.deepEqual(Object.keys(f.hooks).sort(), ["permission.evaluate", "shell.create.before", "tool.execute.before"])
   })

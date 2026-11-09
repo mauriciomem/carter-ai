@@ -66,7 +66,7 @@ Next steps or open questions at the end.
 
 **Good comment examples:**
 
-> **Investigation: API latency spike on 2026-05-10**
+> **Investigation: API latency regression on 2026-05-10**
 >
 > Root cause: the `/users` endpoint performs N+1 queries when loading team memberships. Each request triggers 15-30 additional DB calls.
 >

@@ -155,7 +155,7 @@ class TestPrePush:
 class TestWrapper:
     """The configured command is self-contained: a missing or broken script never blocks a human.
 
-    A script that exits 0 is trusted (the file is edit-denied and gate-denied, C.1)."""
+    A script that exits 0 is trusted (the file is edit-denied and gate-denied)."""
 
     def wrapper(self, sh: list[str], script: Path, env: dict[str, str], tmp: Path):
         command = GIT_RUN % hooks.hook_command(script)

@@ -80,7 +80,10 @@ Without a terminal (a script, CI) and without `--yes`, the guards are skipped wi
 | `config-edit` | Agents can't edit OpenCode config, git hooks and config, or Carter's own config and control files. |
 | `alias` | **Optional.** Adds the git alias `git ai-commit` (`carter commit`), unless you already have an `alias.ai-commit`. Never part of the one question or of `--yes`: use `carter guard install --only alias`. |
 
-A group you decline stays declined. `carter guard status` and `carter check --host` list it.
+A group you decline stays declined. `carter guard status` and `carter check --host` list it, with
+the command that asks again (`carter guard install --only <group>`). The one exception: with the LLM
+signing key (T2) configured and no commit hooks installed, the single question offers a declined
+`hooks` again and says so in one line.
 Preview everything with `carter guard install --dry-run`: it lists every file it would write
 and writes nothing.
 
@@ -123,7 +126,8 @@ terminal.
 
 **Restart the OpenCode server from a clean terminal** after the install (one that no agent started),
 so it loads the plugin with a clean environment. The first agent command then runs a short
-self-test; until it passes, `carter check --host` shows the plugin as `unproven`.
+check of the plugin; until it has run, `carter check --host` says the server is waiting for the
+first agent command.
 
 If your global git config is a symlink or read-only (dotfiles, Nix), Carter doesn't write it. It
 prints the exact line instead:

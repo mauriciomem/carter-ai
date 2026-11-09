@@ -277,7 +277,7 @@ class TestCommitShapeUnderPollution:
     def test_a_role_b_environment_leaves_state_commits_human_and_unsigned(
         self, tmp_path, config, monkeypatch
     ):
-        """H8: the complete role-b block (LLM author and committer, signing on) in the
+        """The complete role-author block (LLM author and committer, signing on) in the
         process environment must not reach `.carter` state commits: they stay human/human."""
         from carter.identity.payload import to_git_env
 

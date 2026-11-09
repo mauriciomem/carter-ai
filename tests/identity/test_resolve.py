@@ -360,7 +360,9 @@ class TestResolve:
         c = cfg(workspaces={WS: Workspace(require_tier="t2")})
         r = resolve(c, workspace=WS, env={})
         assert r.require_tier == "t2"
-        assert r.commits == "allowed"  # E-TIER-REQUIRED is enforced by 2a/2b
+        assert (
+            r.commits == "allowed"
+        )  # E-TIER-REQUIRED is enforced by the plugin and the commit command
 
     def test_ensure_commits_allowed_raises_with_the_registry_code(self):
         c = cfg(workspaces={WS: Workspace(role="author")})

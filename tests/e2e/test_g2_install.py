@@ -102,8 +102,8 @@ def test_install_isolate_gate_and_restore(rig_factory, opencode_bin) -> None:
 
     # 6. check --host sees a loaded, passing plugin (run from the rig, which has the server)
     check = carter(rig, "check", "--host", "-v")
-    assert "plugin and isolation.json match (hash)" in check.stdout, check.stdout
-    assert "self-test passed" in check.stdout, check.stdout
+    assert "plugin and isolation.json match" in check.stdout, check.stdout
+    assert ": working" in check.stdout, check.stdout
     # the rig's `carter-engineer` is a stand-in (no `carter install` ran), so the two rows about
     # its permissions are expected to be RED; anything else with a cross is a failure
     crosses = [ln for ln in (check.stdout + check.stderr).splitlines() if "\u2717" in ln]
@@ -137,7 +137,7 @@ def test_install_isolate_gate_and_restore(rig_factory, opencode_bin) -> None:
     )
     res = carter(rig, "guard", "install", "--yes", "--only", "g2")
     assert res.returncode == 0 and (home / ".carter/isolation.json").exists(), res.stdout
-    assert state(rig)["consents"]["g2"]["rev"] == 3  # slice B: revision 3 carries the push tool
+    assert state(rig)["consents"]["g2"]["rev"] == 3  # revision 3 carries the push tool
 
     # 10. a full remove leaves nothing of Carter's but the documented keepers
     res = carter(rig, "guard", "remove", "--yes")

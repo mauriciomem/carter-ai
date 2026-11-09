@@ -163,6 +163,14 @@ class TestGithubToken:
         ):
             assert needle in body, needle
 
+    def test_a_missing_token_is_a_warning_at_install_but_the_server_fails_to_start(self) -> None:
+        body = self.doc()
+        assert "does not stop the install" in body and "shows as failed" in body
+        assert "only a warning" not in body
+        from carter.install import prereqs
+
+        assert "never fails" in (prereqs.check_credentials.__doc__ or "").lower()
+
     def test_the_documented_entry_is_what_the_package_ships(self) -> None:
         shipped = json.loads((REPO / "mcp/opencode/github.json").read_text())
         env = shipped["carter-github"]["environment"]["GITHUB_PERSONAL_ACCESS_TOKEN"]

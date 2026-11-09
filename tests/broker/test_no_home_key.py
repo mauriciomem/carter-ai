@@ -1,4 +1,4 @@
-"""There is no user-config way to redirect the broker's home (maestro decision, .
+"""There is no user-config way to redirect the broker's home.
 
 the broker's child ``HOME`` and the ``~/.ssh/config`` scan come from the system account entry. A
 ``[broker] home`` in ``config.toml`` is one more place to plant a hostile ssh config, so the key

@@ -1,4 +1,4 @@
-"""The human-terminal rule every Carter mutator shares (RFC-0007 App B §1, App C.1 AD1)."""
+"""The human-terminal rule every Carter mutator shares (AD1)."""
 
 from __future__ import annotations
 
@@ -32,7 +32,7 @@ def pty_pair():
 
 
 class TestAgentTable:
-    """App C.1 AD1: agent iff CARTER_AGENT_SHELL=1, or (AGENT or OPENCODE_SESSION_ID set and
+    """AD1: agent iff CARTER_AGENT_SHELL=1, or (AGENT or OPENCODE_SESSION_ID set and
     CARTER_HUMAN_SHELL unset)."""
 
     @pytest.mark.parametrize(
@@ -45,7 +45,7 @@ class TestAgentTable:
             ({"CARTER_AGENT_SHELL": "1", "CARTER_HUMAN_SHELL": "1"}, True),  # agent wins
             ({"OPENCODE_SESSION_ID": "ses_1"}, True),
             ({"OPENCODE_SESSION_ID": "ses_1", "CARTER_HUMAN_SHELL": "1"}, False),
-            ({"OPENCODE_TERMINAL": "1"}, False),  # `unlock` (2b) cares; AD1 does not
+            ({"OPENCODE_TERMINAL": "1"}, False),  # `unlock` cares; AD1 does not
             ({"CARTER_AGENT_SHELL": "0"}, False),  # only the exact value 1 is the strong marker
             ({"CARTER_HUMAN_SHELL": "1"}, False),
             ({"SSH_AUTH_SOCK": "/x", "HOME": "/h", "PATH": "/usr/bin"}, False),

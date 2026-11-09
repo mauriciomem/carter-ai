@@ -1,7 +1,7 @@
 """What OpenSSH does that the dedicated signing agent relies on.
 
 Observed on OpenSSH 10.2p1 / Linux. These tests are the
-regression record for section 4.4 and report 22: they pin the exit codes and the
+regression record: they pin the exit codes and the
 few stable phrases Carter's agent code is allowed to depend on.
 
 They start real ``ssh-agent`` processes (``-m real_ssh_agent``; skipped when OpenSSH is missing)
@@ -124,7 +124,7 @@ class TestProbe:
         sock, pid = rig.start_agent()
         os.kill(pid, signal.SIGSTOP)
         with pytest.raises(subprocess.TimeoutExpired):
-            rig.run("ssh-add", "-l", sock=sock, timeout=1.5)  # report 22 open item 5
+            rig.run("ssh-add", "-l", sock=sock, timeout=1.5)
         os.kill(pid, signal.SIGTERM)
         time.sleep(0.3)
         assert _alive(pid)  # a stopped process keeps the pending TERM: escalate to KILL

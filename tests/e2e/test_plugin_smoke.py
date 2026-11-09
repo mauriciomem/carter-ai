@@ -3,7 +3,7 @@
 A smoke test, opt-in (``CARTER_E2E=1``), on the primary binary and ``CARTER_E2E_OPENCODE_ALT``.
 The python interpreter in ``isolation.json`` is a shell script that stands in for the gate
 (allow, or deny when the command says so) and for the identity entry, because the Python gate
-arrives in M3. Step 32 turns this into the full compatibility contract.
+is not in play here. The compatibility contract tests cover the whole path.
 """
 
 from __future__ import annotations

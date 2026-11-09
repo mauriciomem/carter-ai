@@ -123,7 +123,7 @@ class TestInstall:
         assert not guard_script_path(None).exists() and not carter_gitconfig_path(None).exists()
         assert "include" not in global_cfg().read_text()
         out = guard("status").output
-        assert "hooks" in out and "declined" in out and "residual" in out
+        assert "hooks" in out and "declined" in out and "asks again" in out
 
     def test_the_consent_prompt_shows_the_effect_line(self, stack, human_tty) -> None:
         human_tty(True)

@@ -93,7 +93,7 @@ class TestGitconfigFirst:
 
         monkeypatch.setattr(gc, "run_git", spy)
         items = check(agents_reader=None)
-        assert items[0].level == "red" and items[-1].area == "residual"
+        assert items[0].level == "red" and items[-1].area == "limits"
         assert plain == [], plain
 
     def test_the_cli_exit_is_1_and_still_prints_the_rest(self, stack) -> None:
@@ -130,7 +130,7 @@ class TestIncludeAndHook:
         cfg.symlink_to(real)
         assert guard("install", "--yes").exit_code == 0
         items = check()
-        (item,) = find(items, "pre-push hook is inactive", "warn")
+        (item,) = find(items, "git hooks are inactive", "warn")
         assert "add this line there" in item.text and "include.path" in item.fix
 
 
@@ -139,7 +139,7 @@ class TestHashes:
         installed(stack)
         items = check()
         assert not [i for i in items if i.level == "red"]
-        assert find(items, "plugin and isolation.json match (hash)", "ok")
+        assert find(items, "plugin and isolation.json match", "ok")
 
     @pytest.mark.parametrize("which", ["plugin", "isolation", "core"])
     def test_a_changed_or_missing_file_is_red(self, stack, which: str) -> None:
@@ -163,13 +163,20 @@ class TestHashes:
         state = load(guard_state_path(None))
         state.record_file(iso, iso.read_bytes())  # recorded, so only the baked hash can tell
         save(state, guard_state_path(None))
-        (item,) = find(check(), "does not match the hash in the plugin", "red")
+        (item,) = find(check(), "is not the one the plugin was built for", "red")
         assert "agent shells are refused" in item.text
 
     def test_the_script_and_gitconfig_are_compared_too(self, stack) -> None:
         installed(stack)
         guard_script_path(None).write_text("#!/bin/sh\nexit 0\n")
         assert find(check(), str(guard_script_path(None)), "red")
+
+
+WORDS = {
+    "unproven": "waiting for the first agent command",
+    "passed": "working",
+    "failed": "own check failed",
+}
 
 
 class TestStatus:
@@ -183,7 +190,7 @@ class TestStatus:
     def test_each_state(self, stack, state: str, level: str) -> None:
         installed(stack)
         write_status(Path.home(), state, failed_reason="timeout" if state == "failed" else None)
-        found = find(check(opencode_version=(2, 1, 4)), "self-test", level)
+        found = find(check(opencode_version=(2, 1, 4)), WORDS[state], level)
         assert found and state in ("unproven", "passed", "failed")
 
     def test_a_server_on_another_opencode_version_says_restart(self, stack) -> None:
@@ -217,12 +224,12 @@ class TestStatus:
             )
         )
         items = check()
-        assert find(items, "self-test passed", "ok") and find(items, "self-test failed", "red")
+        assert find(items, "working", "ok") and find(items, "own check failed", "red")
 
 
 class TestG2States:
     def test_g2_off_without_state(self, stack) -> None:
-        assert find(check(), "G2 off", "warn")
+        assert find(check(), "the guards are off", "warn")
 
     def test_rev_2_pending_and_declined_offer(self, stack) -> None:
         installed(stack)
@@ -242,12 +249,12 @@ class TestG2States:
         stack.fake(before=debug_config(stack.live))
         items = check()
         assert find(items, "sudo-docker: not installed", "info")
-        assert not find(items, "different declined groups")
+        assert not find(items, "disagree on the declined groups")
         iso = isolation_path(None)
         doc = json.loads(iso.read_bytes())
         doc["plugin"]["declined_groups"] = []
         iso.write_bytes(isolation.canonical_bytes(doc))
-        assert find(check(), "different declined groups", "warn")
+        assert find(check(), "disagree on the declined groups", "warn")
 
 
 class TestPlugins:

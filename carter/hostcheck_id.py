@@ -76,10 +76,10 @@ def mirror_items(
 ) -> list[Item]:
     path = carter_gitconfig_path(base_dir)
     if not path.exists():
-        text = "~/.carter/gitconfig is missing: the guard reads t0"
-        return [Item("red", "tier mirror", text, UPDATE)]
+        text = "~/.carter/gitconfig is missing: the commit hooks assume tier t0"
+        return [Item("red", "hook tier", text, UPDATE)]
     out = [
-        Item("red", "tier mirror", f"{key} differs from config.toml", UPDATE)
+        Item("red", "hook tier", f"{key} differs from config.toml", UPDATE)
         for key, want in mirror.base_entries(cfg)
         if key != "carter.tier" and _git_value(path, key, cwd) != want
     ]
@@ -87,13 +87,15 @@ def mirror_items(
     ws = cfg.workspaces.get(workspace) if workspace else None
     want_tier = effective_tier(configured_tier(cfg), ws.max_tier if ws else "")
     if mirror.mirror_state(cfg, {"tier": seen}, workspace) == "in-sync":
-        out.append(Item("ok", "tier mirror", f"the guard reads {seen} here, as config.toml says"))
+        out.append(
+            Item("ok", "hook tier", f"the commit hooks use tier {seen} here, as config.toml says")
+        )
         return out
-    text = f"the guard reads {seen} but config.toml allows {want_tier}"
+    text = f"the commit hooks use tier {seen} but config.toml allows {want_tier}"
     if _crosses_t2(seen, want_tier):
-        out.append(Item("red", "tier mirror", text + ": agent commits fail", UPDATE))
+        out.append(Item("red", "hook tier", text + ": agent commits fail", UPDATE))
     else:
-        out.append(Item("warn", "tier mirror", text, UPDATE))
+        out.append(Item("warn", "hook tier", text, UPDATE))
     return out
 
 
@@ -102,23 +104,23 @@ def fragment_items(cfg: IdentityConfig, state: GuardState, base_dir: Path | None
     for path, text in mirror.fragments(cfg, mirror_io.carter_dir(base_dir)).items():
         if not path.exists():
             out.append(
-                Item("red", "cap fragment", f"{path.name} is missing: no cap applies", UPDATE)
+                Item("red", "workspace cap", f"{path.name} is missing: no cap applies", UPDATE)
             )
         elif not gitconfig.parses(path):
             out.append(
                 Item(
                     "red",
-                    "cap fragment",
+                    "workspace cap",
                     f"{path.name} is malformed: git fails in that workspace",
                     f"Delete {path} and run `carter update`.",
                 )  # fmt: skip
             )
         elif path.read_text(encoding="utf-8") != text or not state.owned_unchanged(path):
             out.append(
-                Item("warn", "cap fragment", f"{path.name} differs from what Carter wrote", UPDATE)
+                Item("warn", "workspace cap", f"{path.name} differs from what Carter wrote", UPDATE)
             )
         else:
-            out.append(Item("ok", "cap fragment", f"{path.name} is in sync"))
+            out.append(Item("ok", "workspace cap", f"{path.name} is in sync"))
     return out
 
 
@@ -144,27 +146,32 @@ def key_items(cfg: IdentityConfig, home: Path) -> list[Item]:
         return [Item("red", "signing key", f"incomplete: {exc}", AGAIN)]
     out: list[Item] = []
     if cfg.signing.program:
-        out.append(
-            Item("info", "agent", "managed by the signing program; not probed, no shim check")
-        )
+        out.append(Item("info", "signing agent", "managed by the signing program; not checked"))
     elif setup.file_mode:
-        out.append(Item("ok", "agent", "no passphrase: the shim signs from the key file"))
+        out.append(
+            Item("ok", "signing agent", "no passphrase: the signing helper signs from the key file")
+        )
     else:
         state = probe_setup(setup, cfg).state
         _, text, fix = PROBE_TEXT[state]
         level = AGENT_LEVEL[state]
         if level == "info":
             text = "agent commits will fail until you unlock: " + text
-        out.append(Item(level, "agent", text, "" if level == "ok" else fix))
+        out.append(Item(level, "signing agent", text, "" if level == "ok" else fix))
     if shim_state(home).ok:
-        out.append(Item("ok", "shim", "the signing shim is Carter's (hash matches guard state)"))
+        out.append(Item("ok", "signing helper", "the signing helper is Carter's and unchanged"))
     else:
         text = f"{shim_path(home)} is missing, not executable or changed: agent commits fail"
-        out.append(Item("red", "shim", text, AGAIN))
+        out.append(Item("red", "signing helper", text, AGAIN))
     named = shim_socket(home)
     if named is not None and named != expected_socket(cfg, home):
         out.append(
-            Item("red", "shim", "the shim names another agent socket than config.toml", AGAIN)
+            Item(
+                "red",
+                "signing helper",
+                "the signing helper uses another agent socket than config.toml says",
+                AGAIN,
+            )
         )
     if not shim.allowed_signers_path(home).exists():
         text = "allowed_signers is missing: post-commit and verify cannot check signatures"
@@ -174,36 +181,41 @@ def key_items(cfg: IdentityConfig, home: Path) -> list[Item]:
 
 def hygiene_items(cfg: IdentityConfig, fetch: Fetch | None) -> list[Item]:
     if fetch is None:
-        return [Item("info", "key hygiene", "not checked (no reader)")]
+        return [Item("info", "key on GitHub", "not checked (no reader)")]
     lists = fetch(cfg.identity.login)
     blob = public_blob(cfg.signing.public_key)
     out: list[Item] = []
     if lists.auth is None:
         out.append(
-            Item("info", "key hygiene", "authentication keys not read (offline): not checked")
+            Item("info", "key on GitHub", "authentication keys not read (offline): not checked")
         )
     elif blob in lists.auth:
         text = "the LLM key is an AUTHENTICATION key on the account: it could log in as the LLM"
-        out.append(Item("red", "key hygiene", text, "Register it as a signing key only."))
+        out.append(Item("red", "key on GitHub", text, "Register it as a signing key only."))
     else:
-        out.append(Item("ok", "key hygiene", "the key is absent from the account's login keys"))
+        out.append(Item("ok", "key on GitHub", "the key is absent from the account's login keys"))
     if lists.signing is None:
-        out.append(Item("info", "key hygiene", "signing keys not read (offline): not checked"))
+        out.append(Item("info", "key on GitHub", "signing keys not read (offline): not checked"))
     elif blob not in lists.signing:
         text = "the key is not an SSH signing key on the account: commits show Unverified"
-        out.append(Item("warn", "key hygiene", text, "Register it as a signing key on GitHub."))
+        out.append(Item("warn", "key on GitHub", text, "Register it as a signing key on GitHub."))
     return out
 
 
 def guard_items(state: GuardState, git: tuple[int, int] | None) -> list[Item]:
     out: list[Item] = []
-    if not {"hooks", "repo_hooks"} & set(consent.accepted_groups(state)):
-        text = "T2 is configured but no commit guard is installed (only the plugin stands)"
-        out.append(Item("red", "guards", text, "Run `carter guard install` in your terminal."))
+    if not set(consent.COMMIT_GUARDS) & set(consent.accepted_groups(state)):
+        group = "repo_hooks" if git is not None and git < repohooks.MIN_CONFIG_HOOKS else "hooks"
+        record = state.consents.get(group, {})
+        text = "the LLM signing key (T2) is set up but the commit hooks are not installed"
+        fix = "Run `carter guard install` in your terminal."
+        if record.get("decision") == "declined":
+            when = record.get("date", "")
+            text += f" (you declined `{group}`{f' on {when}' if when else ''})"
+            fix = f"Run `carter guard install --only {group}` in your terminal and answer yes."
+        out.append(Item("red", "guards", text, fix))
     else:
-        text = (
-            "without the hooks, the plugin alone keeps agent commits from degrading (fail closed)"
-        )
+        text = "the commit hooks are installed; an agent commit that cannot be signed fails"
         out.append(Item("info", "guards", text))
         for old, version in repohooks.other_old_gits():
             text = f"an older git is also installed ({old}, {version}): no config hook through it"

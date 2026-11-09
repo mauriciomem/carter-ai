@@ -1,7 +1,7 @@
 # ruff: noqa: E501, F811
 """``identity add --role``, ``show`` and ``verify`` for role author.
 
-The same fakes as the 2b command tests: loopback GitHub, throwaway keys, the hermetic home. The
+The same fakes as the signing command tests: loopback GitHub, throwaway keys, the hermetic home. The
 human's identity is in the hermetic global git config; nothing leaves the machine except the
 unauthenticated reads of the fake.
 """

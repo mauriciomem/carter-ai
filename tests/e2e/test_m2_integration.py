@@ -92,7 +92,7 @@ class Full:
 def full(rig_factory, opencode_bin) -> Iterator[Full]:  # type: ignore[no-untyped-def]
     keydir = Path(
         tempfile.mkdtemp(
-            prefix="k", dir="/tmp/opencode/e2e" if Path("/tmp/opencode/2b").exists() else None
+            prefix="k", dir="/tmp/opencode/e2e" if Path("/tmp/opencode/e2e").exists() else None
         )
     )
     key = keydir / "id"

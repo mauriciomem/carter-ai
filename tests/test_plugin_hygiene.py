@@ -116,7 +116,7 @@ def test_core_is_installed_byte_identical_so_it_holds_no_placeholder() -> None:
     assert "__CARTER_" not in read(PLUGIN / "core.ts")
 
 
-@pytest.mark.skipif(not (PLUGIN / "index.ts").exists(), reason="index.ts arrives in step 16")
+@pytest.mark.skipif(not (PLUGIN / "index.ts").exists(), reason="index.ts is not in this checkout")
 class TestIndex:
     def test_index_holds_exactly_the_two_render_placeholders(self) -> None:
         text = read(PLUGIN / "index.ts")
@@ -126,7 +126,7 @@ class TestIndex:
         ]
 
     def test_index_only_hands_the_broker_its_dependencies(self) -> None:
-        """Slice B: the tools and the permission hook live in broker.ts; index.ts wires them."""
+        """The tools and the permission hook live in broker.ts; index.ts wires them."""
         text = strip_comments(read(PLUGIN / "index.ts"))
         assert "tool.transform" not in text and "evaluate" not in text and "tool.add" not in text
         assert text.count("registerBroker(") == 1
@@ -164,7 +164,7 @@ class TestNoPythonOnlyKnowledge:
         assert leaked == set(), f"{source.name}: {sorted(leaked)} must come from isolation.json"
 
 
-# ---- slice B: the broker tool wrapper stays thin ------------------
+# ---- the broker tool wrapper stays thin ------------------
 BROKER_MAX_LINES = 200
 
 

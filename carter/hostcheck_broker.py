@@ -3,7 +3,7 @@
 Read-only and names only: no environment value, no socket path, no commit text, no title ever
 reaches an item. What it reports:
 
-- whether the push tool are on (``isolation.json`` ``b_enabled``) and whether that agrees with the
+- whether the push tool is on (``isolation.json`` ``b_enabled``) and whether that agrees with the
   ``g2`` revision in guard state (a mismatch in either direction is not silent);
 - the headless profile, against its recorded hash;
 - the audit store (directory and file modes; counts of decisions, nothing else);
@@ -79,17 +79,17 @@ def profile_items(state: GuardState, base_dir: Path | None) -> list[Item]:
         return []
     path = headless_profile_path(base_dir)
     if state.owned_unchanged(path):
-        text = "headless profile present (`OPENCODE_CONFIG=` with `opencode run --standalone`)"
-        return [Item("ok", "B headless", text)]
+        text = "the profile for headless runs is present (`opencode run --standalone`)"
+        return [Item("ok", "push tool profile", text)]
     what = "was changed since Carter wrote it" if path.exists() else "is missing"
-    return [Item("warn", "B headless", f"{path.name} {what}", INSTALL_HINT)]
+    return [Item("warn", "push tool profile", f"{path.name} {what}", INSTALL_HINT)]
 
 
 def audit_items(base_dir: Path | None) -> list[Item]:
     carter_dir = run_dir(base_dir).parent
     directory = audit.audit_dir(carter_dir)
     if not directory.exists():
-        return [Item("info", "B audit", "no decisions recorded yet")]
+        return [Item("info", "push tool log", "no decisions recorded yet")]
     out: list[Item] = []
     bad = []
     if stat.S_IMODE(directory.stat().st_mode) != 0o700:
@@ -99,12 +99,12 @@ def audit_items(base_dir: Path | None) -> list[Item]:
             bad.append(f"{path.name} is not 0600")
     if bad:
         out.append(
-            Item("warn", "B audit", "; ".join(bad), "chmod 700 the directory, 600 the files.")
+            Item("warn", "push tool log", "; ".join(bad), "chmod 700 the directory, 600 the files.")
         )
     events = audit.read_b(carter_dir)
     counts = Counter(str(e.get("decision", "?")) for e in events)
     summary = ", ".join(f"{n} {k}" for k, n in sorted(counts.items())) or "none"
-    out.append(Item("info", "B audit", f"{len(events)} recent decision(s): {summary}"))
+    out.append(Item("info", "push tool log", f"{len(events)} recent decision(s): {summary}"))
     return out
 
 
@@ -115,18 +115,28 @@ def counter_items(base_dir: Path | None) -> list[Item]:
     try:
         families, stopped = counter.summary(carter_dir)
     except counter.CounterError as exc:
-        text = f"{E_B_REJECTED}: the rejection counter is unreadable ({exc}); the broker refuses"
-        return [Item("warn", "B counter", text, "Run `carter guard status --reset-b`.")]
+        text = f"the rejection counter is unreadable ({exc}); `carter_push` is refused"
+        text += f" ({E_B_REJECTED})"
+        return [Item("warn", "push tool rejections", text, "Run `carter guard status --reset-b`.")]
     if stopped:
         text = (
-            f"{stopped} of {families} session famil(ies) stopped after "
+            f"{stopped} of {families} OpenCode session(s) stopped after "
             f"{counter.MAX_REJECTIONS} rejections"
         )
         return [
-            Item("warn", "B counter", text, "A new session, or `carter guard status --reset-b`.")
+            Item(
+                "warn",
+                "push tool rejections",
+                text,
+                "A new session, or `carter guard status --reset-b`.",
+            )
         ]
     return [
-        Item("info", "B counter", f"{families} session famil(ies) with rejections, none stopped")
+        Item(
+            "info",
+            "push tool rejections",
+            f"{families} OpenCode session(s) with rejections, none stopped",
+        )
     ]
 
 
@@ -142,16 +152,16 @@ def autoaccept_items(base_dir: Path | None, auto_pids: Callable[[], list[int]]) 
     if mode == "autoaccept":
         text = (
             "OpenCode is set to auto-accept permissions (session.permissions); "
-            f"the broker refuses every use ({E_B_DWELL})"
+            f"`carter_push` is refused ({E_B_DWELL})"
         )
-        out.append(Item("warn", "B approval", text, hint))
+        out.append(Item("warn", "push approvals", text, hint))
     pids = auto_pids()
     if pids:
         text = (
-            f"{len(pids)} OpenCode process(es) run with --auto; "
-            f"approvals there are instant ({E_B_DWELL})"
+            f"{len(pids)} OpenCode session{'s' if len(pids) != 1 else ''} run with --auto; "
+            f"`carter_push` is refused there ({E_B_DWELL})"
         )
-        out.append(Item("warn", "B approval", text, "Start OpenCode without --auto."))
+        out.append(Item("warn", "push approvals", text, "Start OpenCode without --auto."))
     return out
 
 
@@ -160,16 +170,19 @@ def server_items(
     home: str,
     tools: env.Tools | None,
 ) -> list[Item]:
-    """For each server: would B accept its environment and its SSH agent?"""
+    """For each server: would the push tool accept its environment and its SSH agent?"""
     out: list[Item] = []
     for pid, server in sorted(servers().items()):
         if server is None:
             continue
         names = env.polluted_names(server, home)
         if names:
-            text = f"server {pid}: refused with {E_B_POLLUTED} (names only): {', '.join(names)}"
+            text = (
+                f"server {pid}: `carter_push` is refused ({E_B_POLLUTED}); "
+                f"variables set (names only): {', '.join(names)}"
+            )
             out.append(
-                Item("warn", "B server env", text, "Restart OpenCode from a clean terminal.")
+                Item("warn", "push tool server", text, "Restart OpenCode from a clean terminal.")
             )
             continue
         if tools is None:
@@ -177,14 +190,17 @@ def server_items(
         try:
             env.agent_socket(server, tools)
         except IdentityError as exc:
-            text = f"server {pid}: {E_B_NOAGENT} ({exc.detail})"
+            text = f"server {pid}: `carter_push` is refused ({E_B_NOAGENT}): {exc.detail}"
             out.append(
                 Item(
-                    "warn", "B ssh agent", text, "Restart OpenCode from a terminal with your agent."
+                    "warn",
+                    "push tool ssh agent",
+                    text,
+                    "Restart OpenCode from a terminal with your agent.",
                 )
             )
         else:
-            out.append(Item("ok", "B ssh agent", f"server {pid}: SSH_AUTH_SOCK answers"))
+            out.append(Item("ok", "push tool ssh agent", f"server {pid}: your SSH agent answers"))
     return out
 
 
@@ -201,10 +217,10 @@ def origin_items(cwd: Path) -> list[Item]:
     url = done.stdout.strip().lower()
     if done.returncode == 0 and url.startswith(("https://", "http://")):
         text = (
-            f"origin of this repository is HTTPS; the broker pushes over SSH only ({E_B_HTTPS}): "
-            "use `carter push`"
+            f"origin of this repository is HTTPS; `carter_push` pushes over SSH only "
+            f"({E_B_HTTPS}): use `carter push`"
         )
-        return [Item("warn", "B origin", text)]
+        return [Item("warn", "push tool origin", text)]
     return []
 
 
@@ -229,9 +245,9 @@ def ownership_items(plugin: dict | None) -> list[Item]:
     if loose:
         text = (
             f"not root-owned, or writable by others: {', '.join(loose)} "
-            "(B runs them with your credentials)"
+            "(the push tool runs them with your credentials)"
         )
-        return [Item("warn", "push tool", text, "Use the system tools, or accept this residual.")]
+        return [Item("warn", "push tool", text, "Use the system tools, or accept the risk.")]
     return []
 
 

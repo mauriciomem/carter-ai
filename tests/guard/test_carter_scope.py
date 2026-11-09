@@ -24,7 +24,7 @@ from carter.install.paths import guard_state_path
 from guard.helpers import decline, verbose
 
 NOTICE = (
-    "✓ G2 now applies only to Carter agents and Carter workspaces; "
+    "✓ the guards now apply only to Carter agents and Carter workspaces; "
     "global OpenCode policies removed."
 )
 BUILTINS = ["build", "plan", "general", "explore"]
@@ -311,7 +311,7 @@ class TestStatusAndHost:
     def test_status_says_where_the_rules_live(self, stack, home: Path) -> None:
         carter_install(stack)
         out = guard("status").output
-        assert "no global policies" in out and "Carter agent files carrying the G2 rules" in out
+        assert "no global policies" in out and "Carter agent files carrying the guard rules" in out
 
     def test_status_flags_leftover_recorded_policies(self, stack, home: Path) -> None:
         TestUpgradeFromGlobalPolicies().seed(home)
@@ -325,7 +325,7 @@ class TestStatusAndHost:
         TestUpgradeFromGlobalPolicies().seed(home)
         stack.fake()
         out = check_host().output
-        assert "WARN  policies:" in out and "bind every agent" in out
+        assert "WARN  agent files:" in out and "bind every agent" in out
 
     def test_check_host_is_red_for_a_drifted_agent_file(self, stack, home: Path) -> None:
         from rows import check_host
@@ -334,14 +334,14 @@ class TestStatusAndHost:
         path = home / ".config" / "opencode" / "agents" / "carter-engineer.md"
         path.write_text(path.read_text().replace("git push *", "git push --never *"))
         out = check_host().output
-        assert "RED   policies: carter-engineer.md" in out
+        assert "RED   agent files: carter-engineer.md" in out
 
     def test_check_host_is_green_after_install(self, stack, home: Path) -> None:
         from rows import check_host
 
         carter_install(stack)
         out = check_host().output
-        assert "OK    policies:" in out and "carry the G2 rules" in out
+        assert "OK    agent files:" in out and "carry the guard rules" in out
 
 
 class TestHooksOnlyActOnThePluginTag:

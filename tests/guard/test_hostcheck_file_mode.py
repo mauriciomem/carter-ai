@@ -45,7 +45,7 @@ def test_a_file_mode_key_is_ok_and_the_agent_is_never_probed(
 
     monkeypatch.setattr(hostcheck_id, "probe_setup", boom)
     items = hostcheck_id.key_items(cfg(mode="file"), quiet_host)
-    agent = [i for i in items if i.area == "agent"]
+    agent = [i for i in items if i.area == "signing agent"]
     assert [i.level for i in agent] == ["ok"] and "key file" in agent[0].text
     assert not [i for i in items if i.level in ("warn", "red")]
     assert "unlock" not in " ".join(i.text + i.fix for i in items)

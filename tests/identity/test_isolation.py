@@ -177,7 +177,8 @@ class TestResolveFalse:
             isolation.resolve_false(self.fake(table))
         assert exc.value.code == "E-FALSE-MISSING"
         assert str(exc.value) == (
-            "no root-owned `false` found at /usr/bin/false or /bin/false; G2 cannot be installed"
+            "no root-owned `false` found at /usr/bin/false or /bin/false; "
+            "the guards cannot be installed"
         )
 
     def test_nothing_found_is_refused(self) -> None:

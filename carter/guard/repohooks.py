@@ -81,7 +81,7 @@ def chain_snippet(script: Path, event: str = HOOK) -> str:
     """Lines for the human to add to a hook Carter does not own."""
     quoted = shlex.quote(str(script))
     env = ""
-    if event != HOOK:  # the commit events read the tier mirror from Carter's own git file
+    if event != HOOK:  # the commit events read the hook tier from Carter's own git file
         env = f"CARTER_GUARD_CONFIG={shlex.quote(str(script.parent.parent / 'gitconfig'))} "
     what = "agent-push guard" if event == HOOK else "agent-commit guard"
     return f'[ -x {quoted} ] && {{ {env}{quoted} {event} "$@" || exit 1; }}   # Carter: {what}'

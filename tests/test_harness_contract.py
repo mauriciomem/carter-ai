@@ -1,6 +1,6 @@
 """The `opencode debug config` / `debug agents` contract of OpenCode 2.1.4.
 
-Recorded from the real binary in an isolated HOME spike; fixtures in
+Recorded from the real binary in an isolated HOME; fixtures in
 ``tests/data/opencode-2.1.4-*.json``, all values made up). What the real thing does, as found:
 
 - ``debug config`` prints a JSON **list of config sources**, not one merged object:
@@ -220,7 +220,7 @@ class TestPerAgentDeniesInDebugAgents:
       diagnostic`` for ``$.agents.<name>`` with no rule detail.
 
     ``harness.agent_deny_gaps`` is what ``check --host`` uses; the strict
-    ``xfail`` markers written in step 5 were removed when it landed.
+    It used to be pinned with strict ``xfail`` markers.
     """
 
     @staticmethod

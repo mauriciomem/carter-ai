@@ -289,7 +289,7 @@ class TestK1AndTheTiers:
         assert "rc=0" not in stale and "carter update" in stale and lab.count() == before, stale
         assert "f.txt" in lab.staged()  # nothing lost
         upd = lab.carter_plain("update", str(lab.rig.base / "proj"), "--yes")
-        assert upd.returncode == 0 and "tier mirror written" in upd.stdout, upd.stdout + upd.stderr
+        assert upd.returncode == 0 and "hook tier written" in upd.stdout, upd.stdout + upd.stderr
         capped = lab.agent_commit("capped")
         assert "rc=0" in capped, capped
         who = lab.show().split("|")

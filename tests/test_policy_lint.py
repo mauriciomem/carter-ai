@@ -73,7 +73,7 @@ _GITHUB_WRITE = (
     "gh api *",
 )
 _BROKER = [_r("carter_push", "*", "deny")]  # all but devops
-_MCP_GITHUB = _r("carter_github_*", "*", "deny")  # C14, roles that do not need it
+_MCP_GITHUB = _r("carter_github_*", "*", "deny")  # roles that do not need it
 
 
 def _shell(remote_write: str, dangerous: str) -> list[dict[str, str]]:

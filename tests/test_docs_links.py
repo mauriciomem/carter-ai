@@ -1,7 +1,7 @@
 """Relative links and anchors in README.md and docs/** must resolve.
 
 docs/adr/ and docs/rfcs/ are local-only (gitignored, absent in CI) and excluded: their
-files are not scanned. A tracked doc must not link *into* them either (ADR-0016 D4), as
+files are not scanned. A tracked doc must not link *into* them either , as
 the link would break on a clean checkout. External (scheme://, mailto:) links are not
 checked.
 """
@@ -138,7 +138,7 @@ class TestLocalOnlyDirsAreNotScanned:
 
 
 class TestTrackedDocsMustNotLinkIntoLocalOnlyDirs:
-    """ADR-0016 D4: a tracked doc that links into docs/adr/ or docs/rfcs/ breaks on a
+    """A tracked doc that links into docs/adr/ or docs/rfcs/ breaks on a
     clean checkout, whether or not the target exists locally."""
 
     @pytest.mark.parametrize(

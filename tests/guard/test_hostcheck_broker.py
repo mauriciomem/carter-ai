@@ -52,7 +52,7 @@ def test_a_fresh_full_install_reports_b_on_and_nothing_red(stack) -> None:
     installed(stack)
     items = check()
     assert find(items, "enabled for devops only", "ok")
-    assert find(items, "headless profile present", "ok")
+    assert find(items, "profile for headless runs is present", "ok")
     assert not [i for i in b_items(items) if i.level == "red"]
     assert not find(items, "push tool", "red")
 
@@ -71,7 +71,7 @@ def test_g2_at_revision_2_says_b_is_off_and_pending(stack) -> None:
     items = check()
     assert find(items, "off: confirm it with", "info")
     assert find(items, "g2 update pending: the push tool", "info")
-    assert not find(items, "headless profile")
+    assert not find(items, "profile for headless runs")
 
 
 def test_isolation_enabling_b_without_the_consent_is_red(stack) -> None:
@@ -159,7 +159,7 @@ class TestAutoaccept:
     def test_an_opencode_started_with_auto(self, stack, monkeypatch: pytest.MonkeyPatch) -> None:
         installed(stack)
         monkeypatch.setattr(serverenv, "auto_pids", lambda **k: [4242])
-        assert find(check(), "1 OpenCode process(es) run with --auto", "warn")
+        assert find(check(), "1 OpenCode session run with --auto", "warn")
 
     def test_the_ps_reader_finds_only_opencode_with_auto(self) -> None:
         class Done:
@@ -183,7 +183,7 @@ class TestServers:
     def test_a_polluted_server_is_named_by_its_variables_only(self, stack) -> None:
         installed(stack)
         items = check(servers=lambda: {7: {"AGENT": "1", "OPENCODE_SESSION_ID": "ses_secret"}})
-        (warn,) = find(items, "refused with E-B-POLLUTED", "warn")
+        (warn,) = find(items, "`carter_push` is refused (E-B-POLLUTED)", "warn")
         assert "AGENT" in warn.text and "ses_secret" not in " ".join(i.render() for i in items)
 
     def test_a_missing_socket_is_noagent(self, stack) -> None:
@@ -202,7 +202,7 @@ class TestServers:
             hostcheck_broker.env, "agent_socket", lambda server, tools: server["SSH_AUTH_SOCK"]
         )
         items = check(servers=lambda: {7: {"SSH_AUTH_SOCK": agent_socket}})
-        assert find(items, "server 7: SSH_AUTH_SOCK answers", "ok")
+        assert find(items, "server 7: your SSH agent answers", "ok")
 
 
 class TestOriginAndTools:

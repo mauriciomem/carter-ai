@@ -32,9 +32,12 @@ def _consents(state: GuardState, echo: Echo) -> None:
         elif rec["decision"] == "accepted":
             echo(f"  {group.id:<18} accepted {rec['date']}")
         elif group.optional:
-            echo(f"  {group.id:<18} declined {rec['date']}  (optional: no residual)")
+            echo(f"  {group.id:<18} declined {rec['date']}  (optional)")
         else:
-            echo(f"  {group.id:<18} declined {rec['date']}  (residual: not installed)")
+            echo(
+                f"  {group.id:<18} declined {rec['date']}  (not installed; "
+                f"`carter guard install --only {group.id}` asks again)"
+            )
 
 
 def _policies(state: GuardState, base_dir: Path | None, echo: Echo) -> None:
@@ -43,16 +46,16 @@ def _policies(state: GuardState, base_dir: Path | None, echo: Echo) -> None:
     if state.opencode_policies:
         echo(
             f"  {len(state.opencode_policies)} global policy statement(s) still recorded from an "
-            "earlier Carter: run `carter guard install` to remove them (G2 now applies only to "
-            "Carter agents and Carter workspaces)"
+            "earlier Carter: run `carter guard install` to remove them (the guards now apply "
+            "only to Carter agents and Carter workspaces)"
         )
     else:
-        echo("  no global policies (G2's rules are in the Carter agent files)")
+        echo("  no global policies (the guard rules are in the Carter agent files)")
     current, drifted = agent_rules.agent_file_state(base_dir)
     if current:
-        echo(f"  Carter agent files carrying the G2 rules: {len(current)}")
+        echo(f"  Carter agent files carrying the guard rules: {len(current)}")
     for name in drifted:
-        echo(f"  CHANGED {name}: its permissions differ from what Carter renders")
+        echo(f"  CHANGED {name}: its permissions differ from what Carter writes")
 
 
 def _permissions(state: GuardState, echo: Echo) -> None:
@@ -60,7 +63,7 @@ def _permissions(state: GuardState, echo: Echo) -> None:
         return
     config = _load_jsonc(target_path(None)) if target_path(None).exists() else None
     agents = sorted({r["agent"] for r in state.agent_permissions})
-    echo(f"Per-agent denies recorded for: {', '.join(agents)}")
+    echo(f"Agents with `carter_push` denied: {', '.join(agents)}")
     if config is None:
         echo("  cannot read the OpenCode config to confirm them")
 
@@ -134,7 +137,7 @@ def report(base_dir: Path | None, echo: Echo) -> None:
     if consent.plugin_wanted(state):
         echo("Plugin: installed; `carter check --host` says if OpenCode loaded it")
         echo(
-            "Isolation: isolation.json is rendered; agent shells are isolated once the plugin loads"
+            "Isolation: isolation.json is written; agent shells are isolated once the plugin loads"
         )
     else:
         pending = "g2" in consent.reconsent_pending(state)

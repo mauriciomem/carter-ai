@@ -205,7 +205,7 @@ def wrapper_statements(
 
     ``post-commit`` never blocks (it warns in the script, git ignores its status anyway). The
     commit events pass ``CARTER_GUARD_CONFIG`` (Carter's own git file, next to the hooks
-    directory) so the script reads the tier mirror from there and nowhere else."""
+    directory) so the script reads the hook tier from there and nowhere else."""
     env = ""
     if event != EVENT:
         env = (

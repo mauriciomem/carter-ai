@@ -285,7 +285,7 @@ class TestOfficialGitHubServer:
     def test_token_is_a_file_placeholder_not_literal_not_env(self) -> None:
         entry = self._github_cfg()
         env = entry.get("env") or entry.get("environment", {})
-        # RFC-0007 App C.7: the read-only PAT lives in a 0600 file, never in the environment
+        # The read-only PAT lives in a 0600 file, never in the environment
         # (an exported GITHUB_TOKEN would also reach agent shells) and never baked in.
         assert env == {"GITHUB_PERSONAL_ACCESS_TOKEN": "{file:~/.carter/secrets/gh-read.token}"}
         assert "{env:" not in str(env) and "github_pat_" not in str(env)
