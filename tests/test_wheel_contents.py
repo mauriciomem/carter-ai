@@ -28,7 +28,7 @@ REQUIRED = (
     "carter/gate/rules.py",
     "carter/guard/plugin.py",
     "carter/guard/hooks.py",
-    # (2b): the identity commands, the tier mirror, the commit core, the GitHub client
+    # the identity commands, the hook tier, the commit core, the GitHub client
     "carter/identity/mirror.py",
     "carter/identity/commit.py",
     "carter/identity/github.py",
@@ -42,7 +42,7 @@ REQUIRED = (
     "carter/identity_verify.py",
     "carter/commit_cli.py",
     "carter/hostcheck_id.py",
-    # (2c): role author
+    # role author
     "carter/identity/coauthor.py",
     "carter/identity/coauthor_link.py",
     "carter/human_items.py",

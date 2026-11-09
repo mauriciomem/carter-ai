@@ -147,7 +147,7 @@ class TestT2:
             stat.S_IMODE(allowed.stat().st_mode) == 0o600
             and stat.S_IMODE(allowed.parent.stat().st_mode) == 0o700
         )
-        assert "guards not installed: `carter check --host` shows G2 off" in notices
+        assert "guards not installed: `carter check --host` shows the guards off" in notices
 
     def test_the_entry_now_sends_the_signing_block(
         self, fake: FakeGitHub, home: Path, key: KeyPair

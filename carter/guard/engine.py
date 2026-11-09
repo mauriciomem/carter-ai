@@ -48,7 +48,7 @@ Echo = Callable[[str], None]
 Confirm = Callable[..., bool]
 
 GLOBAL_REMOVED = (
-    "✓ G2 now applies only to Carter agents and Carter workspaces; "
+    "✓ the guards now apply only to Carter agents and Carter workspaces; "
     "global OpenCode policies removed."
 )
 INTERIM_NOTE = (
@@ -393,12 +393,29 @@ NEWS = {
 }
 
 
-def _summary(offer: Sequence[str], state: GuardState) -> list[str]:
+def _needed_groups(state: GuardState, unavailable: dict[str, str]) -> list[str]:
+    """Declined groups the configuration cannot do without: with the LLM signing key (T2), the
+    commit hooks. They are asked again in the one install question."""
+    from carter.identity.config import ConfigError, default_path, load_identity  # noqa: PLC0415
+    from carter.identity.resolve import configured_tier  # noqa: PLC0415
+
+    try:
+        t2 = configured_tier(load_identity(default_path())) == "t2"
+    except ConfigError:
+        return []
+    return consent.declined_commit_guards(state, unavailable) if t2 else []
+
+
+def _summary(offer: Sequence[str], state: GuardState, again: Sequence[str] = ()) -> list[str]:
     """The 3-4 lines above the one install question. A group accepted earlier at an
     older revision says what the new revision adds: the yes is the consent for it."""
     revs = {g.id: g.rev for g in consent_groups()}
     head = ", ".join(offer)
     lines = [f"Carter will set up: {head}"]
+    if again:
+        lines.append(
+            f"  asked again: you declined {', '.join(again)}, but the LLM signing key (T2) needs it"
+        )
     news = []
     for name in offer:
         rec = state.consents.get(name)
@@ -453,14 +470,16 @@ def install(
 
     mode, unavailable = _availability(echo)
     if interactive and not assume_yes:
-        offer = consent.to_offer(state, only=only, unavailable=unavailable)
+        again = _needed_groups(state, unavailable)
+        offer = consent.to_offer(state, only=only, unavailable=unavailable, reoffer=again)
+        again = [g for g in again if g in offer and g not in (only or [])]
         if offer:
             groups_by_id = {g.id: g for g in consent_groups()}
             for name in offer:
                 if groups_by_id[name].rev > 1:  # what a revision adds, in full, with -v
                     for line in groups_by_id[name].explain:
                         echo(line)
-            question = "\n".join([*_summary(offer, state), "Install?"])
+            question = "\n".join([*_summary(offer, state, again), "Install?"])
             if not confirm(question, default=True):
                 _remember_refusals(state, offer, only, base_dir)
                 echo("Nothing installed.")
@@ -487,7 +506,7 @@ def install(
                 f"Declined: {name} (optional; `carter guard install --only {name}` adds it later)."
             )
         else:
-            echo(f"Declined: {name} (listed as a residual by `carter guard status`).")
+            echo(f"Declined: {name} (`carter guard install --only {name}` asks again).")
     for name in plan.refused_offers:
         echo(f"Not confirmed: {name} (denies stay; `carter guard install --only {name}`)")
     if consent.plugin_wanted(state):
@@ -495,7 +514,7 @@ def install(
     optouts = _active_optouts(state, echo=echo)
     wanted = consent.desired_statements(state, home=home, optouts=optouts)
     agents = builtin_agents() if "g2" in consent.accepted_groups(state) else []
-    echo(f"Carter agents will carry {len(wanted)} G2 rule(s)")
+    echo(f"Carter agents will carry {len(wanted)} guard rule(s)")
     before = copy.deepcopy(state)
     state_path = guard_state_path(base_dir)
     previous = state_path.read_bytes() if state_path.exists() else None
@@ -579,7 +598,7 @@ def _dry_run(
     )
     echo(f"OpenCode config: {res.target}" + ("" if res.changed else " (already up to date)"))
     _show_diff(res, echo)
-    echo(f"  Carter agents would carry {len(wanted)} G2 rule(s)")
+    echo(f"  Carter agents would carry {len(wanted)} guard rule(s)")
     if agents:
         echo(f"  per-agent denies for built-in agents: {', '.join(agents)}")
     _git_step(base_dir, preview, echo, dry_run=True, mode=mode)

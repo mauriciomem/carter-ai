@@ -99,7 +99,7 @@ current rule without rewriting the file. `--dry-run` lists the files without wri
 
 `update` is also the only place that applies the `identity` policy of `carter.yaml`
 (`role` and `require_tier`, see [Configuration](configuration.md#identity)). It pins the
-values in `~/.carter/config.toml` under `[workspaces."<path>"]`, refreshes the tier mirror and the
+values in `~/.carter/config.toml` under `[workspaces."<path>"]`, refreshes the hook tier and the
 `allow_project_opencode_edit` opt-outs (the agents' rules are re-rendered from `config.toml`), and
 asks nothing; with `-v` it shows each change and its source. An agent shell never pins, writes the
 mirror or refreshes the global agent files. Editing `carter.yaml` alone changes nothing until the
@@ -136,7 +136,10 @@ Carter plugin (`~/.config/opencode/plugins/carter/`, found by OpenCode without a
 
 It asks **one** question: a summary of three or four lines and `Install? [Y/n]` (Enter is yes). That
 yes is the consent for every group it lists; a no installs nothing. `--yes` skips the question.
-Groups you declined earlier stay declined, and the optional `alias` group only comes with
+Groups you declined earlier stay declined and are not asked again, with one exception: while the
+LLM signing key (T2) is configured and no commit-hook group is installed, a declined `hooks` (or
+`repo_hooks` on git older than 2.54) is offered again in the same question, with a line saying why.
+`--only hooks` asks about a declined group on purpose. The optional `alias` group only comes with
 `--only alias`. A run ends with `✓ guards installed  g2 · hooks · ...`; `-v` shows the explanation
 of each group and the diff. Restart the OpenCode server after the plugin is installed.
 
@@ -158,8 +161,7 @@ carter guard status [--reset-b] [-v]
 ```
 
 Read-only. A normal run prints `✓ guards  g2, hooks, ...` and one warning line for each
-`MISSING` statement, changed file or broken include; `-v` lists the consents (declined groups are
-residuals), each recorded statement as `loaded` or `MISSING`, file drift, and the include state.
+`MISSING` statement, changed file or broken include; `-v` lists the consents (a declined group says how to be asked again), each recorded statement as `loaded` or `MISSING`, file drift, and the include state.
 It works with an absent or corrupt guard state and says so.
 
 | Option | Description |
@@ -231,7 +233,7 @@ It asks nothing. On success it prints `✓ <login> · T2 · SHA256:2hx1K1j22SYE�
 or `· no passphrase`, and `→ next: carter identity unlock` only when the key has a passphrase) and
 writes `config.toml` (the previous file is kept in
 `~/.carter/backups/`), the signing shim `~/.carter/bin/carter-ssh-sign`, `allowed_signers`, and the
-tier mirror in `~/.carter/gitconfig`; every file is recorded with its hash and a failure puts them
+hook tier in `~/.carter/gitconfig`; every file is recorded with its hash and a failure puts them
 all back. Running `add` again with another key is a **rotation**: the old public key moves to
 `previous_public_keys`, so old commits still verify. It never writes your global git config.
 `--role` writes `[identity] role` in `config.toml` (your preference; a pinned workspace role or
@@ -262,11 +264,11 @@ carter identity show [-v]
 
 Read-only and allowed anywhere. Prints the identity, the role and where it came from, the
 configured and effective tier with the workspace cap, the commit shape that follows, and, at T2, the
-key's fingerprint, the agent state (`ok`, locked, `wrong-key`, stale), whether the shim is Carter's
-and names the configured socket, whether the tier mirror the guard reads agrees with `config.toml`,
+key's fingerprint, the agent state (`ok`, locked, `wrong-key`, stale), whether the signing helper is Carter's
+and names the configured socket, whether the hook tier the guard reads agrees with `config.toml`,
 and the guard and policy coverage for the current directory. It prints names, ids and fingerprints,
 never a key or a token. A defect in `config.toml` is `E-CONFIG`, never a silent default. The exit
-code is 1 if a line is `RED`. With no passphrase on the key the agent line says the shim signs from
+code is 1 if a line is `RED`. With no passphrase on the key the agent line says the signing helper signs from
 the key file.
 
 | Option | Meaning |
@@ -283,7 +285,7 @@ Without options it signs one commit in a temporary repository with the real shim
 key, checks it against a temporary `allowed_signers` (the current key and the previous ones) and
 checks the shape: the author is not the LLM, the committer is, the signer is the stored
 fingerprint, the trailer is in the message. No network. A locked key (`E-SIGN-LOCKED`) is
-reported, never prompted for, and exits 1; so do the wrong key loaded, a shim naming another socket
+reported, never prompted for, and exits 1; so do the wrong key loaded, a signing helper naming another socket
 and a changed fingerprint, each with its own message. With `--remote OWNER/REPO --sha SHA` it asks
 GitHub (unauthenticated) whether that commit shows as Verified; an unreachable GitHub is
 `E-GITHUB-UNREACHABLE`, never a pass.
@@ -307,7 +309,7 @@ an edited one is kept and listed). In this order: the key leaves Carter's agent 
 stops (never `ssh-agent -k`), the `[identity]` and `[identity.signing]` parts of
 `~/.carter/config.toml` (a copy goes to `~/.carter/backups/`; workspace pins and the footer stay;
 a file that held only the identity is removed), the shim, `allowed_signers`, the socket directory,
-and the tier mirror with its cap fragments. It then prints **what stays**: the guards, hooks,
+and the hook tier with its workspace caps. It then prints **what stays**: the guards, hooks,
 policies and the `git ai-commit` alias (`carter guard remove` takes those), the read-only GitHub
 token, the account and the registered key on GitHub, and your private key file.
 `carter guard remove` and `carter identity remove` are independent: either order works, and each
@@ -541,7 +543,7 @@ its fix) and one summary line (`✓ host  2 warnings`); `-v` prints every row as
 `!` WARN or `✗` RED. The exit code is 1 only if something is red:
 
 - every policy Carter owns is loaded by OpenCode (`E-POLICIES-MISSING` names the missing
-  one), your providers are still loaded, and the per-agent denies are still in the config;
+  one), your providers are still loaded, and the agents' `carter_push` denies are still in the config;
 - the files recorded in `guard-state.json` match their hashes;
 - **first, before any git or OpenCode call:** Carter's included git config parses (a
   malformed one makes every git command fail; the report still completes);
@@ -550,37 +552,39 @@ its fix) and one summary line (`✓ host  2 warnings`); `-v` prints every row as
   (current directory, workspaces) is `guarded` or `unguarded: <reason>`, a WARN that is a
   FAIL while T2 is configured;
 - the plugin directory and `isolation.json` match their recorded hashes and each other (the
-  hash baked into the plugin); each OpenCode server's self-test state from
-  `~/.carter/run/plugin-status/<pid>.json` (`passed`, `unproven`, `failed`), a server on
+  hash baked into the plugin); each OpenCode server's plugin state from
+  `~/.carter/run/plugin-status/<pid>.json` (working, waiting for the first agent command, or its own check failed), a server on
   another OpenCode version or older than the plugin file ("restart the server"), and plugin
   files Carter did not write, listed by name;
-- the server environment, by name only: agent or human signals, Carter's isolation markers
-  and `GH_TOKEN`/`GITHUB_TOKEN` in the OpenCode server's environment;
-- [`carter_push`](../guides/write-operations.md#letting-devops-ask-you-to-push) (`B ...` rows): on or off,
+- the server environment, by name only: variables that show the server was started from an agent
+  shell, or that Carter sets in agent shells, and `GH_TOKEN`/`GITHUB_TOKEN` in the OpenCode server's
+  environment;
+- [`carter_push`](../guides/write-operations.md#letting-devops-ask-you-to-push) (the `push tool` rows): on or off,
   the headless profile, the audit store (modes, counts of decisions, nothing else), the rejection counters,
-  a persisted auto-accept or an OpenCode started with `--auto` (the dwell rule refuses every use),
+  a persisted auto-accept or an OpenCode started with `--auto` (`carter_push` is refused there),
   whether the server's environment and SSH agent would be accepted, an HTTPS `origin`, and
   `git`/`gh`/`ssh` not owned by root;
 - every agent's effective `carter_push` rule from `opencode debug agents`
   (`RED` names the agent; an agent whose config entry OpenCode dropped gets a hint);
 - OpenCode and git version bands (`E-OPENCODE-VERSION`, `E-GIT-OLD`);
-- the accepted residual: shell writes outside Carter's own control paths are not gated;
+- the limits: a shell command can still write config files outside Carter's own control paths;
 - the read-only GitHub token, if you stored one: its file, type, expiry and that it cannot
   write (the same checks as [`github-token check`](#carter-github-token-check)), and that the
   `carter-github` MCP entry reads the token file;
 - declined groups, active `allow_project_opencode_edit` opt-outs, project config that can run
   code, and `carter.yaml` policy that `carter update` has not pinned yet;
-- **the LLM identity** (when one is configured): the tier mirror in `~/.carter/gitconfig`
+- **the LLM identity** (when one is configured): the hook tier in `~/.carter/gitconfig`
   against `config.toml` (`RED` when they sit on opposite sides of T2, because agent commits then
-  fail; `WARN` otherwise, with "run `carter update`"), each cap fragment (`RED` when missing or
+  fail; `WARN` otherwise, with "run `carter update`"), each workspace cap (`RED` when missing or
   malformed: a malformed one makes git fail inside that workspace), linked worktrees where the
-  cap does not follow the path (`WARN`, by path), and at T2 the signing shim (hash, and the
+  cap does not follow the path (`WARN`, by path), and at T2 the signing helper (unchanged, and the
   socket it names), the agent state (a locked key is `INFO`: "agent commits will fail until you
   unlock"; the wrong key or a stale socket is `WARN`), `allowed_signers`, whether the key is
   absent from `https://github.com/<login>.keys` (`RED` if it is an authentication key; `INFO`
   "not checked" offline; no token is sent) and listed as a signing key (`WARN` if not), the four
   hook events, an older git on the machine, and git 2.40 or newer (`E-GIT-OLD`). T2 with no commit
-  guard installed is `RED`;
+  hooks installed is `RED`, and the fix names the group (`carter guard install --only hooks` when
+  you declined it);
 - **role `author`**: below T2 or under a cap it is `RED` (`E-ROLE-B-TIER`); at T2 your git identity in the
   current directory (`RED` with `E-HUMAN-IDENTITY` and a short reason if unusable), whether GitHub
   knows your address (`WARN` if not; the lookup runs in your own terminal and is cached for 7
@@ -589,6 +593,9 @@ its fix) and one summary line (`✓ host  2 warnings`); `-v` prints every row as
   and address are never printed.
 
 Without the plugin the check says "plugin not installed" (never a pass).
+
+A run that prints a URL or other text from OpenCode is a bug: Carter runs OpenCode without a
+terminal and captures everything it writes.
 
 ### carter check --probe
 

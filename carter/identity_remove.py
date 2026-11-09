@@ -4,7 +4,7 @@ Ownership discipline (ADR): every file is removed only if guard state records it
 still matches; an edited file stays and is reported. Order: the key leaves Carter's agent first
 (the ``lock --all`` logic, never ``ssh-agent -k``), then the ``[identity]`` and
 ``[identity.signing]`` parts of ``config.toml`` (the writer, with a backup; workspace pins and
-the footer stay), the shim, ``allowed_signers``, the dedicated socket directory, the tier mirror
+the footer stay), the shim, ``allowed_signers``, the dedicated socket directory, the hook tier
 and its cap fragments.
 The guards, hooks, policies and the ``git ai-commit`` alias are not this command's business
 (``carter guard remove``), and neither is anything on GitHub or the private key file. Either
@@ -151,7 +151,7 @@ def remove_identity(base_dir: Path | None = None, *, dry_run: bool = False) -> R
     main = carter / "gitconfig"
     if dry_run:
         if mirror_io.split(mirror_io.read_entries(main))[0]:
-            report.removed.append(f"{main}: the tier mirror and its cap fragments")
+            report.removed.append(f"{main}: the hook tier and its workspace caps")
         return report
     if read.status in ("corrupt", "newer"):
         return report  # nothing recorded can be proven Carter's: the mirror stays too
@@ -159,7 +159,7 @@ def remove_identity(base_dir: Path | None = None, *, dry_run: bool = False) -> R
     report.removed += res.fragments_removed
     if res.status in ("updated", "removed"):
         report.removed.append(
-            f"{main}: the tier mirror" + (" (file removed)" if res.status == "removed" else "")
+            f"{main}: the hook tier" + (" (file removed)" if res.status == "removed" else "")
         )
     report.kept += [f"{name} (edited since Carter wrote it)" for name in res.kept]
     if res.status == "edited-kept":

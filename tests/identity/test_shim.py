@@ -2,7 +2,7 @@
 
 Three layers: the generator (quoting, determinism, atomic mode-0755 write), the script's contract
 against a *fake* ``ssh-keygen`` that records what it receives (under ``dash`` and
-``bash --posix``), and a round trip with the real tools through git. macOS ``/bin/sh`` is step 33.
+``bash --posix``), and a round trip with the real tools through git. macOS ``/bin/sh`` runs in CI.
 """
 
 # ruff: noqa: E501  (dense parametrized tables)
@@ -564,7 +564,7 @@ class TestRoundTrip:
         done = real.commit()
         elapsed = time.perf_counter() - start
         assert done.returncode == 0, done.stderr
-        assert elapsed < 2  # 10-20 ms on Linux, ~385 ms on macOS (report 22): asserted loosely
+        assert elapsed < 2  # 10-20 ms on Linux, ~385 ms on macOS: asserted loosely
         shown = real.git("log", "-1", "--format=%G?|%GF|%GS|%cn|%an", env=real.signing_env)
         who = "llm@example.invalid|LLM Bot|Fixture Human"  # committer = the LLM, author = the human
         assert shown.stdout.strip() == f"G|{real.key.fingerprint}|{who}"

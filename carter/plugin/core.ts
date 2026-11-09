@@ -87,7 +87,7 @@ export const MESSAGES: Record<string, string> = {
     "Carter isolation file is missing, invalid, or doesn't match its install-time hash; agent shells are disabled. Run `carter guard install` in your terminal.",
   "E-GATE-FAIL": "Command gate unavailable; command refused (fail closed). Run `carter check --host`.",
   "E-SELFTEST":
-    "Carter plugin self-test failed on OpenCode <v>: all shells are treated as agent shells and the push tool is disabled. See `carter check --host`.",
+    "The Carter plugin's own check failed on OpenCode <v>: all shells are treated as agent shells and the push tool is disabled. See `carter check --host`.",
   "E-SIGN-UNAVAILABLE":
     "The LLM signing identity is unavailable (<reason>); agent commits are blocked, not downgraded. Changes are still staged. Run `carter check --host`.",
   "E-CONFIG": "config.toml is invalid; agent commits are disabled until fixed.",

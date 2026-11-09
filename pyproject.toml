@@ -95,7 +95,7 @@ no_implicit_optional = true
 disallow_untyped_defs = true
 
 # Ratchet: small, already-clean modules held to extra strictness. Expand this list
-# as more modules are typed; full-repo strict is a tracked follow-up, not an M1 gate.
+# as more modules are typed; full-repo strict is a tracked follow-up.
 # NB: enumerate explicit per-module flags — `strict = true` here leaks its checks
 # (e.g. disallow_any_generics) globally in mypy, defeating the non-strict baseline.
 [[tool.mypy.overrides]]

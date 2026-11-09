@@ -133,7 +133,7 @@ class TestShow:
         out = run("show").output
         assert "configured t1, cap t0, effective t0" in out
         assert (
-            "OK    tier mirror: the guard reads t0" in out
+            "OK    hook tier: the commit hooks use t0" in out
         )  # no mirror file = t0 = the capped tier
 
     def test_it_is_read_only_and_works_in_an_agent_shell(
@@ -152,11 +152,14 @@ class TestShow:
         add_t2(fake, key, str(real_ssh_agent.sock))
         out = run("show").output
         assert key.fingerprint in out
-        assert "WARN  agent: locked: the agent holds no key" in out
-        assert "OK    shim:" in out and "the shim and the agent socket agree" in out
+        assert "WARN  signing agent: locked: the agent holds no key" in out
+        assert (
+            "OK    signing helper:" in out
+            and "the signing helper and the agent socket agree" in out
+        )
         assert "author is you, committer and signer are the LLM" in out
         assert real_ssh_agent.add(key) == 0
-        assert "OK    agent: the LLM key is loaded in the agent" in run("show").output
+        assert "OK    signing agent: the LLM key is loaded in the agent" in run("show").output
 
     @pytest.mark.parametrize(
         ("state", "level"),
@@ -196,18 +199,18 @@ class TestShow:
             text.replace(f"AGENT_SOCK={real_ssh_agent.sock}", "AGENT_SOCK=/tmp/other.sock")
         )
         out = run("show").output
-        assert "RED   shim: the shim names a different agent socket" in out
-        assert "RED   shim:" in out and "missing, not executable or changed" in out
+        assert "RED   signing helper: the signing helper uses another agent socket" in out
+        assert "RED   signing helper:" in out and "missing, not executable or changed" in out
 
     def test_a_stale_mirror_is_warned_with_the_fix(
         self, home: Path, fake: FakeGitHub, key: KeyPair, real_ssh_agent
     ) -> None:  # type: ignore[no-untyped-def]
         add_t2(fake, key, str(real_ssh_agent.sock))
-        assert "OK    tier mirror: the guard reads t2" in run("show").output
+        assert "OK    hook tier: the commit hooks use t2" in run("show").output
         (home / ".carter" / "gitconfig").unlink()
         out = run("show").output
         assert (
-            "WARN  tier mirror: the guard reads t0, below config.toml" in out
+            "WARN  hook tier: the commit hooks use t0, below config.toml" in out
             and "carter update" in out
         )
 
@@ -290,7 +293,7 @@ class TestVerifyLocal:
         done = run("verify")
         assert (
             done.exit_code == 1
-            and "the shim names a different agent socket than config.toml" in done.output
+            and "the signing helper uses another agent socket than config.toml says" in done.output
         )
 
     @real_ssh

@@ -41,7 +41,7 @@ class TestPollution:
             "HOME": HOME,
         }
         (item,) = check({10: env})
-        assert item.level == "ok" and "no pollution" in item.text
+        assert item.level == "ok" and "its environment is clean" in item.text
 
     @pytest.mark.parametrize(
         "name",

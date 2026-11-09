@@ -85,7 +85,8 @@ def require_opencode() -> tuple[int, int, int]:
     if version_band(version) in ("untested-low", "above"):
         log_warn(
             "opencode",
-            f"G2 untested on {shown}; relying on the plugin self-test ({E_OPENCODE_VERSION})",
+            f"the guards are untested on {shown}; relying on the plugin's own check "
+            f"({E_OPENCODE_VERSION})",
         )
     else:
         log_ok("opencode", shown)
@@ -106,7 +107,14 @@ def _which(cmd: str) -> str | None:
 
 def _cmd_version(cmd: str, flag: str = "--version") -> str | None:
     try:
-        result = subprocess.run([cmd, flag], capture_output=True, text=True, timeout=10)
+        result = subprocess.run(
+            [cmd, flag],
+            capture_output=True,
+            text=True,
+            timeout=10,
+            stdin=subprocess.DEVNULL,
+            start_new_session=True,  # no controlling terminal: nothing can print behind our back
+        )
         return result.stdout.strip().split("\n")[0] if result.returncode == 0 else None
     except (FileNotFoundError, subprocess.TimeoutExpired):
         return None

@@ -223,7 +223,7 @@ class TestHostileOperandsAgainstRealGit:
         self, rig: Rig
     ) -> None:
         """The reason the builder always emits ``--``: git takes ``--receive-pack=`` as an option and
-        the refspec as an scp-style host (report 21 row 7, reproduced)."""
+        the refspec as an scp-style host."""
         res = rig.push([f"--receive-pack=touch {rig.mark}", f"{rig.sha}:refs/heads/feat/x"])
         assert res.returncode != 0
         calls = rig.fake.calls()

@@ -21,7 +21,7 @@
 
 @@HUMAN_RULES@@
 
-# Carter's own git file, passed by the hook command; the tier mirror is read from it directly
+# Carter's own git file, passed by the hook command; the hook tier is read from it directly
 # (`--file ... --includes`), never through the user's global config.
 cfg=${CARTER_GUARD_CONFIG-}
 [ -n "$cfg" ] || cfg=${HOME-}/.carter/gitconfig

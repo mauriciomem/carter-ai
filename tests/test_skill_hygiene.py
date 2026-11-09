@@ -70,7 +70,7 @@ def test_record_template_carries_ai_usage(skill_name: str) -> None:
 
 
 def test_repo_docs_carry_no_front_matter() -> None:
-    """RFC-0007 §4.2: repo docs (non-record) get no front matter."""
+    """Repo docs (non-record) get no front matter."""
     docs = [REPO / "README.md", *sorted((REPO / "docs").rglob("*.md"))]
     local_only = (REPO / "docs" / "adr", REPO / "docs" / "rfcs")
     offenders = [
@@ -228,7 +228,7 @@ class TestCarterOpsPushAndPr:
             "gh issue comment",
             "gh release",
             "gh api",
-        )  # fmt: skip (D72: gh pr create|edit|comment are allowed)
+        )  # fmt: skip
         for write in writes:
             assert write not in fences, write
 
@@ -261,7 +261,7 @@ class TestCarterOpsPushAndPr:
         text = _ops_text()
         for code in ("E-POLICY", "E-GH-READONLY", "E-HUMAN-TERMINAL"):
             assert f"`{code}`" in text, code
-        assert "`E-PUSH-GUARD`" in text  # the pre-push hook is slice 2a
+        assert "`E-PUSH-GUARD`" in text  # the pre-push hook
 
     def test_the_forbidden_block_now_lists_the_push_and_human_only_verbs(self) -> None:
         text = _ops_text()
@@ -305,7 +305,7 @@ def test_the_user_is_never_said_to_sign() -> None:
 
 
 class TestCarterOpsGhReads:
-    """Spike 4: `gh repo view` and `gh search repos` take the repo positionally (no -R)."""
+    """`gh repo view` and `gh search repos` take the repo positionally (no -R)."""
 
     def test_the_positional_verbs_and_the_dash_r_placement_are_stated(self) -> None:
         text = " ".join(_ops_text().split())

@@ -659,7 +659,7 @@ class TestHostileInput:
         self, world: World
     ) -> None:
         """The hook command sets CARTER_GUARD_CONFIG inline, so a value in the caller's environment
-        cannot make the script read another file as the tier mirror."""
+        cannot make the script read another file as the hook tier."""
         world.configure("t2")
         world.install_repo_hooks()
         liar = world.repo.parent / "liar-gitconfig"

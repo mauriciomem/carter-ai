@@ -323,7 +323,7 @@ class FileRemoval:
 def remove_files(base_dir: Path | None, state: GuardState) -> FileRemoval:
     """Delete Carter's file and its ``gitconfig.d`` fragments, each only if still unchanged.
 
-    While the file holds the ``carter.*`` tier mirror it is rewritten with the mirror alone
+    While the file holds the ``carter.*`` hook tier it is rewritten with the mirror alone
     (fragments stay): removing the guards must not blind the guard's own tier source."""
     out = FileRemoval()
     main = carter_gitconfig_path(base_dir)
@@ -331,7 +331,7 @@ def remove_files(base_dir: Path | None, state: GuardState) -> FileRemoval:
     if mirror := carried_mirror(base_dir):  # `identity remove` owns the mirror, not `guard remove`
         if state.owned_unchanged(main):
             install_file(main, render_gitconfig(mirror), state)
-            out.removed.append(f"{main} (hook and alias entries; the tier mirror stays)")
+            out.removed.append(f"{main} (hook and alias entries; the hook tier stays)")
         else:
             out.kept.append(str(main))
         return out

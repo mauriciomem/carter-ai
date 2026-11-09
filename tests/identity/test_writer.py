@@ -449,7 +449,7 @@ class TestReadsNeverWrite:
 
 class TestSize:
     def test_writer_code_stays_small(self):
-        """Step 8: ~120 lines. Counts code only (no blanks, comments or docstrings)."""
+        """About 120 lines. Counts code only (no blanks, comments or docstrings)."""
         src = (REPO / "carter" / "identity" / "writer.py").read_text()
         tree = ast.parse(src)
         doc_lines: set[int] = set()

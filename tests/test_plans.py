@@ -212,15 +212,7 @@ REPO_PLANS = Path(__file__).resolve().parent.parent / ".carter" / "state" / "pla
 
 @pytest.mark.skipif(not REPO_PLANS.is_dir(), reason="private .carter/ workspace state is absent")
 class TestRealWorkspacePlans:
-    """Regression: and 002 keep ``push_policy: manual`` and must still validate."""
-
-    @pytest.mark.parametrize("name", ["001-llm-attribution-signing", "002-slice-1-hazards"])
-    def test_real_plan_validates(self, name):
-        plan_dir = REPO_PLANS / "active" / name
-        if not plan_dir.is_dir():
-            pytest.skip(f"{name} is not in active/ any more")
-        result = _validate_plan_dir(plan_dir)[0]
-        assert result.errors == []
+    """The private workspace's own plans validate (skipped where there are none)."""
 
     def test_whole_workspace_scan_has_no_errors(self):
         assert validate_plans_dir(REPO_PLANS).errors == []
@@ -267,7 +259,7 @@ class TestAiUsage:
         assert "checkpoint" in errors[0]
 
 
-# ─── validate_plan_dir — must_haves + O6 ─────────────────────────────────────
+# ─── validate_plan_dir — must_haves ──────────────────────────────────────────
 
 
 class TestMustHaves:
@@ -292,7 +284,7 @@ class TestMustHaves:
             '    - "The sample behaviour works"\n', ""
         )
         plan = make_plan(tmp_path, readme=readme)
-        # O6 only gates "active"; a proposed plan may still be filling in must_haves
+        # only "active" is gated; a proposed plan may still be filling in must_haves
         assert validate_plan_dir(plan) == []
 
 
@@ -433,7 +425,7 @@ class TestCheckIntegration:
 
     def test_check_fails_on_invalid_plan(self, tmp_path):
         runner, main = self._init(tmp_path)
-        # active plan with empty must_haves violates O6
+        # active plan with empty must_haves is refused
         bad = VALID_README.replace('    - "The sample behaviour works"\n', "")
         make_plan(tmp_path / ".carter" / "state" / "plans", readme=bad)
         result = runner.invoke(main, ["check", str(tmp_path)])

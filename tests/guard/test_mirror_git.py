@@ -272,7 +272,7 @@ class TestUpdateCommand:
         before = glob.read_bytes()
         done = CliRunner().invoke(main, ["update", "-v", str(world)])  # asks nothing ()
         assert done.exit_code == 0, done.output
-        assert "+ carter.tier = t2" in done.output and "tier mirror written" in done.output
+        assert "+ carter.tier = t2" in done.output and "hook tier written" in done.output
         assert glob.read_bytes() == before
         home = Path(os.environ["HOME"])
         assert mirror_io.read_entries(home / ".carter" / "gitconfig")[0] == ("carter.tier", "t2")

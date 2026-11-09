@@ -105,6 +105,7 @@ def _call(opencode: str, cwd: Path, runner: Callable[..., Any], timeout: float) 
             text=True,
             timeout=timeout,
             stdin=subprocess.DEVNULL,
+            start_new_session=True,  # no controlling terminal: nothing can print behind our back
         )
     except OSError as exc:
         raise _CallError(f"could not run `opencode debug agents`: {exc}") from exc
@@ -264,6 +265,7 @@ def read_debug_config(
             text=True,
             timeout=timeout,
             stdin=subprocess.DEVNULL,
+            start_new_session=True,  # no controlling terminal: nothing can print behind our back
         )
     except subprocess.TimeoutExpired as exc:
         raise DebugConfigError(f"`opencode debug config` timed out after {timeout:g}s") from exc

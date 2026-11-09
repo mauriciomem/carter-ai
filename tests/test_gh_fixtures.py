@@ -2,7 +2,7 @@
 
 Modelled from the public REST documentation (Users, SSH signing keys, Commits, Rate limits) read
 on 2026-11-04; the web page ``/<login>.keys`` is not part of the REST API. Everything here runs
-against the loopback fake: no network, no credentials. The real-service confirmation is step 33.
+against the loopback fake: no network, no credentials. The real service is checked by hand.
 """
 
 from __future__ import annotations

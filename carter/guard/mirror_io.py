@@ -136,7 +136,7 @@ def remove_mirror(base_dir: Path | None, state: GuardState) -> SyncResult:
 
 def identity_files(base_dir: Path | None, state: GuardState) -> list[str]:
     """Recorded files that belong to the identity setup, not to the guards: the shim,
-    ``allowed_signers``, the cap fragments and, while it holds the tier mirror, Carter's git file.
+    ``allowed_signers``, the cap fragments and, while it holds the hook tier, Carter's git file.
     ``guard remove`` leaves them (and their hash records) alone; ``identity remove`` takes them."""
     carter = carter_dir(base_dir)
     main = carter_gitconfig_path(base_dir)

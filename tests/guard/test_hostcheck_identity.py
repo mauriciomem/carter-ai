@@ -90,14 +90,14 @@ class TestMirror:
         self, home: Path, fake: FakeGitHub, key: KeyPair, tmp_path: Path
     ) -> None:
         make(fake, key)
-        assert levels(run(tmp_path), "tier mirror") == ["ok"]
+        assert levels(run(tmp_path), "hook tier") == ["ok"]
 
     def test_a_missing_file_is_red(
         self, home: Path, fake: FakeGitHub, key: KeyPair, tmp_path: Path
     ) -> None:
         make(fake, key)
         (home / ".carter" / "gitconfig").unlink()
-        item = find(run(tmp_path), "tier mirror", "missing")
+        item = find(run(tmp_path), "hook tier", "missing")
         assert item and item.level == "red" and item.fix == "Run `carter update`."
 
     def test_a_wrong_email_or_fingerprint_is_red(
@@ -107,7 +107,7 @@ class TestMirror:
         cfg_file = home / ".carter" / "gitconfig"
         # the user's edit is not Carter's file any more, but the value the guard reads is what matters
         cfg_file.write_text(cfg_file.read_text().replace(key.fingerprint, "SHA256:other"))
-        assert find(run(tmp_path), "tier mirror", "carter.llmFingerprint differs")
+        assert find(run(tmp_path), "hook tier", "carter.llmFingerprint differs")
 
     def test_a_cap_added_without_update_is_red_because_the_guard_still_reads_t2(
         self, home: Path, fake: FakeGitHub, key: KeyPair, tmp_path: Path
@@ -119,7 +119,7 @@ class TestMirror:
             replace(load_identity(), workspaces={str(ws.resolve()): Workspace(max_tier="t1")}),
             home / ".carter" / "config.toml",
         )
-        item = find(run(ws), "tier mirror", "config.toml allows t1")
+        item = find(run(ws), "hook tier", "config.toml allows t1")
         assert item and item.level == "red" and "agent commits fail" in item.text
 
     def test_a_cap_removed_without_update_is_red_too_and_t1_vs_t0_is_only_a_warning(
@@ -140,11 +140,11 @@ class TestMirror:
         write_config(
             replace(capped, workspaces={}), home / ".carter" / "config.toml"
         )  # cap removed in config.toml only
-        assert find(run(ws), "tier mirror", "config.toml allows t2").level == "red"  # type: ignore[union-attr]
+        assert find(run(ws), "hook tier", "config.toml allows t2").level == "red"  # type: ignore[union-attr]
         # t0 cap vs t1 mirror: no T2 involved, the trailer differs only
         t0 = replace(capped, workspaces={str(ws.resolve()): Workspace(max_tier="t0")})
         write_config(t0, home / ".carter" / "config.toml")
-        item = find(run(ws), "tier mirror", "config.toml allows t0")
+        item = find(run(ws), "hook tier", "config.toml allows t0")
         assert item and item.level == "warn"
 
 
@@ -164,7 +164,7 @@ class TestFragmentsAndWorktrees:
     ) -> None:
         make(fake, key)
         ws = self.capped(home, tmp_path)
-        assert levels(run(ws), "cap fragment") == ["ok"]
+        assert levels(run(ws), "workspace cap") == ["ok"]
 
     def test_a_malformed_fragment_is_red_and_says_git_fails_there(
         self, home: Path, fake: FakeGitHub, key: KeyPair, tmp_path: Path
@@ -173,7 +173,7 @@ class TestFragmentsAndWorktrees:
         self.capped(home, tmp_path)
         (frag,) = (home / ".carter" / "gitconfig.d").iterdir()
         frag.write_text("[carter\n\ttier = broken\n")
-        item = find(run(tmp_path), "cap fragment", "malformed")
+        item = find(run(tmp_path), "workspace cap", "malformed")
         assert (
             item
             and item.level == "red"
@@ -188,9 +188,9 @@ class TestFragmentsAndWorktrees:
         self.capped(home, tmp_path)
         (frag,) = (home / ".carter" / "gitconfig.d").iterdir()
         frag.write_text(frag.read_text() + "# mine\n")
-        assert levels(run(tmp_path), "cap fragment") == ["warn"]
+        assert levels(run(tmp_path), "workspace cap") == ["warn"]
         frag.unlink()
-        assert levels(run(tmp_path), "cap fragment") == ["red"]
+        assert levels(run(tmp_path), "workspace cap") == ["red"]
 
     def test_worktree_gaps_are_warnings_naming_the_path(
         self, home: Path, fake: FakeGitHub, key: KeyPair, tmp_path: Path
@@ -228,8 +228,8 @@ class TestShimAndAgent:
     ) -> None:
         make(fake, key)
         items = run(tmp_path)
-        assert find(items, "shim", "hash matches").level == "ok"  # type: ignore[union-attr]
-        assert not find(items, "shim", "another agent socket")
+        assert find(items, "signing helper", "is Carter's and unchanged").level == "ok"  # type: ignore[union-attr]
+        assert not find(items, "signing helper", "another agent socket")
 
     def test_an_edited_shim_is_red(
         self, home: Path, fake: FakeGitHub, key: KeyPair, tmp_path: Path
@@ -237,7 +237,7 @@ class TestShimAndAgent:
         make(fake, key)
         shim = home / ".carter" / "bin" / "carter-ssh-sign"
         shim.write_text(shim.read_text() + "# edited\n")
-        item = find(run(tmp_path), "shim", "agent commits fail")
+        item = find(run(tmp_path), "signing helper", "agent commits fail")
         assert item and item.level == "red"
 
     def test_a_shim_naming_another_socket_is_red(
@@ -249,7 +249,7 @@ class TestShimAndAgent:
             replace(cfg, signing=replace(cfg.signing, agent_socket="/tmp/moved.sock")),
             home / ".carter" / "config.toml",
         )
-        assert find(run(tmp_path), "shim", "another agent socket").level == "red"  # type: ignore[union-attr]
+        assert find(run(tmp_path), "signing helper", "another agent socket").level == "red"  # type: ignore[union-attr]
 
     def test_a_missing_allowed_signers_is_a_warning(
         self, home: Path, fake: FakeGitHub, key: KeyPair, tmp_path: Path
@@ -282,7 +282,7 @@ class TestShimAndAgent:
     ) -> None:
         make(fake, key)
         monkeypatch.setattr(hostcheck_id, "probe_setup", lambda *_a: Probe(state))
-        item = find(run(tmp_path), "agent")
+        item = find(run(tmp_path), "signing agent")
         assert item and item.level == level and needle in item.text
 
     @real_ssh
@@ -290,9 +290,9 @@ class TestShimAndAgent:
         self, home: Path, fake: FakeGitHub, key: KeyPair, real_ssh_agent, tmp_path: Path
     ) -> None:  # type: ignore[no-untyped-def]
         make(fake, key, str(real_ssh_agent.sock))
-        assert find(run(tmp_path), "agent").level == "info"  # type: ignore[union-attr]
+        assert find(run(tmp_path), "signing agent").level == "info"  # type: ignore[union-attr]
         assert real_ssh_agent.add(key) == 0
-        assert find(run(tmp_path), "agent").level == "ok"  # type: ignore[union-attr]
+        assert find(run(tmp_path), "signing agent").level == "ok"  # type: ignore[union-attr]
 
 
 class TestHygiene:
@@ -301,7 +301,7 @@ class TestHygiene:
     ) -> None:
         make(fake, key)
         register(fake, key.blob, auth=(key.blob,))
-        item = find(run(tmp_path, fetch=hostcheck_id.live_fetch), "key hygiene", "AUTHENTICATION")
+        item = find(run(tmp_path, fetch=hostcheck_id.live_fetch), "key on GitHub", "AUTHENTICATION")
         assert item and item.level == "red"
 
     def test_a_clean_account_is_ok_and_requests_carry_no_credentials(
@@ -316,7 +316,7 @@ class TestHygiene:
         monkeypatch.setenv("GH_TOKEN", SENTINEL)
         fake.requests.clear()
         items = run(tmp_path, fetch=hostcheck_id.live_fetch)
-        assert levels(items, "key hygiene") == ["ok"]
+        assert levels(items, "key on GitHub") == ["ok"]
         assert (
             fake.requests
             and fake.authorized_requests() == []
@@ -334,7 +334,7 @@ class TestHygiene:
         make(fake, key)
         register(fake, throwaway_key("ed25519").blob)
         item = find(
-            run(tmp_path, fetch=hostcheck_id.live_fetch), "key hygiene", "not an SSH signing key"
+            run(tmp_path, fetch=hostcheck_id.live_fetch), "key on GitHub", "not an SSH signing key"
         )
         assert item and item.level == "warn"
 
@@ -344,9 +344,9 @@ class TestHygiene:
         make(fake, key)
         fake.on("GET", f"/{LOGIN}.keys", Reply(502, "{}"))
         fake.on("GET", f"/users/{LOGIN}/ssh_signing_keys", Reply(502, "{}"))
-        got = levels(run(tmp_path, fetch=hostcheck_id.live_fetch), "key hygiene")
+        got = levels(run(tmp_path, fetch=hostcheck_id.live_fetch), "key on GitHub")
         assert got == ["info", "info"]
-        assert levels(run(tmp_path, fetch=None), "key hygiene") == ["info"]
+        assert levels(run(tmp_path, fetch=None), "key on GitHub") == ["info"]
 
 
 class TestGuardsAndGroups:
@@ -354,8 +354,38 @@ class TestGuardsAndGroups:
         self, home: Path, fake: FakeGitHub, key: KeyPair, tmp_path: Path
     ) -> None:
         make(fake, key)
-        item = find(run(tmp_path), "guards", "no commit guard")
+        item = find(run(tmp_path), "guards", "commit hooks")
         assert item and item.level == "red"
+
+    def test_a_declined_hooks_group_is_named_with_the_command_that_asks_again(
+        self, home: Path, fake: FakeGitHub, key: KeyPair, tmp_path: Path
+    ) -> None:
+        make(fake, key)
+        state = load(guard_state_path(None))
+        state.consent("hooks", "declined", "2026-11-08", 2)
+        save(state, guard_state_path(None))
+        item = find(run(tmp_path), "guards", "commit hooks")
+        assert item and item.level == "red"
+        assert "declined" in item.text and "2026-11-08" in item.text
+        assert "carter guard install --only hooks" in item.fix
+
+    def test_on_an_old_git_the_group_to_ask_again_is_repo_hooks(
+        self, home: Path, fake: FakeGitHub, key: KeyPair, tmp_path: Path
+    ) -> None:
+        make(fake, key)
+        state = load(guard_state_path(None))
+        state.consent("repo_hooks", "declined", "2026-11-08", 2)
+        save(state, guard_state_path(None))
+        item = find(run(tmp_path, git=(2, 45)), "guards", "commit hooks")
+        assert item and "carter guard install --only repo_hooks" in item.fix
+
+    def test_when_nothing_was_declined_the_plain_command_is_the_fix(
+        self, home: Path, fake: FakeGitHub, key: KeyPair, tmp_path: Path
+    ) -> None:
+        make(fake, key)
+        item = find(run(tmp_path), "guards", "commit hooks")
+        assert item and "declined" not in item.text
+        assert item.fix == "Run `carter guard install` in your terminal."
 
     def test_with_hooks_the_note_is_info_and_old_git_is_red(
         self, home: Path, fake: FakeGitHub, key: KeyPair, tmp_path: Path
@@ -365,7 +395,7 @@ class TestGuardsAndGroups:
         state.consent("hooks", "accepted", "2026-11-04", 2)
         save(state, guard_state_path(None))
         items = run(tmp_path, git=(2, 39))
-        assert find(items, "guards", "fail closed").level == "info"  # type: ignore[union-attr]
+        assert find(items, "guards", "cannot be signed").level == "info"  # type: ignore[union-attr]
         assert find(items, "git", "E-GIT-OLD").level == "red"  # type: ignore[union-attr]
 
     def test_the_alias_consent_is_listed(
@@ -393,7 +423,12 @@ class TestGuardsAndGroups:
     ) -> None:
         identity_add.apply_add(identity_add.plan_add(identity_add.AddRequest(LOGIN)))
         areas = {i.area for i in run(tmp_path)}
-        assert "tier mirror" in areas and not areas & {"shim", "agent", "key hygiene", "guards"}
+        assert "hook tier" in areas and not areas & {
+            "signing helper",
+            "signing agent",
+            "key on GitHub",
+            "guards",
+        }
 
 
 class TestTheCommand:
@@ -425,8 +460,10 @@ class TestTheCommand:
         }
         assert before == after
         assert (
-            code == 1 and "RED   guards: T2 is configured but no commit guard is installed" in out
+            code == 1
+            and "RED   guards: the LLM signing key (T2) is set up but the commit hooks are not installed"
+            in out
         )
         assert SENTINEL not in out and key.blob not in out and str(key.pub_path) not in out
-        assert "OK    key hygiene: the key is absent from the account's login keys" in out
+        assert "OK    key on GitHub: the key is absent from the account's login keys" in out
         assert fake.authorized_requests() == []

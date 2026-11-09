@@ -100,7 +100,7 @@ only if the key has a passphrase), and writes:
 | the identity and the key's public half, and the private key's **path** (never its content) | `~/.carter/config.toml` (the previous file is kept in `~/.carter/backups/`) |
 | a small signing script that only the LLM key can use | `~/.carter/bin/carter-ssh-sign` |
 | the public keys that count as the LLM's | `~/.carter/hooks/allowed_signers` |
-| the "tier mirror" the git hooks read | `~/.carter/gitconfig` |
+| the "hook tier" the git hooks read | `~/.carter/gitconfig` |
 
 Everything is recorded with a checksum so that Carter later removes only what is still unchanged. If
 something fails half-way, every file is put back. With only `--login` you get **T1**. Running `add`
@@ -291,7 +291,7 @@ max_tier = "t1"
 ```
 
 Then run `carter update` in your terminal. The plugin reads the file directly, but the git hooks read a
-copy (the tier mirror and one small fragment per capped workspace) that `carter update` refreshes. If
+copy (the hook tier and one small fragment per capped workspace) that `carter update` refreshes. If
 the two disagree, an agent commit is rejected with a message that says "run `carter update`". A change
 of `max_tier`, `role` or `require_tier` always needs `carter update`; it asks nothing.
 
@@ -322,7 +322,7 @@ refuses any commit whose committer is the LLM and that has no valid LLM signatur
 ```bash
 carter identity show          # who is who, the key's state, the guards, nothing secret
 carter identity verify        # signs a test commit in a temporary repo and checks it
-carter check --host           # the whole machine: mirror, shim, agent, hooks, GitHub's key lists
+carter check --host           # the whole machine: hook tier, signing helper, agent, hooks, GitHub's key lists
 ```
 
 `verify --remote <owner/repo> --sha <sha>` asks GitHub whether a pushed commit is Verified.

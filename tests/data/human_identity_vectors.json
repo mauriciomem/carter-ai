@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "note": "Plan 006 K2. One oracle for carter.identity.coauthor.validate (Python) and the POSIX check in the rendered guard script. llm_email is the LLM's noreply address. problem is '' for a valid identity, else one of: missing-name, missing-email, bad-name, bad-email, llm-email, fallback. Plan 006 K2 narrowed by the maintainer: the state-commit fallback is the PAIR name Carter + state@carter.invalid; each alone is a valid identity. carter-bot@* stays a fallback by itself.",
+  "note": "One oracle for carter.identity.coauthor.validate (Python) and the POSIX check in the rendered guard script. llm_email is the LLM's noreply address. problem is '' for a valid identity, else one of: missing-name, missing-email, bad-name, bad-email, llm-email, fallback. The state-commit fallback is the PAIR name Carter + state@carter.invalid; each alone is a valid identity. carter-bot@* stays a fallback by itself.",
   "llm_email": "4242+llm-bot@users.noreply.github.com",
   "cases": [
     {

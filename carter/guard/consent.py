@@ -165,12 +165,37 @@ def resolve_consents(
     return plan
 
 
+COMMIT_GUARDS = ("hooks", "repo_hooks")  # the groups that install the commit hooks
+
+
+def declined_commit_guards(
+    state: GuardState, unavailable: Mapping[str, str] | None = None
+) -> list[str]:
+    """The declined commit-hook groups, while no commit-hook group is accepted.
+
+    With the LLM signing key (T2) configured, these are what a RED "no commit hooks" needs;
+    a group that cannot work on this git (``unavailable``) is not counted.
+    """
+    if set(COMMIT_GUARDS) & set(accepted_groups(state)):
+        return []
+    return [
+        g
+        for g in COMMIT_GUARDS
+        if state.consents.get(g, {}).get("decision") == "declined" and g not in (unavailable or {})
+    ]
+
+
 def to_offer(
-    state: GuardState, *, only: Sequence[str] | None, unavailable: Mapping[str, str] | None = None
+    state: GuardState,
+    *,
+    only: Sequence[str] | None,
+    unavailable: Mapping[str, str] | None = None,
+    reoffer: Sequence[str] = (),
 ) -> list[str]:
     """The groups the single install question covers: the ones in scope that are undecided,
     named in ``--only``, or accepted at an older revision and not refused. A group declined
-    earlier stays declined, and an optional group needs ``--only``."""
+    earlier stays declined unless the caller says the configuration needs it (``reoffer``),
+    and an optional group needs ``--only``."""
     groups = {g.id: g for g in consent_groups()}
     scope = list(only) if only is not None else list(groups)
     out = []
@@ -183,7 +208,8 @@ def to_offer(
         stale = prior == "accepted" and int(rec.get("rev", 1)) < group.rev
         refused = (state.offer(name) or {}).get("rev", 0) >= group.rev
         explicit = only is not None and name in only
-        if explicit or (prior is None and not group.optional) or (stale and not refused):
+        needed = name in reoffer and prior == "declined"
+        if explicit or (prior is None and not group.optional) or (stale and not refused) or needed:
             out.append(name)
     return out
 

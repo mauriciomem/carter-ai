@@ -148,7 +148,7 @@ test("a timeout writes failed with its reason, and every shell then becomes an a
   assert.equal(carter.state(), "failed")
   const record = JSON.parse(readFileSync(join(r.iso.plugin.status_dir, "4242.json"), "utf8"))
   assert.deepEqual([record.state, record.failed_reason], ["failed", "timeout"])
-  assert.match(r.logs.join("\n"), /self-test failed on OpenCode 2\.1\.4/)
+  assert.match(r.logs.join("\n"), /own check failed on OpenCode 2\.1\.4/)
   const bang = event("echo from-bang", { SSH_AUTH_SOCK: "/s" }) // unmarked: would be a human shell
   await carter.createBefore(bang)
   assert.equal(bang.env.CARTER_AGENT_SHELL, "1")
@@ -270,7 +270,7 @@ test("the marker is added only after the gate allowed the call, and the timer is
   r.cleanup()
 })
 
-test("slice B: a failed self-test tells the adapter once, so the broker tools can drop out", async () => {
+test("a failed self-test tells the adapter once, so the broker tools can drop out", async () => {
   let told = 0
   const r = rig({ onFailed: () => void told++ })
   const carter = createCarter(r.deps)
@@ -286,7 +286,7 @@ test("slice B: a failed self-test tells the adapter once, so the broker tools ca
   r.cleanup()
 })
 
-test("slice B: brokerOn needs b_enabled in the validated file and a self-test that is not failed", async () => {
+test("brokerOn needs b_enabled in the validated file and a self-test that is not failed", async () => {
   const r = rig({}, (iso) => {
     iso.plugin.b_enabled = true
     iso.plugin.b_git = "/usr/bin/git"

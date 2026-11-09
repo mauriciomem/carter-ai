@@ -27,7 +27,7 @@ Terraform Enterprise, also set `TFE_ADDRESS`; leave it unset for HCP Terraform.
 [`.env.example`](../../.env.example) lists every variable. The GitHub token is
 **not** an environment variable: `carter-github` reads it from a file.
 
-A missing token is only a warning; the install continues:
+A missing token does not stop the install; it prints a warning and goes on:
 
 ```text
 → Checking credentials...
@@ -36,6 +36,10 @@ A missing token is only a warning; the install continues:
   ⚠ TFE_TOKEN
     export TFE_TOKEN="your-value"
 ```
+
+The server itself is not skipped. Without the token file OpenCode starts `carter-github` with an
+empty token, which the GitHub server refuses, so it shows as failed (`opencode mcp list`) and has
+no tools until you run `carter github-token set` in your own terminal and restart OpenCode.
 
 The Atlassian server needs no token, but you sign in once
 ([OpenCode MCP servers](https://opencode.ai/v2/docs/mcp-servers/)): run `/mcps` in

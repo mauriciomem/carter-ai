@@ -109,19 +109,21 @@ def key_items(cfg: IdentityConfig, home: Path) -> list[Item]:
             Item("red", "signing key", f"incomplete: {exc}", "Run `carter identity add`."),
         ]
     if cfg.signing.program:
-        out.append(Item("info", "agent", "managed by the signing program; not probed"))
+        out.append(Item("info", "signing agent", "managed by the signing program; not probed"))
     elif setup.file_mode:
-        out.append(Item("ok", "agent", "no passphrase: the shim signs from the key file"))
+        out.append(
+            Item("ok", "signing agent", "no passphrase: the signing helper signs from the key file")
+        )
     else:
         level, text, fix = PROBE_TEXT[probe_setup(setup, cfg).state]
-        out.append(Item(level, "agent", text, fix))  # type: ignore[arg-type]
+        out.append(Item(level, "signing agent", text, fix))  # type: ignore[arg-type]
     if shim_state(home).ok:
-        out.append(Item("ok", "shim", f"{shim_path(home)} is Carter's (hash matches)"))
+        out.append(Item("ok", "signing helper", f"{shim_path(home)} is Carter's and unchanged"))
     else:
         out.append(
             Item(
                 "red",
-                "shim",
+                "signing helper",
                 f"{shim_path(home)} is missing, not executable or changed",
                 "Run `carter identity add` again.",
             )
@@ -131,13 +133,13 @@ def key_items(cfg: IdentityConfig, home: Path) -> list[Item]:
         out.append(
             Item(
                 "red",
-                "shim",
-                "the shim names a different agent socket than config.toml",
+                "signing helper",
+                "the signing helper uses another agent socket than config.toml says",
                 "Run `carter identity add` again.",
             )
         )
     elif named is not None:
-        out.append(Item("ok", "shim", "the shim and the agent socket agree"))
+        out.append(Item("ok", "signing helper", "the signing helper and the agent socket agree"))
     return out
 
 
@@ -153,14 +155,16 @@ def mirror_items(cfg: IdentityConfig, home: Path, workspace: str | None, cwd: Pa
     state = mirror.mirror_state(cfg, {"tier": seen}, workspace)
     if state == "in-sync":
         return [
-            Item("ok", "tier mirror", f"the guard reads {seen or 't0'} here, as config.toml says")
+            Item(
+                "ok", "hook tier", f"the commit hooks use {seen or 't0'} here, as config.toml says"
+            )
         ]
     why = "above" if state == "stale-added" else "below"
     return [
         Item(
             "warn",
-            "tier mirror",
-            f"the guard reads {seen or 't0'}, {why} config.toml",
+            "hook tier",
+            f"the commit hooks use {seen or 't0'}, {why} config.toml",
             "Run `carter update`.",
         )
     ]

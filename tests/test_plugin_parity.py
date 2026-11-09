@@ -211,7 +211,7 @@ def test_the_ts_has_no_role_logic_and_isolation_json_is_unchanged() -> None:
             text.replace("human-identity-invalid", ""),
         ), name
     vectors = json.loads((CORE.parents[2] / "tests" / "data" / "plugin_vectors.json").read_text())
-    # slice B (schema 2) moved the golden hash once, away from the 2a/2b/2c value d5456e7d...
+    # schema 2 moved the golden hash once, away from the schema 1 value d5456e7d...
     assert vectors["isolation"]["sha256"] != (
         "d5456e7d8b82dd91b901cc3ade43fb8dbeecd0bfcbe32556f754797782a40a6e"
     )

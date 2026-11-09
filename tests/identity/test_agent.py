@@ -1,4 +1,4 @@
-"""The dedicated agent core report 22, ).
+"""The dedicated agent core.
 
 Paths and permission rules are unit-tested with fakes; the probe, unlock and lock run against real
 ``ssh-agent``/``ssh-add`` started under the ``/tmp/c2b-*`` base of the ``real_ssh_agent`` fixtures.

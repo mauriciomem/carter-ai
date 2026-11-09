@@ -61,11 +61,11 @@ class TestHealthyInstall:
         assert res.exit_code == 0, res.output
         found = levels(res.output)
         assert "RED" not in found
-        assert any("carry the G2 rules" in t for t in found["OK"])
+        assert any("carry the guard rules" in t for t in found["OK"])
         warns = " ".join(found["WARN"])
         assert "not loaded yet: start OpenCode" in warns  # installed, no server has loaded it
         assert "not provisioned" in warns  # no token yet: a WARN, never a failure
-        assert "plugin and isolation.json match (hash)" in " ".join(found["OK"])
+        assert "plugin and isolation.json match" in " ".join(found["OK"])
         assert res.output.rstrip().endswith("✓ host  2 warnings")
 
     def test_a_pre_2a_user_keeps_the_1g_wording_and_sees_rev_2_pending(self, stack) -> None:
@@ -120,7 +120,7 @@ class TestNothingInstalled:
         stack.fake()
         res = host()
         assert res.exit_code == 0
-        assert "G2 off: no guards are installed" in res.output
+        assert "the guards are off: none is installed" in res.output
         assert "carter guard install" in res.output
         assert "plugin not installed" not in res.output  # nothing consented, nothing to qualify
 
@@ -133,9 +133,9 @@ class TestRedItems:
         stack.fake(before=debug_config())
         res = host()
         assert res.exit_code == 1
-        assert "carter-pm.md: its permissions differ from what Carter renders" in res.output
+        assert "carter-pm.md: its permissions differ from what Carter writes" in res.output
         reds = levels(res.output)["RED"]
-        assert sum("differ from what Carter renders" in r for r in reds) == 1  # its own line
+        assert sum("differ from what Carter writes" in r for r in reds) == 1  # its own line
 
     def test_a_lost_provider_is_red(self, stack) -> None:
         target = config_target(None)
@@ -210,7 +210,7 @@ class TestRedItems:
         monkeypatch.setattr(hostcheck, "_files", lambda s: (_ for _ in ()).throw(RuntimeError("x")))
         res = host()
         assert res.exit_code == 1 and "check could not run (RuntimeError)" in res.output
-        assert "carry the G2 rules" in res.output
+        assert "carry the guard rules" in res.output
 
 
 class TestGitIncludeLine:
@@ -288,7 +288,7 @@ class TestWarnsAndLists:
             server_env={"GH_TOKEN": "ghp_SENTINELVALUE", "GITHUB_TOKEN": "x", "PATH": "/bin"},
             reader=lambda: {"providers": {}, "policies": []},
         )
-        warn = [i for i in items if i.area == "server env" and i.level == "warn"]
+        warn = [i for i in items if i.area == "server environment" and i.level == "warn"]
         assert warn and "GH_TOKEN, GITHUB_TOKEN" in warn[0].text
         assert "SENTINEL" not in repr(items)
 

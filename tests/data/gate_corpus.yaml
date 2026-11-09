@@ -325,7 +325,7 @@ cases:
   command: git -c remote.origin.pushurl= fetch
   expect: deny
   rule: config-flags
-  why: 'E11: an empty value resets the multi-valued pushurl'
+  why: 'an empty value resets the multi-valued pushurl'
 - id: fz-control-plugin-singular
   command: echo 'x' > ~/.config/opencode/plugin/x.ts
   expect: deny

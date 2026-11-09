@@ -178,11 +178,11 @@ class TestAmbientCarterVariablesDoNotLeak:
         assert proc.returncode == 0, proc.stdout + proc.stderr
 
 
-# --- the 1G host surfaces (OpenCode config, gh, network) ---------------
+# --- the host surfaces (OpenCode config, gh, network) ---------------
 
 
 class TestOpencodeConfigIsSandboxed:
-    """Slice 1G writes the global OpenCode config; a bug must land in the sandbox."""
+    """The guards write the global OpenCode config; a bug must land in the sandbox."""
 
     def test_default_config_path_resolves_into_the_fixture_home(self, real_home: Path) -> None:
         path = Path.home() / ".config" / "opencode" / "opencode.json"

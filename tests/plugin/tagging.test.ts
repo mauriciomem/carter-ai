@@ -3,7 +3,7 @@ import assert from "node:assert/strict"
 import { MARK_PREFIX, countState, detect, isPolluted, mark, newNonce, tagShell } from "../../carter/plugin/core.ts"
 import { expand, isoDoc, vectors } from "./helpers.ts"
 
-test("the marker format is the App C.2 one", () => {
+test("the marker format is the documented one", () => {
   assert.equal(MARK_PREFIX, vectors.marker.prefix)
 })
 

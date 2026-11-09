@@ -1,5 +1,5 @@
 {
- "_about": "Hostile B push operands run against real git 2.56 with a fake ssh (plan 007 step 4). 'reaches_transport_or_changes_remote' = git started ssh, exited 0 or changed the remote WITHOUT a validator; '--' alone blocked the rest. <SHA> = the pinned commit, <MARK> = a path whose creation proves code ran, <BARE> a local bare repo. expect_validator is the contract for step 8. 'no-dashdash' rows are shapes the builder must never produce.",
+ "_about": "Hostile push operands run against real git 2.56 with a fake ssh. 'reaches_transport_or_changes_remote' = git started ssh, exited 0 or changed the remote WITHOUT a validator; '--' alone blocked the rest. <SHA> = the pinned commit, <MARK> = a path whose creation proves code ran, <BARE> a local bare repo. expect_validator is the contract the validators must meet. 'no-dashdash' rows are shapes the builder must never produce.",
  "git_version": "2.56.0",
  "cases": [
   {

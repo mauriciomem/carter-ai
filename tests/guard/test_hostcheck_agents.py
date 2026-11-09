@@ -1,5 +1,5 @@
 """``check --host``: per-agent denies from ``opencode debug agents`` and the version bands
-fixtures, C23)."""
+fixtures)."""
 
 from __future__ import annotations
 
@@ -117,7 +117,8 @@ class TestVersionBands:
         assert item.level == level
         if level == "warn":
             assert (
-                "E-OPENCODE-VERSION" in item.text and "relying on the plugin self-test" in item.text
+                "E-OPENCODE-VERSION" in item.text
+                and "relying on the plugin's own check" in item.text
             )
 
     def test_old_git_is_a_warn_with_the_registered_text(self) -> None:
@@ -132,7 +133,7 @@ class TestVersionBands:
         monkeypatch.setattr(prereqs, "_which", lambda _c: "/x/opencode")
         monkeypatch.setattr(prereqs, "_cmd_version", lambda *_a, **_k: "opencode v2.1.2")
         assert prereqs.require_opencode() == (2, 1, 2)
-        assert messages and "G2 untested on 2.1.2" in messages[0][-1]
+        assert messages and "the guards are untested on 2.1.2" in messages[0][-1]
         messages.clear()
         monkeypatch.setattr(prereqs, "_cmd_version", lambda *_a, **_k: "opencode v2.1.4")
         prereqs.require_opencode()

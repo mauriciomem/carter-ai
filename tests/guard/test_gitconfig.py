@@ -542,7 +542,7 @@ class TestDirectFallback:
 
 
 class TestApplyKeys:
-    ENTRIES = [("alias.ai-commit", "!true")]  # not a `carter.*` key: those are the tier mirror
+    ENTRIES = [("alias.ai-commit", "!true")]  # not a `carter.*` key: those are the hook tier
 
     def apply(self, tmp_path: Path, mode: str, entries=None, **kw):
         state = GuardState()

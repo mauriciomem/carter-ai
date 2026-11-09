@@ -588,7 +588,7 @@ ASK_KEYS = ("metadata", "resources")
 ISOLATION_B_KEYS = ("b_enabled", "b_caller", "broker_args", "b_git", "b_gh")
 CONSENT_REV_PLUGIN, CONSENT_REV_BROKER = 2, 3
 HEADLESS_PROFILE = "opencode-headless.json"
-BROKER_CONFIG_KEYS = ("min_dwell_ms",)  # no home key (maestro decision,
+BROKER_CONFIG_KEYS = ("min_dwell_ms",)  # no home key
 BROKER_TS_MAX_LINES, INDEX_TS_MAX_LINES = 200, 80
 # where git and gh may be found at install (never PATH at runtime)
 TOOL_DIRS = ("/usr/bin", "/bin", "/usr/local/bin", "/opt/homebrew/bin")
@@ -676,7 +676,7 @@ def test_the_headless_profile_name_and_content() -> None:
     assert paths.headless_profile_path(None).name == HEADLESS_PROFILE
     doc = json.loads(plugin.render_headless())
     assert list(doc) == ["agents"] and list(doc["agents"]) == [DEVOPS_AGENT]
-    assert "policies" not in doc  # a global tool.use policy never matches a plugin tool (A6)
+    assert "policies" not in doc  # a global tool.use policy never matches a plugin tool
     assert {r["action"] for r in doc["agents"][DEVOPS_AGENT]["permissions"]} == set(
         AGENT_PERMISSION_DENIES
     )

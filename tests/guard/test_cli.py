@@ -122,7 +122,7 @@ class TestDryRun:
             assert f"{group:<18} would ask" in out
         assert f"{'alias':<18} optional, not part of --yes" in out
         assert f"{'repo_hooks':<18} not on this machine: not needed" in out  # git >= 2.54 here
-        assert "Carter agents would carry" in out and "G2 rule(s)" in out
+        assert "Carter agents would carry" in out and "guard rule(s)" in out
         assert "+ deny-git-push" not in out  # no global policies any more
         assert "per-agent denies for built-in agents: build, plan, general, explore" in out
         assert "carter-engineer" not in out
@@ -135,7 +135,7 @@ class TestDryRun:
     def test_only_limits_the_preview(self, stack) -> None:
         stack.fake()
         out = guard("install", "--dry-run", "--only", "sudo-docker").output
-        assert "would carry 2 G2 rule(s)" in out and "deny-git-push" not in out  # sudo, docker
+        assert "would carry 2 guard rule(s)" in out and "deny-git-push" not in out  # sudo, docker
         assert "per-agent" not in out
 
     def test_a_declined_group_stays_declined_in_the_preview(self, stack, human_tty) -> None:
@@ -498,7 +498,7 @@ class TestStatus:
             and "alias              optional, not installed" in out
         )
         assert "no global policies" in out and "MISSING" not in out
-        assert "Per-agent denies recorded for: build, explore, general, plan" in out
+        assert "Agents with `carter_push` denied: build, explore, general, plan" in out
         assert "include.path: present in" in out and "ok      " in out
         assert tree_hash(stack.home) == before
 
@@ -507,7 +507,7 @@ class TestStatus:
         decline("sudo-docker")
         guard("install", "--yes")
         out = guard("status").output
-        assert "sudo-docker" in out and "declined" in out and "residual" in out
+        assert "sudo-docker" in out and "declined" in out and "asks again" in out
 
     def test_a_corrupt_state_is_reported_without_writing(self, stack) -> None:
         path = guard_state_path(None)
