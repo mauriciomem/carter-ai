@@ -1,5 +1,5 @@
 # ruff: noqa: E501
-"""The broker CLI and the refusal layer (plan 007 steps 13-14): exit codes, JSON, pollution, record."""
+"""The broker CLI and the refusal layer: exit codes, JSON, pollution, record."""
 
 from __future__ import annotations
 
@@ -92,7 +92,7 @@ class TestPlanAndExec:
 class TestUsage:
     @pytest.mark.parametrize(
         "argv",
-        [[], ["push"], ["push", "--plan"], ["nope"], ["record"], ["push", "--plan", "--exec"], ["pr", "--plan"],  # D72: there is no pr verb any more
+        [[], ["push"], ["push", "--plan"], ["nope"], ["record"], ["push", "--plan", "--exec"], ["pr", "--plan"],  # there is no pr verb any more
          ["record", "--outcome", "maybe", "--agent", "a", "--session", "s", "--root", "r"]],
     )  # fmt: skip
     def test_bad_usage_exits_two_with_a_json_line(self, world: World, argv: list[str]) -> None:

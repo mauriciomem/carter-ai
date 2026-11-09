@@ -1,5 +1,5 @@
 """Atomic, verified, reversible writes of ``policies`` into the OpenCode config
-(RFC-0007 App C.6.3; plan 003 step 10). Only ``fake_opencode`` is ever run, never the real
+. Only ``fake_opencode`` is ever run, never the real
 binary, and only under the sandbox home."""
 
 from __future__ import annotations
@@ -24,7 +24,7 @@ PROVIDERS = {"anthropic": {"settings": {"apiKey": SENTINEL}}, "openai": {}}
 
 
 def st(id_: str, resource: str, effect: str = "deny") -> Statement:
-    return Statement(id_, "g2", "tool.use", resource, effect, "test")
+    return Statement(id_, "g2", "tool.use", resource, effect)
 
 
 A = st("deny-a", "shell:aaa *")

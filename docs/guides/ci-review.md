@@ -1,9 +1,8 @@
 # Review-only CI: let Carter review your pull requests
 
 Carter can review every pull request in GitHub Actions and put the review in the job summary.
-This is **CI context E: review only**. The run reads the change, reports findings and **makes no
-commits**: it has `contents: read` and nothing else, no push, no comment (unless you opt in),
-no edit. Commits in CI (contexts C and D) do not exist yet.
+The run reads the change, reports findings and **makes no commits**: it has `contents: read` and
+nothing else, no push, no comment (unless you opt in), no edit. Carter never commits in CI.
 
 You do not need this to use Carter. It is for teams that want a second pair of eyes on every PR
 without handing a model any write access.
@@ -80,10 +79,9 @@ edit the file).
 
 `mode` resolves from `CARTER_IDENTITY_MODE`, then `[identity] mode` in `~/.carter/config.toml`,
 then `auto`. Values: `auto`, `interactive`, `review`. `auto` is `review` when a CI is detected
-(`GITHUB_ACTIONS=true`, or `CI` set to a true value) and `interactive` otherwise. Carter never
-works out that it may commit: in a detected CI even an explicit `interactive` is refused (that
-would be context C), and so are `commit` and `scheduled` (contexts C and D, not built). An unknown
-value is `E-CONFIG`, with no fallback.
+(`GITHUB_ACTIONS=true`, or `CI` set to a true value) and `interactive` otherwise. In a detected CI
+even an explicit `interactive` is refused. Any other value (`commit`, `scheduled`, a typo) is
+`E-CONFIG`, with no fallback.
 
 > [!WARNING]
 > If you export `CI=true` in your own shell, `carter commit` and the agents' commits are refused
@@ -100,6 +98,5 @@ value is `E-CONFIG`, with no fallback.
   branch in your repository. Use a key with a spending limit and consider required reviewers on the
   environment.
 - GitHub shows a first-time contributor's workflow as "needs approval"; that setting is yours.
-- The first real run on GitHub (fork skip, summary, timeout) is checked by hand; CI cannot do it.
 
-See also: [Safety and permissions](safety-and-permissions.md), [Push tool](push-and-pr-tools.md).
+See also: [Safety and permissions](safety-and-permissions.md), [Write operations](write-operations.md).

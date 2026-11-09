@@ -1,5 +1,5 @@
 # ruff: noqa: E501
-"""``carter ci install review`` (plan 008 step 5): human-only, never overwrites an edited file."""
+"""``carter ci install review``: human-only, never overwrites an edited file."""
 
 from __future__ import annotations
 

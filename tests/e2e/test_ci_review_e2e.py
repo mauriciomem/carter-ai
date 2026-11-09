@@ -1,5 +1,5 @@
 # ruff: noqa: E501
-"""The review driver on a real OpenCode, runner-like (plan 008 step 6; RFC-0007 App C.10).
+"""The review driver on a real OpenCode, runner-like.
 
 A real OpenCode (2.1.4, and 2.1.2 through ``CARTER_E2E_OPENCODE_ALT``) in its own HOME and
 loopback-only netns, the scripted mock model as the only provider, a git checkout, and the runner's

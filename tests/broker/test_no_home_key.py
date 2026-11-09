@@ -1,6 +1,6 @@
-"""There is no user-config way to redirect B's home (maestro decision, plan 007 notes).
+"""There is no user-config way to redirect the broker's home (maestro decision, .
 
-B's child ``HOME`` and the ``~/.ssh/config`` scan come from the system account entry. A
+the broker's child ``HOME`` and the ``~/.ssh/config`` scan come from the system account entry. A
 ``[broker] home`` in ``config.toml`` is one more place to plant a hostile ssh config, so the key
 does not exist: it is reported as unknown and nothing reads it.
 """

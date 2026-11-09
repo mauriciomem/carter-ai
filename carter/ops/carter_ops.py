@@ -1,8 +1,8 @@
 """Carter-ops — audit ledger and config helper for operational tasks.
 
-The model executes write operations (git, gh) directly in the terminal
-with bot attribution flags, following the ``carter-ops`` skill. This CLI only
-provides the deterministic side-channel around that:
+The model runs git and gh commands directly in the terminal, with the attribution that
+``config --emit`` prints, following the ``carter-ops`` skill. This CLI only provides the
+deterministic side-channel around that:
 
   - audit:           post-hoc audit logging after model-driven execution
   - policy-override: record a single-action strictness-policy override
@@ -35,7 +35,7 @@ from carter.config import _BASH_COMMANDS, RISK_TAXONOMY
 from carter.identity.rules import forbidden_classes
 from carter.ops.config import Config
 
-# The ops log lives in ~/.carter/state/audit/ next to b.jsonl (plan 007, C20). It is resolved when
+# The ops log lives in ~/.carter/state/audit/ next to b.jsonl. It is resolved when
 # used, not at import; a test may still point AUDIT_LOG at a file of its own.
 AUDIT_LOG: Path | None = None
 
@@ -128,7 +128,7 @@ def _handle_audit(params: dict[str, Any]) -> int:
         except (json.JSONDecodeError, TypeError):
             entry["identifiers"] = {"raw": str(identifiers_json)}
 
-    _audit(entry)  # silent on success: the agent does not echo a record nobody reads (D68 i)
+    _audit(entry)  # silent on success: the agent does not echo a record nobody reads
     return 0
 
 
@@ -144,9 +144,7 @@ def _github_write_prefixes() -> list[list[str]]:
     """Word lists of every GitHub-write command: the ``github-write`` shell table (what the
     agent permissions deny) plus the ``push-verbs`` class of ``g2_rules.json``."""
     prefixes = [p.removesuffix(" *") for p in _BASH_COMMANDS["github-write"]]
-    prefixes += [
-        item for c in forbidden_classes(all_slices=True) if c.id == "push-verbs" for item in c.items
-    ]
+    prefixes += [item for c in forbidden_classes() if c.id == "push-verbs" for item in c.items]
     return [p.lower().split() for p in dict.fromkeys(prefixes)]
 
 
@@ -208,8 +206,8 @@ def _handle_policy_override(params: dict[str, Any]) -> int:
         return 1
 
     if is_github_write(action):
-        # Every GitHub write is human-only (RFC-0007 D31, D72): the ledger must not suggest
-        # otherwise. Opening, editing and commenting on a PR are not writes of that kind (D72).
+        # Every GitHub write is human-only: the ledger must not suggest
+        # otherwise. Opening, editing and commenting on a PR are not writes of that kind.
         _audit(
             {
                 "timestamp": datetime.now(UTC).isoformat(),
@@ -278,7 +276,7 @@ def _handle_config_emit(field: str | None = None) -> int:
         emit_error(f"--field must be one of: {', '.join(data)}")
         return 1
     value = data[field]
-    # one value, no JSON: the agent reads it without printing the whole record (D68 i)
+    # one value, no JSON: the agent reads it without printing the whole record
     print(
         "true" if value is True else "false" if value is False else "" if value is None else value
     )

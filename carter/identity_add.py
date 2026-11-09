@@ -1,4 +1,4 @@
-"""``carter identity add``: derive, check and write a BYO LLM identity (plan 005 step 15, App B).
+"""``carter identity add``: derive, check and write a BYO LLM identity.
 
 The user brings the key. Carter never registers a key and never reads a private key: a public key
 comes from a ``.pub`` file or a ``key::`` literal (only ``type blob`` is kept, the literal is never
@@ -6,7 +6,7 @@ comes from a ``.pub`` file or a ``key::`` literal (only ``type blob`` is kept, t
 private key is stored as a *path* and is not opened. The checks are unauthenticated GitHub reads.
 
 ``plan_add`` does every check and every network call and writes nothing; ``apply_add`` writes
-(config.toml through the D55 writer with a backup, the shim, ``allowed_signers``, the mirror) and
+(config.toml through the writer with a backup, the shim, ``allowed_signers``, the mirror) and
 puts every file back if a write fails, so a failure leaves the tree as it was. Output names only the
 login, the id, the fingerprint and file names.
 """
@@ -58,7 +58,7 @@ class AddRequest:
     private_key: str | None = None
     agent_socket: str | None = None
     signing_program: str | None = None
-    role: str | None = None  # K10: co-author | author; None keeps what config.toml has
+    role: str | None = None  # co-author | author; None keeps what config.toml has
 
 
 @dataclass
@@ -79,7 +79,7 @@ class AddPlan:
 
 
 def key_paths(value: str, private_override: str | None = None) -> tuple[str, str]:
-    """``(public value, private path)`` from what ``--ssh-public-key`` was given (D68 c).
+    """``(public value, private path)`` from what ``--ssh-public-key`` was given.
 
     A ``key::`` literal stays a literal (the private path is then ``private_override`` or empty).
     A path may be the ``.pub`` file or the private key: the other is the same name with ``.pub``
@@ -214,14 +214,14 @@ def plan_add(
     has_old = bool(old.public_key)
     managed = bool(req.agent_socket or req.signing_program)
     if req.ssh_public_key is None:
-        # K10: a role-only change on an existing T2 identity needs no key arguments.
+        # A role-only change on an existing T2 identity needs no key arguments.
         role_only = bool(req.role) and has_old and not managed and not req.private_key
         if (has_old or managed or req.private_key) and not role_only:
             raise fail(
                 E_IDENTITY_CHECK, "a signing key is configured; pass --ssh-public-key to change it"
             )
         if req.role == "author" and not has_old:
-            raise IdentityError(E_ROLE_B_TIER)  # role b needs T2: nothing is written
+            raise IdentityError(E_ROLE_B_TIER)  # role author needs T2: nothing is written
         if role_only:
             return _finish(
                 AddPlan(

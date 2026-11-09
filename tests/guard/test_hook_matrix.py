@@ -1,7 +1,7 @@
 # ruff: noqa: E501
-"""The hook coverage matrix with the installed guard (plan 005 step 20; RFC-0007 §9, §4.4).
+"""The hook coverage matrix with the installed guard.
 
-``tests/data/hook_matrix.json`` is spike B's table (which hooks fire for every way a commit comes
+``tests/data/hook_matrix.json`` is the table of which hooks fire for every way a commit comes
 into being, git 2.56). Here the *installed* ``carter-guard`` runs as config hooks next to a
 recorder, in an agent shell with the T2 signing block and a throwaway agent:
 
@@ -32,8 +32,8 @@ from carter.aplus.sigcheck import SigIdentity, check_signatures
 from carter.gate import check as gate_check
 from carter.guard import hooks
 from carter.identity.errors import E_B_UNSIGNED
-from guard.test_carter_guard_2b import EMAIL, World, with_config
-from guard.test_git_behaviour_2b import (
+from guard.test_carter_guard_commit_events import EMAIL, World, with_config
+from guard.test_git_behaviour_signing import (
     MATRIX,
     MODES,
     NV,
@@ -155,7 +155,7 @@ class GuardLab(Lab):
 EDITOR_APPENDS = {"commit (editor)", "commit -t template"}
 # the lab's reword editor replaces the whole message: the trailer is gone with it
 EDITOR_REWRITES = {"rebase -i reword"}
-# Plan 006 K1: an agent may not change a commit's author, so the hook refuses this one (it is also
+# an agent may not change a commit's author, so the hook refuses this one (it is also
 # on the gate's forbidden list); the recorded data is the git behaviour without Carter's rule.
 AUTHOR_CHANGERS = {"commit --amend --reset-author"}
 

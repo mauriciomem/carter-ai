@@ -1,7 +1,6 @@
 """``pre-push`` end to end: real git, a ``file://`` bare remote, the sandbox HOME
-(plan 004 step 23; RFC-0007 §5 2a, §9).
 
-The hook is installed the way ``carter guard install`` does it (step 24): ``carter-guard`` in
+The hook is installed the way ``carter guard install`` does it: ``carter-guard`` in
 ``~/.carter/hooks``, ``hook.carter-guard-pre-push.*`` in ``~/.carter/gitconfig`` and one include
 line in the (sandbox) global config. It is the backstop when the OpenCode plugin is not loaded,
 so no plugin, no isolation block and no gate exist in these tests. Needs git >= 2.54.
@@ -21,7 +20,7 @@ from carter.guard.state import GuardState
 from carter.identity.errors import registry
 from carter.install.paths import carter_gitconfig_path, guard_script_path
 
-# D71: the hooks act only on the plugin's tag; another agent's AGENT/OPENCODE_* alone never block
+# the hooks act only on the plugin's tag; another agent's AGENT/OPENCODE_* alone never block
 AGENT_ENVS = [pytest.param({"CARTER_AGENT_SHELL": "1"}, id="CARTER_AGENT_SHELL")]
 OTHER_AGENT_ENVS = [
     pytest.param({"AGENT": "1"}, id="AGENT"),
@@ -38,7 +37,7 @@ def _git_version() -> tuple[int, ...]:
 
 
 pytestmark = pytest.mark.skipif(
-    _git_version() < (2, 54), reason="config-based hooks need git >= 2.54 (old git: step 25)"
+    _git_version() < (2, 54), reason="config-based hooks need git >= 2.54"
 )
 
 
@@ -85,7 +84,7 @@ def rig(tmp_path: Path) -> Rig:
 
 
 def install_hook() -> Path:
-    """What step 24's install writes, via the production functions (sandbox HOME)."""
+    """What the install writes, via the production functions (sandbox HOME)."""
     state = GuardState()
     hooks.install_script(None, state)
     script = guard_script_path(None)
@@ -124,7 +123,7 @@ class TestAgentVersusHuman:
     def test_another_agents_push_is_not_blocked_by_our_hook(
         self, env: dict[str, str], hooked: Rig
     ) -> None:
-        """D71: without the plugin's tag the hook leaves the shell alone (no Carter scope)."""
+        """without the plugin's tag the hook leaves the shell alone (no Carter scope)."""
         hooked.commit("other-agent-work")
         done = hooked.push(env)
         assert done.returncode == 0, done.stderr
@@ -142,7 +141,7 @@ class TestAgentVersusHuman:
         assert hooked.push().returncode == 0
 
     def test_scrubbed_is_human_the_documented_ad1_limit(self, hooked: Rig) -> None:
-        """An agent that adds ``CARTER_HUMAN_SHELL`` looks like a human to AD1 (RFC App C.1).
+        """An agent that adds ``CARTER_HUMAN_SHELL`` looks like a human to AD1.
         The gate and the isolation block are what stop that route; the hook cannot."""
         env = {"AGENT": "1", "CARTER_HUMAN_SHELL": "1"}
         assert hooked.push(env).returncode == 0
@@ -180,7 +179,7 @@ class TestSurvival:
         assert done.returncode != 0 and hooked.remote_head() == ""
 
     def test_no_verify_skips_the_hook_a_documented_limit(self, hooked: Rig) -> None:
-        """``git push --no-verify`` skips every pre-push hook, config hooks included (spike E 5).
+        """``git push --no-verify`` skips every pre-push hook, config hooks included (5).
         With the plugin loaded the gate rejects every ``git push``; the hook is the backstop only
         for pushes the gate never saw."""
         done = hooked.push({"CARTER_AGENT_SHELL": "1"}, "--no-verify")

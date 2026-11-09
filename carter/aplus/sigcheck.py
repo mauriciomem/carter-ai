@@ -1,9 +1,9 @@
-"""The shared signature choke point (RFC-0007 App C.5 and C.6.6).
+"""The shared signature choke point.
 
 Every LLM-committed commit in the pushed range must carry a valid signature by a key Carter
 stored: ``%G?`` = ``G`` and ``%GF`` (the signing key's fingerprint) among the stored
 fingerprints. Human-committed commits are not looked at. With no LLM signing key configured
-(T0/T1) there is nothing to check and the check passes: those tiers never sign.
+ there is nothing to check and the check passes: those tiers never sign.
 
 How it verifies, with no unlocked agent and no trust in the repository's own settings:
 

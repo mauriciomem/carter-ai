@@ -1,5 +1,5 @@
 # ruff: noqa: E501
-"""The lab for the B contract (plan 007 step 19): a REAL isolated OpenCode with Carter's own
+"""The lab for the B contract: a REAL isolated OpenCode with Carter's own
 ``carter install`` (plugin, ``isolation.json``, per-agent denies, the Carter agents), the REAL
 broker core, a fake ``ssh`` that runs ``receive-pack`` against a local bare remote, a fake ``gh``,
 a fake agent socket and a scripted human who answers OpenCode's permission prompt through the API.

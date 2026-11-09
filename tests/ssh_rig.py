@@ -1,4 +1,4 @@
-"""Throwaway OpenSSH for tests: the shared ``real_ssh_agent`` fixtures (plan 005 steps 2, 3, 7).
+"""Throwaway OpenSSH for tests: the shared ``real_ssh_agent`` fixtures .
 
 Real ``ssh-agent``/``ssh-add``/``ssh-keygen`` run only through these fixtures, never against the
 developer's agent or ``~/.ssh``:
@@ -63,10 +63,10 @@ def signed_matrix(cls: type) -> type:
 
 
 def classify_key(rc: int, stderr: str) -> str:
-    """Spike-A oracle (plan 005 step 2): what ``ssh-keygen -y -P '' -f KEY`` meant on OpenSSH 10.2.
+    """Spike-A oracle: what ``ssh-keygen -y -P '' -f KEY`` meant on OpenSSH 10.2.
 
     Exit 0 = no passphrase; every failure is 255 and only the phrase tells a passphrase from an
-    unusable file. The product rule (H10/D54) is *exit code only*; this stays as the record of why.
+    unusable file. The product rule is *exit code only*; this stays as the record of why.
     """
     if rc == 0:
         return "no-passphrase"

@@ -1,4 +1,4 @@
-"""The schema-2 names are frozen (plan 002 step 7). Changing this file is deliberate:
+"""The schema-2 names are frozen. Changing this file is deliberate:
 a rename or a new default needs an architect review and a writer/migration update."""
 
 from __future__ import annotations
@@ -36,7 +36,7 @@ FROZEN_NAMES = {
     "identity.disclosure": ("assisted_by",),
     "attribution": ("footer",),
     "github": ("read_token_file", "probe_repo"),
-    "broker": ("min_dwell_ms",),  # slice B (plan 007 B3, optional table)
+    "broker": ("min_dwell_ms",),  # slice B optional table)
     'workspaces."<abs path>"': (
         "allow_project_opencode_edit",
         "max_tier",

@@ -1,4 +1,4 @@
-"""Fixtures for the ``carter guard`` tests (plan 003 steps 11-15)."""
+"""Fixtures for the ``carter guard`` tests."""
 
 from __future__ import annotations
 

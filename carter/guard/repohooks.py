@@ -1,9 +1,9 @@
-"""Per-repo ``pre-push`` fallback for git older than 2.54 (RFC-0007 C.6.5; plan 004 step 25).
+"""Per-repo ``pre-push`` fallback for git older than 2.54.
 
 Without config-based hooks the backstop is a ``.git/hooks/pre-push`` file in each repo: the same
 fail-safe wrapper as the config hook (``hooks.repo_hook_text``), calling ``carter-guard``.
 
-Rules, all from the RFC and the freeze (G10):
+Rules:
 
 - Carter writes a repo hook only where ``pre-push`` is absent or **Carter-owned** (it is recorded in
   ``repo_hooks`` with its hash and still has it). A foreign or edited hook, or a repo with
@@ -12,8 +12,8 @@ Rules, all from the RFC and the freeze (G10):
 - ``init.templateDir`` covers new clones and inits. It is single-valued, so Carter sets it (in
   ``~/.carter/gitconfig``) only if the user has none; otherwise it prints the chain snippet and
   reports ``unguarded: templateDir`` for new clones.
-- When git >= 2.54 appears the config hook covers every repo, and ``migrate`` removes the owned,
-  unchanged repo hooks. ``other_old_gits`` finds older git binaries that would still need them.
+- When git >= 2.54 appears the config hook covers every repo, and the owned, unchanged repo hooks
+  are removed. ``other_old_gits`` finds older git binaries that would still need them.
 - Only the human-run ``carter guard install`` reaches this code. An agent shell cannot write
   ``.git/hooks`` (edit-denied and gate-denied), and the reads here change nothing.
 """
@@ -36,7 +36,6 @@ from carter.install.atomic import atomic_write_bytes
 HOOK = "pre-push"
 MIN_CONFIG_HOOKS = (2, 54)
 TEMPLATE_KEY = "init.templateDir"
-Reason = Literal["", "foreign hook", "edited hook", "hooksPath", "templateDir", "not installed"]
 
 
 @dataclass
@@ -200,7 +199,7 @@ def install_template(
     return statuses[0]
 
 
-# -- removal and migration -----------------------------------------------------------------
+# -- removal -----------------------------------------------------------------
 
 
 @dataclass
@@ -223,11 +222,6 @@ def remove_owned(state: GuardState) -> Removal:
     return out
 
 
-def migrate(state: GuardState) -> Removal:
-    """git >= 2.54 is here and the config hook is installed: drop the owned repo hooks."""
-    return remove_owned(state)
-
-
 def git_version(binary: str) -> tuple[int, int] | None:
     try:
         out = subprocess.run(
@@ -246,7 +240,7 @@ def git_version(binary: str) -> tuple[int, int] | None:
 def other_old_gits(env: Mapping[str, str] | None = None) -> list[tuple[str, str]]:
     """Git binaries on PATH (and the usual system paths) older than 2.54: ``(path, version)``.
 
-    ``check`` warns about them after a migration: a repo reached through such a git has no
+    ``check`` warns about them once git is upgraded: a repo reached through such a git has no
     config hook, and its owned repo hook was removed."""
     environment = os.environ if env is None else env
     dirs = [d for d in environment.get("PATH", "").split(os.pathsep) if d]

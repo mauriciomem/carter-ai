@@ -3,7 +3,7 @@
 Stdlib-only on purpose (the gate's neighbours, the plugin's identity entry and the guard import
 it). The public names are resolved on first use (PEP 562) so that importing a submodule such as
 ``carter.identity.rules`` or ``carter.identity.env`` does not load the config reader, the error
-registry and ``importlib.resources`` (about 25 ms, plan 004 spike F).
+registry and ``importlib.resources`` (about 25 ms).
 """
 
 from __future__ import annotations

@@ -1,4 +1,4 @@
-"""``carter github-token set | check`` (RFC-0007 App C.7). A thin click layer over ``ghtoken``.
+"""``carter github-token set | check``. A thin click layer over ``ghtoken``.
 
 ``set`` reads the token from stdin (a hidden prompt on a terminal), never from argv or the
 environment, and needs a human terminal on stderr. ``check`` refuses in agent shells but needs

@@ -1,5 +1,5 @@
 # ruff: noqa: E501
-"""``carter commit``, the core (plan 005 step 21; RFC-0007 §4.3; D26, D36, D57, D64; freeze H14).
+"""``carter commit``, the core.
 
 Real git, throwaway keys and a real throwaway agent. The human's own signing setup is a decoy at
 every tier (its private key is made unreadable): any use of it fails the test.
@@ -21,9 +21,9 @@ from carter.identity.commit import (
     REFUSED_FLAGS,
     CommitRefused,
     Plan,
+    _screen,
     plan_commit,
     run_git,
-    screen_args,
 )
 from carter.identity.config import load_identity
 from carter.identity.errors import (
@@ -41,6 +41,11 @@ LOGIN, UID = "octocat", 583231
 EMAIL = f"{UID}+{LOGIN}@users.noreply.github.com"
 COAUTHOR = f"Co-authored-by: {LOGIN} <{EMAIL}>"
 HUMAN = ("Hu Man", "human@example.invalid")
+
+
+def screen_args(args):  # the two results a caller needs: the kept arguments and the notes
+    kept, notes, _ = _screen(args)
+    return kept, notes
 
 
 class TestScreen:
@@ -149,9 +154,7 @@ def cfg_of(tier: str, **over: object) -> IdentityConfig:
     return IdentityConfig(identity=ident, signing=sign, state="current", **over)  # type: ignore[arg-type]
 
 
-def plan(
-    cfg: IdentityConfig, *args: str, agent: bool = False, tty: bool = True, offer=None, env=None
-) -> Plan:  # type: ignore[no-untyped-def]
+def plan(cfg: IdentityConfig, *args: str, agent: bool = False, env=None) -> Plan:  # type: ignore[no-untyped-def]
     return plan_commit(
         list(args),
         cfg=cfg,
@@ -159,13 +162,11 @@ def plan(
         cwd=os.getcwd(),
         home=Path(os.environ["HOME"]),
         agent=agent,
-        human_tty=tty,
-        offer_unlock=offer,
     )
 
 
 class TestReviewModeRefusesEveryTier:
-    """Plan 008 step 4: a CI review run (context E) makes no commits, at any tier."""
+    """a CI review run (context E) makes no commits, at any tier."""
 
     @pytest.mark.parametrize("tier", ["t0", "t1", "t2"])
     @pytest.mark.parametrize(
@@ -221,7 +222,6 @@ class TestPlanBelowT2:
             cwd=str(tmp_path),
             home=Path(os.environ["HOME"]),
             agent=False,
-            human_tty=True,
         )
         assert got.shape == "unsigned" and got.warnings[0].startswith("E-COMMIT-T1")
 
@@ -257,7 +257,7 @@ class TestPlanBelowT2:
         assert err.value.code == E_CONFIG
 
     def test_role_author_does_not_refuse_carter_commit_it_ignores_the_role(self) -> None:
-        """Plan 006 K9 (D26): the role is for agents; at your terminal you are always the author."""
+        """(): the role is for agents; at your terminal you are always the author."""
         role_b = IdentityConfig(
             identity=Identity(login=LOGIN, id=UID, email=EMAIL, role="author"), state="current"
         )
@@ -277,7 +277,6 @@ class TestPlanBelowT2:
                 cwd=str(tmp_path),
                 home=Path(os.environ["HOME"]),
                 agent=False,
-                human_tty=True,
             )
         assert err.value.code == E_TIER_REQUIRED and "required t2" in err.value.detail
         capped = cfg_of(
@@ -291,7 +290,6 @@ class TestPlanBelowT2:
                 cwd=str(tmp_path),
                 home=Path(os.environ["HOME"]),
                 agent=False,
-                human_tty=True,
             )
 
 
@@ -348,9 +346,7 @@ class Lab:
     def cfg(self) -> IdentityConfig:
         return load_identity(self.home / ".carter" / "config.toml")
 
-    def commit(
-        self, *args: str, agent: bool = False, tty: bool = True, offer=None, env=None
-    ) -> tuple[int, Plan]:  # type: ignore[no-untyped-def]
+    def commit(self, *args: str, agent: bool = False, env=None) -> tuple[int, Plan]:  # type: ignore[no-untyped-def]
         p = plan_commit(
             list(args),
             cfg=self.cfg(),
@@ -358,8 +354,6 @@ class Lab:
             cwd=str(self.repo),
             home=self.home,
             agent=agent,
-            human_tty=tty,
-            offer_unlock=offer,
         )
         return run_git(p, str(self.repo)), p
 
@@ -409,7 +403,7 @@ class TestK1:
     def test_in_a_role_author_config_it_is_still_human_author_and_llm_committer(
         self, lab: Lab
     ) -> None:
-        """Plan 006 K9: `carter commit` ignores the role; a polluted GIT_AUTHOR_* changes nothing."""
+        """`carter commit` ignores the role; a polluted GIT_AUTHOR_* changes nothing."""
         assert lab.agent.add(lab.key) == 0  # type: ignore[attr-defined]
         cfg_file = lab.home / ".carter" / "config.toml"
         text = cfg_file.read_text()
@@ -517,12 +511,11 @@ class TestLocked:
         assert lab.git("rev-list", "--count", "--all").stdout.strip() in ("0", "")
         assert "A  a" in lab.git("status", "--short").stdout
 
-    def test_a_human_is_offered_the_unlock_once_and_a_no_falls_back_to_unsigned(
+    def test_a_human_with_the_key_locked_is_asked_nothing_and_gets_an_unsigned_commit(
         self, lab: Lab
     ) -> None:
-        asked: list[int] = []
-        code, plan_ = lab.commit("-m", "fallback", offer=lambda: asked.append(1) or False)
-        assert code == 0 and asked == [1]
+        code, plan_ = lab.commit("-m", "fallback")
+        assert code == 0 and plan_.shape == "unsigned" and plan_.key_locked
         assert (
             plan_.warnings
             and plan_.warnings[0].startswith("E-SIGN-HUMAN-FALLBACK")
@@ -534,17 +527,11 @@ class TestLocked:
         assert got["author"] == got["committer"] == f"{HUMAN[0]} <{HUMAN[1]}>"
         assert got["body"].strip().splitlines()[-1] == COAUTHOR
 
-    def test_a_successful_unlock_continues_as_k1(self, lab: Lab) -> None:
-        def unlock() -> bool:
-            return lab.agent.add(lab.key) == 0  # type: ignore[attr-defined]
-
-        code, plan_ = lab.commit("-m", "after unlock", offer=unlock)
-        assert code == 0 and plan_.shape == "k1" and lab.show()["status"] == "G"
-
-    def test_no_terminal_means_no_offer_and_the_fallback(self, lab: Lab) -> None:
-        asked: list[int] = []
-        code, plan_ = lab.commit("-m", "x", tty=False, offer=lambda: asked.append(1) or True)
-        assert code == 0 and asked == [] and plan_.shape == "unsigned"
+    def test_after_an_unlock_the_commit_is_k1(self, lab: Lab) -> None:
+        assert lab.agent.add(lab.key) == 0  # type: ignore[attr-defined]
+        code, plan_ = lab.commit("-m", "after unlock")
+        assert code == 0 and plan_.shape == "k1" and not plan_.key_locked
+        assert lab.show()["status"] == "G"
 
     def test_an_amend_with_the_agent_locked_in_an_agent_shell_leaves_the_commit_unchanged(
         self, lab: Lab
@@ -577,13 +564,10 @@ class TestBelowT2WithDecoys:
         )
         assert plan_.warnings[0].startswith("E-COMMIT-T1")
 
-    def test_t0_commits_with_assisted_by_and_never_prompts(self, lab: Lab) -> None:
+    def test_t0_commits_with_assisted_by(self, lab: Lab) -> None:
         write_config(IdentityConfig(state="absent"), lab.home / ".carter" / "config.toml")
-        asked: list[int] = []
-        code, _ = lab.commit("-m", "t0", offer=lambda: asked.append(1) or True)
-        assert (
-            code == 0 and not asked and lab.show()["body"].strip().endswith("Assisted-by: Carter")
-        )
+        code, _ = lab.commit("-m", "t0")
+        assert code == 0 and lab.show()["body"].strip().endswith("Assisted-by: Carter")
 
     def test_git_exit_codes_are_propagated(self, lab: Lab) -> None:
         write_config(IdentityConfig(state="absent"), lab.home / ".carter" / "config.toml")

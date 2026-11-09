@@ -1,8 +1,8 @@
-"""Git alias resolution (RFC-0007 C.4.2 rule 7, freeze G6).
+"""Git alias resolution.
 
 Git ignores an alias that is named like a built-in command, so the lookup is needed only for the
 other subcommands. The lookup is ``git config --get-regexp '^alias\\.'`` run in the effective
-directory (``-C`` honoured); ``subprocess`` is imported only here, on that path (spike F: 6 ms).
+directory (``-C`` honoured); ``subprocess`` is imported only here, on that path (6 ms).
 No directory known means no lookup, and the caller then refuses a non-built-in subcommand.
 A missing git, a timeout or a failing lookup mean "no aliases": never a crash, never a deny.
 """

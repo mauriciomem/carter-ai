@@ -1,4 +1,4 @@
-"""The GitHub API shapes ``identity add`` / ``identity verify --remote`` rely on (plan 005, step 5).
+"""The GitHub API shapes ``identity add`` / ``identity verify --remote`` rely on.
 
 Modelled from the public REST documentation (Users, SSH signing keys, Commits, Rate limits) read
 on 2026-11-04; the web page ``/<login>.keys`` is not part of the REST API. Everything here runs

@@ -1,10 +1,9 @@
 """``carter check --host``: read-only checks of the machine, from the human's terminal.
 
-RFC-0007 App B §3, the items that exist in slice 1G. It prints names, never values: no
-environment values, no tokens, no provider settings (``opencode debug config`` is compared
-in memory). Every item has a level: ``ok``, ``info``, ``warn`` or ``red``; the exit code is 1
-only if something is ``red``. Items that need the plugin, hooks or isolation (slice 2a/2b)
-say so ("not installed in this slice"), never green.
+It prints names, never values: no environment values, no tokens, no provider settings
+(``opencode debug config`` is compared in memory). Every item has a level: ``ok``, ``info``,
+``warn`` or ``red``; the exit code is 1 only if something is ``red``. An item that needs the
+plugin, hooks or isolation is never green when they are not installed.
 
 Nothing here writes. The same pieces back ``carter guard status``.
 """
@@ -30,13 +29,9 @@ from carter.install.jsonc import _load_jsonc
 from carter.install.mcp import config_target
 from carter.install.paths import guard_state_path
 
-BROKEN_CONFIG_HINT = (
-    "A broken OpenCode config drops all policies and your providers: run `carter guard install`."
-)
 STATE_HINT = "Carter does not rebuild it: fix or move the file, then run `carter guard install`."
 CARTER_KEYS_NA = (
-    "carter.tier, carter.llmEmail, carter.llmFingerprint and the cap mirror: "
-    "not applicable in this slice"
+    "carter.tier, carter.llmEmail, carter.llmFingerprint and the cap mirror: not applicable"
 )
 HOOK_MODES = {
     "include": "hooks from an included file are reported `global` here",
@@ -59,7 +54,7 @@ def render(items: list[Item]) -> list[str]:
 
 
 def _policies(state: GuardState, reader: Reader | None, base_dir: Path | None) -> list[Item]:
-    """D71: G2's rules are in the Carter agent files; the OpenCode config holds no policies, only
+    """G2's rules are in the Carter agent files; the OpenCode config holds no policies, only
     the per-agent ``carter_push`` denies and the user's providers."""
     items: list[Item] = []
     accepted = consent.accepted_groups(state)
@@ -162,7 +157,7 @@ def _git(state: GuardState) -> list[Item]:
 
 
 def _project_scope(cwd: Path) -> list[Item]:
-    """D48: a project config that can run code is worth a line (names only)."""
+    """a project config that can run code is worth a line (names only)."""
     risky = {"plugin", "plugins", "mcp", "commands", "command", "formatter", "shell"}
     found: list[str] = []
     for name in (
@@ -189,12 +184,12 @@ def _optouts() -> list[Item]:
     try:
         found = optout.active_optouts(load_identity())
     except ConfigError:
-        return [Item("warn", "D52 opt-outs", "config.toml is invalid; opt-outs not listed")]
+        return [Item("warn", "opt-outs", "config.toml is invalid; opt-outs not listed")]
     items = [
-        Item("warn", "D52 opt-out", f"agents may edit project config in {ws}")
+        Item("warn", "opt-out", f"agents may edit project config in {ws}")
         for ws in found.workspaces
     ]
-    return items + [Item("warn", "D52 opt-out", f"not applied: {why}") for why in found.refused]
+    return items + [Item("warn", "opt-out", f"not applied: {why}") for why in found.refused]
 
 
 def _pending_pins(cwd: Path) -> list[Item]:
@@ -283,7 +278,7 @@ def run_host_checks(
 ) -> list[Item]:
     """All host checks, in a stable order. Never raises for a failing check.
 
-    The slice-2a readers (``agents_reader``, ``servers``, versions) are passed by the CLI; a
+    The readers (``agents_reader``, ``servers``, versions) are passed by the CLI; a
     library caller that omits them gets no check for that area (nothing is read behind its back)."""
     where = cwd or Path.cwd()
     items: list[Item] = []
@@ -341,7 +336,7 @@ def run_host_checks(
     guarded("versions", lambda: g2.version_items(opencode_version, git_version))
     guarded("plugin files", lambda: g2.foreign_plugin_items(base_dir, where))
     guarded("project", lambda: _project_scope(where))
-    guarded("D52", _optouts)
+    guarded("opt-outs", _optouts)
     guarded("workspace", lambda: _pending_pins(where))
     guarded("unknown key", lambda: unknownkeys.host_items(base_dir))
     guarded("token", lambda: _token(base_dir))
@@ -383,7 +378,7 @@ def _identity(
     git_version: tuple[int, int] | None,
     fetch: Any,
 ) -> list[Item]:
-    """The slice-2b items (``hostcheck_id``); a broken config is E-CONFIG, never defaults."""
+    """The identity items (``hostcheck_id``); a broken config is E-CONFIG, never defaults."""
     from carter import hostcheck_id  # noqa: PLC0415
     from carter.identity.env import workspace_for  # noqa: PLC0415
 
@@ -411,7 +406,7 @@ def _broker(
     servers: Callable[[], Mapping[int, Mapping[str, str] | None]] | None,
     home: str | None,
 ) -> list[Item]:
-    """The slice-B items (``hostcheck_broker``); the working repo is only asked for its origin."""
+    """The push tool items (``hostcheck_broker``); the working repo is only asked for its origin."""
     from carter import hostcheck_broker  # noqa: PLC0415
 
     try:

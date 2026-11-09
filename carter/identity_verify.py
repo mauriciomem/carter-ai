@@ -1,4 +1,4 @@
-"""``carter identity verify``: does the whole signing chain work? (App B; plan 005 step 16).
+"""``carter identity verify``: does the whole signing chain work?.
 
 Local: a throwaway repository, a throwaway ``allowed_signers`` (the current key and the
 ``previous_public_keys``), one commit made with the real shim and the loaded key through the same
@@ -133,7 +133,7 @@ def verify_commit(
     rev: str, cfg: IdentityConfig, home: Path, base_env: Mapping[str, str], cwd: Path | None = None
 ) -> tuple[bool, str]:
     """Is ``rev`` signed by the configured LLM key? Checked against Carter's own ``allowed_signers``
-    (not the user's git config), so no ``allowedSignersFile`` error and no bogus ``N`` (D68 i).
+    (not the user's git config), so no ``allowedSignersFile`` error and no bogus ``N``.
     Returns ``(good, reason)``; ``reason`` is empty when good."""
     if not cfg.signing.public_key:
         return False, "no LLM signing key is configured"

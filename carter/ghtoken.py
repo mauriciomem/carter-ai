@@ -1,4 +1,4 @@
-"""The read-only GitHub token: store it, check it (RFC-0007 App C.7; plan 003 step 16).
+"""The read-only GitHub token: store it, check it.
 
 Pure logic for ``carter github-token set|check``: no click, no subprocess, no printing.
 The token lives in ``~/.carter/secrets/gh-read.token`` (dir 0700, file 0600, written
@@ -7,7 +7,7 @@ atomically, no trailing newline) and is only ever sent in an ``Authorization`` h
 value that was supplied.
 
 ``check`` classifies the write probe (``POST repos/{o}/{r}/git/refs`` with an all-zero sha) by
-HTTP status and response text, never by an exit code. Strings are the ones recorded in spike 4
+HTTP status and response text, never by an exit code. Strings are the ones GitHub returns
 (2026-11-02) with a real fine-grained read-only token: 403 ``Resource not accessible by
 personal access token`` means the token cannot write; 422 (or 201) means it can.
 """
@@ -219,12 +219,6 @@ def request(
         return Reply(0, "", {})
 
 
-def stored_token(base_dir: Path | None = None) -> str | None:
-    """The stored token if the file passes every check (mode, owner, no link, outside a repo,
-    a ``github_pat_`` value), else ``None``. Callers decide what to say; this never explains."""
-    return _file_items(token_path(base_dir), required=False)[1]
-
-
 def _lower(headers: object) -> dict[str, str]:
     return {k.lower(): v for k, v in headers.items()}  # type: ignore[attr-defined]
 
@@ -356,7 +350,7 @@ def _probe(base: str, token: str, login: str, base_dir: Path | None) -> list[Ite
 
 
 def _pull_request_item(base: str, token: str, repo: str) -> Item:
-    """The PR probe (D72): ``POST /pulls`` with an empty body can never create anything. GitHub
+    """The PR probe: ``POST /pulls`` with an empty body can never create anything. GitHub
     validates the permission first: 422 = the token may open PRs, 403 = it may not."""
     reply = request(base, "POST", f"/repos/{repo}/pulls", token, {})
     if reply.status in (201, 422):

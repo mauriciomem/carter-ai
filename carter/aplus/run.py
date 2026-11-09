@@ -1,6 +1,6 @@
-"""The one subprocess entry of A+ (plan 003 step 18; RFC-0007 App C.5 "Hardened git calls").
+"""The one subprocess entry of `carter push`.
 
-Every git, ssh and ssh-keygen call the A+ building blocks make goes through here, so the
+Every git, ssh and ssh-keygen call the push building blocks make goes through here, so the
 environment is scrubbed in exactly one place: a polluted shell cannot pick the author,
 inject config (``GIT_CONFIG_COUNT``/``KEY_n``/``PARAMETERS``) or point git at another
 repository; system config is never read; prompts and pagers are off; and the agent socket is
@@ -174,8 +174,6 @@ def network_git(
 
 
 GH_TIMEOUT = 60.0
-# Carter never sets these; they are named so a stale one can be reported (names only).
-GH_TOKEN_VARS = ("GH_TOKEN", "GITHUB_TOKEN", "GH_ENTERPRISE_TOKEN", "GITHUB_ENTERPRISE_TOKEN")
 
 
 def gh_path() -> str | None:

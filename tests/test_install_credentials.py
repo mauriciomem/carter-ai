@@ -1,4 +1,4 @@
-"""``check_credentials``: the installer no longer asks for an exported GITHUB_TOKEN (step 16)."""
+"""``check_credentials``: the installer no longer asks for an exported GITHUB_TOKEN."""
 
 from __future__ import annotations
 

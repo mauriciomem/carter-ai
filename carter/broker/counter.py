@@ -1,4 +1,4 @@
-"""The rejection counter (RFC-0007 App C.5 "Rejection scope", freeze B5).
+"""The rejection counter.
 
 Rejections, timeouts, aborts and dwell refusals are counted per **root session family** (the
 plugin walks ``parentID`` to the root and sends its id), across repos. At ``MAX_REJECTIONS`` B
@@ -7,7 +7,7 @@ refuses (``E-B-REJECTED``) until a new root session starts or a human runs
 
 State: ``~/.carter/run/b-rejections.json`` (0600, in the 0700 ``run/`` directory), guarded by
 ``fcntl.flock`` on a sibling lock file. Entries older than ``TTL_S`` are dropped on write. A
-file that cannot be read or does not parse **fails closed**: B refuses and says why; only
+file that cannot be read or does not parse **fails closed**: the broker refuses and says why; only
 ``reset`` (the human command) replaces it. Stdlib only.
 """
 

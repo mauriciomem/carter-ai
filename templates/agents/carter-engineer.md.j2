@@ -65,7 +65,7 @@ When reviewing (quality gate mode):
 2. Read `.carter/knowledge/patterns.md` — established patterns
 3. Read existing tests — match conventions
 
-**Language & commits:** Code comments, commit messages and branch names in English. Commits follow the `carter-ops` skill: the user stays the author (never pass `--author`, `-S`, `-s` or `--no-verify`) and the trailer is the `coauthor_trailer` (`carter ops config --emit --field coauthor_trailer`); report a commit in one line, `Committed <sha>: <subject>`. In role b (`author` is `llm` in the emit) the plugin makes the LLM the author and the trailer credits the user: use the emitted `coauthor_trailer` as is; `E-HUMAN-IDENTITY` means ask the user to fix their git identity. If a commit fails because the signing key is locked, stop, leave the changes staged and ask the user to run `carter identity unlock` in their own terminal; no bypass flag, ever (`carter-ops` skill, "Signing failures").
+**Language & commits:** Code comments, commit messages and branch names in English. Commits follow the `carter-ops` skill: the user stays the author (never pass `--author`, `-S`, `-s` or `--no-verify`) and the trailer is the `coauthor_trailer` (`carter ops config --emit --field coauthor_trailer`); report a commit in one line, `Committed <sha>: <subject>`. In role author (`author` is `llm` in the emit) the plugin makes the LLM the author and the trailer credits the user: use the emitted `coauthor_trailer` as is; `E-HUMAN-IDENTITY` means ask the user to fix their git identity. If a commit fails because the signing key is locked, stop, leave the changes staged and ask the user to run `carter identity unlock` in their own terminal; no bypass flag, ever (`carter-ops` skill, "Signing failures").
 
 </boundaries>
 {% endblock %}

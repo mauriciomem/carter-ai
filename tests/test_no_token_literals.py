@@ -1,4 +1,4 @@
-"""No file in the repository holds a token-shaped literal (plan 003 step 25).
+"""No file in the repository holds a token-shaped literal.
 
 GitHub push protection and secret scanning flag ``github_pat_`` / ``ghp_`` / ``gho_`` /
 ``ghu_`` / ``ghs_`` / ``ghr_`` followed by 20 or more token characters, even for made-up

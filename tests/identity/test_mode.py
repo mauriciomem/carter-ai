@@ -1,4 +1,4 @@
-"""CI mode and context E: the resolver refuses commits in review mode (plan 008 step 4; RFC §4.1).
+"""CI mode and context E: the resolver refuses commits in review mode.
 
 Precedence ``CARTER_IDENTITY_MODE`` > ``[identity] mode`` > auto; auto in a detected CI is
 ``review``; Carter never infers that it may commit. Contexts C and D are not built.
@@ -83,15 +83,15 @@ class TestPrecedence:
 class TestRefusedModes:
     def test_interactive_in_ci_is_refused_that_is_context_c(self) -> None:
         got = mode.resolve_mode("", {**CI, "CARTER_IDENTITY_MODE": "interactive"})
-        assert got.error and "context C" in got.error and "RFC-0007" in got.error
+        assert got.error and "context C" in got.error and "not built" in got.error
 
     def test_config_interactive_in_ci_is_refused_too(self) -> None:
         assert mode.resolve_mode("interactive", CI).error
 
     @pytest.mark.parametrize("value", ["commit", "scheduled", "ci", "C", "D"])
-    def test_unbuilt_contexts_c_and_d_are_errors_that_point_to_the_rfc(self, value: str) -> None:
+    def test_unbuilt_contexts_c_and_d_are_errors(self, value: str) -> None:
         got = mode.resolve_mode(value, {})
-        assert got.error and "not built" in got.error and "§4.1" in got.error
+        assert got.error and "not built" in got.error and "only `review`" in got.error
 
     @pytest.mark.parametrize("value", ["Review", "yes", "rview", " review", "review "])
     def test_an_unknown_value_is_an_error_and_never_echoed(self, value: str) -> None:
@@ -154,7 +154,7 @@ class TestResolver:
         assert resolve(cfg(), workspace=str(tmp_path), env={}).commits == "allowed"
 
 
-def test_the_registry_has_the_code_with_the_ci_e_tag() -> None:
+def test_the_registry_has_the_review_code() -> None:
     entry = registry()[E_CI_REVIEW]
-    assert entry.slice == "CI-E" and "review run" in entry.message
+    assert "review run" in entry.message
     assert "\n" not in entry.message

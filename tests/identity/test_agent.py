@@ -1,8 +1,8 @@
-"""The dedicated agent core (plan 005 step 10, freeze H2/H10/H11, report 22, spike A).
+"""The dedicated agent core report 22, ).
 
 Paths and permission rules are unit-tested with fakes; the probe, unlock and lock run against real
 ``ssh-agent``/``ssh-add`` started under the ``/tmp/c2b-*`` base of the ``real_ssh_agent`` fixtures.
-macOS-only path facts are computed here and flagged for the user session (step 33).
+macOS-only path facts are computed here and flagged for the user session.
 """
 
 # ruff: noqa: E501
@@ -329,7 +329,7 @@ class TestUnlock:
         assert probe(sock, "/usr/bin", ctx.key.fingerprint).state == "ok"
 
     def test_no_ttl_means_no_lifetime_option(self, ctx: Ctx) -> None:
-        agent.unlock(ctx.with_ttl(""), ctx.runner)  # D68 e
+        agent.unlock(ctx.with_ttl(""), ctx.runner)
         ((argv, _env),) = ctx.calls
         assert argv == ["/usr/bin/ssh-add", str(ctx.key.path)]
 

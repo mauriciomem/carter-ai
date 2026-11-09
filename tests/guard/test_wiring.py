@@ -1,4 +1,4 @@
-"""``carter install`` / ``carter uninstall`` call the guard (plan 003 step 15, T16).
+"""``carter install`` / ``carter uninstall`` call the guard.
 
 Install: agents and skills as before; then the guards, with the same consent rules as
 ``carter guard install``. A guard failure never undoes the rest and only that part exits 1.
@@ -47,7 +47,7 @@ class TestInstallCallsGuard:
         assert res.exit_code == 0, res.output
         assert agents_installed(base_dir) and read_manifest(base_dir)
         state = load(guard_state_path(base_dir))
-        assert state.opencode_policies == [] and "policies" not in cfg(base_dir)  # D71
+        assert state.opencode_policies == [] and "policies" not in cfg(base_dir)
         agent = (base_dir / "opencode" / "agents" / "carter-engineer.md").read_text()
         assert "git send-pack *" in agent  # the deny set lives in the Carter agents
         assert "plugin installed:" in res.output and "restart the OpenCode server" in res.output

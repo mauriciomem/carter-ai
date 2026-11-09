@@ -1,4 +1,4 @@
-"""``python -I -m carter.gate`` (freeze G6) and the ``carter gate check`` wrapper (step 21)."""
+"""``python -I -m carter.gate`` and the ``carter gate check`` wrapper."""
 
 from __future__ import annotations
 

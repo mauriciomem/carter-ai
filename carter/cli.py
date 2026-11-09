@@ -224,18 +224,10 @@ def init(
     ui.ok(f"workspace '{workspace_name}' initialized", f"{mode} mode")
 
 
-def _detail(line: str) -> None:
-    """Lines of the update steps: warnings surface, the rest shows with ``-v``."""
-    text = line.strip()
-    (ui.warn if text.startswith(("⚠", "ℹ", "Not ", "Policies are")) else ui.detail)(
-        text.lstrip("⚠ℹ ")
-    )
-
-
 def _pin_identity_policy(target: Path, config: dict, *, dry_run: bool) -> None:
-    """Copy ``identity.role``/``require_tier`` from carter.yaml into config.toml (D62).
+    """Copy ``identity.role``/``require_tier`` from carter.yaml into config.toml.
 
-    Asks nothing (D68 h); an agent shell never pins. Raises ``click.ClickException`` when
+    Asks nothing; an agent shell never pins. Raises ``click.ClickException`` when
     pinning is wanted but refused (cap below ``require_tier``, unmodelled keys, a broken file).
     """
     from carter.identity import ConfigError, load_identity
@@ -286,9 +278,9 @@ def _pin_identity_policy(target: Path, config: dict, *, dry_run: bool) -> None:
 
 
 def _sync_mirror(*, dry_run: bool) -> None:
-    """D64: regenerate ``carter.tier`` and the cap fragments in ``~/.carter/gitconfig``.
+    """regenerate ``carter.tier`` and the cap fragments in ``~/.carter/gitconfig``.
 
-    Asks nothing (D68 h); an agent shell never writes it. Never fails ``update`` for a config
+    Asks nothing; an agent shell never writes it. Never fails ``update`` for a config
     problem; a cap below ``require_tier`` is refused."""
     from carter.guard import update_mirror
     from carter.identity import ConfigError, load_identity
@@ -326,13 +318,13 @@ def _sync_mirror(*, dry_run: bool) -> None:
 
 
 def _report_unknown_keys(target: Path) -> None:
-    """D70, at the end of ``update``: each leftover key once, workspace files then host files."""
+    """at the end of ``update``: each leftover key once, workspace files then host files."""
     hits = [*unknownkeys.workspace(target), *unknownkeys.host()]
     unknownkeys.report(unknownkeys.once_per_key(hits))
 
 
 def _refresh_agents(*, dry_run: bool) -> None:
-    """D52 and D71: the global Carter agent files carry G2's rules, including the opt-outs read
+    """and: the global Carter agent files carry G2's rules, including the opt-outs read
     from ``config.toml``. Re-render them from a human's shell when they differ; ``update`` never
     fails here."""
     from carter.guard.agent_rules import current_rules
@@ -390,7 +382,7 @@ def _note_stale_workspace_rules(target: Path, config: dict, env: Environment) ->
 @verbose_option
 def update(target_dir: str, dry_run: bool, assume_yes: bool) -> None:
     """Re-render the agents and apply carter.yaml."""
-    del assume_yes  # accepted and ignored: update asks nothing (D68 h)
+    del assume_yes  # accepted and ignored: update asks nothing
     target = Path(target_dir).resolve()
     config_path = target / ".carter" / "carter.yaml"
 

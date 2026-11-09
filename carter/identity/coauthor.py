@@ -1,5 +1,5 @@
 """The human behind a role-b commit: who they are, whether the identity is usable, and whether
-GitHub can credit it (RFC-0007 §4.1 role ``author``; plan 006 freeze K2, K4, K7).
+GitHub can credit it (role ``author``).
 
 In role ``author`` the LLM is author and committer and the human is credited by
 ``Co-authored-by: <user.name> <user.email>``. That line is built from the human's own git config,

@@ -1,4 +1,4 @@
-"""Credential and control paths after normalization (RFC-0007 C.4.2 rule 8, freeze G9, D67).
+"""Credential and control paths after normalization.
 
 A token is normalized before it is matched: ``~`` and ``$HOME`` are already expanded by the lexer,
 relative tokens are resolved against the effective directory (``cd`` and ``git -C`` are tracked),
@@ -7,7 +7,7 @@ catches symlinks. Matching is on path *segments*, so ``~/.sshfoo`` is not ``/.ss
 
 Credential paths are refused for any reference by any command. Control paths are refused only for
 write-capable references (redirections, ``tee``, ``sed -i``, ``cp``/``mv``/``rm``/``ln``/``chmod``/
-``truncate``..., interpreter arguments); reads such as ``cat ~/.carter/gitconfig`` pass. D67: the
+``truncate``..., interpreter arguments); reads such as ``cat ~/.carter/gitconfig`` pass.: the
 other section 4.5 paths (global OpenCode config, ``~/.gitconfig``, repo ``.opencode/``,
 ``.git/hooks``,
 ``.git/config``...) are an accepted residual; the corpus pins them as allowed.

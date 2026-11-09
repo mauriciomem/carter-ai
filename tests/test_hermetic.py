@@ -1,4 +1,4 @@
-"""The hermetic fixture (RFC-0007 App A T18): no test reaches the developer's real
+"""The hermetic fixture: no test reaches the developer's real
 ``~/.gitconfig``, ``~/.carter`` or ``~/.config/opencode``.
 
 The autouse fixture lives in ``conftest.py``. These tests pin what it guarantees,
@@ -178,7 +178,7 @@ class TestAmbientCarterVariablesDoNotLeak:
         assert proc.returncode == 0, proc.stdout + proc.stderr
 
 
-# --- plan 003, step 5: the 1G host surfaces (OpenCode config, gh, network) ---------------
+# --- the 1G host surfaces (OpenCode config, gh, network) ---------------
 
 
 class TestOpencodeConfigIsSandboxed:

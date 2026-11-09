@@ -12,7 +12,7 @@ def mark(prefix: str, nonce: str, command: str, scope: bool) -> str:
 
 
 def detect(prefix: str, nonce: str, command: str) -> tuple[bool, bool | None, str]:
-    """``(marked, scope, rest)``: the D71 marker ends in ``_1`` (in scope) or ``_0``."""
+    """``(marked, scope, rest)``: the marker ends in ``_1`` (in scope) or ``_0``."""
     head = f"{prefix}{nonce}_"
     bit = command[len(head) : len(head) + 1] if command.startswith(head) else ""
     if bit in ("1", "0") and command[len(head) + 1 : len(head) + 2] == "\n":

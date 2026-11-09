@@ -1,4 +1,4 @@
-"""The unauthenticated GitHub client against the loopback fake (plan 005 step 14, freeze H13)."""
+"""The unauthenticated GitHub client against the loopback fake."""
 
 from __future__ import annotations
 

@@ -1,8 +1,8 @@
 """``python -I -m carter.identity.env --json``: the identity entry the plugin calls per agent shell.
 
-RFC-0007 App C.2 "T2 fail-closed", freezes G13 (2a) and H3 (2b). Stdlib-only (no ``carter.cli``,
-click or yaml). It answers one question per agent shell: *must agent commits be blocked here, and
-if not, with which signing block?* The block itself is built by ``payload.build_payload``.
+Stdlib-only (no ``carter.cli``, click or yaml). It answers one question per agent shell: *must
+agent commits be blocked here, and if not, with which signing block?* The block itself is built by
+``payload.build_payload``.
 
 Output (one JSON object, schema 1)::
 

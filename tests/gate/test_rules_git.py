@@ -1,4 +1,4 @@
-"""git rules of the gate (RFC-0007 C.4.1 rows 1-3, 5-7; C.4.2 rule 6; plan 004 step 19)."""
+"""git rules of the gate."""
 
 from __future__ import annotations
 

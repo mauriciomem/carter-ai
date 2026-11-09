@@ -1,9 +1,7 @@
-"""The 2a compatibility contract with the real plugin, gate and identity entry (plan 004 step 32).
+"""The compatibility contract with the real plugin, gate and identity entry.
 
-RFC §4.9 and App C.8: every OpenCode dependency of G2, on the real binary and the mock model.
-Opt-in (``CARTER_E2E=1``); runs on the primary binary and ``CARTER_E2E_OPENCODE_ALT``. Rows of C.8
-that are already proven elsewhere are listed in ``notes.md`` (deny-before-hook: spike D; shell
-hook order and polluted server with the prototype: spike C).
+Every OpenCode dependency of G2, on the real binary and the mock model. Opt-in
+(``CARTER_E2E=1``); runs on the primary binary and ``CARTER_E2E_OPENCODE_ALT``.
 """
 
 from __future__ import annotations
@@ -141,7 +139,7 @@ class TestSelfTestAndPollution:
     def test_a_second_plugin_that_rejects_after_ours_ends_in_failed(
         self, rig_factory, opencode_bin
     ) -> None:
-        """Accepted residual E12 (spike C g3): the self-test cannot tell this from a broken
+        """Accepted residual E12 (g3): the self-test cannot tell this from a broken
         order. The consequence is conservative: every shell, the human's ``!`` too, is tagged
         as an agent's."""
         files = install_files()
@@ -170,7 +168,7 @@ class TestIdentityEntry:
     def test_a_failing_identity_entry_blocks_agent_commits_but_not_the_human(
         self, rig_factory, opencode_bin
     ) -> None:
-        """C.2: when the identity entry fails, ``blocking_git_config`` is appended (signing
+        """When the identity entry fails, ``blocking_git_config`` is appended (signing
         forced, every signer the root-owned ``false``): the agent commit fails, nothing unsigned."""
         wrapper = (
             f'#!/bin/sh\ncase "$*" in *carter.identity.env*) exit 2 ;; esac\nexec {PYTHON} "$@"\n'

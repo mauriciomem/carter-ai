@@ -1,5 +1,5 @@
 # ruff: noqa: E501
-"""B's refuse-mode checks: repo config, SSH config, signatures (plan 007 step 9, App C.5 table)."""
+"""the broker's refuse-mode checks: repo config, SSH config, signatures."""
 
 from __future__ import annotations
 
@@ -233,7 +233,9 @@ class TestForcedEnv:
         ctx = checks.Context(world.ctx.cfg, world.ctx.owned, tools, world.home)
         env = child_env("push", {}, tools, world.home)
         with run.forced_env(env):
-            run.git(["rev-parse", "--git-dir"], world.repo)  # the A+ runner honours the base
+            run.git(
+                ["rev-parse", "--git-dir"], world.repo
+            )  # the `carter push` runner honours the base
             assert "sentinel-pw" not in run.clean_env().values()
         del ctx
         # the subprocess itself is plain git (the spy is for the pr/push runner tests later)

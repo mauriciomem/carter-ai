@@ -1,11 +1,11 @@
-"""Pure tier and role resolution (RFC-0007 §4.1). No I/O, no environment reads.
+"""Pure tier and role resolution. No I/O, no environment reads.
 
 The caller passes the parsed config, the workspace path and the environment mapping, so
 the same inputs always give the same answer and nothing here can write or run git.
 
 ``carter.yaml`` is deliberately not an input: its ``identity.role`` and
 ``identity.require_tier`` reach this module only after a human runs ``carter update``
-and pins them under ``[workspaces."<path>"]`` (D62).
+and pins them under ``[workspaces."<path>"]``.
 """
 
 from __future__ import annotations
@@ -106,7 +106,7 @@ def configured_tier(cfg: IdentityConfig) -> str:
 
 
 def effective_tier(configured: str, cap: str) -> str:
-    """``min(configured, cap)`` (D64). An empty cap means none; an unknown cap fails safe
+    """``min(configured, cap)``. An empty cap means none; an unknown cap fails safe
     to T0. A cap never raises the tier."""
     if not cap:
         return configured
@@ -133,7 +133,7 @@ def resolve_role(
         warnings.append(f"{ENV_ROLE} is not one of {list(ROLES)}; ignored")  # never echo it
         session = ""
     configured = cfg.identity.role if cfg.identity.role != "co-author" else ""
-    # D20: a lower source that differs is reported (source names only), never obeyed or refused.
+    # a lower source that differs is reported (source names only), never obeyed or refused.
     winner, source = (pinned, "workspace") if pinned else (session, "env") if session else ("", "")
     if pinned and session and session != pinned:
         warnings.append(f"{ENV_ROLE} asks for another role; the workspace pin wins")
@@ -162,7 +162,7 @@ class Resolution:
     role_source: RoleSource
     commits: Literal["allowed", "refused"]
     refusal_reason: str  # an error code, "" when allowed
-    require_tier: str  # pinned minimum; enforced by the plugin and `carter commit` (2a/2b)
+    require_tier: str  # pinned minimum; enforced by the plugin and `carter commit`
     warnings: tuple[str, ...] = ()
     refusal_detail: str = ""  # key names only, never values
     mode: str = (
@@ -188,10 +188,10 @@ def resolve(
     force_role: str | None = None,
 ) -> Resolution:
     """Resolve tier and role. ``force_role`` skips the role precedence (``carter commit`` ignores
-    the role, D26: it passes ``co-author``).
+    the role: it passes ``co-author``).
 
     Refusals, in order: a signing setup that is not a complete T2 (E-CONFIG, no fallback
-    to T1/T0, RFC §4.1), then role ``author`` below T2 (E-ROLE-B-TIER, never downgraded).
+    to T1/T0), then role ``author`` below T2 (E-ROLE-B-TIER, never downgraded).
     """
     ws = _workspace(cfg, workspace)
     configured = configured_tier(cfg)

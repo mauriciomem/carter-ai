@@ -1,21 +1,22 @@
-"""The slice-B items of ``carter check --host`` (plan 007 step 18; freeze B9, B11, B17).
+"""The push tool items of ``carter check --host``.
 
 Read-only and names only: no environment value, no socket path, no commit text, no title ever
 reaches an item. What it reports:
 
-- whether the B tools are on (``isolation.json`` ``b_enabled``) and whether that agrees with the
+- whether the push tool are on (``isolation.json`` ``b_enabled``) and whether that agrees with the
   ``g2`` revision in guard state (a mismatch in either direction is not silent);
 - the headless profile, against its recorded hash;
 - the audit store (directory and file modes; counts of decisions, nothing else);
 - the rejection counter (how many session families are stopped; an unreadable file);
 - a persisted autoaccept (``session.permissions`` in ``~/.config/opencode/cli.json``) or an
-  OpenCode process started with ``--auto``: both make the human's approval instant, and B's dwell
-  check then refuses every use (D49);
-- per OpenCode server: would B refuse its environment (``E-B-POLLUTED``) or its SSH agent
+  OpenCode process started with ``--auto``: both make the human's approval instant, and the
+  dwell check then refuses every use;
+- per OpenCode server: would the broker refuse its environment (``E-B-POLLUTED``) or its SSH agent
   (``E-B-NOAGENT``);
-- an ``origin`` over HTTPS in the working repository (B pushes over SSH only; A+ takes HTTPS);
-- tools B runs with the human's credentials that someone other than root could replace
-  (``git``, ``gh``, the ``ssh_bin_dir``): a WARN, the residual of freeze B11.
+- an ``origin`` over HTTPS in the working repository (the broker pushes over SSH only; `carter push`
+  takes HTTPS);
+- tools the broker runs with the human's credentials that someone other than root could replace
+  (``git``, ``gh``, the ``ssh_bin_dir``): a WARN.
 """
 
 from __future__ import annotations
@@ -59,15 +60,17 @@ def consent_items(state: GuardState, plugin: dict | None) -> list[Item]:
     wanted = consent.broker_wanted(state)
     enabled = bool(plugin and plugin.get("b_enabled") is True)
     if wanted and enabled:
-        return [Item("ok", "B tools", "enabled for devops only (g2 revision 3, isolation.json)")]
+        return [Item("ok", "push tool", "enabled for devops only (isolation.json)")]
     if wanted:
-        text = "g2 is at revision 3 but isolation.json has the B tools off (no git found?)"
-        return [Item("warn", "B tools", text, INSTALL_HINT)]
+        text = "the push tool is confirmed but isolation.json has it off (no git found?)"
+        return [Item("warn", "push tool", text, INSTALL_HINT)]
     if enabled:
-        text = "isolation.json enables the B tools but guard state does not have g2 at revision 3"
-        return [Item("red", "B tools", text, INSTALL_HINT)]
+        text = "isolation.json enables the push tool but guard state does not have it confirmed"
+        return [Item("red", "push tool", text, INSTALL_HINT)]
     if consent.plugin_wanted(state):
-        return [Item("info", "B tools", "off: confirm g2 revision 3 to enable them (devops only)")]
+        return [
+            Item("info", "push tool", "off: confirm it with `carter guard install` (devops only)")
+        ]
     return []
 
 
@@ -112,7 +115,7 @@ def counter_items(base_dir: Path | None) -> list[Item]:
     try:
         families, stopped = counter.summary(carter_dir)
     except counter.CounterError as exc:
-        text = f"{E_B_REJECTED}: the rejection counter is unreadable ({exc}); B refuses"
+        text = f"{E_B_REJECTED}: the rejection counter is unreadable ({exc}); the broker refuses"
         return [Item("warn", "B counter", text, "Run `carter guard status --reset-b`.")]
     if stopped:
         text = (
@@ -128,7 +131,7 @@ def counter_items(base_dir: Path | None) -> list[Item]:
 
 
 def autoaccept_items(base_dir: Path | None, auto_pids: Callable[[], list[int]]) -> list[Item]:
-    """A persisted autoaccept or a ``--auto`` process: B's dwell check refuses every use."""
+    """A persisted autoaccept or a ``--auto`` process: the dwell check refuses every use."""
     out: list[Item] = []
     config = (Path.home() if base_dir is None else base_dir) / OPENCODE_CLI_CONFIG
     try:
@@ -139,7 +142,7 @@ def autoaccept_items(base_dir: Path | None, auto_pids: Callable[[], list[int]]) 
     if mode == "autoaccept":
         text = (
             "OpenCode is set to auto-accept permissions (session.permissions); "
-            f"B refuses every use ({E_B_DWELL})"
+            f"the broker refuses every use ({E_B_DWELL})"
         )
         out.append(Item("warn", "B approval", text, hint))
     pids = auto_pids()
@@ -164,9 +167,7 @@ def server_items(
             continue
         names = env.polluted_names(server, home)
         if names:
-            text = (
-                f"server {pid}: B refuses it with {E_B_POLLUTED} (names only): {', '.join(names)}"
-            )
+            text = f"server {pid}: refused with {E_B_POLLUTED} (names only): {', '.join(names)}"
             out.append(
                 Item("warn", "B server env", text, "Restart OpenCode from a clean terminal.")
             )
@@ -200,7 +201,7 @@ def origin_items(cwd: Path) -> list[Item]:
     url = done.stdout.strip().lower()
     if done.returncode == 0 and url.startswith(("https://", "http://")):
         text = (
-            f"origin of this repository is HTTPS; B pushes over SSH only ({E_B_HTTPS}): "
+            f"origin of this repository is HTTPS; the broker pushes over SSH only ({E_B_HTTPS}): "
             "use `carter push`"
         )
         return [Item("warn", "B origin", text)]
@@ -217,7 +218,7 @@ def _unsafe(path: str) -> bool:
 
 def ownership_items(plugin: dict | None) -> list[Item]:
     """git, gh and the ssh directory run with your credentials: root-owned and not writable by
-    others, or a WARN (freeze B11; the install of Carter itself is the same class, residual 6)."""
+    others, or a WARN (the install of Carter itself is the same class)."""
     if not plugin or plugin.get("b_enabled") is not True:
         return []
     ssh = str(plugin.get("ssh_bin_dir", ""))
@@ -230,7 +231,7 @@ def ownership_items(plugin: dict | None) -> list[Item]:
             f"not root-owned, or writable by others: {', '.join(loose)} "
             "(B runs them with your credentials)"
         )
-        return [Item("warn", "B tools", text, "Use the system tools, or accept this residual.")]
+        return [Item("warn", "push tool", text, "Use the system tools, or accept this residual.")]
     return []
 
 

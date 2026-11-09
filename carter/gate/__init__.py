@@ -1,9 +1,9 @@
-"""The Carter command gate (RFC-0007 §4.5, App C.4; plan 004 steps 17-21, freeze G1, G6, G7).
+"""The Carter command gate.
 
 ``check(command, cwd, skip_groups)`` decides whether an agent shell may run ``command``;
 ``python -I -m carter.gate --json`` is the process the plugin calls. Stdlib-only, and it must
 not import ``carter.identity``, ``importlib.resources``, ``importlib.metadata`` or ``pathlib``
-(spike F: they cost 25 ms each and the gate runs on every agent command). ``subprocess`` is
+(they cost 25 ms each and the gate runs on every agent command). ``subprocess`` is
 imported lazily, only for git alias lookups.
 """
 

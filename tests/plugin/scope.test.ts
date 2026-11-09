@@ -1,4 +1,4 @@
-// D71: the plugin acts only for Carter agents (a global install) and in Carter workspaces. Anything
+// the plugin acts only for Carter agents (a global install) and in Carter workspaces. Anything
 // else is left alone: no gate, no isolation and no tag, but the marker still goes on every shell call.
 import { test } from "node:test"
 import assert from "node:assert/strict"

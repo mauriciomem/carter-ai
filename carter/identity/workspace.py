@@ -2,7 +2,7 @@
 
 The key is the resolved absolute path (symlinks followed) of the nearest ancestor that
 holds ``.carter/carter.yaml``; with none, the resolved starting directory. ``carter
-update`` pins policy under the same key (plan 002 step 12), so both must use this.
+update`` pins policy under the same key, so both must use this.
 """
 
 from __future__ import annotations

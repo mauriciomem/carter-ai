@@ -1,4 +1,4 @@
-"""Fixtures for the opt-in e2e suite (plan 004, step 2).
+"""Fixtures for the opt-in e2e suite.
 
 Everything here is skipped unless ``CARTER_E2E=1``. The real ``opencode`` binary is resolved
 at import time, before the autouse tool guard puts a refusing stub first on ``PATH``. A second

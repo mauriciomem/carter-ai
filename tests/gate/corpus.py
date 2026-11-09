@@ -23,7 +23,9 @@ def load(path: Path = CORPUS) -> list[dict[str, Any]]:
 
 
 def canonical_hash(cases: list[dict[str, Any]]) -> str:
-    text = json.dumps(cases, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+    """Hash of every field but ``why``: rewording a reason does not unfreeze the corpus."""
+    behaviour = [{k: v for k, v in case.items() if k != "why"} for case in cases]
+    text = json.dumps(behaviour, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
     return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
 

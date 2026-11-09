@@ -79,7 +79,7 @@ defaults, so you only write what you change; lists (`agents`,
 Optional: `carter init` does not write it, and a file without it is valid.
 
 Policy only. Nothing here changes attribution while agents run: `carter update` shows
-these two values, asks, and pins them in `~/.carter/config.toml` (see
+these two values and pins them in `~/.carter/config.toml` (see
 [User config](#user-config-carterconfigtoml)).
 
 | Key | Default | Description |
@@ -178,14 +178,11 @@ English.
 
 ## User config: `~/.carter/config.toml`
 
-`carter install` creates it (schema 2) if it is missing and never rewrites it. A missing
-`schema` key reads as 2. A key Carter does not know (an old `[attribution] name`/`email`, `[git]
-signing_key`, `identity.bot_name`, `identity.git_account`) is not read and not migrated:
-`carter check --host`, `carter install` and `carter update` name it with its file, for example
-``⚠ unknown key `git.signing_key` in /home/you/.carter/config.toml → delete it``, and
-`carter identity add` refuses to rewrite the file until you delete it. Loading the file never
-writes to it. `carter check` reports the retired `identity.git_account` and `identity.bot_name`
-in `.carter/carter.yaml` the same way.
+`carter install` creates it if it is missing and never rewrites it. A key Carter doesn't read is
+named by `carter check --host`, `carter install` and `carter update` with its file, for example
+``⚠ unknown key `x.y` in /home/you/.carter/config.toml → delete it``, and `carter identity add` refuses
+to rewrite the file until you delete it. Loading the file never writes to it. `carter check` reports
+unknown keys in `.carter/carter.yaml` and in plans the same way.
 
 ```toml
 schema = 2
@@ -224,9 +221,8 @@ require_tier = "t2"       # pinned by `carter update`
 |-------|------|
 | `[identity]` | `role`, `login`, `id`, `name`, `email`, `mode` (`auto`, `interactive` or `review`; `CARTER_IDENTITY_MODE` wins; in a detected CI `auto` is `review`, which refuses commits. See [Review-only CI](../guides/ci-review.md#modes)) |
 | `[identity.signing]` | The LLM's signing key, written by `carter identity add`: `public_key`, `fingerprint`, `private_key_path` (a path, never read), `previous_public_keys` (kept after a rotation so old commits verify), `ssh_bin_dir` (default `/usr/bin`; where `ssh-keygen`, `ssh-agent` and `ssh-add` come from), `ttl` (how long `identity unlock` keeps the key; none by default), `mode` (`file` for a key without a passphrase, signed straight from `private_key_path`; `agent` otherwise; set by `identity add`), `agent_socket` or `program` (a password manager instead of Carter's own agent) |
-| `[identity.disclosure]` | Reserved for a later release; read and kept, not used yet |
 | `[github]` | `read_token_file`: where `carter github-token set` stored the GitHub token (a path only, never the token itself). `probe_repo`: optional `owner/name` that `github-token check` uses for its refused push attempt and its pull-request probe instead of a repository you own |
-| `[broker]` | Optional, for the [B tool](../guides/push-and-pr-tools.md). `min_dwell_ms`: the shortest an approval may take before B refuses it as automatic; the effective value is never below 500 and never above 10000. B always uses the home in your system account entry (what OpenSSH reads) for its git and ssh calls and for the `~/.ssh/config` scan; there is no setting for it |
+| `[broker]` | Optional, for [`carter_push`](../guides/write-operations.md#letting-devops-ask-you-to-push). `min_dwell_ms`: the shortest an approval may take before it is refused as automatic; the effective value is never below 500 and never above 10000. It always uses the home in your system account entry (what OpenSSH reads) for its git and ssh calls and for the `~/.ssh/config` scan; there is no setting for it |
 | `[attribution]` | `footer`: appended to GitHub and Jira bodies |
 | `[workspaces."<path>"]` | `max_tier`, `role`, `require_tier`, `allow_project_opencode_edit`. The path is the resolved absolute path of the workspace |
 
@@ -243,7 +239,7 @@ allow_project_opencode_edit = true
 
 It takes effect only when a human runs `carter guard install` or `carter update`: they write
 three exact-path `allow` rules (`opencode.json`, `opencode.jsonc` and `.opencode/*` of that
-workspace) after the denies in the Carter agents' permissions (D71: not a global policy), and
+workspace) after the denies in the Carter agents' permissions, and
 `guard install` lists every active opt-out. It asks nothing. `carter check --host` lists
 them too. A path that no longer exists or contains `*` or `?` is skipped with a message.
 

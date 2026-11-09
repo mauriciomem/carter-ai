@@ -1,10 +1,9 @@
-"""The rendered isolation block against real git (plan 004 step 12; RFC-0007 App C.2, D51).
+"""The rendered isolation block against real git.
 
-No plugin exists yet: the environment is produced by the Python reference
-``apply_isolation`` from a rendered ``isolation.json`` document, which is exactly what the
-TypeScript core will produce for the same input (golden vectors, step 14). Everything runs in
+The environment is produced by the Python reference ``apply_isolation`` from a rendered
+``isolation.json`` document, which is exactly what the TypeScript core produces for the same
+input (golden vectors). Everything runs in
 the hermetic fixture home with file remotes only: no network, no agent socket, no real key.
-The macOS-only parts (osxkeychain helper order, `/bin/false` layout) are listed for step 38.
 """
 
 from __future__ import annotations
@@ -121,7 +120,7 @@ SIGNING = [["-S", "-m", "x"], ["--gpg-sign", "-m", "x"]]
 
 
 class TestNoHumanSignatureBelowT2:
-    """RFC rv2-sec B1: a bare `-S`, `--gpg-sign` and `git tag -s` fail instead of reaching the
+    """A bare `-S`, `--gpg-sign` and `git tag -s` fail instead of reaching the
     human's key. The block is tier-independent, so T0, T1 and a `max_tier` cap share it."""
 
     @pytest.mark.parametrize("tier", ["t0", "t1", "t1-by-cap"])
@@ -197,7 +196,7 @@ class TestNoHumanSignatureBelowT2:
 
 
 class TestBlockedCommits:
-    """C.2 "T2 fail-closed": the blocking entries make every commit fail, never unsigned."""
+    """The blocking entries make every commit fail, never unsigned."""
 
     def test_a_plain_commit_fails_and_creates_nothing(self, doc: dict, repo: Path) -> None:
         before = commits(repo)

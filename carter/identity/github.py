@@ -1,4 +1,4 @@
-"""The calls of the unauthenticated GitHub client (freeze H13; plan 005 step 14).
+"""The calls of the unauthenticated GitHub client.
 
 Used by ``identity add``, ``identity verify --remote`` and ``check --host``: ``get_user``,
 ``get_signing_keys`` (2 pages of 100 at most), ``get_auth_keys`` (the ``<login>.keys`` page) and

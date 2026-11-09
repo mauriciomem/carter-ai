@@ -1,4 +1,4 @@
-"""What the A+ checks return: findings that name a place, never a value.
+"""What the `carter push` checks return: findings that name a place, never a value.
 
 ``Finding`` is shared by the repo-config, SSH-config and signature checks. ``scope`` is a
 git config scope (``system|global|local|worktree|command``) or ``hooks`` / ``ssh config`` /

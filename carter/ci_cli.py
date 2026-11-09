@@ -1,7 +1,7 @@
-"""``carter ci``: install and run the review-only workflow (plan 008 freeze C1, C12).
+"""``carter ci``: install and run the review-only workflow.
 
 ``install review`` is human-only (agent shells refused, a TTY needed to write). ``review`` is
-what the workflow runs. ``check`` validates any workflow against the App C.10 rules.
+what the workflow runs. ``check`` validates any workflow against the workflow rules.
 """
 
 from __future__ import annotations

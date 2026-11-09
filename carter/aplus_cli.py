@@ -1,6 +1,6 @@
-"""``carter push``: the click layer over ``carter.aplus`` (RFC-0007 C.6.6; D72).
+"""``carter push``: the click layer over ``carter.aplus``.
 
-It is for the human (RFC-0007 App B §1, D68 g): they refuse in an agent shell *before* any git
+It is for the human: they refuse in an agent shell *before* any git
 or gh call, and need no TTY. OpenCode's ``!`` shell counts as the human's when the plugin tagged it
 (``CARTER_HUMAN_SHELL`` and no agent signal, AD1). It asks nothing.
 """

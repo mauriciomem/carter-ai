@@ -1,5 +1,5 @@
 # ruff: noqa: E501
-"""``broker push --plan`` (plan 007 step 10): range, signatures, default branch, refusals."""
+"""``broker push --plan``: range, signatures, default branch, refusals."""
 
 from __future__ import annotations
 
@@ -103,7 +103,7 @@ class TestThePlan:
         assert "\x1b" not in subject and "\t" not in subject and len(subject) <= 72
 
     def test_bidi_and_zero_width_characters_cannot_disguise_the_prompt(self, world: World) -> None:
-        """Security review S3."""
+        """"""
         (world.repo / "x").write_text("x")
         git("add", "x", cwd=world.repo)
         git("commit", "-q", "-m", "ok\u202e evil\u200b\u2028end", cwd=world.repo)
@@ -184,7 +184,7 @@ class TestRefusals:
     def test_main_and_master_stay_refused_even_if_origin_head_was_moved_by_a_shell(
         self, world: World, name: str
     ) -> None:
-        """Security review S2: `git remote set-head` moves a local ref; the usual defaults stay refused."""
+        """`git remote set-head` moves a local ref; the usual defaults stay refused."""
         git("checkout", "-q", "-B", name, cwd=world.repo)
         git("update-ref", "refs/remotes/origin/other", world.base_sha, cwd=world.repo)
         git("symbolic-ref", "refs/remotes/origin/HEAD", "refs/remotes/origin/other", cwd=world.repo)

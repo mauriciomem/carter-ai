@@ -63,7 +63,7 @@ exec {real} "$@"
 
 
 def install_old_git(bindir: Path, real_git: str) -> None:
-    """Put a ``git`` into ``bindir`` that behaves like git < 2.54 for the D61 probe (spike E 6)."""
+    """Put a ``git`` into ``bindir`` that behaves like git < 2.54 for the probe (6)."""
     wrapper = bindir / "git"
     wrapper.unlink(missing_ok=True)
     wrapper.write_text(OLD_GIT.replace("{real}", real_git))
@@ -77,7 +77,7 @@ def STAND_IN(*_a: object, **_k: object) -> list[tuple[str, str]]:  # noqa: N802
 
 
 def verbose(args: tuple[str, ...]) -> tuple[str, ...]:
-    """``guard install, remove, status`` show details with ``-v`` (D68 a); these tests read them."""
+    """``guard install, remove, status`` show details with ``-v`` (); these tests read them."""
     if args and args[0] in ("install", "remove", "status"):
         return (args[0], "-v", *args[1:])
     return tuple(args)
@@ -85,7 +85,7 @@ def verbose(args: tuple[str, ...]) -> tuple[str, ...]:
 
 def decline(*groups: str) -> None:
     """Record these groups as declined in the guard state (a TTY could once decline one by one;
-    D68 h made the install one question, so the state is the way to get a declined group)."""
+    made the install one question, so the state is the way to get a declined group)."""
     from carter.guard.state import load_or_empty_readonly, save
     from carter.identity.policyset import consent_groups
     from carter.install.paths import guard_state_path
@@ -97,3 +97,14 @@ def decline(*groups: str) -> None:
         state.consent(name, "declined", "2026-01-01", revs[name])
     path.parent.mkdir(parents=True, exist_ok=True)
     save(state, path)
+
+
+def replace_others(base_dir, state, others):  # type: ignore[no-untyped-def]
+    """Rewrite Carter's git file with new hook/alias entries, keeping the mirror and fragments."""
+    from carter.guard import mirror_io
+    from carter.identity import mirror
+
+    mine, _ = mirror_io.split(mirror_io.read_entries(mirror_io.carter_gitconfig_path(base_dir)))
+    carter = mirror_io.carter_dir(base_dir)
+    frags = {p: p.read_text() for p in (carter / mirror.FRAGMENTS_DIR).glob("*")} if mine else {}
+    return mirror_io.write_entries(base_dir, state, mine, others, frags)

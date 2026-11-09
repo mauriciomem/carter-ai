@@ -3346,7 +3346,7 @@
     "signing": null
    },
    {
-    "name": "role b: an env name managed by the isolation block next to the author",
+    "name": "role author: an env name managed by the isolation block next to the author",
     "signing": {
      "env": {
       "GIT_AUTHOR_NAME": "LLM Bot",
@@ -3415,7 +3415,7 @@
   },
   "apply_role_b": [
    {
-    "name": "role b: empty environment",
+    "name": "role author: empty environment",
     "env": {},
     "expected": {
      "env": {
@@ -3438,7 +3438,7 @@
     }
    },
    {
-    "name": "role b: an inherited author and committer are replaced",
+    "name": "role author: an inherited author and committer are replaced",
     "env": {
      "GIT_AUTHOR_NAME": "Evil",
      "GIT_AUTHOR_EMAIL": "evil@example.invalid",
@@ -3466,7 +3466,7 @@
     }
    },
    {
-    "name": "role b: an inherited author alone is replaced",
+    "name": "role author: an inherited author alone is replaced",
     "env": {
      "GIT_AUTHOR_EMAIL": "human@example.invalid"
     },
@@ -3491,7 +3491,7 @@
     }
    },
    {
-    "name": "role b: appends after a valid inherited count",
+    "name": "role author: appends after a valid inherited count",
     "env": {
      "GIT_CONFIG_COUNT": "1",
      "GIT_CONFIG_KEY_0": "commit.gpgsign",

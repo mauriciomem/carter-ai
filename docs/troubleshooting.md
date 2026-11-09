@@ -53,11 +53,11 @@ Find your symptom, then apply the fix. If nothing here helps, open an
 | The agent reports `E-ROLE-B-TIER` | The role is `author` and the workspace is below T2 (no signing key, or a `max_tier` cap). Add the key (`carter identity add`), remove the cap, or set `role: co-author` in `carter.yaml` and run `carter update` |
 | The agent reports `E-HUMAN-IDENTITY` | Role `author` credits you by your git identity and it is unusable here: `user.name` or `user.email` is empty, is the LLM's address, or is a Carter fallback (the pair `Carter` with `state@carter.invalid`, or `carter-bot@…`; a person named Carter with a real address is fine). Set them in your own git config (an `includeIf` override for this folder counts). `carter check --host` names the reason |
 | `E-GUARD-COMMITTER`: "an agent may not change a commit's author" | An agent used `--reset-author` or `--author` while amending a commit by someone else. Nothing was changed. Ask for a plain amend, or do it yourself |
-| `carter check --host` says the commit hook script is from an older Carter | Run `carter guard install` in your own terminal once after upgrading (role `author` needs the new script) |
+| `carter check --host` says the commit hook script is out of date | The installed `~/.carter/hooks/carter-guard` differs from the one this Carter renders. Run `carter guard install` in your own terminal |
 | `carter check --host` says your address is not known to be linked | In role `author` the `Co-authored-by` line is your only credit. Use your `<id>+<login>@users.noreply.github.com` address as `user.email`, or add your address to your GitHub account, then run `carter check --host` again in your own terminal |
-| `carter update` says "Not pinned" | The `identity` policy is only applied after you confirm. Run it in a terminal, or pass `--yes` |
+| `carter update` says the identity policy was not pinned | It ran in an agent shell, which never pins. Run `carter update` in your own terminal |
 | `carter install` says `AGENTS.md` is user-modified | Your global `AGENTS.md` has your edits, so Carter left it alone. Merge its Communication and Git & Language sections by hand |
-| ``⚠ unknown key `…` in <file> → delete it`` | A key Carter no longer reads (`attribution.name`, `git.signing_key`, `identity.bot_name`, `identity.git_account`, `push_policy`, `agent.<name>.permission`, an old `mcp.carter-*` entry). Nothing was changed and no command failed; delete the key from the file it names. `carter identity add` and `carter update` refuse to rewrite `config.toml` while an unknown key is in it |
+| ``⚠ unknown key `…` in <file> → delete it`` | Carter doesn't read that key. Nothing was changed and no command failed; delete the key from the file it names. `carter identity add` and `carter update` refuse to rewrite `config.toml` while an unknown key is in it |
 
 ## Review-only CI
 
@@ -79,7 +79,6 @@ Find your symptom, then apply the fix. If nothing here helps, open an
 | `E-POLICIES-MISSING: … not loaded` | OpenCode dropped a provider after a guard write (a broken config drops all of them). Carter re-reads for a few seconds first, because OpenCode's background service reloads the file a moment after it changes. `carter guard install` already restored your config from the backup; check the file with `opencode debug config`, then try again |
 | After a guard write OpenCode lost a provider | The write is rolled back automatically. If it ever isn't, restore `~/.carter/backups/<timestamp>/opencode.json[c]` over your config |
 | `carter check --host` says a Carter agent file's permissions differ from what Carter renders | Someone edited it (or Carter was upgraded). Run `carter guard install` (it re-renders the Carter agent files); `check --host` goes green again |
-| `check --host` says global policies from an earlier Carter are still in your OpenCode config | Run `carter guard install`: G2 now applies only to Carter agents and Carter workspaces, and the install takes the old global statements out (only ones it recorded) |
 | `E-STATE-INVALID` | `~/.carter/guard-state.json` is unreadable or from a newer Carter. Carter never rebuilds it: fix or move the file, then run `carter guard install` |
 | Every git command fails with "bad config line … gitconfig" | Carter's included git file (`~/.carter/gitconfig`) is malformed. Delete that file (`rm ~/.carter/gitconfig`): git works again at once. `carter guard remove` and `carter check --host` also work while git itself fails, because they read the file with your global git config switched off |
 | My `opencode.jsonc` comments disappeared after the guards | Carter rewrote the file as JSON. The original is `opencode.jsonc.carter-backup` |
@@ -88,10 +87,12 @@ Find your symptom, then apply the fix. If nothing here helps, open an
 | The agent reports `E-B-REJECTED` | Three rejections (rejects, timeouts, dwell refusals, interrupts) in this session family. Start a new session, or run `carter guard status --reset-b` in your terminal |
 | The agent reports `E-B-POLLUTED` | The OpenCode server was started from an agent shell or already carries Carter's isolation variables; the names are in the message. Quit it and start OpenCode from a clean terminal |
 | The agent reports `E-B-NOAGENT` | The server's `SSH_AUTH_SOCK` is missing, stale or not yours, so B cannot push. Restart OpenCode from a terminal where `ssh-add -l` works |
-| The agent reports `E-B-REPOCFG`, `E-B-HTTPS`, `E-B-DEFAULT`, `E-B-UNSIGNED` or `E-B-ARGS` from `carter_push` | B refused before asking you; the message says why. Everything B refuses, `carter push` in your terminal lets you decide ([Push tool](guides/push-and-pr-tools.md#what-carter-refuses-and-what-to-do)) |
-| `carter_push` does not exist for an agent | Expected for everyone but devops; for devops it needs `g2` at revision 3 (`carter guard install`) and an OpenCode restart. `carter check --host` says which |
+| The agent reports `E-B-DEFAULT` or `E-B-HTTPS` from `carter_push` | The branch is the remote's default branch, or `origin` is HTTPS (the tool pushes over SSH to a non-default branch only). Run `carter push` yourself |
+| The agent reports `E-B-REPOCFG`, `E-B-UNSIGNED` or `E-B-ARGS` from `carter_push` | It refused before asking you; the message says why: repository or SSH config that could run code, an LLM-committed commit without a valid LLM signature, or not a fast-forward of the current branch. Fix it, or run `carter push` yourself and decide ([Write operations](guides/write-operations.md#letting-devops-ask-you-to-push)) |
+| The agent reports `E-B-MOVED` | `HEAD` changed after you approved. Ask again |
+| `carter_push` does not exist for an agent | Expected for everyone but devops. For devops it needs the `g2` guard group (`carter guard install`; `carter guard remove --only broker` turns it off) and an OpenCode restart. `carter check --host` says which |
 | `E-APLUS-ARGS` from `carter push` | Detached HEAD, no `origin`, a non-fast-forward branch, or an extra argument. `carter push` takes no arguments or force option: check out the branch, fetch and rebase |
-| `carter push` lists settings in red and asks to continue | A repository, git or SSH setting could run code with your credentials (a credential helper, `core.sshCommand`, a hook file, a `ProxyCommand`). Read the names, remove what you did not expect, and answer `y` only if you did put them there |
+| `carter push` printed a warning about settings | A repository, git or SSH setting could run code with your credentials (a credential helper, `core.sshCommand`, a hook file, a `ProxyCommand`). The push went on. Read the names and remove what you did not put there |
 | `E-PAT-TYPE` from `carter github-token set` | Only fine-grained `github_pat_` tokens are accepted. The error shows at most the first four characters of what you gave it. Create a fine-grained token (Contents: read, Pull requests: write) |
 | `E-PAT-PERM` | The token file or its folder is not mode 0600/0700, not yours, a symlink, or inside a git repository. Fix it, or run `carter github-token set` again |
 | `carter github-token check` says the token is WRITABLE | GitHub accepted a push attempt: the token has **Contents** write. Revoke it and create one with Contents read |
@@ -121,7 +122,7 @@ Find your symptom, then apply the fix. If nothing here helps, open an
 
 | Symptom | Fix |
 |---------|-----|
-| My agent's commit failed with `error: Couldn't find key in agent?` or `Couldn't get agent socket` and then `fatal: failed to write commit object` (`E-SIGN-LOCKED`, `E-SIGN-NOAGENT`) | The LLM signing key is locked, expired (the default lifetime is 8 hours) or the agent stopped. Nothing was committed and the changes are still staged. In your own terminal run `carter identity unlock`, then ask the agent to retry |
+| My agent's commit failed with `error: Couldn't find key in agent?` or `Couldn't get agent socket` and then `fatal: failed to write commit object` (`E-SIGN-LOCKED`, `E-SIGN-NOAGENT`) | The LLM signing key is locked, its lifetime (`unlock --ttl`) ran out, or the agent stopped. Nothing was committed and the changes are still staged. In your own terminal run `carter identity unlock`, then ask the agent to retry |
 | `E-UNLOCK-OPENCODE` | `unlock` refuses inside OpenCode: in an agent shell, in the `!` prompt and in the integrated terminal (OpenCode sets `OPENCODE_TERMINAL` in every shell it starts). Open a terminal that OpenCode did not start |
 | `E-UNLOCK-TTY` | `unlock` needs a terminal on stdin and stderr to ask for the passphrase. Run it in your own terminal |
 | `E-UNLOCK-PATH` or a socket-path length message | Something that is not our agent's socket sits at the socket path, or the path is too long (104 bytes on macOS, 108 on Linux). Carter never removes what is not its own socket: remove the file yourself or shorten `$TMPDIR`/`XDG_RUNTIME_DIR` |
@@ -136,7 +137,7 @@ Find your symptom, then apply the fix. If nothing here helps, open an
 | `E-IDENTITY-CHECK` from `carter identity add` | The account or the key failed a check and nothing was written. The message names the actual cause: not a `User` account, an id mismatch, the key is not registered as an SSH **signing** key, it is registered as an **authentication** key, it is your own key, or the private key file is missing, too open or does not match |
 | `E-GITHUB-UNREACHABLE` | The unauthenticated checks could not reach GitHub (network, a 5xx, or a rate limit with the reset time). Nothing was written; try again later |
 | `E-SSH-OLD` or `E-GIT-OLD` from `identity add` | Signing needs git 2.40 or newer and OpenSSH 8.4 or newer (`ssh_bin_dir` can point at a newer one, for example Homebrew's). Nothing was written |
-| `E-SIGN-HUMAN-FALLBACK`: `carter commit` says it committed unsigned | The key was locked and you answered no to the unlock question (or there is no terminal): the commit is unsigned with the `Co-authored-by` trailer. Your own key is never used. Run `carter identity unlock` and commit again if you want it signed |
+| `E-SIGN-HUMAN-FALLBACK`: `carter commit` says it committed unsigned | The key was locked, so the commit is unsigned with the `Co-authored-by` trailer. Your own key is never used. Run `carter identity unlock` and commit again if you want it signed |
 | GitHub shows "Unverified" on a commit | The LLM account may have vigilant mode on and the commit was unsigned, or signed with a key that is not registered as a signing key on that account. See [the guide](guides/identity-and-signing.md#the-vigilant-mode-table) |
 | `carter identity unlock` seems to do nothing under a password manager | With `agent_socket` or `program` set, the key lives in the password manager and Carter has nothing to unlock: approve the signing request there |
 
@@ -144,5 +145,5 @@ Find your symptom, then apply the fix. If nothing here helps, open an
 
 | Symptom | Fix |
 |---------|-----|
-| `carter uninstall` kept the guards | Without a terminal and without `--yes` the guards are kept; run `carter guard remove`, or `carter uninstall --yes` |
+| `carter uninstall` kept the guards | You passed `--keep-guards`. Run `carter guard remove` to take them out |
 | `carter uninstall` left files behind | By design. Files you edited are kept (those edited since the last install are listed as `⚠ Kept …`), and memories, `config.toml` and `audit.log` are never removed. Delete them by hand if you don't need them |

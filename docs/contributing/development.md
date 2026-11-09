@@ -36,7 +36,13 @@ carter/          the CLI package
   state.py         .carter/ workspace state
   install/         carter install / uninstall, MCP config
   ops/             carter ops (audit log, config)
-  broker/          B: the push broker behind carter_push (plan 007)
+  broker/          the `carter_push` broker (approval, checks, audit)
+  gate/            the command gate (stdlib only)
+  guard/           `carter guard`: consent, policies, hooks, plugin install
+  identity/        tiers, signing, isolation block, error registry
+  aplus/           `carter push` and its checks
+  ci/              the review-only CI workflow
+  plugin/          the TypeScript OpenCode plugin
   broker_cli.py    `python -I -m carter.broker_cli`, the only entry of the broker
 templates/       Jinja2 templates for agents and AGENTS.md
 skills/          skill definitions (edited by hand)

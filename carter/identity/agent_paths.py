@@ -1,4 +1,4 @@
-"""Where the dedicated ssh-agent lives, and the checks on those paths (freeze H2, report 22 §5).
+"""Where the dedicated ssh-agent lives, and the checks on those paths.
 
 Socket: ``$XDG_RUNTIME_DIR/carter/agent.sock`` when that directory is set, absolute and owned by
 the user; on macOS ``$TMPDIR/carter-<uid>/agent.sock``; otherwise ``~/.carter/run/agent.sock``.

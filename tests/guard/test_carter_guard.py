@@ -1,9 +1,9 @@
-"""``carter-guard`` and its self-contained hook command (plan 004 step 22; RFC-0007 §4.4, C.6.4).
+"""``carter-guard`` and its self-contained hook command.
 
-Every case runs the real script under ``dash`` and ``bash --posix`` (macOS ``/bin/sh`` joins in
-step 38). The AD1 vectors are the shared ones of ``tests/data/plugin_vectors.json``. Since D71
-the hooks act only on ``CARTER_AGENT_SHELL=1`` (``hooks.hook_is_agent`` is their oracle); the
-full AD1 test, ``carter.identity.rules.is_agent``, stays for Carter's own CLI refusals.
+Every case runs the real script under ``dash`` and ``bash --posix`` (and macOS ``/bin/sh``).
+The vectors are the shared ones of ``tests/data/plugin_vectors.json``. The hooks act only on
+``CARTER_AGENT_SHELL=1`` (``hooks.hook_is_agent`` is their oracle); the full agent test,
+``carter.identity.rules.is_agent``, stays for Carter's own CLI refusals.
 """
 
 from __future__ import annotations
@@ -125,7 +125,7 @@ class TestPrePush:
         self, sh: list[str], script: Path, tmp_path: Path
     ) -> None:
         envs = ({}, {"CARTER_HUMAN_SHELL": "1"}, {"OPENCODE_TERMINAL": "1"})
-        # D71: the weak signals of another agent's shell no longer block
+        # the weak signals of another agent's shell do not block
         envs += ({"AGENT": "1"}, {"OPENCODE_SESSION_ID": "ses_x"}, {"OPENCODE": "1"})
         for env in envs:
             done = run([*sh, str(script), "pre-push", "origin", "url"], env, tmp_path)

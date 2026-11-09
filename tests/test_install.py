@@ -577,7 +577,7 @@ class TestInstallOps:
         created = install.install_ops(base_dir, {"files": [], "file_hashes": {}})
 
         assert created is False
-        assert config.read_text() == SCHEMA1_INSTALLED  # D70: nothing is migrated
+        assert config.read_text() == SCHEMA1_INSTALLED  # nothing is migrated
         assert [p.name for p in config.parent.glob("config.toml*")] == ["config.toml"]
 
     def test_a_future_schema_is_left_untouched(self, base_dir: Path) -> None:
@@ -631,7 +631,7 @@ class TestInstallOps:
 
 
 # ──────────────────────────────────────────────────────────────────────────────
-# Bot name (gone: D70)
+# Bot name (gone: )
 # ──────────────────────────────────────────────────────────────────────────────
 
 
@@ -829,19 +829,19 @@ def _v016_text() -> str:
 
 
 def seen(capsys: pytest.CaptureFixture[str]) -> str:
-    """Everything printed: warnings go to stderr, results to stdout (D68 a)."""
+    """Everything printed: warnings go to stderr, results to stdout ()."""
     got = capsys.readouterr()
     return got.out + got.err
 
 
-# The push sentence before D68 g: the pinned hashes below are of files that carried it.
+# The push sentence an earlier Carter wrote into AGENTS.md.
 OLD_OWN_TERMINAL = (
     "Run `carter push` and then `carter pr` in your own terminal, not through an agent."
 )
 
 
 class TestGlobalAttributionRule:
-    """The global AGENTS.md carries the tier-based rule (plan 002 step 17)."""
+    """The global AGENTS.md carries the tier-based rule."""
 
     def _install(self, base_dir: Path, manifest: dict | None = None, previous=None):
         manifest = manifest if manifest is not None else {"files": [], "file_hashes": {}}
@@ -863,12 +863,14 @@ class TestGlobalAttributionRule:
         assert "`refused`" in _ATTRIBUTION_RULE and "stop" in _ATTRIBUTION_RULE
 
     def test_rule_is_short(self) -> None:
-        assert len(_ATTRIBUTION_RULE) <= 700  # AGENTS.md loads every session (plan 005: +committer)
+        assert len(_ATTRIBUTION_RULE) <= 700  # AGENTS.md loads every session +committer)
 
-    def test_the_rule_carries_the_handoff_sentence_and_stays_short(self) -> None:
+    def test_the_rule_says_who_pushes_and_who_opens_the_pr_and_stays_short(self) -> None:
         from carter.aplus.push import OWN_TERMINAL
 
         assert OWN_TERMINAL in _ATTRIBUTION_RULE and "human-only" in _ATTRIBUTION_RULE
+        assert "`carter_push`" in _ATTRIBUTION_RULE and "gh pr create" in _ATTRIBUTION_RULE
+        assert "carter pr" not in _ATTRIBUTION_RULE and "handoff" not in _ATTRIBUTION_RULE
         assert len(_ATTRIBUTION_RULE) <= 700  # AGENTS.md loads every session
 
     def test_a_file_matching_the_recorded_manifest_hash_is_upgraded_in_place(
@@ -891,7 +893,7 @@ class TestGlobalAttributionRule:
     def test_an_earlier_text_the_manifest_does_not_know_is_user_modified(
         self, base_dir: Path, capsys: pytest.CaptureFixture[str]
     ) -> None:
-        """D70: no sha lists of shipped versions; only the recorded hash proves it is unedited."""
+        """no sha lists of shipped versions; only the recorded hash proves it is unedited."""
         agents_md = base_dir / "opencode" / "AGENTS.md"
         agents_md.parent.mkdir(parents=True)
         older = _OPENCODE_AGENTS_MD.replace(OWN_TERMINAL, OLD_OWN_TERMINAL)

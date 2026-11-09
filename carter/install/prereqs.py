@@ -26,7 +26,7 @@ REQUIRED_ENV_VARS = ("TFE_TOKEN",)
 
 # Minimum supported OpenCode release (the first with V2 permissions).
 MIN_OPENCODE = (2, 1)
-# The newest OpenCode the Carter plugin was proven against (plan 004 step 32, C23). Older 2.1.x
+# The newest OpenCode the Carter plugin was proven against. Older 2.1.x
 # and newer releases still install, with a warning: G2 relies on the plugin's self-test there.
 TESTED_OPENCODE = (2, 1, 4)
 FIRST_PLUGIN_BAND = (2, 1, 4)

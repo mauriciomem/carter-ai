@@ -1,4 +1,4 @@
-"""Rule ``env-overrides`` (RFC-0007 C.4.1 row 4): assignments, ``export``, ``unset``, ``env -u``.
+"""Rule ``env-overrides``: assignments, ``export``, ``unset``, ``env -u``.
 
 The names come from the data file: the ``env-overrides`` items plus every ``isolation_vars`` name.
 Reading a variable (``echo $HOME``) is not an override and never reaches this module.

@@ -1,4 +1,4 @@
-"""``carter ci install review``: write the review-only workflow (plan 008 freeze C1).
+"""``carter ci install review``: write the review-only workflow.
 
 Click-free, so it is testable. It writes ``.github/workflows/carter-review.yml`` under the
 repository that contains the working directory, and nothing else. The caller has already

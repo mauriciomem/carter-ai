@@ -1,10 +1,10 @@
-"""The human-terminal rule shared by every Carter mutator (RFC-0007 App B §1).
+"""The human-terminal rule shared by every Carter mutator.
 
 ``carter guard install|remove``, ``github-token set|check``, ``push`` and ``pr`` must refuse
 in an agent shell (AD1) and, unless told otherwise, without a TTY. The rule is written once
 here so it cannot drift between commands.
 
-Stdlib-only (plus ``carter.identity``, itself stdlib-only): the 2a gate wrapper can import
+Stdlib-only (plus ``carter.identity``, itself stdlib-only): the gate wrapper can import
 it without pulling in click.
 """
 

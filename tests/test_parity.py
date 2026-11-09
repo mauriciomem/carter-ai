@@ -368,7 +368,7 @@ class TestNoFalseReadOnlyClaim:
 
 
 class TestNoAgentPushes:
-    """Plan 003 step 12 (T14): no agent pushes; devops is the sole caller of B.
+    """no agent pushes; devops is the sole caller of B.
 
     Structural half: the rendered frontmatter of every Carter agent. The prose half (the
     devops template no longer claims it pushes) lands with step 23, so this step ends green.
@@ -423,7 +423,7 @@ class TestNoAgentPushes:
             assert got == expected, role
 
     def test_the_global_policy_set_never_names_the_broker_tools(self) -> None:
-        # D46 is per-agent: a global deny would block devops as well.
+        # is per-agent: a global deny would block devops as well.
         from carter.identity.policyset import policy_set
 
         assert not [s for s in policy_set() if "carter_" in s.resource]
@@ -579,7 +579,7 @@ class TestCarterOpsSkillGeneratedBlocks:
 
 
 class TestPushProse:
-    """Plan 003 step 23 (T14, text half) as amended by D72: the agent-facing prose matches the push
+    """as amended by the agent-facing prose matches the push
     model. Nobody pushes: the human runs ``carter push``, then an agent may open the pull request
     with ``gh pr create``. Jira and Slack stay with devops. The one sentence about *where* comes
     from ``push.OWN_TERMINAL`` and nowhere else."""
@@ -607,11 +607,11 @@ class TestPushProse:
     def test_devops_describes_the_b_tool_as_an_approval_request_and_nobody_else_does(
         self, rendered_agents_dir: Path
     ) -> None:
-        """Slice B (plan 007 step 21): only devops names the tool; every use asks the human."""
+        """Slice B: only devops names the tool; every use asks the human."""
         body = self._body(rendered_agents_dir, "devops")
         assert "`carter_push`" in body and "carter_pr" not in body
         assert "opens a prompt" in body and "A rejection is final" in body
-        assert "never use them as a way around a refusal" in body
+        assert "never use it as a way around a refusal" in body
         assert "If the tool is not in your list" in body and "hand off" in body
         assert "later release" not in body
         for role in ("engineer", "maestro", "pm", "security", "narrator", "architect", "learner"):

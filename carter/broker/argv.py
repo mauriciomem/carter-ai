@@ -1,15 +1,15 @@
-"""Validators and the fixed argv of B's push (RFC-0007 App C.5 "Argv and URL", freeze B11, B13).
+"""Validators and the fixed argv of the broker's push.
 
 The model supplies **nothing** here: ``carter_push`` has no input fields. The URL comes from
 ``origin``, the branch from ``HEAD``, the sha from ``rev-parse``; everything is still validated,
 because a repository's config and a branch name are attacker-influenced data.
 
-Rules (driven by ``tests/data/b_hostile_argv.json``, spike C7/C8):
+Rules (driven by ``tests/data/b_hostile_argv.json``):
 
 - the URL matches one of two shapes with ``fullmatch`` (``$`` would accept a trailing newline):
   ``git@github.com:<owner>/<repo>[.git]`` or ``ssh://git@github.com/<owner>/<repo>[.git]``;
   host lower-case, user ``git``, no port, no userinfo, no ``.``/``..`` segment, no leading ``-``;
-- an ``http(s)`` origin is ``E-B-HTTPS`` (use A+), every other shape ``E-B-ARGS``;
+- an ``http(s)`` origin is ``E-B-HTTPS`` (use `carter push`), every other shape ``E-B-ARGS``;
 - the refspec is built here as ``<sha>:refs/heads/<branch>``; a given one is parsed back, with
   no ``+``, no empty source (deletion), no glob, no tag or other namespace, no short name;
 - the branch obeys git's ref-name rules and must not start with ``-`` (git would push ``--x``);
@@ -35,7 +35,6 @@ _SCP = re.compile(rf"git@github\.com:(?P<owner>{_NAME})/(?P<repo>{_NAME}?)(?:\.g
 _SSH = re.compile(rf"ssh://git@github\.com/(?P<owner>{_NAME})/(?P<repo>{_NAME}?)(?:\.git)?")
 _HTTP = re.compile(r"https?://", re.IGNORECASE)
 _SHA = r"(?:[0-9a-f]{40}|[0-9a-f]{64})"
-_REFSPEC = re.compile(rf"(?P<sha>{_SHA}):refs/heads/(?P<branch>[^\n]+)")
 _BAD_REF_CHARS = re.compile(r"[\x00-\x20\x7f~^:?*\[\\]")
 MAX_BRANCH = 200
 # Belt and braces on top of the config checks: no prompts, no forwarding, no local command.
@@ -82,7 +81,7 @@ def valid_branch(name: str) -> bool:
     if any(
         unicodedata.category(c) in ("Cc", "Cf", "Cn", "Co", "Cs", "Zl", "Zp", "Zs") for c in name
     ):
-        return False  # bidi overrides and zero-width characters could disguise the prompt (S3)
+        return False  # bidi overrides and zero-width characters could disguise the prompt
     if name.endswith(("/", ".", ".lock")) or name == "@":
         return False
     return not any(part.startswith(".") or part.endswith(".lock") for part in name.split("/"))
@@ -98,14 +97,6 @@ def build_refspec(sha: str, branch: str) -> str:
     if not re.fullmatch(_SHA, sha):
         raise _args("the pinned commit is not a full lower-case sha")
     return f"{sha}:refs/heads/{require_branch(branch)}"
-
-
-def parse_refspec(refspec: str) -> tuple[str, str]:
-    """``(sha, branch)`` of a refspec of exactly the shape B builds; anything else is refused."""
-    match = _REFSPEC.fullmatch(refspec)
-    if not match or not valid_branch(match["branch"]):
-        raise _args("the refspec is not <sha>:refs/heads/<branch>")
-    return match["sha"], match["branch"]
 
 
 def ssh_command(tools: Tools) -> str:

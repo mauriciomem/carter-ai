@@ -1,4 +1,4 @@
-// The plugin's signing block (plan 005 step 12, freeze H3): it applies what `identity env` returns at
+// The plugin's signing block: it applies what `identity env` returns at
 // effective T2 and nothing else; every other path stays fail-closed as in 2a.
 import { test } from "node:test"
 import assert from "node:assert/strict"
@@ -44,7 +44,7 @@ test("signing vectors: the plugin rejects exactly the shapes it can judge", () =
 
 const blockB: Signing = vectors.signing.block_role_b
 
-test("role b vectors: the block with the author is accepted and applied like the committer-only block (no new function)", () => {
+test("role author vectors: the block with the author is accepted and applied like the committer-only block (no new function)", () => {
   assert.deepEqual(validateSigning(blockB, isoDoc), blockB)
   assert.deepEqual(Object.keys(blockB.env), vectors.signing.env_keys_role_b)
   for (const c of vectors.signing.apply_role_b) {

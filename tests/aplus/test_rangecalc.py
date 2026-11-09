@@ -1,5 +1,7 @@
-"""The range ``carter push`` shows and the signature check walks (RFC-0007 C.6.6; plan 003
-step 18): ``origin/<branch>`` if it exists, else ``merge-base(origin/HEAD, HEAD)``."""
+"""The range ``carter push`` shows and the signature check walks.
+
+It is ``origin/<branch>`` if that exists, else ``merge-base(origin/HEAD, HEAD)``.
+"""
 
 from __future__ import annotations
 

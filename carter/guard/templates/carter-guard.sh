@@ -1,13 +1,13 @@
 #!/bin/sh
 # Managed by Carter (`carter guard`). Do not edit: a changed file is detected,
 # kept as you left it, and reported by `carter guard status`.
-# carter-guard @@VERSION@@: git hook backstop for agent shells (RFC-0007 section 4.4, C.6.4).
+# carter-guard @@VERSION@@: git hook backstop for agent shells.
 # POSIX sh only. The human path runs no external command and makes no git call.
 # Events: pre-push (blocks an agent push) and, since revision 2 of the `hooks` group,
 # prepare-commit-msg (every reject check, then the idempotent trailer), commit-msg (the trailer is
 # still there) and post-commit (warn only). The script never calls `carter` or Python.
-# Roles (2c): the script never reads the role. The committer is always the LLM; when the commit's
-# author is the LLM (role b) the trailer is the human's `Co-authored-by: <user.name> <user.email>`
+# Roles: the script never reads the role. The committer is always the LLM; when the commit's
+# author is the LLM (role author) the trailer is the human's `Co-authored-by: <user.name> <user.email>`
 # (read with `git config` in the repo), otherwise the LLM's.
 
 @@IS_AGENT@@
@@ -28,7 +28,7 @@ nl='
 
 carter_key() { git config --file "$cfg" --includes --get "carter.$1" 2>/dev/null; }
 
-# A usable human identity (plan 006 K2; the vectors in tests/data/human_identity_vectors.json hold
+# A usable human identity (the vectors in tests/data/human_identity_vectors.json hold
 # this and coauthor.validate to the same answers). Prints nothing when usable, else one problem.
 # $1 name, $2 email, $3 the LLM's email. The problem tokens are a fixed set: safe to print.
 human_problem() {
@@ -73,7 +73,7 @@ tier_of() {
 
 # sets TRAILER_KEY and TRAILER_LINE: Co-authored-by at T1/T2 (login from the noreply email),
 # Assisted-by: Carter at T0 and whenever the email is missing. At T2, when the commit's author is
-# the LLM (role b), the line is the human's, from `git config` in the repo; an unusable human
+# the LLM (role author), the line is the human's, from `git config` in the repo; an unusable human
 # identity rejects the commit (nothing is ever downgraded to the LLM's own trailer).
 trailer_for() {
   TRAILER_KEY=Assisted-by

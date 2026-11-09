@@ -1,5 +1,5 @@
 # ruff: noqa: E501
-"""``carter identity remove`` (plan 005 step 17; ADR D14: removable, and only if unchanged).
+"""``carter identity remove`` ADR removable, and only if unchanged).
 
 The identity is made with the real ``identity add`` code against the loopback fake GitHub. The
 dedicated agent case uses a throwaway ssh-agent as the "password manager" socket.
@@ -27,6 +27,7 @@ from carter.identity.schema import Workspace
 from carter.identity.writer import write_config
 from carter.install.paths import guard_state_path
 from gh_api import FakeGitHub, Reply
+from guard.helpers import replace_others
 from ssh_rig import KeyPair
 
 LOGIN, UID = "octocat", 583231
@@ -156,7 +157,7 @@ class TestRemoval:
     ) -> None:
         t2(fake, key)
         state = load(guard_state_path(None))
-        mirror_io.replace_others(
+        replace_others(
             None,
             state,
             [("hook.carter-guard-pre-push.event", "pre-push"), ("alias.ai-commit", "!true")],
@@ -206,7 +207,7 @@ class TestCommand:
         self, home: Path, fake: FakeGitHub, key: KeyPair
     ) -> None:
         t2(fake, key)
-        done = remove()  # no input, no terminal: D68 h, we have backups
+        done = remove()  # no input, no terminal: we have backups
         assert done.exit_code == 0, done.output
         assert len(done.output.splitlines()) == 1 and "removed the LLM identity" in done.output
         assert "your key file stay" in done.output

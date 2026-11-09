@@ -1,11 +1,11 @@
-"""What OpenSSH does that the dedicated signing agent relies on (plan 005, step 2; spike A).
+"""What OpenSSH does that the dedicated signing agent relies on.
 
-Observed on OpenSSH 10.2p1 / Linux (the macOS repeat is step 33). These tests are the
-regression record for RFC-0007 section 4.4 and report 22: they pin the exit codes and the
-few stable phrases Carter's agent code (step 10) is allowed to depend on.
+Observed on OpenSSH 10.2p1 / Linux. These tests are the
+regression record for section 4.4 and report 22: they pin the exit codes and the
+few stable phrases Carter's agent code is allowed to depend on.
 
 They start real ``ssh-agent`` processes (``-m real_ssh_agent``; skipped when OpenSSH is missing)
-through the shared fixtures of ``tests/ssh_rig.py`` (step 7): a short ``/tmp/c2b-<pid>-*`` base, a
+through the shared fixtures of ``tests/ssh_rig.py``: a short ``/tmp/c2b-<pid>-*`` base, a
 scrubbed environment, a reaper that fails the run if an agent is left. The developer's agent and
 ``~/.ssh`` are never named.
 """
@@ -25,7 +25,7 @@ from ssh_rig import Rig, _alive, classify_key, real_ssh
 
 @real_ssh
 class TestPassphraseDetection:
-    """Question 1: D54 needs a safe "has a passphrase" test."""
+    """Question 1: needs a safe "has a passphrase" test."""
 
     @pytest.mark.parametrize(
         ("kind", "extra"),

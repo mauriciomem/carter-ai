@@ -1,13 +1,13 @@
-"""``carter guard install`` / ``remove``: the single owner of G2 artifacts (RFC-0007 C.6.2).
+"""``carter guard install`` / ``remove``: the single owner of G2 artifacts.
 
-Scope so far: policies, per-agent permissions, guard state, and (2a step 24-25) the ``hooks``
-group: ``~/.carter/hooks/carter-guard``, the ``pre-push`` entries in ``~/.carter/gitconfig`` and
-the include line, or on git < 2.54 the ``repo_hooks`` fallback. No plugin yet (step 26).
+What it manages: the ``hooks`` group (``~/.carter/hooks/carter-guard``, the ``pre-push`` and
+commit entries in ``~/.carter/gitconfig`` and the include line, or on git < 2.54 the
+``repo_hooks`` fallback), the plugin and the per-agent permissions.
 
-Scope (D71). G2's deny set is not written to the OpenCode config any more: it is rendered into
+G2's deny set is not written to the OpenCode config any more: it is rendered into
 the ``permissions:`` of Carter's own agent files (``components.rerender_agents``), so other agents
 are untouched. The only global write left is the per-agent ``carter_push`` denies for the built-in
-agents (D46); an earlier Carter's recorded global ``policies`` are taken out.
+agents; an earlier Carter's recorded global ``policies`` are taken out.
 
 Order and atomicity. Consent is resolved in memory first. The per-agent denies (and the removal
 of old global policies) go to the OpenCode config in ONE verified write (rolled back on any loss);
@@ -52,14 +52,14 @@ GLOBAL_REMOVED = (
     "global OpenCode policies removed."
 )
 INTERIM_NOTE = (
-    "Interim: plugin and isolation are not installed; literal denies only. They are a speed "
-    "bump, not a boundary, until the plugin is confirmed (`g2` revision 2)."
+    "The plugin and isolation are not installed: the denies are literal matches only, a speed "
+    "bump, not a boundary. `carter guard install` asks again."
 )
 GIT_NOT_NEEDED = "include.path: not needed (no Carter git keys are enabled)"
 PAT_KEPT = (
     "`~/.carter/secrets/gh-read.token` kept; delete it and revoke the token on GitHub if unused"
 )
-# Files a later slice installs; removal deletes them only if recorded and unchanged.
+# Extra files Carter may have written; removal deletes them only if recorded and unchanged.
 KNOWN_EXTRA_FILES = ("opencode-headless.json",)
 
 
@@ -68,7 +68,7 @@ class GuardAbort(Exception):
 
 
 def describe_error(exc: BaseException) -> tuple[str, str, str] | None:
-    """``(cause, fix, code)`` for the failures commands expect (F9, D68 a); ``None`` otherwise.
+    """``(cause, fix, code)`` for the failures commands expect; ``None`` otherwise.
 
     The cause is the registry message plus the technical detail when there is one; the fix is the
     registry's one-line ``fix`` (empty when the cause already says what to do)."""
@@ -119,27 +119,23 @@ def _load_state(base_dir: Path | None, *, dry_run: bool, echo: Echo) -> GuardSta
         echo(f"⚠ guard state {path} is unreadable ({read.detail}).")
         if dry_run:
             echo("A real install would move it aside and start fresh (nothing is written now).")
-        else:  # moved, not deleted: nothing to ask (D68 h)
+        else:  # moved, not deleted: nothing to ask
             echo(f"Moved to {quarantine_corrupt(path, now=_stamp())}")
     return read.state
 
 
-def _live_ids() -> list[str]:
-    return [g.id for g in consent_groups() if g.live]
-
-
 def _active_optouts(state: GuardState, *, echo: Echo) -> list[Statement]:
-    """D52: apply and list every active opt-out. They come from the user's own ``config.toml``,
-    so nothing is asked (D68 h)."""
+    """apply and list every active opt-out. They come from the user's own ``config.toml``,
+    so nothing is asked."""
     if consent.CONFIG_EDIT not in consent.accepted_groups(state):
         return []
     try:
         found = optout.active_optouts(load_identity())
     except ConfigError:
-        echo("config.toml is invalid; D52 opt-outs not applied.")
+        echo("config.toml is invalid; opt-outs not applied.")
         return []
     if found.workspaces or found.refused:
-        echo("Active D52 opt-outs (agents may edit these project files):")
+        echo("Active opt-outs (agents may edit these project files):")
         for line in optout.describe(found):
             echo(line)
     return found.statements() if found.workspaces else []
@@ -157,7 +153,7 @@ def _show_diff(res: policies.ApplyResult, echo: Echo) -> None:
 
 
 def _rerender(base_dir: Path | None, echo: Echo) -> None:
-    """Write the global Carter agent files again: they carry G2's rules (D71)."""
+    """Write the global Carter agent files again: they carry G2's rules."""
     from carter.install import components
 
     try:
@@ -189,10 +185,10 @@ def _undo_git(base_dir: Path | None, before: GuardState, after: GuardState) -> N
 
 
 def _availability(echo: Echo) -> tuple[gitconfig.Mode | None, dict[str, str]]:
-    """What this git can do (D61 probe) and which hook groups therefore make no sense here.
+    """What this git can do (probe) and which hook groups therefore make no sense here.
 
     ``hooks`` needs git >= 2.54 (E-GIT-OLD otherwise: ``repo_hooks`` is offered instead);
-    ``repo_hooks`` is for older git only. No consent is asked for nothing (G10)."""
+    ``repo_hooks`` is for older git only. No consent is asked for nothing."""
     try:
         mode = gitconfig.probe_scope()
     except gitconfig.GitError as exc:
@@ -398,10 +394,10 @@ NEWS = {
 
 
 def _summary(offer: Sequence[str], state: GuardState) -> list[str]:
-    """The 3-4 lines above the one install question (D68 h). A group accepted earlier at an
-    older revision says what the new revision adds: the yes is the D65 consent for it."""
+    """The 3-4 lines above the one install question. A group accepted earlier at an
+    older revision says what the new revision adds: the yes is the consent for it."""
     revs = {g.id: g.rev for g in consent_groups()}
-    head = ", ".join(f"{g} r{revs[g]}" if revs[g] > 1 else g for g in offer)
+    head = ", ".join(offer)
     lines = [f"Carter will set up: {head}"]
     news = []
     for name in offer:
@@ -422,7 +418,7 @@ def _summary(offer: Sequence[str], state: GuardState) -> list[str]:
 def _remember_refusals(
     state: GuardState, offer: Sequence[str], only: Sequence[str] | None, base_dir: Path | None
 ) -> None:
-    """A no to a revision upgrade keeps the old consent and is not asked again (D65)."""
+    """A no to a revision upgrade keeps the old consent and is not asked again."""
     stale = [
         g
         for g in offer
@@ -469,7 +465,7 @@ def install(
                 _remember_refusals(state, offer, only, base_dir)
                 echo("Nothing installed.")
                 return 0
-            # the one yes is the consent for every group it listed, revisions included (D65)
+            # the one yes is the consent for every group it listed, revisions included
             assume_yes = True
             only = [*offer, *(g for g in (only or []) if g not in offer)]
     plan = consent.resolve_consents(
@@ -493,9 +489,7 @@ def install(
         else:
             echo(f"Declined: {name} (listed as a residual by `carter guard status`).")
     for name in plan.refused_offers:
-        echo(
-            f"Not confirmed: {name} revision 2 (denies stay; `carter guard install --only {name}`)"
-        )
+        echo(f"Not confirmed: {name} (denies stay; `carter guard install --only {name}`)")
     if consent.plugin_wanted(state):
         plugin.plan(base_dir, state)  # preflight: E-FALSE-MISSING, bad paths... before any write
     optouts = _active_optouts(state, echo=echo)
@@ -552,9 +546,6 @@ def _dry_run(
     for name in scope:
         group = groups[name]
         prior = state.consents.get(name, {}).get("decision")
-        if not group.live:
-            echo(f"  {name:<18} nothing to install in this version")
-            continue
         if name in unavailable:
             echo(f"  {name:<18} not on this machine: {unavailable[name]}")
             continue
@@ -566,10 +557,8 @@ def _dry_run(
             continue
         rec_rev = int(state.consents.get(name, {}).get("rev", 1))
         if prior == "accepted" and rec_rev < group.rev and not (only and name in only):
-            echo(f"  {name:<18} accepted (revision {rec_rev}): {group.effect}")
-            echo(
-                f"  {'':<18} needs your confirmation for revision {group.rev}: plugin not installed"
-            )
+            echo(f"  {name:<18} accepted earlier: {group.effect}")
+            echo(f"  {'':<18} needs your confirmation again: new content (plugin not installed)")
             continue
         status = prior or "would ask"
         echo(f"  {name:<18} {status}: {group.effect}")
@@ -612,12 +601,12 @@ def _dry_run(
 
 
 def _only_plugin(base_dir: Path | None, state: GuardState, echo: Echo, *, dry_run: bool) -> None:
-    """``remove --only plugin``: plugin, ``isolation.json`` and ``run/`` go; the 1G denies, hooks
+    """``remove --only plugin``: plugin, ``isolation.json`` and ``run/`` go; the denies, hooks
     and the PAT stay. ``g2`` goes back to revision 1 so a bare ``--yes`` never brings it back."""
     if dry_run:
         for item in (plugin.isolation_path(base_dir), plugin.plugin_dir(base_dir)):
             echo(f"  would remove {item}")
-        echo("  g2 would go back to revision 1 (the 1G denies stay)")
+        echo("  g2 would keep only the denies")
         return
     plugin.remove(base_dir, state, echo)
     if state.consents.get("g2", {}).get("decision") == "accepted":
@@ -632,7 +621,7 @@ def _only_broker(base_dir: Path | None, state: GuardState, echo: Echo, *, dry_ru
     ``isolation.json`` are re-rendered together with ``b_enabled: false``, the headless profile is
     removed, and the revision-3 offer is recorded as declined so nothing asks again."""
     if dry_run:
-        echo("  g2 would go back to revision 2: B off, the rest of the plugin stays")
+        echo("  the push tool would go off; the rest of the plugin stays")
         echo(f"  would remove {plugin.headless_profile_path(base_dir)}")
         return
     day = datetime.now(UTC).date().isoformat()
@@ -648,7 +637,7 @@ def _only_broker(base_dir: Path | None, state: GuardState, echo: Echo, *, dry_ru
     state.forget_file(profile)
     if consent.plugin_wanted(state):
         plugin.install(base_dir, state, echo)  # re-render isolation.json and the plugin together
-    echo("B is off; OpenCode needs a restart to drop the tools")
+    echo("The push tool is off; OpenCode needs a restart to drop the tools")
 
 
 def _known_extra_files(
@@ -683,7 +672,7 @@ def remove(
     reader: configwrite.Reader | None = None,
 ) -> int:
     """Run ``carter guard remove``: policies and permissions, then git config, then state.
-    It asks nothing: backups are kept (D68 h)."""
+    It asks nothing: backups are kept."""
     path = guard_state_path(base_dir)
     read = load_or_empty_readonly(path)
     if read.status == "newer":

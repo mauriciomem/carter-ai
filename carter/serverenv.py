@@ -1,4 +1,4 @@
-"""Find the OpenCode server process(es) and read their environment **by name** (step 30).
+"""Find the OpenCode server process(es) and read their environment **by name**.
 
 ``carter check --host`` asks whether the server was started from a polluted environment (an
 agent signal, a human tag, Carter's own isolation markers): then the plugin cannot tell shells

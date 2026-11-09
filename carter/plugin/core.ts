@@ -1,4 +1,4 @@
-// Carter plugin core (RFC-0007 §4.3, App C.2; plan 004 steps 13-16, freeze G2-G6, G13).
+// Carter plugin core.
 //
 // Pure logic with injected dependencies: no OpenCode import, `node:*` modules only, erasable
 // TypeScript only (Node type stripping and Bun load this file as written). The plugin holds the
@@ -36,7 +36,7 @@ export interface Iso {
     gate_timeout_ms: number
     env_timeout_ms: number
     status_dir: string
-    b_enabled: boolean // slice B: the broker tools register only while this is true
+    b_enabled: boolean // the broker tool registers only while this is true
     b_caller: string // the one agent id allowed to use them (devops)
     broker_args: string[] // `-I -m carter.broker_cli`, after python_path
     b_git: string // absolute paths fixed at install ("" = not found)
@@ -75,7 +75,7 @@ export interface Deps {
   random: () => number
   euid: number | undefined
   sessionDir: (sessionID: string) => Promise<string | undefined>
-  // The parent of a session, null for a root session. Throws when the session cannot be read (D71).
+  // The parent of a session, null for a root session. Throws when the session cannot be read.
   sessionParent: (sessionID: string) => Promise<string | null>
   log: (line: string) => void
   onFailed?: () => void // the self-test failed: the adapter reloads the tool list so B drops out
@@ -87,7 +87,7 @@ export const MESSAGES: Record<string, string> = {
     "Carter isolation file is missing, invalid, or doesn't match its install-time hash; agent shells are disabled. Run `carter guard install` in your terminal.",
   "E-GATE-FAIL": "Command gate unavailable; command refused (fail closed). Run `carter check --host`.",
   "E-SELFTEST":
-    "Carter plugin self-test failed on OpenCode <v>: all shells are treated as agent shells and B is disabled. See `carter check --host`.",
+    "Carter plugin self-test failed on OpenCode <v>: all shells are treated as agent shells and the push tool is disabled. See `carter check --host`.",
   "E-SIGN-UNAVAILABLE":
     "The LLM signing identity is unavailable (<reason>); agent commits are blocked, not downgraded. Changes are still staged. Run `carter check --host`.",
   "E-CONFIG": "config.toml is invalid; agent commits are disabled until fixed.",
@@ -101,7 +101,7 @@ export class CarterError extends Error {
   }
 }
 
-// ---- marker (App C.2 "Shell tagging"; D71 adds the scope bit) --------------------------------
+// ---- marker (with the scope bit) --------------------------------
 // `: carter_agent_<nonce>_<1|0>\n`: 1 = the shell is in Carter's scope (a Carter agent or a Carter
 // workspace), 0 = it is not and create.before leaves it untouched. Every shell call is marked, so the
 // self-test and the `!` human tag stay correct whatever the scope.
@@ -120,7 +120,7 @@ export function detect(nonce: string, command: string): { marked: boolean; scope
   return { marked: false, scope: null, command }
 }
 
-// ---- scope (D71) ----------------------------------------------------------------------------
+// ---- scope ----------------------------------------------------------------------------
 // A shell is in Carter's scope when (A) the calling agent is a Carter agent (`carter-*`, workspace
 // suffixes included), or a subagent of one, or (B) its directory is inside a Carter workspace.
 export const WORKSPACE_LEVELS = 32 // directories walked upwards from the shell's directory
@@ -189,7 +189,7 @@ export function countState(env: Env): { state: "ok" | "polluted"; n: number; rea
   return ok(n)
 }
 
-// ---- self-test state machine (App C.2; spike C; freeze correction 3) ------------------------
+// ---- self-test state machine  ------------------------
 // unproven -> passed on the first marked round trip; a marked execute.before that is not followed
 // by a marked create.before within N ms -> failed (terminal, in every state). Timers are armed
 // LAST in execute.before and live in every state.
@@ -257,7 +257,7 @@ export function tagShell(
   return { tag: "none", polluted }
 }
 
-// ---- isolation.json (G4) --------------------------------------------------------------------
+// ---- isolation.json --------------------------------------------------------------------
 const TOP = ["schema_version", "env", "git_config", "blocking_git_config", "pollution", "plugin"]
 const PLUGIN_KEYS = [
   "python_path", "carter_path", "gate_args", "env_args", "pat_file", "pat_prefix", "gh_token_dummy",
@@ -363,7 +363,7 @@ export function applyIsolation(env: Env, iso: Iso, pat: string | undefined, bloc
   return { env: out, flags }
 }
 
-// Port of carter.identity.payload.to_git_env: the signing block (identity entry, H3) goes on top of
+// Port of carter.identity.payload.to_git_env: the signing block (identity entry) goes on top of
 // the isolation entries, so Carter's later entries win. It adds the committer variables and the
 // git entries and deletes an inherited GIT_CONFIG_PARAMETERS; it decides nothing.
 export function applySigning(env: Env, signing: Signing) {
@@ -401,7 +401,7 @@ export function validateSigning(v: unknown, iso: Iso): Signing | null {
   return { env: env as Record<string, string>, git_config: cfg as Pair[], fingerprint: v.fingerprint as string }
 }
 
-// ---- identity entry (G13): decide whether agent commits must be blocked ---------------------
+// ---- identity entry: decide whether agent commits must be blocked ---------------------
 const TIERS = ["t0", "t1", "t2"]
 export function tierDecision(res: RunResult, iso: Iso): Decision {
   const failed: Decision = { block: true, flags: ["sign-unavailable"], signing: null, reason: null }
@@ -528,7 +528,7 @@ export function createCarter(deps: Deps) {
   })
   writeStatus()
 
-  // D71 (A): sessions in which a `carter-*` agent called a tool, and the parent of each session read so
+  // (A): sessions in which a `carter-*` agent called a tool, and the parent of each session read so
   // far (null = root). A subagent (`general`, `explore`) reports its own id, so its session is covered
   // through its ancestors. Both maps are bounded; forgetting a session only costs one more lookup.
   const carterSessions = new Set<string>()
@@ -641,7 +641,7 @@ export function createCarter(deps: Deps) {
     nonce: (): string => nonce,
 
     // The only hook that may reject a call. Order: scope -> isolation -> gate -> mark -> arm the timer.
-    // Every tool call records a Carter agent's session (D71 A); only a shell is gated, and only in scope.
+    // Every tool call records a Carter agent's session (A); only a shell is gated, and only in scope.
     async executeBefore(e: ExecuteBefore): Promise<void> {
       const carterAgent = isCarterAgent(e.agent)
       if (e.tool !== "shell" || !isObj(e.input) || typeof e.input.command !== "string") {
@@ -666,7 +666,7 @@ export function createCarter(deps: Deps) {
         e.command = seen.command
         selfTest.roundTrip()
       }
-      // D71: a marked shell is Carter's when the mark says so, or its own directory is a Carter
+      // a marked shell is Carter's when the mark says so, or its own directory is a Carter
       // workspace; a failed self-test cannot tell, so every shell is. Otherwise it is left alone.
       const agent = selfTest.state() === "failed" || (seen.marked && (seen.scope === true || inCarterWorkspace(fs, e.cwd)))
       if (seen.marked && !agent) {

@@ -1,4 +1,4 @@
-"""Peel the wrappers off a simple command (RFC-0007 App C.4.2 rule 1).
+"""Peel the wrappers off a simple command.
 
 ``env``, ``command``, ``exec``, ``nohup``, ``time``, ``xargs``, ``sh -c`` and friends all end in
 "run this other command". The gate must judge that command, not the wrapper. ``unwrap`` returns

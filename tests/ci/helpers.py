@@ -1,4 +1,4 @@
-"""Helpers for the CI-E tests: fixture path and an optional ``actionlint``."""
+"""Helpers for the review-workflow tests: fixture path and an optional ``actionlint``."""
 
 from __future__ import annotations
 

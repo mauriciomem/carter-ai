@@ -1,8 +1,8 @@
-"""D52: the per-workspace opt-out from the project-config edit deny (RFC-0007 §4.5, C.6.2).
+"""the per-workspace opt-out from the project-config edit deny.
 
 ``[workspaces."<abs path>"] allow_project_opencode_edit = true`` in ``~/.carter/config.toml``
 becomes exact-path ``allow`` rules for ``<ws>/opencode.json``, ``<ws>/opencode.jsonc``
-and ``<ws>/.opencode/*``, placed after the denies in the Carter agents' ``permissions:`` (D71).
+and ``<ws>/.opencode/*``, placed after the denies in the Carter agents' ``permissions:``.
 ``carter guard install`` lists every active opt-out; ``carter update`` re-renders the agent
 files from ``config.toml``. A shell write to ``config.toml`` is a residual risk, so the human
 must see them.
@@ -69,7 +69,6 @@ def optout_statements(workspaces: Iterable[str]) -> list[Statement]:
             "tool.use",
             f"edit:{ws}/{tail}",
             "allow",
-            "4.5 D48 opt-out (D52)",
         )
         for ws in workspaces
         for slug, tail in SUFFIXES

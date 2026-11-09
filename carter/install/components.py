@@ -50,7 +50,7 @@ def install_agents(
 
 
 def rerender_agents(base_dir: Path | None) -> dict[str, int] | None:
-    """Re-write the global Carter agent files and their manifest entries (D71).
+    """Re-write the global Carter agent files and their manifest entries.
 
     ``carter guard install`` and ``remove`` call this after the guard state changed: G2's deny
     set is part of each agent's ``permissions:``. Nothing happens without a manifest (no
@@ -73,7 +73,7 @@ def _render_opencode_agents(base_dir: Path | None = None) -> dict[str, str]:
 
     Returns ``{filename: content}`` keyed by ``carter-<role>.md`` (no agent suffix —
     global installs use canonical names), each carrying G2's rules as the guard state of
-    ``base_dir`` records them (D71). The scaffold/Jinja stack is imported lazily so importing
+    ``base_dir`` records them. The scaffold/Jinja stack is imported lazily so importing
     the installer stays cheap.
     """
     from carter.config import generate_default_config
@@ -172,9 +172,7 @@ its instructions exactly.
   solutions to check for past decisions and lessons.
 """
 
-# Global rules §Communication (only this section: AGENTS.md loads every session,
-# so its token cost must stay small). Written as implicit concatenation purely to satisfy
-# the line-length lint.
+# Global rules, Communication section. AGENTS.md loads in every session, so it stays short.
 _OPENCODE_COMMUNICATION = (
     "\n## Communication\n"
     "- Be concise and clear. Explain so a junior developer or solution architect"
@@ -189,13 +187,14 @@ _OPENCODE_COMMUNICATION = (
 # The commit-attribution rule: installed into the global AGENTS.md.
 _ATTRIBUTION_RULE = (
     "- Commits: the user is the author (their own git config) unless `carter ops config --emit`"
-    " says `author` is `llm` (role b); the committer is the user, or"
+    " says `author` is `llm` (role author); the committer is the user, or"
     " the LLM at T2. Never pass `--author`, `--no-verify`, `-s` or `-S`, never set `GIT_AUTHOR_*`"
     " or `GIT_COMMITTER_*`, and never add `Signed-off-by` unless the user asks. Credit comes only"
     " from the `coauthor_trailer` it prints; if `commits` is `refused`, stop and report.\n"
-    "- Pushing is human-only. When a branch is ready, tell the user: "
+    "- Pushing is human-only: tell the user: "
     + OWN_TERMINAL
-    + " Then you may open the PR with `gh pr create`.\n"
+    + " Only carter-devops may ask with `carter_push`; the user approves each use."
+    " After the push, `gh pr create` is fine.\n"
 )
 
 # The "Git & Language" global rules (also rendered into the workspace AGENTS.md).

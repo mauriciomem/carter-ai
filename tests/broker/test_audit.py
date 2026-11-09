@@ -1,4 +1,4 @@
-"""The audit store and the ``ops audit.log`` move (plan 007 step 6, freeze B15)."""
+"""The audit store and the ``ops audit.log`` move."""
 
 from __future__ import annotations
 

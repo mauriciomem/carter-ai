@@ -1,6 +1,6 @@
 """The full ``carter guard install`` with ``g2`` revision 2, into an isolated HOME and an
-isolated server (plan 004 step 32). This is the stand-in for the user's live install (step 40).
-D71: the deny set lives in the Carter agents, so the shells below run as the rig's Carter agent;
+isolated server. This is the stand-in for the user's live install.
+the deny set lives in the Carter agents, so the shells below run as the rig's Carter agent;
 the global OpenCode config gets no ``policies``, only the per-agent ``carter_push`` denies.
 
 Nothing here touches the real ``~/.config/opencode`` or ``~/.carter``: Carter runs with the rig's
@@ -51,14 +51,14 @@ def test_install_isolate_gate_and_restore(rig_factory, opencode_bin) -> None:
     home = rig.home
     assert not (home / ".carter/isolation.json").exists()
 
-    # 1. install (a bare --yes on a fresh machine follows C.6.2: g2 at revision 2 is asked and yes)
+    # 1. install (a bare --yes on a fresh machine asks for g2 at revision 3 and the answer is yes)
     dry = carter(rig, "guard", "install", "--dry-run")
     assert dry.returncode == 0, dry.stdout + dry.stderr
     assert "would write" in dry.stdout and not (home / ".carter/isolation.json").exists()
     res = carter(rig, "guard", "install", "-v", "--yes")
     assert res.returncode == 0, res.stdout + res.stderr
     assert "plugin installed:" in res.stdout and "restart the OpenCode server" in res.stdout
-    assert state(rig)["consents"]["g2"]["rev"] == 3  # slice B: revision 3 carries the B tools
+    assert state(rig)["consents"]["g2"]["rev"] == 3  # revision 3 carries the push tool
     assert isolation_path(None).name == "isolation.json"
     for path in (
         home / ".carter/isolation.json",
@@ -67,7 +67,7 @@ def test_install_isolate_gate_and_restore(rig_factory, opencode_bin) -> None:
         assert path.exists(), path
     assert "pre-push" in (home / ".carter/gitconfig").read_text()
     assert not policies(rig) and "policies" not in json.loads(rig.config_file.read_text())
-    assert state(rig)["opencode_policies"] == []  # D71: nothing global but the per-agent denies
+    assert state(rig)["opencode_policies"] == []  # nothing global but the per-agent denies
     assert state(rig)["agent_permissions"]
 
     # 2. restart: the plugin loads
@@ -109,7 +109,7 @@ def test_install_isolate_gate_and_restore(rig_factory, opencode_bin) -> None:
     crosses = [ln for ln in (check.stdout + check.stderr).splitlines() if "\u2717" in ln]
     assert all("carter-engineer" in ln or ln.startswith("\u2717 host:") for ln in crosses), crosses
 
-    # 7. remove --only plugin: the plugin side goes, the 1G denies, hooks and token stay
+    # 7. remove --only plugin: the plugin side goes, the denies, hooks and token stay
     res = carter(rig, "guard", "remove", "--yes", "--only", "plugin")
     assert res.returncode == 0, res.stdout + res.stderr
     assert not (home / ".carter/isolation.json").exists() and not plugin_dir(home).exists()
@@ -117,7 +117,7 @@ def test_install_isolate_gate_and_restore(rig_factory, opencode_bin) -> None:
     assert state(rig)["consents"]["g2"]["rev"] == 1 and state(rig)["agent_permissions"]
     assert (home / ".carter/hooks/carter-guard").exists() and (home / ".carter/gitconfig").exists()
 
-    # 8. OpenCode unloads the deleted plugin (spike B 6d): the agent shell is no longer isolated
+    # 8. OpenCode unloads the deleted plugin the agent shell is no longer isolated
     deadline = time.time() + 30
     names = set()
     while time.time() < deadline:
@@ -137,7 +137,7 @@ def test_install_isolate_gate_and_restore(rig_factory, opencode_bin) -> None:
     )
     res = carter(rig, "guard", "install", "--yes", "--only", "g2")
     assert res.returncode == 0 and (home / ".carter/isolation.json").exists(), res.stdout
-    assert state(rig)["consents"]["g2"]["rev"] == 3  # slice B: revision 3 carries the B tools
+    assert state(rig)["consents"]["g2"]["rev"] == 3  # slice B: revision 3 carries the push tool
 
     # 10. a full remove leaves nothing of Carter's but the documented keepers
     res = carter(rig, "guard", "remove", "--yes")

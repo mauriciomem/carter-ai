@@ -1,4 +1,4 @@
-"""The isolation block as data (RFC-0007 App C.2; plan 004 step 11, G4)."""
+"""The isolation block as data."""
 
 from __future__ import annotations
 
@@ -32,7 +32,7 @@ def doc(**kw):
 
 
 class TestEnvRows:
-    """One test per row of the C.2 table."""
+    """One test per row of the isolation table."""
 
     def test_ssh_auth_sock_and_github_token_and_config_parameters_are_deleted(self) -> None:
         assert doc()["env"]["delete"] == ["SSH_AUTH_SOCK", "GITHUB_TOKEN", "GIT_CONFIG_PARAMETERS"]
@@ -199,7 +199,7 @@ class TestSchema:
         [
             lambda d: d.pop("env"),
             lambda d: d.update(extra=1),
-            lambda d: d.update(schema_version=1),  # a 2a file: plugin and file refuse each other
+            lambda d: d.update(schema_version=1),  # an old file: plugin and file refuse each other
             lambda d: d.update(schema_version=3),
             lambda d: d["plugin"].update(b_enabled="yes"),
             lambda d: d["plugin"].update(b_git="git"),
@@ -287,8 +287,8 @@ class TestHash:
         assert isolation.sha256_hex(isolation.canonical_bytes(rendered)) == golden["sha256"]
 
     def test_the_golden_hash_changed_once_for_slice_b_schema_2(self) -> None:
-        """Plan 007 B9: schema 2 adds the plugin keys of the broker tools, so the hash moved from
-        the 2a value (d5456e7d...) exactly once; it is re-rendered with the plugin at install."""
+        """schema 2 adds the plugin keys of the broker tools, so the hash moved from
+        the old value exactly once; it is re-rendered with the plugin at install."""
         assert V["isolation"]["doc"]["schema_version"] == 2
         assert V["isolation"]["sha256"] != (
             "d5456e7d8b82dd91b901cc3ade43fb8dbeecd0bfcbe32556f754797782a40a6e"

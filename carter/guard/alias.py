@@ -1,8 +1,8 @@
-"""The optional ``git ai-commit`` alias (consent group ``alias``; plan 005 step 19, freeze H15).
+"""The optional ``git ai-commit`` alias (consent group ``alias``).
 
 ``alias.ai-commit`` is single-valued, so Carter sets it (in ``~/.carter/gitconfig``) only if the
 user has none; theirs wins and the chain snippet is printed. The value has **no** ``"$@"``: git
-appends the alias's arguments itself, and a second copy would duplicate them (spike B 8, R1). The
+appends the alias's arguments itself, and a second copy would duplicate them. The
 ``cd`` makes the command run from where the user typed it (git runs aliases at the top level).
 """
 

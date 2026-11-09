@@ -1,5 +1,5 @@
 # ruff: noqa: E501
-"""Static hygiene of the TypeScript plugin sources (plan 004 step 9; RFC-0007 D7, D60).
+"""Static hygiene of the TypeScript plugin sources D7, ).
 
 The plugin holds the marker, the tagging, a read of the static ``isolation.json`` and the call
 of the Python gate, and nothing else. Every list, flag and rule it applies comes from
@@ -164,7 +164,7 @@ class TestNoPythonOnlyKnowledge:
         assert leaked == set(), f"{source.name}: {sorted(leaked)} must come from isolation.json"
 
 
-# ---- slice B: the broker tool wrapper stays thin (plan 007 step 15, freeze B19) ------------------
+# ---- slice B: the broker tool wrapper stays thin ------------------
 BROKER_MAX_LINES = 200
 
 

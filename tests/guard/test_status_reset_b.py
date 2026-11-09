@@ -1,5 +1,5 @@
 # ruff: noqa: E501
-"""``carter guard status --reset-b`` (plan 007 step 14): human terminal only; nothing agent-callable."""
+"""``carter guard status --reset-b``: human terminal only; nothing agent-callable."""
 
 from __future__ import annotations
 

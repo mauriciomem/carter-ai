@@ -1,6 +1,6 @@
-"""Carter's own gitconfig behind one ``include.path`` line (RFC-0007 App C.6.4, D61;
-plan 003 step 13). Built and tested under the sandbox home only: in 1G the real host gets
-no include line (architect decision 1), so nothing here may touch ``~/.gitconfig``."""
+"""Carter's own gitconfig behind one ``include.path`` line .
+
+Built and tested under the sandbox home only: nothing here may touch ``~/.gitconfig``."""
 
 from __future__ import annotations
 
@@ -646,31 +646,6 @@ class TestApplyKeys:
         assert not gc.global_config_path().is_relative_to(real_home)
 
 
-class TestSingleValuedKeys:
-    def test_sets_a_key_the_user_does_not_have(self, global_cfg: Path) -> None:
-        res = gc.set_single_valued(global_cfg, "init.templateDir", "/carter/templates")
-        assert res.status == "set"
-        assert (
-            git("config", "--file", str(global_cfg), "--get", "init.templateDir").stdout.strip()
-            == "/carter/templates"
-        )
-
-    def test_refuses_when_the_user_has_a_value_and_returns_the_chain_snippet(
-        self, global_cfg: Path
-    ) -> None:
-        git("config", "--file", str(global_cfg), "alias.ai-commit", "!mine")
-        before = global_cfg.read_bytes()
-        res = gc.set_single_valued(global_cfg, "alias.ai-commit", "!carter commit")
-        assert res.status == "kept-user-value"
-        assert "alias.ai-commit" in res.snippet and "!carter commit" in res.snippet
-        assert global_cfg.read_bytes() == before
-
-    def test_the_value_may_come_from_an_include(self, tmp_path: Path, global_cfg: Path) -> None:
-        other = tmp_path / "other.gitconfig"
-        other.write_text("[init]\n\ttemplateDir = /theirs\n")
-        git("config", "--file", str(global_cfg), "--add", "include.path", str(other))
-        res = gc.set_single_valued(global_cfg, "init.templateDir", "/carter/templates")
-        assert res.status == "kept-user-value"
-
-    def test_neither_key_is_written_by_1g(self) -> None:
+class TestKeys:
+    def test_no_key_is_written_without_a_consent(self) -> None:
         assert gc.carter_git_entries() == []

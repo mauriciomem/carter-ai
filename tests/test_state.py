@@ -205,7 +205,7 @@ class TestCommitAttribution:
 
         log = _git(carter_dir, "log", "-1", "--format=%an <%ae>%n%B")
         assert log.stdout.startswith("Jane Dev <jane@example.com>")
-        assert "Assisted-by: Carter" in log.stdout  # T0: no identity configured
+        assert "Assisted-by: Carter" in log.stdout  # no identity configured
         assert "Co-authored-by" not in log.stdout
 
     def test_co_author_comes_from_carter_config(self, tmp_path, config, monkeypatch):
@@ -228,7 +228,7 @@ class TestCommitAttribution:
         assert log.stdout.strip() == "state@carter.invalid"
 
 
-# ─── Commit shape: human/human, unsigned, immune to the environment (plan 002 step 11) ───
+# ─── Commit shape: human/human, unsigned, immune to the environment ───
 
 IDENT = "Jane Dev|Jane Dev|N"  # %an|%cn|%G?
 LOG_SHAPE = "--format=%an|%cn|%G?"
@@ -277,7 +277,7 @@ class TestCommitShapeUnderPollution:
     def test_a_role_b_environment_leaves_state_commits_human_and_unsigned(
         self, tmp_path, config, monkeypatch
     ):
-        """Plan 006 H8: the complete role-b block (LLM author and committer, signing on) in the
+        """H8: the complete role-b block (LLM author and committer, signing on) in the
         process environment must not reach `.carter` state commits: they stay human/human."""
         from carter.identity.payload import to_git_env
 
@@ -301,7 +301,7 @@ class TestCommitShapeUnderPollution:
         for key, value in to_git_env({}, block).env.items():
             monkeypatch.setenv(key, value)
 
-        assert commit_state(carter_dir, "chore: role b snapshot") is True
+        assert commit_state(carter_dir, "chore: role author snapshot") is True
 
         assert _shape(carter_dir) == IDENT
         raw = _git(carter_dir, "cat-file", "commit", "HEAD").stdout

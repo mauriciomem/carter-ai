@@ -3,7 +3,7 @@
 Never writes, works with an absent or corrupt guard state (it reports that), and never
 prints provider settings: ``opencode debug config`` is compared in memory only. Per statement:
 an invalid statement is dropped alone by OpenCode, so one missing line is one missing line.
-``carter check --host`` (step 21) builds on the same pieces.
+``carter check --host`` builds on the same pieces.
 """
 
 from __future__ import annotations
@@ -24,11 +24,7 @@ GIT_NOT_NEEDED = "include.path: not needed (no Carter git keys are enabled)"
 
 def _consents(state: GuardState, echo: Echo) -> None:
     echo("Consents:")
-    reserved = []
     for group in consent_groups():
-        if not group.live:
-            reserved.append(group.id)
-            continue
         rec = state.consents.get(group.id)
         if rec is None:
             how = "optional, not installed" if group.optional else "not decided yet"
@@ -39,12 +35,10 @@ def _consents(state: GuardState, echo: Echo) -> None:
             echo(f"  {group.id:<18} declined {rec['date']}  (optional: no residual)")
         else:
             echo(f"  {group.id:<18} declined {rec['date']}  (residual: not installed)")
-    if reserved:
-        echo(f"  {', '.join(reserved)}: reserved, nothing to install in this version")
 
 
 def _policies(state: GuardState, base_dir: Path | None, echo: Echo) -> None:
-    """D71: G2's rules live in the Carter agent files; the OpenCode config holds no policies."""
+    """G2's rules live in the Carter agent files; the OpenCode config holds no policies."""
     echo(f"OpenCode config: {state.opencode_config or target_path(base_dir)}")
     if state.opencode_policies:
         echo(
@@ -138,7 +132,7 @@ def report(base_dir: Path | None, echo: Echo) -> None:
         _files(state, echo)
     _git(state, base_dir, echo)
     if consent.plugin_wanted(state):
-        echo("Plugin: installed (g2 revision 2); `carter check --host` says if OpenCode loaded it")
+        echo("Plugin: installed; `carter check --host` says if OpenCode loaded it")
         echo(
             "Isolation: isolation.json is rendered; agent shells are isolated once the plugin loads"
         )

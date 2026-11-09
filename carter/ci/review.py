@@ -1,4 +1,4 @@
-"""The review driver, what the review-only workflow runs (RFC-0007 §4.1 context E; plan 008).
+"""The review driver, what the review-only workflow runs.
 
 ``carter ci review`` reviews a pull request with a headless OpenCode and writes the result to
 ``$GITHUB_STEP_SUMMARY``. It makes no commit and calls no GitHub API (the opt-in comment is a
@@ -235,7 +235,7 @@ def build_message(title: str, files: list[str], diff: str, nonce: str) -> str:
 
 
 def changed_files_and_diff(repo: Path, base: str) -> tuple[list[str], str]:
-    """``(files, patch)`` of ``base..HEAD`` through A+'s hardened, scrubbed git calls."""
+    """``(files, patch)`` of ``base..HEAD`` through `carter push`'s hardened, scrubbed git calls."""
     names = gitrun.git(
         ["diff", "--no-ext-diff", "--no-textconv", "--name-only", "-z", base, "HEAD"], repo
     )

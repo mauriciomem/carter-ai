@@ -1,4 +1,4 @@
-"""Fixtures for the CI-E tests."""
+"""Fixtures for the review-workflow tests."""
 
 from __future__ import annotations
 

@@ -1,6 +1,6 @@
-"""AD1, pollution and ``GIT_CONFIG_COUNT`` against the shared golden vectors (plan 004 step 10).
+"""AD1, pollution and ``GIT_CONFIG_COUNT`` against the shared golden vectors.
 
-The same vector file is consumed by the TypeScript core tests (``tests/plugin``) and, in step 22,
+The same vector file is consumed by the TypeScript core tests (``tests/plugin``) and
 by the ``carter-guard`` sh tests. The Python functions are the oracle.
 """
 
@@ -9,7 +9,7 @@ from __future__ import annotations
 import pytest
 
 from carter.identity.pollution import COUNT_CAP, count_state, pollution
-from carter.identity.rules import is_agent, load_rules, warn_hits
+from carter.identity.rules import is_agent, load_rules
 from identity import vectors
 
 V = vectors.load()
@@ -40,7 +40,7 @@ class TestPollution:
     def test_tokens_only_warn(self) -> None:
         env = {"GH_TOKEN": "x", "GITHUB_TOKEN": "y"}
         assert pollution(env, HOME) == []
-        assert warn_hits(env) == ["GH_TOKEN", "GITHUB_TOKEN"]
+        assert [n for n in load_rules().warn_only if n in env] == ["GH_TOKEN", "GITHUB_TOKEN"]
 
     def test_values_are_never_returned(self) -> None:
         env = {"GIT_SSH_COMMAND": "ssh -o IdentityAgent=none -o SECRET-VALUE=1"}

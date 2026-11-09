@@ -1,5 +1,5 @@
 # ruff: noqa: E501
-"""``carter identity show`` and ``verify`` (plan 005 step 16; RFC-0007 App B).
+"""``carter identity show`` and ``verify``.
 
 ``show`` is read-only and prints names only. ``verify`` makes one real signed commit in a throwaway
 repository with the real shim and a throwaway agent, and reports distinct messages for a locked

@@ -293,7 +293,7 @@ class TestJsoncTarget:
 
 
 class TestRetiredInstallFlags:
-    """D70: ``--bot-name`` is gone, not deprecated."""
+    """``--bot-name`` is gone, not deprecated."""
 
     def test_the_flag_is_not_an_option(self) -> None:
         result = CliRunner().invoke(main, ["install", "--help"])

@@ -1,7 +1,7 @@
 # ruff: noqa: E501
-"""Test doubles for B (plan 007 step 4): a fake ``ssh`` that runs receive-pack locally.
+"""Test doubles for B: a fake ``ssh`` that runs receive-pack locally.
 
-The fake lives in a directory used as ``[identity.signing] ssh_bin_dir``. B pushes with
+The fake lives in a directory used as ``[identity.signing] ssh_bin_dir``. the broker pushes with
 ``-c core.sshCommand=<ssh_bin_dir>/ssh``, so this is the only seam: no environment variable, no
 ``url.<x>.insteadOf`` (a global ``insteadOf`` that matches the origin makes B refuse). The fake
 maps the path of ``git-receive-pack '<path>'`` below ``<dir>/remote-root``, so

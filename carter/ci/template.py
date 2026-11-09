@@ -1,5 +1,5 @@
 # ruff: noqa: E501  (the YAML pieces below are one-line workflow expressions)
-"""Render the review-only workflow (RFC-0007 App C.10; plan 008 freeze C1, C8, C11).
+"""Render the review-only workflow.
 
 The template file is ``templates/ci/carter-review.yml.tmpl`` (bundled like the other
 templates). Placeholders are plain ``__NAME__`` tokens: Jinja would fight ``${{ }}``. The

@@ -1,7 +1,6 @@
-"""Gate start-up budget (RFC-0007 App C.4.2): p95 < 100 ms per command, start-up included.
+"""Gate start-up budget: p95 < 100 ms per command, start-up included.
 
-Skeleton from plan 004 step 7 (spike F); step 21 fills the corpus run. What the spike measured
-(Linux, uv tool venv, Python 3.14.8; numbers in ``notes.md``):
+What was measured (Linux, uv tool venv, Python 3.14.8):
 
 - a bare ``python -I`` is ~12 ms; the stdlib imports the gate needs add ~4 ms (``subprocess`` alone
   6 ms, so import it lazily);
@@ -10,12 +9,12 @@ Skeleton from plan 004 step 7 (spike F); step 21 fills the corpus run. What the 
   ``carter.identity/__init__`` pulls ``config``, ``errors``, ``importlib.resources`` (+25 ms).
   Together: p95 42 ms warm / 80-96 ms cold, against 16 / 33 ms when both are lazy.
 
-Step 21 made both imports lazy; ``TestStartupFloor`` pins it (``import carter`` must not load
+Both imports are lazy; ``TestStartupFloor`` pins it (``import carter`` must not load
 ``importlib.metadata``, and the gate must not load ``carter.identity``, ``importlib.resources``,
 ``importlib.metadata``, ``pathlib`` or ``subprocess``).
 
 The corpus run is opt-in (``CARTER_PERF=1``) and skips until ``tests/data/gate_corpus.yaml`` exists
-(step 17). ``CARTER_GATE_PYTHON`` points it at the ``uv tool`` interpreter (CI does this).
+. ``CARTER_GATE_PYTHON`` points it at the ``uv tool`` interpreter (CI does this).
 """
 
 from __future__ import annotations
@@ -122,7 +121,7 @@ def _watched_modules_after(statement: str) -> set[str]:
 
 
 class TestStartupFloor:
-    """Design requirements for step 21 (see the module docstring)."""
+    """Design requirements (see the module docstring)."""
 
     def test_importing_carter_does_not_import_importlib_metadata(self) -> None:
         assert "importlib.metadata" not in _watched_modules_after("import carter")
@@ -134,7 +133,7 @@ class TestStartupFloor:
             text=True,
             check=True,
         ).stdout.strip()
-        assert out  # eager today, lazy (PEP 562 module __getattr__) after step 21: same value
+        assert out  # lazy (PEP 562 module __getattr__): same value
 
 
 def corpus_payloads() -> list[bytes]:
@@ -152,7 +151,7 @@ def corpus_payloads() -> list[bytes]:
 )
 @pytest.mark.parametrize("cold", [False, True], ids=["warm", "cold"])
 def test_gate_p95_is_under_the_budget_including_interpreter_startup(cold: bool) -> None:
-    """RFC C.4.2: p95 < 100 ms per command over the whole corpus, interpreter start-up included.
+    """p95 < 100 ms per command over the whole corpus, interpreter start-up included.
 
     ``CARTER_GATE_PYTHON`` points at a ``uv tool`` interpreter (CI does this); the default is the
     test interpreter. Prints p50/p95/max for the PR description."""

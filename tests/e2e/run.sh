@@ -1,5 +1,5 @@
 #!/bin/sh
-# Run the opt-in OpenCode e2e/contract suite (plan 004 step 32) in one command, for CI and for a human.
+# Run the opt-in OpenCode e2e/contract suite in one command, for CI and for a human.
 #
 #   tests/e2e/run.sh                       # the OpenCode on PATH (the tested 2.1.4)
 #   tests/e2e/run.sh --version 2.1.2       # the warn band: installs @opencode/cli@2.1.2 under $BASE

@@ -9,7 +9,7 @@ def __getattr__(name: str) -> str:
     """Resolve ``__version__`` lazily (PEP 562).
 
     ``importlib.metadata`` costs about 25 ms to import and ``python -m carter.gate`` runs on every
-    agent shell command, so the package itself must stay free to import (plan 004 spike F)."""
+    agent shell command, so the package itself must stay free to import."""
     if name == "__version__":
         from importlib.metadata import PackageNotFoundError, version  # noqa: PLC0415
 

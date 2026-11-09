@@ -24,7 +24,7 @@ def test_no_platform_memory_or_harness_date(skill: Path) -> None:
     assert "harness date variable" not in text
 
 
-# ─── Record templates carry ``ai-usage`` (RFC-0007 §4.2), plans do not carry push_policy ──
+# ─── Record templates carry ``ai-usage``, plans do not carry push_policy ──
 
 REPO = Path(__file__).resolve().parents[1]
 AI_USAGE_LINE = "ai-usage: ai-assisted"
@@ -82,7 +82,7 @@ def test_repo_docs_carry_no_front_matter() -> None:
     assert offenders == []
 
 
-# ─── carter-ops: the agent commit recipe (plan 002 step 15) ───
+# ─── carter-ops: the agent commit recipe ───
 
 OPS_SKILL = REPO / "skills" / "carter-ops" / "SKILL.md"
 
@@ -129,7 +129,7 @@ class TestCarterOpsRecipe:
 
     def test_recipe_verifies_the_commit_shape(self) -> None:
         text = _ops_text()
-        assert "carter identity verify --commit HEAD --quiet" in text  # D68 i: one exit code
+        assert "carter identity verify --commit HEAD --quiet" in text  # one exit code
         assert "Committed <sha>: <subject>" in text  # one line, details only on failure
         assert "%G?" not in text  # no raw status letters: no bogus `N`
 
@@ -180,7 +180,7 @@ class TestCarterOpsRecipe:
         assert "proceed without signing" not in _ops_text()
 
 
-# ─── carter-ops: Push is the human's; the agent opens the PR (plan 003 step 22, D72) ───
+# ─── carter-ops: Push is the human's; the agent opens the PR ───
 
 
 def _section(tag: str) -> str:
@@ -193,7 +193,7 @@ class TestCarterOpsPushAndPr:
     def test_the_section_exists_and_has_no_handoff_file(self) -> None:
         section = _section("push-and-pr")
         assert "## Push and PR" in section
-        for gone in ("handoff", "carter pr", ".carter/state"):  # D72
+        for gone in ("handoff", "carter pr", ".carter/state"):
             assert gone not in section, gone
 
     def test_the_agent_opens_the_pr_after_the_push(self) -> None:
@@ -206,7 +206,7 @@ class TestCarterOpsPushAndPr:
         from carter.aplus.push import OWN_TERMINAL
 
         assert OWN_TERMINAL in _section("push-and-pr")
-        assert "as `!carter push` in OpenCode" in _section("push-and-pr")  # D68 g
+        assert "as `!carter push` in OpenCode" in _section("push-and-pr")
 
     def test_no_command_is_shown_with_a_leading_bang_or_a_force_flag(self) -> None:
         for fence in _code_fences(_ops_text()):
@@ -249,16 +249,19 @@ class TestCarterOpsPushAndPr:
         assert "Jira and Slack writes" in routing and "only by carter-devops" in routing
         assert "carter-narrator" in routing
 
-    def test_the_guards_interim_paragraph_is_honest(self) -> None:
+    def test_the_guards_paragraph_says_what_they_are_and_that_they_are_not_to_be_tested(
+        self,
+    ) -> None:
         text = " ".join(_ops_text().split())
-        assert "literal command matches" in text
-        assert "plugin and shell isolation" in text and "not installed yet" in text
+        assert "your own permissions deny `git push` and the GitHub writes" in text
+        assert "isolates your shell" in text and "Carter agents and in Carter workspaces" in text
+        assert "trying is a violation, not a workaround" in text
 
     def test_the_error_table_carries_the_codes_an_agent_can_meet(self) -> None:
         text = _ops_text()
         for code in ("E-POLICY", "E-GH-READONLY", "E-HUMAN-TERMINAL"):
             assert f"`{code}`" in text, code
-        assert "`E-PUSH-GUARD`" in text  # the pre-push hook is slice 2a (plan 004 step 34)
+        assert "`E-PUSH-GUARD`" in text  # the pre-push hook is slice 2a
 
     def test_the_forbidden_block_now_lists_the_push_and_human_only_verbs(self) -> None:
         text = _ops_text()
@@ -266,7 +269,7 @@ class TestCarterOpsPushAndPr:
         assert "`carter push`" in text and "`carter guard *`" in text
 
 
-# ─── Attribution wording agrees everywhere (plan 002 step 17) ───
+# ─── Attribution wording agrees everywhere ───
 
 WORDING_FILES = [
     "skills/carter-pipeline/SKILL.md",
@@ -317,7 +320,7 @@ class TestCarterOpsGhReads:
 
 
 class TestOwnTerminalWordingHasOneHome:
-    """Plan 003 step 23: the sentence that says *where* pushing happens lives in
+    """the sentence that says *where* pushing happens lives in
     ``push.OWN_TERMINAL`` only; templates use the ``own_terminal`` global, skills and the
     AGENTS.md rule carry it verbatim, and no file words it differently."""
 
@@ -340,7 +343,7 @@ class TestOwnTerminalWordingHasOneHome:
         assert OWN_TERMINAL == (
             "Run `carter push` yourself, in your terminal or as "
             "`!carter push` in OpenCode, not through an agent."
-        )  # D68 g: the `!` shell is the human's when the plugin tagged it
+        )  # the `!` shell is the human's when the plugin tagged it
 
     def test_no_file_words_the_instruction_differently(self) -> None:
         from carter.aplus.push import OWN_TERMINAL
@@ -372,7 +375,7 @@ class TestOwnTerminalWordingHasOneHome:
         )
 
 
-# ─── Plan 004 step 34: what the agent meets once the gate and isolation are live ───
+# ─── what the agent meets once the gate and isolation are live ───
 
 
 class TestCarterOpsGate:
@@ -397,7 +400,7 @@ class TestCarterOpsGate:
         gate = self.gate()
         assert "Put `-R <owner>/<repo>` after the `gh` subcommand" in gate
         assert "Stage explicit paths" in gate and "`git add -A`" in gate
-        assert "no SSH in your shell" in gate and "HTTPS with a read-only token" in gate
+        assert "no SSH in your shell" in gate and "HTTPS with the GitHub token" in gate
         assert "Below T2 your commits are unsigned" in gate
         for code in ("E-ISOLATION-MISSING", "E-GATE-FAIL"):
             assert f"`{code}`" in gate
@@ -413,12 +416,7 @@ class TestCarterOpsGate:
         for evasion in ("sh -c", "bash -c", "eval ", "python3 -c", "xargs"):
             assert evasion not in gate, evasion
 
-    def test_the_interim_paragraph_has_both_wordings(self) -> None:
-        text = " ".join(_ops_text().split())
-        assert "Once the user has confirmed group `g2` at revision 2, the Carter plugin is" in text
-        assert "literal command matches" in text and "not installed yet" in text
-
-    def test_the_error_table_carries_the_2a_codes(self) -> None:
+    def test_the_error_table_carries_the_gate_and_plugin_codes(self) -> None:
         text = _ops_text()
         for code in (
             "E-ISOLATION-MISSING", "E-GATE", "E-GATE-FAIL", "E-PUSH-GUARD", "E-GIT-OLD",
@@ -437,7 +435,7 @@ class TestCarterOpsGate:
         assert "carter identity unlock" in text  # signing failures: ask the human, never bypass
 
 
-# ─── carter-ops: signing failures (plan 005 step 27) ───
+# ─── carter-ops: signing failures ───
 
 
 class TestCarterOpsSigningFailures:

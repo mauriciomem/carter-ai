@@ -1,4 +1,4 @@
-"""Pin ``carter.yaml identity.role`` / ``require_tier`` into ``~/.carter/config.toml`` (D62).
+"""Pin ``carter.yaml identity.role`` / ``require_tier`` into ``~/.carter/config.toml``.
 
 Only the human-run ``carter update`` calls this. ``carter.yaml`` is writable by an agent,
 so it never changes attribution at runtime; the pin is the explicit, displayed, confirmed
@@ -50,7 +50,7 @@ def plan_pin(cfg: IdentityConfig, key: str, *, role: str, require_tier: str) -> 
     )
     refusal = ""
     cap = current.max_tier
-    if cap and role == "author":  # K8: role b needs T2 and every cap is below it; never downgraded
+    if cap and role == "author":  # role author needs T2 and every cap is below it; never downgraded
         refusal = (
             f"{E_ROLE_B_TIER}: role author needs T2, but max_tier {cap} (hand-edited in "
             "config.toml) caps this workspace below it; remove the cap or keep role co-author"

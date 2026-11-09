@@ -18,7 +18,7 @@ from carter.identity.rules import is_agent
 from carter.terminal import is_agent_shell, require_human_terminal
 
 REPO = Path(__file__).resolve().parents[1]
-SUFFIX = "restart the app from a clean terminal"  # in the fix line since D68 a
+SUFFIX = "restart the app from a clean terminal"  # in the fix line since
 
 
 @pytest.fixture
@@ -112,7 +112,7 @@ class TestRequireHumanTerminal:
             require_human_terminal("push", env={}, stdin=pty_pair, stdout=io.StringIO())
 
     def test_the_streams_to_check_are_selectable(self, pty_pair: io.TextIOBase) -> None:
-        # github-token set (F8): piped stdin is fine, a TTY on stderr is required.
+        # github-token set: piped stdin is fine, a TTY on stderr is required.
         require_human_terminal(
             "github-token set",
             env={},

@@ -1,4 +1,4 @@
-"""Processes of the dedicated agent: start it, recognise it, stop it (freeze H11, report 22 §4).
+"""Processes of the dedicated agent: start it, recognise it, stop it.
 
 A pid is only ever killed after ``verified_agent`` has seen ``ssh-agent`` and the socket path in its
 command line. Stopping is TERM, a wait of about three seconds, then KILL (a SIGSTOP'd agent only

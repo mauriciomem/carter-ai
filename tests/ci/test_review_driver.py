@@ -1,5 +1,5 @@
 # ruff: noqa: E501
-"""The review driver (plan 008 step 6): profile, message, environment, summary, exit codes.
+"""The review driver: profile, message, environment, summary, exit codes.
 
 A fake runner stands in for ``opencode``; ``tests/e2e/test_ci_review.py`` runs the real one
 against the mock model. Nothing here touches the network, a provider or the real home.

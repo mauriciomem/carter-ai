@@ -43,9 +43,9 @@ must_haves:                   # at least one entry in total
   `completed/`; `proposed`, `active` and `blocked` plans live in `active/`.
 - The README stays within `plans.readme_max_lines` (default 150).
 
-A key `carter check` does not know in a plan's front matter is not validated. The retired
-`push_policy` is the one it names: ``⚠ unknown key `push_policy` in <path> → delete it``. Such a
-report never changes the exit code of `carter check`; only errors do.
+A key `carter check` doesn't know in a plan's front matter is reported once with its file
+(``⚠ unknown key `x` in <path> → delete it``). Such a report never changes the exit code of
+`carter check`; only errors do.
 
 ### The `ai-usage` field
 

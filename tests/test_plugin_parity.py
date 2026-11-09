@@ -1,4 +1,4 @@
-"""Cross-runtime parity between the Python oracles and the TypeScript core (plan 004 steps 13-16).
+"""Cross-runtime parity between the Python oracles and the TypeScript core.
 
 The shared golden vectors are exercised by both ``pytest`` and ``node --test``. These tests cover
 what vectors cannot: the registry texts the TS carries, and a real round trip of an
@@ -118,7 +118,7 @@ def test_pollution_of_a_rendered_document_agrees_between_the_runtimes(tmp_path: 
 
 
 def test_a_block_built_by_python_is_accepted_by_the_ts_and_applied_the_same_way() -> None:
-    """Python and TS agree on a real ``build_payload`` result and on applying it (plan 005 step 12),
+    """Python and TS agree on a real ``build_payload`` result and on applying it,
     on an environment that already carries the isolation entries."""
     from carter.identity.isolation_apply import apply_isolation
     from carter.identity.payload import ShimState, build_payload, fingerprint_of, to_git_env
@@ -158,7 +158,7 @@ def test_a_block_built_by_python_is_accepted_by_the_ts_and_applied_the_same_way(
 
 
 def test_a_role_b_block_built_by_python_is_accepted_by_the_ts_and_applied_the_same_way() -> None:
-    """Plan 006 step 9: the TS is thin: the same two functions handle the five-key role-b env."""
+    """the TS is thin: the same two functions handle the five-key role-b env."""
     from carter.identity.coauthor import Human
     from carter.identity.isolation_apply import apply_isolation
     from carter.identity.payload import ShimState, build_payload, fingerprint_of, to_git_env
@@ -201,7 +201,7 @@ def test_a_role_b_block_built_by_python_is_accepted_by_the_ts_and_applied_the_sa
 
 
 def test_the_ts_has_no_role_logic_and_isolation_json_is_unchanged() -> None:
-    """The plugin never names a role; `identity env` decides (K5). The hash stays pinned."""
+    """The plugin never names a role; `identity env` decides. The hash stays pinned."""
     import re
 
     for name in ("core.ts", "index.ts"):

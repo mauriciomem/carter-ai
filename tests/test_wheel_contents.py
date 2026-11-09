@@ -1,4 +1,4 @@
-"""The wheel carries everything G2 needs at run time (plan 004 step 26, C25).
+"""The wheel carries everything G2 needs at run time.
 
 Built once per session with ``uv build --wheel``; skipped when ``uv`` is not available.
 """
@@ -19,7 +19,7 @@ REQUIRED = (
     "carter/plugin/index.ts",
     "carter/guard/templates/carter-guard.sh",
     "carter/identity/g2_rules.json",
-    "carter/identity/templates/carter-ssh-sign.sh",  # plan 005 step 9: no force-include needed
+    "carter/identity/templates/carter-ssh-sign.sh",  # no force-include needed
     "carter/identity/shim.py",
     "carter/identity/payload.py",
     "carter/identity/errors.json",
@@ -28,7 +28,7 @@ REQUIRED = (
     "carter/gate/rules.py",
     "carter/guard/plugin.py",
     "carter/guard/hooks.py",
-    # plan 005 (2b): the identity commands, the tier mirror, the commit core, the GitHub client
+    # (2b): the identity commands, the tier mirror, the commit core, the GitHub client
     "carter/identity/mirror.py",
     "carter/identity/commit.py",
     "carter/identity/github.py",
@@ -42,7 +42,7 @@ REQUIRED = (
     "carter/identity_verify.py",
     "carter/commit_cli.py",
     "carter/hostcheck_id.py",
-    # plan 006 (2c): role b
+    # (2c): role author
     "carter/identity/coauthor.py",
     "carter/identity/coauthor_link.py",
     "carter/human_items.py",

@@ -1,9 +1,8 @@
 #!/usr/bin/env python3
 """Scripted OpenAI-compatible mock model for the e2e suite. Loopback only, no credentials.
 
-Ported from the report-21 spike (``s21-mock_llm.py``) and made reusable: the log directory
-and the port are arguments, and the prompt grammar is a pure function (``parse_directive``)
-so it has unit tests that need no OpenCode.
+The log directory and the port are arguments, and the prompt grammar is a pure function
+(``parse_directive``) so it has unit tests that need no OpenCode.
 
 Usage: ``mock_llm.py <port> <logdir>``
 
@@ -15,7 +14,7 @@ Prompt grammar (the first matching line of the last user message wins):
     FORCE <tool> <json>          -> a call to <tool> even when it is NOT in the tool list (a model
                                     that remembers a tool OpenCode did not offer it)
     TASK <rest>                  -> a ``subagent`` call (agent=general) whose prompt is <rest>
-    TASKAS <agent> <rest>        -> the same with a named agent (plan 007: devops as a subagent)
+    TASKAS <agent> <rest>        -> the same with a named agent devops as a subagent)
     anything else                -> the text "ok"
 
 When the last message is a tool result the mock answers with the text "done".

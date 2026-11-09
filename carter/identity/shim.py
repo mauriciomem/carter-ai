@@ -1,4 +1,4 @@
-"""The signing shim ``~/.carter/bin/carter-ssh-sign`` (RFC-0007 App C.3, freeze H8/H9).
+"""The signing shim ``~/.carter/bin/carter-ssh-sign``.
 
 git calls it as ``gpg.ssh.program``. The generated POSIX script signs only the configured LLM key,
 through the configured agent, and never prompts; it refuses everything else with ``E-SHIM-REFUSED``.
@@ -50,7 +50,7 @@ _BANNER = "Managed by Carter"
 
 
 def allowed_signers_path(home: Path | None = None) -> Path:
-    """``~/.carter/hooks/allowed_signers`` (H2): the LLM key, one ``namespaces="git"`` line."""
+    """``~/.carter/hooks/allowed_signers``: the LLM key, one ``namespaces="git"`` line."""
     return (home or Path.home()) / ".carter" / "hooks" / "allowed_signers"
 
 
@@ -68,9 +68,7 @@ class ShimParams:
     keygen: str
     run_dir: str
     signer: str = ""
-    file_key: str = (
-        ""  # D68 d: a passphrase-less private key; the shim signs from exactly this path
-    )
+    file_key: str = ""  # a passphrase-less private key; the shim signs from exactly this path
 
     def checked(self) -> ShimParams:
         for name in ("sock", "false_path", "keygen", "run_dir", "signer", "file_key"):

@@ -1,6 +1,6 @@
-"""D65 for the B tools: ``g2`` revision 3 (plan 007 step 17, freeze B9).
+"""for the push tool: ``g2`` revision 3.
 
-A user at revision 2 has the plugin and its shell isolation; the B tools (``carter_push``,
+A user at revision 2 has the plugin and its shell isolation; the push tool (``carter_push``,
 for devops) are new content that needs its own yes. Until then ``isolation.json``
 says ``b_enabled: false`` and the plugin registers nothing. Bare ``--yes``, ``carter install``
 and every non-TTY run leave revision 2 alone.
@@ -33,7 +33,7 @@ def guard(*args: str, **kw):
 
 
 def rev2(stack) -> None:
-    """A 2a/2b/2c install: g2 at revision 2 with the plugin written, B off."""
+    """An install at revision 2: g2 with the plugin written, B off."""
     stack.fake()
     state = GuardState()
     for g in ("g2", "sudo-docker", "read-edit-denies", "config-edit"):
@@ -81,7 +81,7 @@ class TestRevisionTwoUserKeepsB_Off:
         assert (isolation_path(None).read_bytes(), state_g2()) == before
         assert iso_plugin()["b_enabled"] is False and not headless_profile_path(None).exists()
         if args == ("install", "--yes"):
-            assert PENDING in res.output and "B tool" in res.output
+            assert PENDING in res.output and "push tool" in res.output
 
     def test_a_yes_in_a_terminal_without_the_group_named_still_waits(
         self, stack, human_tty
@@ -122,7 +122,7 @@ class TestConfirming:
         assert (plugin_dir(None) / "broker.ts").exists() and headless_profile_path(None).exists()
         assert "restart the OpenCode server" in res.output
         assert "convenience, not a security boundary" in res.output
-        assert "B tool: carter_push is enabled for devops" in res.output
+        assert "push tool: carter_push is enabled for devops" in res.output
 
     def test_a_tty_yes_shows_what_b_is_before_the_question(self, stack, human_tty) -> None:
         rev2(stack)
@@ -183,7 +183,7 @@ class TestUndo:
         assert state_g2()["rev"] == 2
         assert iso_plugin()["b_enabled"] is False and plugin_hash_matches()
         assert (plugin_dir(None) / "index.ts").exists() and isolation_path(None).exists()
-        assert not headless_profile_path(None).exists() and "B is off" in res.output
+        assert not headless_profile_path(None).exists() and "The push tool is off" in res.output
         offer = load(guard_state_path(None)).extra["consent_offers"]["g2"]
         assert offer["rev"] == 3 and offer["decision"] == "declined"
 
@@ -225,7 +225,7 @@ class TestUndo:
         self.confirmed(stack, human_tty)
         stack.fake(before=debug_config(stack.live), after=debug_config(stack.live))
         res = guard("remove", "--dry-run", "--only", "broker")
-        assert "g2 would go back to revision 2" in res.output and state_g2()["rev"] == 3
+        assert "the push tool would go off" in res.output and state_g2()["rev"] == 3
 
 
 class TestNoGit:
@@ -238,7 +238,7 @@ class TestNoGit:
         stack.fake(before=debug_config(stack.live), after=debug_config(stack.live))
         res = guard("install", "--yes", "--only", "g2")
         assert res.exit_code == 0 and iso_plugin()["b_enabled"] is False
-        assert "B tools not enabled: no git found" in res.output
+        assert "push tool not enabled: no git found" in res.output
         assert not headless_profile_path(None).exists()
 
 

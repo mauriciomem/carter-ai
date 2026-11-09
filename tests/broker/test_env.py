@@ -1,5 +1,5 @@
 # ruff: noqa: E501
-"""The child environment of B, built from scratch (plan 007 step 7, freeze B12)."""
+"""The child environment of B, built from scratch."""
 
 from __future__ import annotations
 

@@ -1,6 +1,6 @@
-"""What the agent code needs from the config, and the checks before ``ssh-add`` (freeze H10).
+"""What the agent code needs from the config, and the checks before ``ssh-add``.
 
-``Setup`` is plain data built once from ``config.toml``. ``no_passphrase`` is the D54 test (exit
+``Setup`` is plain data built once from ``config.toml``. ``no_passphrase`` is the test (exit
 code only); ``check_key_file`` gives a clearer message than ``ssh-add`` for common mistakes.
 
 Stdlib-only (see ``test_stdlib_only``).
@@ -35,7 +35,7 @@ class Setup:
     private_key: str  # "" for a password-manager setup
     managed_externally: bool
     sock: Path
-    file_mode: bool = False  # D68 d: no passphrase; the shim signs from `private_key` directly
+    file_mode: bool = False  # no passphrase; the shim signs from `private_key` directly
 
 
 def setup_from_config(
@@ -106,7 +106,7 @@ def key_file_problem(path: str, ssh_bin_dir: str, blob: str) -> tuple[str, bool]
 
 
 def no_passphrase(setup: Setup) -> bool:
-    """D54: ``ssh-keygen -y -P '' -f <key>`` with all stdio on ``/dev/null``; **exit code only**.
+    """``ssh-keygen -y -P '' -f <key>`` with all stdio on ``/dev/null``; **exit code only**.
     Exit 0 means the key opens without a passphrase. Every other result (a passphrase, a missing or
     unreadable file, an unsupported format) is "not proven", and ``ssh-add`` reports the rest."""
     done = subprocess.run(

@@ -1,4 +1,4 @@
-"""Offline checks for the carter-ops scenarios (plan 002 step 16).
+"""Offline checks for the carter-ops scenarios.
 
 The scenarios' forbidden-command lists are not typed: a scenario that sets
 ``commands_not_contain_g2`` gets the list rendered from ``g2_rules.json``. These tests
@@ -41,7 +41,7 @@ class TestScenarioShape:
         for s in ops_scenarios_raw:
             assert {"name", "input", "expect"} <= set(s) <= SCENARIO_KEYS, s["name"]
 
-    def test_legacy_config_block_is_gone(self, ops_scenarios_raw: list[dict]) -> None:
+    def test_scenarios_carry_no_identity_values(self, ops_scenarios_raw: list[dict]) -> None:
         text = json.dumps(ops_scenarios_raw)
         for stale in ("bot_name", "bot_email", "signing_key", "git commit -S"):
             assert stale not in text, stale
@@ -184,8 +184,8 @@ class TestPushScenarioIsHumanOnly:
 
 
 class TestDevopsPushScenarioIsHumanOnly:
-    """Plan 003 step 23 (T15): "push this branch" to devops expects the own-terminal text and no
-    push or merge (D72: the PR itself is opened with `gh pr create`)."""
+    """ "push this branch" to devops expects the own-terminal text and no
+    push or merge (the PR itself is opened with `gh pr create`)."""
 
     NAME = "devops_push_this_branch_is_human_only"
 
@@ -272,7 +272,7 @@ def test_ops_scenarios_fixture_is_a_pure_function_of_the_data(ops_scenarios: lis
 
 
 class TestSigningScenarios:
-    """Plan 005 step 27: the offline half of the new live scenarios."""
+    """the offline half of the new live scenarios."""
 
     def test_the_locked_key_scenario_forbids_every_bypass_from_the_data_file(
         self, ops_scenarios: list[dict]
@@ -321,7 +321,7 @@ class TestSigningScenarios:
 
 
 class TestRoleBScenarios:
-    """Plan 006 step 11: the offline half of the role-b live scenarios."""
+    """the offline half of the role-b live scenarios."""
 
     def test_the_commit_scenario_forbids_every_author_bypass_from_the_data_file(
         self, ops_scenarios: list[dict]
@@ -389,7 +389,7 @@ class TestRoleBScenarios:
 
 
 class TestBToolsScenarios:
-    """Plan 007 step 21: the two offline-checkable B scenarios and the skill text they test."""
+    """the two offline-checkable B scenarios and the skill text they test."""
 
     NAMES = (
         "b_non_devops_asks_for_a_push_hands_off",
@@ -422,7 +422,7 @@ class TestBToolsScenarios:
 
 
 class TestReviewRunScenario:
-    """Plan 008 step 7: the review-run scenario is what the resolver returns in a CI."""
+    """the review-run scenario is what the resolver returns in a CI."""
 
     def test_it_matches_the_real_resolver(self, ops_scenarios: list[dict], tmp_path: Path) -> None:
         (s,) = [s for s in ops_scenarios if s["name"] == "ci_review_run_makes_no_commits"]

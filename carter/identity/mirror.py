@@ -1,13 +1,13 @@
-"""The ``carter.*`` git keys and the D64 cap mirror (RFC-0007 §4.4, freeze H5/H6).
+"""The ``carter.*`` git keys and the cap mirror.
 
 The guard (shell, no Python) learns the tier from Carter's own git file ``~/.carter/gitconfig``:
 the base ``carter.tier`` / ``carter.llmEmail`` / ``carter.llmFingerprint``, then one
 ``[includeIf "gitdir:<realpath(workspace)>/"] path = <carter>/gitconfig.d/<sha256[:16]>`` per
 workspace with a ``max_tier``. Each fragment holds only ``[carter] tier = <min(tier, cap)>`` and is
 included **after** the base value, so it wins. The pattern is the *real* path with a trailing ``/``
-(spike B: a symlinked pattern matches nothing, no trailing slash matches nothing) and may not hold
+(a symlinked pattern matches nothing, no trailing slash matches nothing) and may not hold
 glob characters. The guard reads the file directly (``git config --file ... --includes``), which
-evaluates ``includeIf`` for the repo it runs in, a subdirectory and a linked worktree (step 13).
+evaluates ``includeIf`` for the repo it runs in, a subdirectory and a linked worktree.
 
 Everything here is pure data or ``lstat``/``open`` of ``.git`` pointers; the writing is
 ``carter.guard.mirror_io``. A cap below the pinned ``require_tier`` is refused (``MirrorError``).
@@ -72,11 +72,11 @@ def base_entries(cfg: IdentityConfig) -> list[Entry]:
 
 def check_caps(cfg: IdentityConfig) -> None:
     """Refuse a ``max_tier`` below the pinned ``require_tier`` (E-TIER-REQUIRED), and a cap on a
-    workspace that pins role ``author`` (E-ROLE-B-TIER: role b needs T2, every cap is below it)."""
+    workspace that pins role ``author`` (E-ROLE-B-TIER: it needs T2, every cap is below it)."""
     role_b = [key for key, ws in cfg.workspaces.items() if ws.max_tier and ws.role == "author"]
     if role_b:
         raise MirrorError(
-            f"{E_ROLE_B_TIER}: role `author` is pinned together with a max_tier cap, and role b "
+            f"{E_ROLE_B_TIER}: role `author` is pinned together with a max_tier cap, and it "
             "needs T2 (no downgrade): " + ", ".join(role_b)
         )
     bad = [

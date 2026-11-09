@@ -1,7 +1,7 @@
-"""Leftover keys Carter no longer reads, reported so the user can delete them (D70).
+"""Leftover keys Carter does not read, reported so the user can delete them.
 
-Carter keeps no migration and no deprecation shim. A key an older Carter wrote, or the user
-copied from an old doc, is simply *unknown*: this module finds it and names the file::
+A key an older Carter wrote, or the user copied from an old doc, is *unknown*: this module
+finds it and names the file::
 
     ⚠ unknown key `attribution.name` in /home/me/.carter/config.toml → delete it
 
@@ -161,10 +161,6 @@ def once_per_key(hits: Iterable[Hit]) -> list[Hit]:
 def host_items(base_dir: Path | None = None) -> list[Item]:
     """Every host hit as a ``check --host`` row (no deduplication)."""
     return [hit.item() for hit in host(base_dir)]
-
-
-def workspace_items(target: Path) -> list[Item]:
-    return [hit.item() for hit in workspace(target)]
 
 
 def report(hits: Iterable[Hit]) -> int:

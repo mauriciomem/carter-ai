@@ -191,8 +191,8 @@ class TestEnums:
 
 
 class TestPushPolicyIsJustAnUnknownKey:
-    """D70: ``push_policy`` is neither accepted-and-warned nor an error; validation ignores it and
-    ``carter check`` reports it as an unknown key (see ``tests/test_d70.py``)."""
+    """``push_policy`` is neither accepted-and-warned nor an error; validation ignores it and
+    ``carter check`` reports it as an unknown key (see ``tests/test_unknown_keys.py``)."""
 
     @pytest.mark.parametrize("value", ["manual", "auto", "bogus", "null", "42"])
     def test_any_value_is_ignored_by_validation(self, tmp_path, value):
@@ -212,7 +212,7 @@ REPO_PLANS = Path(__file__).resolve().parent.parent / ".carter" / "state" / "pla
 
 @pytest.mark.skipif(not REPO_PLANS.is_dir(), reason="private .carter/ workspace state is absent")
 class TestRealWorkspacePlans:
-    """Regression: plans 001 and 002 keep ``push_policy: manual`` and must still validate."""
+    """Regression: and 002 keep ``push_policy: manual`` and must still validate."""
 
     @pytest.mark.parametrize("name", ["001-llm-attribution-signing", "002-slice-1-hazards"])
     def test_real_plan_validates(self, name):
@@ -227,7 +227,7 @@ class TestRealWorkspacePlans:
 
 
 class TestAiUsage:
-    """``ai-usage`` is an optional enum on plans and the checkpoint (RFC-0007 §4.2)."""
+    """``ai-usage`` is an optional enum on plans and the checkpoint."""
 
     @pytest.mark.parametrize("value", ["ai-assisted", "ai-generated", "human-only"])
     def test_valid_values_accepted(self, tmp_path, value):
@@ -508,7 +508,7 @@ class TestFrontmatterReferenceMatchesValidator:
         from carter.plans import VALID_AI_USAGE
 
         doc = self._doc()
-        assert "is **deprecated**" not in doc  # D70: a retired key is reported as unknown
+        assert "is **deprecated**" not in doc  # a retired key is reported as unknown
         for value in VALID_AI_USAGE:
             assert value in doc
 

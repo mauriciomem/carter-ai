@@ -95,7 +95,7 @@ Create it at <https://github.com/settings/personal-access-tokens>:
 - **Expiry:** 90 days or less. `carter github-token check` warns 14 days before.
 - **One owner:** a token belongs to one user or organisation. For an organisation that
   uses SAML single sign-on, authorise the token for it. Repositories of several owners
-  need several tokens, which this release does not support.
+  need several tokens, which Carter doesn't support.
 
 Then, in your own terminal, give it to Carter on standard input (a hidden prompt, or a
 pipe from your password manager; never as an argument):
@@ -115,21 +115,20 @@ a branch pointing at an all-zero commit, which no token can complete; "Resource 
 means it cannot push, anything else is flagged red. The second posts an empty pull request
 body, which GitHub rejects with a validation error when the token may open PRs and with
 "Resource not accessible" when it may not: that is a warning (`agents can't open PRs → add
-"Pull requests: write" to the token`), not a failure. The attempts
-goes to a repository **you own** (the newest one the token can see), never to another
+"Pull requests: write" to the token`), not a failure. Both attempts
+go to a repository **you own** (the newest one the token can see), never to another
 organisation's, and the repository's name is never printed. If the token's resource owner is an
 organisation you own no repository through it: the check says the probe was skipped, and you
 can choose one with `[github] probe_repo = "owner/name"` in `~/.carter/config.toml`. Both
 commands refuse in an agent shell and print at most the first four characters of a token
 in an error. `carter check --host` repeats these checks.
 
-The token is readable by anything running as you, and agents can see anything their shell
-sees. Treat it as disclosed to your model provider; that is why it must never write
-**Contents**.
-Agents can't read the file with their file tools once the `read-edit-denies` guard is
-installed, but the guards are a speed bump in this release (see
-[Install: guards](install.md#guards)). Rotate it by running `carter github-token set`
-again; revoke it on GitHub when you no longer need it.
+The token is readable by anything running as you. With the [plugin](install.md#the-plugin)
+installed, Carter agents' shells receive it as `GH_TOKEN` (so `gh` and HTTPS `git fetch` use it
+instead of your login), which means the model can see it. Treat it as disclosed to your model
+provider; that is why it must never write **Contents**. Agents can't read the file with their file
+tools once the `read-edit-denies` guard is installed. Rotate it by running
+`carter github-token set` again; revoke it on GitHub when you no longer need it.
 
 ## What "read-only" means for GitHub
 

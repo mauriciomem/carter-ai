@@ -1,6 +1,5 @@
 # ruff: noqa: E501
-"""The human behind a role-b commit: validation, and reading ``git config`` (plan 006 step 4,
-freeze K2/K4). The vector file is shared with the POSIX check in the guard script (step 7)."""
+"""The human behind a role-b commit: validation, and reading ``git config`` ). The vector file is shared with the POSIX check in the guard script."""
 
 from __future__ import annotations
 

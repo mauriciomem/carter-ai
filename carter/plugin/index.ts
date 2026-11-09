@@ -1,7 +1,7 @@
-// Carter plugin for OpenCode (RFC-0007 §4.3; plan 004 step 16). The only file that imports the
+// Carter plugin for OpenCode. The only file that imports the
 // OpenCode plugin API, and the only one `carter guard install` renders: two placeholders below
 // become the sha256 of ~/.carter/isolation.json and the Carter version. All logic is in core.ts.
-// Slice B adds the two broker tools (broker.ts), registered only while isolation.json says so.
+// The broker tool (broker.ts) is registered only while isolation.json says so.
 import { Plugin } from "@opencode/plugin"
 import { Schema } from "effect"
 import * as fs from "node:fs"
@@ -22,9 +22,9 @@ export default Plugin.define({
       setTimeout: (fn: () => void, ms: number) => setTimeout(fn, ms),
       clearTimeout: (handle: unknown) => clearTimeout(handle as ReturnType<typeof setTimeout>),
     }
-    // The session directory is only visible through the session API (spike B 3a, G6).
+    // The session directory is only visible through the session API.
     const sessionDir = async (sessionID: string) => (await ctx.session.get({ sessionID }))?.location?.directory
-    // D71: the parent of a session (null for a root); an unreadable session throws, which the scope test
+    // the parent of a session (null for a root); an unreadable session throws, which the scope test
     // treats as "may belong to Carter".
     const sessionParent = async (sessionID: string) => {
       const info = await ctx.session.get({ sessionID })

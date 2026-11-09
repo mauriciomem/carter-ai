@@ -126,6 +126,6 @@ def run(
         from carter.guard.wiring import install_guards
 
         code = install_guards(base_dir, assume_yes=assume_yes)
-    # D70: leftover keys Carter no longer reads, once per key, after everything else
+    # leftover keys Carter no longer reads, once per key, after everything else
     unknownkeys.report(unknownkeys.once_per_key(unknownkeys.host(base_dir)))
     return code

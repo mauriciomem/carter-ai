@@ -1,7 +1,7 @@
-"""The signing block: one pure function for the plugin and for ``carter commit`` (RFC-0007 §4.3).
+"""The signing block: one pure function for the plugin and for ``carter commit``.
 
 ``build_payload`` turns a resolved identity into the environment and git settings an LLM commit
-needs to be signed by the LLM key, or says why it cannot (freeze H3). All or nothing: there is
+needs to be signed by the LLM key, or says why it cannot. All or nothing: there is
 never a partial block. ``to_git_env`` applies a block to an environment the way the plugin does.
 
 Stdlib-only (the plugin calls ``python -I -m carter.identity.env`` per agent shell; it must stay
@@ -9,14 +9,14 @@ fast and must not import click or ``carter.guard``). It never opens a key and ne
 agent: a locked key still yields the block, and the commit then fails at signing with the raw git
 error (``E-SIGN-LOCKED`` / ``E-SIGN-NOAGENT``).
 
-Role ``author`` (2c, freeze K5) adds ``GIT_AUTHOR_NAME/EMAIL`` (the LLM) to the same dict: author,
+Role ``author`` adds ``GIT_AUTHOR_NAME/EMAIL`` (the LLM) to the same dict: author,
 committer, ``CARTER_IDENTITY`` and the signing entries are all present or all absent, so an
-LLM-authored commit the human's key signs (hazard H7) cannot be produced. The human's identity is
+LLM-authored commit the human's key signs cannot be produced. The human's identity is
 only *checked* here (``human-identity-invalid``); the hook re-reads it at commit time.
 
-Reasons (H3, K3), in the order they are decided: ``config-error``, ``tier-required``,
-``key-missing``, ``fingerprint-mismatch``, ``shim-missing``, ``human-identity-invalid``. Slice CI-E
-adds ``review-mode`` (decided right after ``config-error``): a review run never commits.
+Reasons, in the order they are decided: ``config-error``, ``tier-required``, ``key-missing``,
+``fingerprint-mismatch``, ``shim-missing``, ``human-identity-invalid``. The review mode adds
+``review-mode`` (decided right after ``config-error``): a review run never commits.
 """
 
 from __future__ import annotations
@@ -60,7 +60,7 @@ REASONS = (
     "fingerprint-mismatch",
     "shim-missing",
     "human-identity-invalid",
-    "review-mode",  # slice CI-E: a review run makes no commits, so there is nothing to sign with
+    "review-mode",  # a review run makes no commits, so there is nothing to sign with
 )
 
 SHIM_REL = ".carter/bin/carter-ssh-sign"
@@ -69,7 +69,7 @@ _KEY_TYPES = ("ssh-", "ecdsa-", "sk-")
 
 
 def shim_path(home: Path | None = None) -> Path:
-    """``~/.carter/bin/carter-ssh-sign`` (H2). ``home`` is the user's home directory."""
+    """``~/.carter/bin/carter-ssh-sign``. ``home`` is the user's home directory."""
     return (home or Path.home()) / SHIM_REL
 
 
@@ -168,7 +168,7 @@ def build_payload(
     llm = {"NAME": ident.name or ident.login, "EMAIL": noreply_email(cfg)}
     env: dict[str, str] = {}
     if (role or res.role) == "author":
-        # Never degrades to co-author: no usable human identity, no block (K3, K4).
+        # Never degrades to co-author: no usable human identity, no block.
         if human is None or not human().ok:
             return Built(reason="human-identity-invalid")
         env = {"GIT_AUTHOR_NAME": llm["NAME"], "GIT_AUTHOR_EMAIL": llm["EMAIL"]}

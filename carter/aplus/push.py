@@ -1,4 +1,4 @@
-"""``carter push``: validated push of the current branch to ``origin`` (RFC-0007 C.6.6, A+, D68 f).
+"""``carter push``: validated push of the current branch to ``origin``.
 
 Runs for a human: in their terminal, or in OpenCode's ``!`` shell when the plugin tagged it human
 (AD1; the click layer enforces that before anything here runs). It asks nothing. There is no
@@ -10,7 +10,8 @@ Order (nothing touches the network before the local checks, because ``fetch`` it
 run a repository-configured credential helper or SSH command):
 
 1. branch and push URL; 2. repo config (hooks, helpers, URL rewrites) and SSH config: findings
-are one warning line (the broker refuses them, A+ does not); 3. fetch the target ref; 4. the
+are one warning line (the broker refuses them, `carter push` does not); 3. fetch the target
+ref; 4. the
 commit range; 5. signature check of LLM-committed commits (a failure refuses, with the commits);
 6. push. A normal run ends in one line; ``-v`` adds the commits, the files and git's own output.
 
@@ -34,7 +35,7 @@ from carter.identity.schema import IdentityConfig
 from carter.install.paths import carter_config_path, guard_state_path
 
 # The one sentence that says who pushes and where (templates, skills and the global rule use it).
-# D68 g: the human may also run it in OpenCode's `!` shell (no TTY needed), never through an agent.
+# the human may also run it in OpenCode's `!` shell (no TTY needed), never through an agent.
 OWN_TERMINAL = (
     "Run `carter push` yourself, in your terminal or as `!carter push` in OpenCode, "
     "not through an agent."
@@ -135,9 +136,9 @@ def _local_checks(
 def vet_local(
     repo: Path, url: str, *, base_dir: Path | None, home: Path, dry_run: bool = False
 ) -> tuple[IdentityConfig, int | None]:
-    """Repo-config and SSH-config checks before anything touches the network (D68 f).
+    """Repo-config and SSH-config checks before anything touches the network.
 
-    Findings are one warning line (the broker refuses them; A+ goes on, as the user's own
+    Findings are one warning line (the broker refuses them; `carter push` goes on, as the user's own
     command). With ``--dry-run`` nothing is fetched, because fetching would run them. Returns the
     identity config and ``None`` to go on, or an exit code to stop with."""
     cfg, found = _local_checks(repo, url, base_dir, home)

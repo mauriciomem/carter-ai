@@ -14,9 +14,13 @@ and anything risky (a push, a `terraform apply`) waits for your approval.
 - **Specialists, not a generalist.** Each agent has its own instructions, model and
   permissions, so answers stay focused on one domain.
 - **Safe by default.** Agents ask before risky actions, and only the DevOps agent can
-  change infrastructure. No agent pushes: you do, with `carter push`.
+  change infrastructure. No agent pushes: you do, with `carter push` (or you approve each push
+  DevOps asks for).
 - **Writes stay under your control.** Commits, pull requests and Jira updates are
   shown as a plan first and run only after you say yes.
+- **Agents can have their own identity.** Optionally, agent commits are made under a GitHub
+  account of their own and signed with its key, with you as the author
+  ([Identity and signing](docs/guides/identity-and-signing.md)).
 - **It remembers.** Lessons, decisions and plans are saved as plain Markdown files
   that you can read and edit.
 
@@ -34,7 +38,7 @@ flowchart LR
 | **Maestro** | Anything. It answers simple questions itself and routes the rest |
 | **Architect** | System design, cloud architecture, trade-offs, decision records |
 | **Engineer** | Code, tests, refactoring, code review |
-| **DevOps** | CI/CD, Terraform, containers, git. You push; it opens the pull request |
+| **DevOps** | CI/CD, Terraform, containers, git. You push (or approve its push request); agents open the pull request |
 | **Security** | Threat models, secure code review, vulnerability triage |
 | **Learner** | Explanations and research, with sources |
 | **PM** | Plans, roadmaps, risks |
@@ -91,10 +95,12 @@ or memory: see [Your first workspace](docs/guides/first-workspace.md).
 
 Every agent starts from "ask before doing anything". Reading and searching are free.
 Local edits are allowed only for agents that need them. Pushing (`carter push`) and merging
-are yours; agents may open, edit and comment on pull requests; publishing to Jira and Slack and Vault secret
-reads are reserved for DevOps and always ask. Destructive or
+are yours; agents may open, edit and comment on pull requests; publishing to Jira and Slack and
+Vault secret reads are reserved for DevOps and always ask. Destructive or
 infrastructure-changing commands ask too, and in `strict` mode they are blocked
-outright. OpenCode enforces these rules, not the model. Read
+outright. OpenCode enforces these rules, not the model. `carter install` also offers guards
+(one question, you can decline) that cut Carter agents' shells off from your SSH keys and `gh`
+login. Read
 [Safety and permissions](docs/guides/safety-and-permissions.md) for the details and
 the limits.
 
@@ -103,7 +109,8 @@ the limits.
 Start with the [docs index](docs/README.md). The most useful pages:
 
 - [Using Carter](docs/guides/using-carter.md) · [Safety](docs/guides/safety-and-permissions.md) ·
-  [Write operations](docs/guides/write-operations.md) · [Identity and signing](docs/guides/identity-and-signing.md) · [MCP servers](docs/guides/mcp-servers.md)
+  [Write operations](docs/guides/write-operations.md) · [Identity and signing](docs/guides/identity-and-signing.md) ·
+  [Review-only CI](docs/guides/ci-review.md) · [MCP servers](docs/guides/mcp-servers.md)
 - [CLI](docs/reference/cli.md) · [Configuration](docs/reference/configuration.md) ·
   [Troubleshooting](docs/troubleshooting.md) · [Contributing](docs/contributing/development.md)
 

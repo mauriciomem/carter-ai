@@ -1,5 +1,5 @@
 # ruff: noqa: E501
-"""``carter check --probe`` (plan 004 step 31; RFC-0007 §4.7, freeze G19).
+"""``carter check --probe``.
 
 The agent environment is the reference isolation block applied to a plain environment
 (``apply_isolation``), so the probe is tested against the real contract. Real git, no network:
@@ -221,7 +221,7 @@ class TestCommand:
 
 
 class TestCommitProbeIsTierAware:
-    """Plan 005 step 23: unsigned at t0/t1, the signing block present at T2, never the human's key."""
+    """unsigned at t0/t1, the signing block present at T2, never the human's key."""
 
     def t2_env(self, home: Path, *, with_block: bool = True) -> dict[str, str]:
         import hashlib

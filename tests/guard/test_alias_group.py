@@ -1,5 +1,5 @@
 # ruff: noqa: E501
-"""The optional ``alias`` group: ``git ai-commit`` (plan 005 step 19; freeze H15, erratum R1).
+"""The optional ``alias`` group: ``git ai-commit``.
 
 A bare ``--yes`` never installs it, ``--only alias`` or a terminal yes does, and a terminal's
 default is No. The alias is written to ``~/.carter/gitconfig`` only when the user has no
@@ -63,7 +63,7 @@ class TestConsent:
     def test_naming_it_makes_the_one_question_about_it(self, stack, human_tty) -> None:
         human_tty(True)
         stack.fake()
-        res = guard("install", "--only", "alias", input="n\n")  # D68 h: Y/n, and no is no
+        res = guard("install", "--only", "alias", input="n\n")  # Y/n, and no is no
         assert "Install? [Y/n]" in res.output and "Nothing installed" in res.output
         assert ALIAS_KEY not in carter_entries()
         assert (

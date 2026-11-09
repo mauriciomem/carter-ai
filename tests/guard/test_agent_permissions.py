@@ -1,5 +1,5 @@
-"""Per-agent ``carter_push`` denies for the built-in agents (D46, freeze F6; plan 003 step 12).
-D72 removed ``carter_pr``; D70 removed the V1 ``agent.<n>.permission`` shape."""
+"""Per-agent ``carter_push`` denies for the built-in agents.
+removed ``carter_pr``; removed the V1 ``agent.<n>.permission`` shape."""
 
 from __future__ import annotations
 
@@ -17,7 +17,7 @@ from carter.install.paths import backups_dir
 
 BUILTINS = ["build", "plan", "general", "explore"]
 DENY_PUSH = {"action": "carter_push", "resource": "*", "effect": "deny"}
-A = Statement("deny-a", "g2", "tool.use", "shell:aaa *", "deny", "t")
+A = Statement("deny-a", "g2", "tool.use", "shell:aaa *", "deny")
 
 
 def dbg(stmts: list[Statement] = ()) -> str:  # type: ignore[assignment]
@@ -94,7 +94,7 @@ class TestWrite:
             "value": "deny",
             "preexisting": False,
         }
-        assert "policies" not in read(cfg)  # D46 is not a global policy
+        assert "policies" not in read(cfg)  # is not a global policy
 
     def test_a_user_entry_is_merged_never_replaced(self, tmp_path, cfg, fake_opencode) -> None:
         mine = {"action": "edit", "resource": "*", "effect": "deny"}
@@ -115,7 +115,7 @@ class TestWrite:
     def test_the_old_v1_map_is_not_handled_and_not_touched(
         self, tmp_path, cfg, fake_opencode
     ) -> None:
-        """D70: no V1 shape. The deny always goes to ``agents.<name>.permissions``; a leftover
+        """no V1 shape. The deny always goes to ``agents.<name>.permissions``; a leftover
         ``agent.<name>.permission`` is the user's (``carter check --host`` names it)."""
         write_cfg(cfg, {"agent": {"plan": {"permission": {"edit": "deny"}}}})
         fake_opencode(config_sequence=[dbg(), dbg()])
@@ -208,7 +208,7 @@ class TestConverge:
     def test_an_earlier_carters_carter_pr_deny_is_taken_out_and_carter_push_stays(
         self, tmp_path, cfg, fake_opencode
     ) -> None:
-        """D72 upgrade: the real host recorded both denies per agent."""
+        """upgrade: the real host recorded both denies per agent."""
         old_pr = {"action": "carter_pr", "resource": "*", "effect": "deny"}
         write_cfg(cfg, {"agents": {"build": {"permissions": [DENY_PUSH, old_pr]}}})
         state = GuardState()

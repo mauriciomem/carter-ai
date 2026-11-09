@@ -96,7 +96,7 @@ jobs:
         run: uv run pytest tests/test_plugin_parity.py tests/test_plugin_hygiene.py tests/test_plugin_runner.py tests/test_plugin_entry_roundtrip.py -q
 
   identity-ssh:
-    # Plan 005 step 26: the signing chain against the OpenSSH of the runner (Apple's /usr/bin tools
+    # The signing chain against the OpenSSH of the runner (Apple's /usr/bin tools
     # on macOS): the shim, the dedicated ssh-agent, unlock/lock on a pty, the commit hooks and the
     # commit core, under the system /bin/sh. The last step runs even on failure: no agent of ours
     # may outlive the job.
@@ -126,7 +126,7 @@ jobs:
           uv run python -c "from pathlib import Path; from carter.identity.agent_paths import socket_path; print('socket path length', len(str(socket_path(Path.home()))))"
 
       - name: Identity, shim, agent, hooks and commit tests (real OpenSSH)
-        run: uv run pytest tests/identity tests/guard/test_carter_guard_2b.py tests/guard/test_carter_guard_2c.py tests/guard/test_git_behaviour_2c.py tests/guard/test_remove_2b.py tests/test_commit_cli.py tests/test_plugin_entry_roundtrip.py -q
+        run: uv run pytest tests/identity tests/guard/test_carter_guard_commit_events.py tests/guard/test_carter_guard_role_author.py tests/guard/test_git_behaviour_role_author.py tests/guard/test_remove_identity.py tests/test_commit_cli.py tests/test_plugin_entry_roundtrip.py -q
 
       - name: No ssh-agent of ours is left behind
         if: always()
@@ -137,10 +137,10 @@ jobs:
           fi
 
   broker:
-    # Plan 007 step 20: slice B's Python core against the OS's own git and OpenSSH (Apple's
+    # The push broker's Python core against the OS's own git and OpenSSH (Apple's
     # /usr/bin tools on macOS): the validators and hostile-operand table, the repo-config and
-    # ssh -G checks, push --plan/--exec through a fake ssh into a bare remote, the PR path with a
-    # fake gh, the counter, the audit store, consent revision 3 and the B items of check --host.
+    # ssh -G checks, push --plan/--exec through a fake ssh into a bare remote, the counter, the
+    # audit store, consent revision 3 and the push tool items of check --host.
     # The step after them runs the real `ssh -G` on this runner. No network, no credentials.
     name: broker (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
@@ -167,15 +167,14 @@ jobs:
           /usr/bin/git --version
 
       - name: Broker, A+ checks, consent revision 3 and check --host B items
-        run: uv run pytest tests/broker tests/aplus tests/guard/test_consent_rev3.py tests/guard/test_hostcheck_broker.py tests/guard/test_status_reset_b.py tests/guard/test_names_frozen.py -q
+        run: uv run pytest tests/broker tests/aplus tests/guard/test_consent_rev3.py tests/guard/test_hostcheck_broker.py tests/guard/test_status_reset_b.py tests/guard/test_names.py -q
 
-      - name: The real ssh -G of this OS is judged by the C.5 key list
+      - name: The real ssh -G of this OS is judged by the broker's key list
         run: uv run pytest tests/broker/test_ssh_g_live.py -q
 
   ci-template:
-    # Plan 008 step 5 (the one change to this file that the plan names): the review-only workflow
-    # template that `carter ci install review` writes to users' repositories. Both variants are
-    # rendered, checked by Carter's structural checker (no write permission, SHA pins, pull_request
+    # The review-only workflow template that `carter ci install review` writes to users'
+    # repositories. Both variants are rendered, checked by Carter's structural checker (no write permission, SHA pins, pull_request
     # only, no script injection...) and by actionlint, and this repository's own workflows are
     # linted too. No secrets and no network beyond installing actionlint.
     name: ci-template (checker + actionlint)
@@ -217,7 +216,7 @@ jobs:
         run: uv run pytest tests/ci tests/identity/test_mode.py -q
 
   gate-budget:
-    # RFC App C.4.2: p95 < 100 ms per gate call, interpreter start-up included, measured on the
+    # p95 < 100 ms per gate call, interpreter start-up included, measured on the
     # installed tool (`uv tool install .`) the plugin will really call. Required check. If it
     # fails, apply the documented fallback (alias cache per repo mtime) before raising the budget.
     name: gate-budget (${{ matrix.os }})
@@ -254,7 +253,7 @@ jobs:
           { echo '### Gate p95 (${{ matrix.os }})'; echo '```'; grep -E '^gate (warm|cold)' budget.txt || true; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
 
   e2e-contract:
-    # The compatibility contract against a real OpenCode (plan 004 step 32). Opt-in: it starts
+    # The compatibility contract against a real OpenCode. Opt-in: it starts
     # servers, so it runs only when a human dispatches the workflow. `tested` is the required
     # version (TESTED_OPENCODE); `latest` is informational and allowed to fail.
     name: e2e-contract (opencode ${{ matrix.label }})
@@ -299,10 +298,10 @@ jobs:
           fi
           unshare -rn true || echo "::warning::no network namespace; the mock-provider-only guarantee still holds"
 
-      - name: OpenSSH tools the 2b scenarios use (throwaway keys, dedicated agent)
+      - name: OpenSSH tools the signing scenarios use (throwaway keys, dedicated agent)
         run: ssh -V && command -v ssh-keygen ssh-agent ssh-add
 
-      - name: OpenCode e2e/contract suite (mock model, isolated HOMEs; includes the 2b scenarios)
+      - name: OpenCode e2e/contract suite (mock model, isolated HOMEs; includes the signing scenarios)
         run: tests/e2e/run.sh --version "${{ matrix.version }}"
 
       - name: No ssh-agent of ours is left behind
@@ -343,7 +342,7 @@ jobs:
       - name: Commit-hook events on git 2.39 (per-repo hooks, the T2 minimum, the hook matrix)
         # test_hook_matrix replays config hooks and skips itself below 2.54; the per-repo events and
         # the git >= 2.40 refusal are what this axis proves.
-        run: uv run pytest tests/guard/test_repohooks_2b.py tests/guard/test_gitold_2b.py tests/guard/test_hook_matrix.py tests/guard/test_carter_guard_2c.py tests/guard/test_git_behaviour_2c.py -q
+        run: uv run pytest tests/guard/test_repohooks_commit_hooks.py tests/guard/test_old_git_signing.py tests/guard/test_hook_matrix.py tests/guard/test_carter_guard_role_author.py tests/guard/test_git_behaviour_role_author.py -q
 
   macos-sh:
     # The POSIX guard script under macOS /bin/sh and Apple's /usr/bin/git (Xcode git, < 2.54).
@@ -375,7 +374,7 @@ jobs:
         run: |
           /usr/bin/ssh -V
           uv run python -c "from pathlib import Path; from carter.identity.agent_paths import socket_path; print('socket path length', len(str(socket_path(Path.home()))))"
-          PATH="/usr/bin:$PATH" uv run pytest tests/identity/test_shim.py tests/identity/test_unlock_cli.py tests/guard/test_carter_guard_2b.py tests/guard/test_carter_guard_2c.py -q
+          PATH="/usr/bin:$PATH" uv run pytest tests/identity/test_shim.py tests/identity/test_unlock_cli.py tests/guard/test_carter_guard_commit_events.py tests/guard/test_carter_guard_role_author.py -q
 
   install-smoke:
     # `floor` = minimum supported OpenCode (required). `latest` = newest 2.x

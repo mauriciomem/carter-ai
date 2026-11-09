@@ -1,4 +1,4 @@
-"""The gate stays stdlib-only and cheap to import (freeze G1; plan 004 steps 20-21)."""
+"""The gate stays stdlib-only and cheap to import."""
 
 from __future__ import annotations
 

@@ -33,7 +33,7 @@ _DATE_STR_RE = re.compile(r"^\d{4}-\d{2}-\d{2}([T ].*)?$")
 
 VALID_PLAN_STATUS = {"proposed", "active", "blocked", "completed", "abandoned"}
 VALID_STEP_STATUS = {"pending", "in-progress", "done", "blocked"}
-# Optional provenance marker on plans, the checkpoint and records (RFC-0007 §4.2).
+# Optional provenance marker on plans, the checkpoint and records.
 AI_USAGE_KEY = "ai-usage"
 VALID_AI_USAGE = ("ai-assisted", "ai-generated", "human-only")
 

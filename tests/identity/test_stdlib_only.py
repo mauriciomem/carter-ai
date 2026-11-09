@@ -1,5 +1,5 @@
 """``carter.identity`` stays stdlib-only so later slices (gate, plugin entry) can import
-it without pulling in click, jinja2 or yaml (RFC-0007 App A C15)."""
+it without pulling in click, jinja2 or yaml."""
 
 from __future__ import annotations
 
@@ -43,6 +43,6 @@ def test_imports_are_stdlib_or_the_package_itself(module: Path) -> None:
 
 @pytest.mark.parametrize("module", MODULES, ids=lambda p: p.name)
 def test_modules_stay_small(module: Path) -> None:
-    # resolve.py: 250 since plan 008 (the mode adds 17 lines); everything else stays at 220
+    # resolve.py: 250 since (the mode adds 17 lines); everything else stays at 220
     limit = 250 if module.name == "resolve.py" else 220
     assert len(module.read_text(encoding="utf-8").splitlines()) <= limit

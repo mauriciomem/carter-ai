@@ -1,10 +1,11 @@
-"""``carter commit``: ``git commit`` as the LLM identity (RFC-0007 §4.3; plan 005 step 22).
+"""``carter commit``: ``git commit`` as the LLM identity.
 
 A thin wrapper over ``carter.identity.commit``: every argument goes to ``git commit`` untouched
 (the command parses nothing itself, so ``-m``, ``--`` and empty strings arrive as typed) except the
 flags that skip a hook, change the signature or pick an identity, which are refused. At T2 with the
-key loaded the LLM signs; with it locked, an agent shell is refused and a person at a terminal is
-offered the unlock once. Below T2 the commit is unsigned with the trailer. Exit codes are git's.
+key loaded the LLM signs. With it locked, an agent shell is refused; a person at a terminal gets
+``✗ key locked → carter identity unlock`` and an unsigned commit (nothing is asked). Below T2 the
+commit is unsigned with the trailer. Exit codes are git's.
 """
 
 from __future__ import annotations
@@ -33,19 +34,6 @@ class _PassThrough(click.Command):
         return []
 
 
-def _offer_unlock() -> bool:
-    """Ask once whether to unlock now; any refusal or failure means "no" (the fallback follows)."""
-    from carter import identity_cli
-
-    if not click.confirm("The LLM signing key is locked. Unlock now?", default=True, err=True):
-        return False
-    try:
-        return identity_cli.perform_unlock(None, False) == 0
-    except (IdentityError, click.ClickException) as exc:
-        ui.warn(f"not unlocked: {getattr(exc, 'message', None) or exc}")
-        return False
-
-
 @click.command("commit", cls=_PassThrough, context_settings={"ignore_unknown_options": True})
 def commit_cmd() -> None:
     """Commit as the LLM identity (git commit arguments).
@@ -67,13 +55,13 @@ def commit_cmd() -> None:
                 cwd=os.getcwd(),
                 home=Path.home(),
                 agent=agent,
-                human_tty=not agent and terminal.stdin_is_tty(),
-                offer_unlock=_offer_unlock,
             )
         except core.CommitRefused as exc:
             raise click.UsageError(str(exc)) from exc
         for note in plan.notes:
             ui.detail(note)
+        if plan.key_locked:
+            ui.fail("key locked", "carter identity unlock", inline=True)
         for warning in plan.warnings:
             ui.warn(warning)
         sys.stdout.flush()

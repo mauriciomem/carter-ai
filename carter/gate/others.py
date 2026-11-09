@@ -1,9 +1,9 @@
 """gh, the other gated verbs, human-only Carter verbs and interpreters.
 
-RFC-0007 C.4.1 rows 3, 8, 9 and C.4.2 rules 2 and 5. ``gh`` is deny-by-default with the read
-allowlist from the data file; ``gh api`` and a leading ``-R/--repo`` never pass. Interpreters
-(``python``, ``perl``, ``ruby``, ``node``...) are judged on their *program text* (``-c``/``-e``
-arguments and heredoc bodies), not on a script path, which stays an accepted residual.
+``gh`` is deny-by-default with the allowlist from the data file; ``gh api`` and a leading
+``-R/--repo`` never pass. Interpreters (``python``, ``perl``, ``ruby``, ``node``...) are judged on
+their *program text* (``-c``/``-e`` arguments and heredoc bodies), not on a script path, which
+stays an accepted residual.
 """
 
 from __future__ import annotations
@@ -11,7 +11,7 @@ from __future__ import annotations
 import re
 
 from carter.gate.data import rules
-from carter.gate.unwrap import CODE_FLAGS, base, interpreter_kind
+from carter.gate.unwrap import CODE_FLAGS, interpreter_kind
 from carter.gate.words import Cmd, Word
 
 TYPE_CHECKING = False
@@ -119,8 +119,8 @@ def interpreter(eng: Judge, name: str, argv: list[Word], cmd: Cmd) -> None:
     kind = interpreter_kind(name)
     if kind is None:
         return
-    # python -m carter.broker_cli ... (also `-mcarter.broker_cli`): B's Python core, human-only
-    # like `carter broker *`; the plugin spawns it, an agent shell never may (plan 007, freeze B2)
+    # python -m carter.broker_cli ... (also `-mcarter.broker_cli`): the broker's Python
+    # core, human-only like `carter broker *`; the plugin spawns it, an agent shell never may
     for i, w in enumerate(argv[1:], start=1):
         module = (
             argv[i + 1].text
@@ -155,7 +155,3 @@ def scan_code(eng: Judge, text: str) -> None:
             item_group="sudo-docker",
         )
     eng.scan_code_paths(text)
-
-
-def is_interpreter_name(argv: list[Word]) -> bool:
-    return bool(argv) and argv[0].static and interpreter_kind(base(argv[0])) is not None

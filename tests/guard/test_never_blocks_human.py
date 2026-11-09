@@ -1,5 +1,4 @@
-"""A broken or partial install never blocks the human's own git (plan 003 step 15, T16;
-RFC-0007 §4.4 wrapper principle applied to 1G's artifacts).
+"""A broken or partial install never blocks the human's own git.
 
 Real git, a ``file://`` bare remote and the sandbox HOME: after each kind of damage, a plain
 ``git commit`` and ``git push`` still succeed (exit 0, the remote ref moves) and
@@ -153,7 +152,7 @@ class TestKilledInstall:
         )
         assert proc.returncode == -signal.SIGKILL, proc.stdout + proc.stderr
 
-        # The per-agent denies are in the config AND recorded as Carter's: no orphans (D71).
+        # The per-agent denies are in the config AND recorded as Carter's: no orphans ().
         written = json.loads(config_target(None).read_text())
         assert "policies" not in written and written["agents"]
         state = load(guard_state_path(None))

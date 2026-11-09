@@ -1,7 +1,6 @@
-"""The frozen gate corpus (RFC-0007 C.4.3) run in-process through ``carter.gate.check``.
+"""The frozen gate corpus run in-process through ``carter.gate.check``.
 
-Plan 004 step 17 wrote these first: they fail until the gate exists (steps 18-21) and every
-later change to the gate must keep them green. A deny case names the rule id it must raise.
+Every change to the gate must keep them green. A deny case names the rule id it must raise.
 """
 
 from __future__ import annotations
@@ -10,7 +9,7 @@ from pathlib import Path
 
 import pytest
 
-from carter import gate  # noqa: I001 - fails with ImportError until step 18
+from carter import gate  # noqa: I001
 from gate import corpus
 
 CASES = corpus.load()
@@ -55,7 +54,7 @@ def test_the_corpus_is_big_enough_and_each_case_says_why() -> None:
 
 
 def test_the_residual_choice_is_pinned_as_allowed() -> None:
-    """D67: shell writes to the other paths of section 4.5 are allowed, on purpose."""
+    """shell writes to the other paths of section 4.5 are allowed, on purpose."""
     residual = {c["id"] for c in CASES if c.get("residual")}
     assert {
         "res-global-opencode-config", "res-gitconfig", "res-xdg-git", "res-git-hooks",

@@ -1,4 +1,4 @@
-"""``check --host``: the OpenCode server's environment, by name only (plan 004 step 30).
+"""``check --host``: the OpenCode server's environment, by name only.
 
 Fake ``environ`` bytes and fake ``ps`` output; no real process is read (an autouse fixture in
 ``tests/conftest.py`` blocks discovery). The macOS permission model is a step-38 item.

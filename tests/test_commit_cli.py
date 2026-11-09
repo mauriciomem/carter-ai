@@ -1,5 +1,5 @@
 # ruff: noqa: E501, F811
-"""``carter commit`` and ``git ai-commit`` (plan 005 step 22; RFC-0007 §4.3).
+"""``carter commit`` and ``git ai-commit``.
 
 The command passes its arguments to ``git commit`` untouched; the rules of the core are tested in
 ``tests/identity/test_commit.py``. Here: registration, argument fidelity, subdirectories, exit codes,
@@ -183,7 +183,6 @@ class TestT2:
             and got["committer"] == f"{LOGIN} <{EMAIL}>"
             and got["author"] == f"{HUMAN[0]} <{HUMAN[1]}>"
         )
-        assert "Unlock now?" not in done.output
 
     def test_a_locked_key_in_an_agent_shell_refuses_and_leaves_the_changes_staged(
         self, lab: Lab, monkeypatch: pytest.MonkeyPatch
@@ -197,30 +196,25 @@ class TestT2:
         )
         assert "A  a" in lab.git("status", "--short").stdout
 
-    def test_a_locked_key_at_a_terminal_asks_once_and_a_no_commits_unsigned_with_the_trailer(
+    def test_a_locked_key_at_a_terminal_says_so_asks_nothing_and_commits_unsigned(
         self, lab: Lab, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         monkeypatch.chdir(lab.repo)
         monkeypatch.setattr(terminal, "_isatty", lambda _s: True)
-        done = carter("-m", "fallback", input="n\n")
+        done = carter("-m", "fallback")  # no input: any question would abort
         assert done.exit_code == 0, done.output
-        assert (
-            done.output.count("Unlock now?") == 1
-            and "E-SIGN-HUMAN-FALLBACK" in done.output
-            and "Unverified" in done.output
-        )
+        assert "✗ key locked → carter identity unlock" in done.output
+        assert "?" not in done.output.split("E-SIGN-HUMAN-FALLBACK")[0]
+        assert "E-SIGN-HUMAN-FALLBACK" in done.output and "Unverified" in done.output
         assert "gpgsig" not in lab.raw() and COAUTHOR in lab.show()["body"]
 
-    def test_without_a_terminal_there_is_no_question(
+    def test_without_a_terminal_it_is_the_same(
         self, lab: Lab, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         monkeypatch.chdir(lab.repo)
         done = carter("-m", "x")
-        assert (
-            done.exit_code == 0
-            and "Unlock now?" not in done.output
-            and "E-SIGN-HUMAN-FALLBACK" in done.output
-        )
+        assert done.exit_code == 0 and "key locked" in done.output
+        assert "E-SIGN-HUMAN-FALLBACK" in done.output
 
 
 @real_ssh

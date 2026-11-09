@@ -1,6 +1,6 @@
-"""Plugin packaging, render and install (plan 004 step 26; RFC-0007 C.6.2, freeze G2/G3/G4).
+"""Plugin packaging, render and install.
 
-Everything under the sandbox HOME with a fake OpenCode; the real server is step 32.
+Everything under the sandbox HOME with a fake OpenCode; the real server is in the e2e suite.
 """
 
 from __future__ import annotations
@@ -48,7 +48,7 @@ class TestRender:
 
     def test_the_source_in_the_repository_is_unrendered(self) -> None:
         text = (plugin.SOURCE / "index.ts").read_text()
-        assert "__CARTER_ISOLATION_SHA256__" in text  # refuses by construction (step 14 tests)
+        assert "__CARTER_ISOLATION_SHA256__" in text  # refuses by construction
 
     def test_isolation_json_is_canonical_valid_and_absolute(self, stack) -> None:
         installed(stack)

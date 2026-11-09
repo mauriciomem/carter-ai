@@ -1,8 +1,8 @@
-"""``python -I -m carter.broker_cli``: the only entry of B's Python core (freeze B2, erratum T6).
+"""``python -I -m carter.broker_cli``: the only entry of the broker's Python core.
 
 Spawned by the OpenCode plugin tools ``carter_push`` with the **server**
 environment (nothing here is meant for a human or an agent shell; there is no click wrapper
-because humans use A+, ``carter push``). Subcommands::
+because humans use `carter push`, ``carter push``). Subcommands::
 
     push --plan --cwd DIR --agent A --session S --root R --git G [--gh H]
     push --exec ... --pinned-sha SHA --asked-at MS --answered-at MS

@@ -1,8 +1,8 @@
 # ruff: noqa: E501
-"""The ssh of this machine, judged by B's key list (plan 007 step 20; Apple's ``/usr/bin/ssh`` on macOS).
+"""The ssh of this machine, judged by the broker's key list Apple's ``/usr/bin/ssh`` on macOS).
 
 ``-F`` points at a throwaway file, so the developer's own ``~/.ssh/config`` is never read (OpenSSH
-ignores ``$HOME``, spike C3); ``ssh -G`` only prints the effective configuration and exits.
+ignores ``$HOME``; ``ssh -G`` only prints the effective configuration and exits.
 """
 
 from __future__ import annotations
@@ -51,7 +51,7 @@ def test_the_command_options_show_up_in_ssh_g_and_are_flagged(
 
 
 def test_match_user_git_only_applies_with_the_push_user(tmp_path: Path) -> None:
-    """Erratum T4: `ssh -G github.com` would miss a `Match user git` block; B asks for git@."""
+    """`ssh -G github.com` would miss a `Match user git` block; B asks for git@."""
     config = "Match user git\n  ProxyCommand nc %h %p\n"
     flagged = {f.key for f in sshcfg.parse_ssh_g(effective(tmp_path, config))}
     assert "proxycommand" in flagged

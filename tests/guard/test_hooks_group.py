@@ -1,4 +1,4 @@
-"""The ``hooks`` consent group is live (plan 004 step 24; RFC-0007 C.6.2, C.6.4, D61).
+"""The ``hooks`` consent group is live.
 
 ``carter guard install`` writes ``~/.carter/hooks/carter-guard`` (0755) and the first Carter git
 keys into ``~/.carter/gitconfig``, then adds ONE include line to the global git config, unless
@@ -322,7 +322,7 @@ class TestGitUnusable:
 
 
 class TestOldGit:
-    """git < 2.54 (simulated, spike E 6): no consent is asked for nothing (G10)."""
+    """git < 2.54 (simulated, 6): no consent is asked for nothing."""
 
     def old(self, stack) -> None:
         stack.fake()

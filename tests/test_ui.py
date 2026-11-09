@@ -1,4 +1,4 @@
-"""The output layer (D68 a): short lines, cause and fix, no markup surprises, plain when piped."""
+"""The output layer (): short lines, cause and fix, no markup surprises, plain when piped."""
 
 from __future__ import annotations
 

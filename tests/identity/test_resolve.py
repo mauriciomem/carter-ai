@@ -1,4 +1,4 @@
-"""The pure tier and role resolver (RFC-0007 §4.1: tiers, D20/D22/D62, D64 cap)."""
+"""The pure tier and role resolver (tiers, cap)."""
 
 from __future__ import annotations
 
@@ -109,12 +109,12 @@ class TestConfiguredTier:
         assert configured_tier(cfg(identity=T1_ID, signing=T2_SIGNING)) == "t2"
 
     def test_public_key_path_alone_is_not_the_public_half(self):
-        # Architect (step 7): the reader cannot open the file; the shim works on the blob.
+        # Architect: the reader cannot open the file; the shim works on the blob.
         signing = Signing(fingerprint="SHA256:abc", public_key_path="~/.ssh/k.pub")
         assert configured_tier(cfg(identity=T1_ID, signing=signing)) == "t0"
 
     def test_custody_fields_are_not_part_of_the_tier(self):
-        # private_key_path / agent_socket / program fail at signing time (2b), not here.
+        # private_key_path / agent_socket / program fail at signing time, not here.
         bare = Signing(**KEY)
         with_agent = Signing(**KEY, agent_socket="/run/a.sock", program="op-ssh-sign")
         assert configured_tier(cfg(identity=T1_ID, signing=bare)) == "t2"
@@ -122,8 +122,8 @@ class TestConfiguredTier:
 
 
 class TestT2FailsClosed:
-    """RFC §4.1: once signing is configured, a broken config disables agent commits;
-    it never falls back to T1 or T0 (architect, step 7, Q3)."""
+    """Once signing is configured, a broken config disables agent commits;
+    it never falls back to T1 or T0."""
 
     MATERIAL = [
         {"public_key": "ssh-ed25519 AAAA"},

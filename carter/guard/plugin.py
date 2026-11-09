@@ -1,7 +1,6 @@
-"""Render, install and remove the Carter OpenCode plugin and its companions (plan 004 step 26).
+"""Render, install and remove the Carter OpenCode plugin and its companions.
 
-RFC-0007 §4.3, App C.6.2, freeze G2/G3/G4. What lands on the host, all recorded in guard state
-(``files``, sha256) and written atomically:
+What lands on the host is all recorded in guard state (``files``, sha256) and written atomically:
 
 - ``~/.config/opencode/plugins/carter/index.ts`` (rendered: the sha256 of the final
   ``isolation.json`` bytes and the Carter version replace two placeholders) and ``core.ts``
@@ -11,7 +10,7 @@ RFC-0007 §4.3, App C.6.2, freeze G2/G3/G4. What lands on the host, all recorded
 
 A file the user edited is kept and reported, never overwritten. A plugin whose baked hash does not
 match ``isolation.json`` refuses to create agent shells (``E-ISOLATION-MISSING``), so a kept edit
-fails closed. The install never runs when no root-owned ``false`` exists (C.2.1): nothing is
+fails closed. The install never runs when no root-owned ``false`` exists: nothing is
 written then. Python and ``carter`` paths are those of the running Carter and must exist; a path
 in a temporary directory is refused (an install must not point the gate at a vanishing file).
 """
@@ -63,7 +62,7 @@ TOOL_DIRS = ("/usr/bin", "/bin", "/usr/local/bin", "/opt/homebrew/bin")  # never
 PLACEHOLDERS = ("__CARTER_ISOLATION_SHA256__", "__CARTER_VERSION__")
 TEMP_ROOTS = ("/tmp", "/var/tmp", "/private/tmp", "/private/var/folders", "/var/folders")
 RESTART = "restart the OpenCode server so it loads the plugin"
-BROKER_AGENT = DEVOPS_AGENT  # freeze B10: the only agent that can use B
+BROKER_AGENT = DEVOPS_AGENT  # the only agent that can use the push tool
 
 
 class PluginInstallError(Exception):
@@ -117,15 +116,15 @@ def broker_tools() -> tuple[str, str]:
 
 
 def broker_enabled(state: GuardState) -> bool:
-    """B is registered only with ``g2`` accepted at revision 3 and a git that was found."""
+    """The push tool is registered only with ``g2`` at revision 3 and a git that was found."""
     return consent.broker_wanted(state) and bool(broker_tools()[0])
 
 
 def render_headless() -> str:
-    """The static headless profile (freeze B8): denies B for devops, the only agent that has it.
+    """The static headless profile: denies B for devops, the only agent that has it.
 
     Per-agent permissions, not ``policies`` (a global ``tool.use`` policy never matches a plugin
-    tool, spike A6). It applies to the process that starts the server: ``opencode run
+    tool). It applies to the process that starts the server: ``opencode run
     --standalone`` or the run that starts the service; a running service ignores it."""
     deny = [{"action": "carter_push", "resource": "*", "effect": "deny"}]
     doc = {"agents": {BROKER_AGENT: {"permissions": deny}}}
@@ -209,10 +208,10 @@ def install(
     else:
         echo(f"plugin up to date: {plugin_dir(base_dir)}")
     if broker_enabled(state):
-        echo("B tool: carter_push is enabled for devops (every use asks you).")
+        echo("push tool: carter_push is enabled for devops (every use asks you).")
     elif consent.broker_wanted(state):
         echo(
-            "⚠ B tools not enabled: no git found in /usr/bin, /bin, /usr/local/bin or "
+            "⚠ push tool not enabled: no git found in /usr/bin, /bin, /usr/local/bin or "
             "/opt/homebrew/bin"
         )
     return out
@@ -254,7 +253,7 @@ def cleanup_dirs(base_dir: Path | None) -> None:
 
 
 def unexpected_files(base_dir: Path | None) -> list[str]:
-    """Plugin code Carter did not write, by name (D66): ``plugin/`` and ``plugins/`` minus ours."""
+    """Plugin code Carter did not write, by name: ``plugin/`` and ``plugins/`` minus ours."""
     ours = {plugin_dir(base_dir) / name for name in ("index.ts", *PLUGIN_FILES)}
     root = plugin_dir(base_dir).parent.parent
     found: list[str] = []

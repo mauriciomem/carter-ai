@@ -1,4 +1,4 @@
-// The broker tool wrapper (plan 007 step 15): thin, fake OpenCode ctx, fake Python.
+// The broker tool wrapper: thin, fake OpenCode ctx, fake Python.
 import { test } from "node:test"
 import assert from "node:assert/strict"
 import { registerBroker, type BrokerDeps } from "../../carter/plugin/broker.ts"
@@ -176,7 +176,7 @@ test("the server environment is handed to Python unchanged; the wrapper builds n
 
 test("a refusal from the plan is the model's error text and nothing is asked", async () => {
   const r = rig()
-  r.respond = () => refusal("E-B-DEFAULT", "`main` is the remote default branch; B never pushes it.")
+  r.respond = () => refusal("E-B-DEFAULT", "`main` is the remote default branch; the broker never pushes it.")
   registerBroker(r.deps)
   await assert.rejects(() => r.tools.carter_push.execute({}, r.tctx()), /default branch.*E-B-DEFAULT/)
   assert.equal(r.asserts.length, 0)

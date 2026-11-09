@@ -1,4 +1,4 @@
-"""The rejection counter (plan 007 step 14, freeze B5)."""
+"""The rejection counter."""
 
 from __future__ import annotations
 

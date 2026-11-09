@@ -1,7 +1,7 @@
 """Data model of a parsed command line: words, redirections, heredocs, simple commands.
 
 Plain ``__slots__`` classes on purpose: ``dataclasses`` pulls in ``inspect`` and costs 7 ms of
-start-up, and the gate runs on every agent command (plan 004 spike F).
+start-up, and the gate runs on every agent command.
 """
 
 from __future__ import annotations

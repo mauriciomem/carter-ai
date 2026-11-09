@@ -1,7 +1,7 @@
-"""The mirror written for real and read back the way the guard reads it (plan 005 step 13).
+"""The mirror written for real and read back the way the guard reads it.
 
-Real git in the hermetic home. The guard's read form is frozen by H6:
-``git config --file <carter>/gitconfig --includes --get carter.<key>`` (D67: a line a shell appended
+Real git in the hermetic home. The guard's read form is
+``git config --file <carter>/gitconfig --includes --get carter.<key>`` (a line a shell appended
 to ``~/.gitconfig`` must not be able to outvote it). ``includeIf gitdir:`` is evaluated under that
 form for a repo, a subdirectory and a linked worktree; the cap follows the **main repo's** git dir.
 """
@@ -23,6 +23,7 @@ from carter.identity import mirror
 from carter.identity.schema import Identity, IdentityConfig, Signing, Workspace
 from carter.identity.writer import write_config
 from carter.install.paths import carter_gitconfig_path, guard_state_path
+from guard.helpers import replace_others
 
 LOGIN, UID = "llm-bot", 4242
 EMAIL = f"{UID}+{LOGIN}@users.noreply.github.com"
@@ -116,7 +117,7 @@ class TestGuardReadForm:
     def test_a_line_appended_to_the_global_config_cannot_outvote_the_file(
         self, tmp_path: Path, base: Path
     ) -> None:
-        """D67: ~/.gitconfig is shell-writable; the guard must not read through it."""
+        """~/.gitconfig is shell-writable; the guard must not read through it."""
         r = repo(tmp_path / "r")
         mirror_io.sync(base, GuardState(), cfg())
         glob = Path(os.environ["GIT_CONFIG_GLOBAL"])
@@ -141,7 +142,7 @@ class TestGuardReadForm:
 
 
 class TestWorktrees:
-    """The 2b erratum (spike B 6): the main repo's git dir decides, not the worktree path."""
+    """The main repo's git dir decides, not the worktree path."""
 
     def test_the_cap_follows_the_main_repo(self, tmp_path: Path, base: Path) -> None:
         ws, out = tmp_path / "ws", tmp_path / "out"
@@ -193,14 +194,14 @@ class TestMirrorIo:
         ws.mkdir()
         state = GuardState()
         mirror_io.sync(base, state, cfg({str(ws): Workspace(max_tier="t1")}))
-        mirror_io.replace_others(base, state, [("hook.carter-guard-pre-push.event", "pre-push")])
+        replace_others(base, state, [("hook.carter-guard-pre-push.event", "pre-push")])
         keys = [k for k, _ in mirror_io.read_entries(carter_gitconfig_path(base))]
         assert (
             keys[0] == "carter.tier"
             and keys[-1].startswith("hook.")
             and any(k.startswith("includeIf.") for k in keys)
         )
-        mirror_io.replace_others(base, state, [])
+        replace_others(base, state, [])
         assert [k for k, _ in mirror_io.read_entries(carter_gitconfig_path(base))][
             0
         ] == "carter.tier"
@@ -269,7 +270,7 @@ class TestUpdateCommand:
     def test_yes_writes_the_mirror_and_never_the_global_config(self, world: Path) -> None:
         glob = Path(os.environ["GIT_CONFIG_GLOBAL"])
         before = glob.read_bytes()
-        done = CliRunner().invoke(main, ["update", "-v", str(world)])  # asks nothing (D68 h)
+        done = CliRunner().invoke(main, ["update", "-v", str(world)])  # asks nothing ()
         assert done.exit_code == 0, done.output
         assert "+ carter.tier = t2" in done.output and "tier mirror written" in done.output
         assert glob.read_bytes() == before
@@ -318,7 +319,7 @@ class TestUpdateCommand:
         CliRunner().invoke(main, ["update", str(world), "--yes"])
         assert update_mirror.include_hint(None) is None  # only the mirror: the guard reads the file
         state = load(guard_state_path(None))
-        mirror_io.replace_others(None, state, [("alias.ai-commit", "!true")])
+        replace_others(None, state, [("alias.ai-commit", "!true")])
         assert (
             update_mirror.include_hint(None)
             == f"git config --global --add include.path {home}/.carter/gitconfig"

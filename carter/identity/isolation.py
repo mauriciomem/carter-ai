@@ -1,9 +1,9 @@
 """The static shell-isolation block as data: rendered at install, validated, hashed.
 
-RFC-0007 §4.5 and App C.2 (plan 004 step 11, frozen as G4). ``carter guard install`` renders
-``~/.carter/isolation.json`` with ``render()``, writes the canonical bytes and records their
-sha256; the TypeScript plugin only reads that file (it holds no list of its own) and refuses to
-create an agent shell when the file is missing, invalid or does not match its baked hash.
+``carter guard install`` renders ``~/.carter/isolation.json`` with ``render()``, writes the
+canonical bytes and records their sha256; the TypeScript plugin only reads that file (it holds no
+list of its own) and refuses to create an agent shell when the file is missing, invalid or does
+not match its baked hash.
 
 Nothing here reads a secret or the identity: the block is the same for every tier. The GitHub
 read token is put into ``GH_TOKEN`` by the plugin at shell creation, never into this file.
@@ -45,7 +45,7 @@ def resolve_false(stat_fn: Callable[[str], os.stat_result] = os.stat) -> str:
     """First of ``/usr/bin/false``, ``/bin/false`` that is root-owned and not writable by others.
 
     Never found through the command search path and never a Carter-owned script (an agent could
-    edit it, C.2.1). ``stat_fn`` is injectable so tests can fake a macOS layout."""
+    edit it). ``stat_fn`` is injectable so tests can fake a macOS layout."""
     for candidate in FALSE_CANDIDATES:
         try:
             st = stat_fn(candidate)
@@ -57,7 +57,7 @@ def resolve_false(stat_fn: Callable[[str], os.stat_result] = os.stat) -> str:
 
 
 def git_config_entries(false_path: str) -> list[list[str]]:
-    """The ``GIT_CONFIG_*`` entries in C.2 order: reset first, so the helper chain is ours only."""
+    """The ``GIT_CONFIG_*`` entries in order: reset first, so the helper chain is ours only."""
     entries = [
         ["credential.helper", ""],
         ["credential.https://github.com.helper", GITHUB_HELPER],
@@ -65,8 +65,8 @@ def git_config_entries(false_path: str) -> list[list[str]]:
         ["url.https://github.com/.insteadOf", "ssh://git@github.com/"],
     ]
     entries += [["url.no_push://.pushInsteadOf", form] for form in GITHUB_FORMS]
-    entries += [["remote.origin.pushurl", "no_push"], ["commit.gpgsign", "false"]]  # C7, D51
-    entries += [[program, false_path] for program in GPG_PROGRAMS]  # rv2-sec B1
+    entries += [["remote.origin.pushurl", "no_push"], ["commit.gpgsign", "false"]]
+    entries += [[program, false_path] for program in GPG_PROGRAMS]
     return entries
 
 

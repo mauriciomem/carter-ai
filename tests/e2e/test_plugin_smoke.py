@@ -1,4 +1,4 @@
-"""The real plugin (``carter/plugin/{index,core}.ts``) loaded by a real OpenCode (plan 004 step 16).
+"""The real plugin (``carter/plugin/{index,core}.ts``) loaded by a real OpenCode.
 
 A smoke test, opt-in (``CARTER_E2E=1``), on the primary binary and ``CARTER_E2E_OPENCODE_ALT``.
 The python interpreter in ``isolation.json`` is a shell script that stands in for the gate
@@ -123,7 +123,7 @@ def test_loads_isolates_the_agent_shell_and_passes_the_self_test(rig_factory, op
     assert run_shell(rig, "printenv GIT_CONFIG_COUNT").strip() == "13"
     assert wait_status(rig, "passed")["failed_reason"] is None
     log = (rig.home / "fakepy.log").read_text()
-    assert f"--cwd {rig.ws}" in log  # the session directory comes from ctx.session.get (G6)
+    assert f"--cwd {rig.ws}" in log  # the session directory comes from ctx.session.get
     assert "-I -m carter.gate --json" in log and "tier" in log
 
 

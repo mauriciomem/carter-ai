@@ -25,7 +25,7 @@ from host_guard import (
     is_local_host,
     ssh_surface,
 )
-from ssh_rig import (  # noqa: F401  (fixtures: the real_ssh_agent family, plan 005 step 7)
+from ssh_rig import (  # noqa: F401  (fixtures: the real_ssh_agent family)
     _ssh_reaper,
     pty_driver,
     real_ssh_agent,
@@ -48,7 +48,7 @@ _REAL_SSH_BEFORE = ssh_surface(_REAL_HOME, _REAL_SSH_AUTH_SOCK)
 
 # Ambient variables that change who git (or Carter) thinks the author is.
 _IDENTITY_ENV_VARS = (
-    # Plan 008: a CI runner (GITHUB_ACTIONS, CI) means "review run, no commits" to the resolver, and
+    # a CI runner (GITHUB_ACTIONS, CI) means "review run, no commits" to the resolver, and
     # CARTER_IDENTITY_MODE sets it by hand. The suite must behave the same on a laptop and in CI.
     "CI",
     "GITHUB_ACTIONS",
@@ -86,7 +86,7 @@ _HOST_LEAK_VARS = (
     "OPENCODE_CONFIG",
     "OPENCODE_CONFIG_DIR",
     "OPENCODE_CONFIG_CONTENT",
-    "OPENCODE_TERMINAL",  # set in every OpenCode-spawned shell, this suite's included (D58)
+    "OPENCODE_TERMINAL",  # set in every OpenCode-spawned shell, this suite's included ()
 )
 
 # Tools a test must never run for real: name -> the fixture that provides a safe stand-in.
@@ -141,7 +141,7 @@ def _hermetic_env(
     for var in (*_IDENTITY_ENV_VARS, *_HOST_LEAK_VARS, *signals, *injected):
         monkeypatch.delenv(var, raising=False)
 
-    # Sockets and temp files must not leak out of the sandbox either (plan 003, step 5).
+    # Sockets and temp files must not leak out of the sandbox either.
     runtime = home / ".run"
     runtime.mkdir(mode=0o700)
     tmpdir = home / "tmp"
@@ -171,7 +171,7 @@ def real_host_digest() -> dict[str, str]:
 @pytest.fixture(scope="session", autouse=True)
 def _real_host_untouched() -> Iterator[None]:
     """Fail the run if any test changed the developer's real git config, OpenCode config
-    or ``~/.carter`` state (plan 003, step 5). Compares hashes taken at import time."""
+    or ``~/.carter`` state. Compares hashes taken at import time."""
     yield
     touched = changed(_REAL_HOST_BEFORE, digest_host(_REAL_HOME))
     assert not touched, f"tests modified the real host files: {', '.join(touched)}"
@@ -286,7 +286,7 @@ def real_ssh_keygen(guard_bin: Path) -> None:
 def pollute_git_env(monkeypatch: pytest.MonkeyPatch) -> Callable[..., None]:
     """Return a function that sets every env var able to hijack the commit identity.
 
-    Used to prove ``state.py`` commits stay human/human and unsigned (plan 002, step 11).
+    Used to prove ``state.py`` commits stay human/human and unsigned.
     The function takes an optional ``monkeypatch`` (defaults to the test's own) so it can
     also be driven from another fixture; the changes are undone with that monkeypatch.
     """

@@ -1,4 +1,4 @@
-"""HTTP transport of the unauthenticated GitHub client (freeze H13; plan 005 step 14).
+"""HTTP transport of the unauthenticated GitHub client.
 
 Never sends credentials (no ``Authorization``, no cookies, no token from the environment or a
 file). ``$GITHUB_API_URL`` is honoured: https anywhere, plain http only on loopback, nothing else
@@ -65,7 +65,7 @@ def api_base(env: Mapping[str, str] | None = None) -> str:
 
 
 def web_base(api_url: str) -> str:
-    """The origin that serves ``/<login>.keys`` for ``api_url`` (spike D rule)."""
+    """The origin that serves ``/<login>.keys`` for ``api_url``."""
     if api_url.rstrip("/") == DEFAULT_API:
         return DEFAULT_WEB
     parts = urlsplit(api_url)

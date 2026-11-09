@@ -1,5 +1,5 @@
 """``check --host``: per-agent denies from ``opencode debug agents`` and the version bands
-(plan 004 step 30; spike D fixtures, C23)."""
+fixtures, C23)."""
 
 from __future__ import annotations
 

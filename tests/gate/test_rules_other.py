@@ -1,4 +1,4 @@
-"""gh, the other gated verbs, human-only Carter verbs and interpreters (plan 004 step 19)."""
+"""gh, the other gated verbs, human-only Carter verbs and interpreters."""
 
 from __future__ import annotations
 
@@ -175,7 +175,7 @@ class TestHumanOnlyCarter:
             "python3 -m carter push",
             "/home/u/.local/bin/carter push",
             "env CARTER_X=1 carter push",
-            # D68 g: the human tag lets the user's `!` shell push, so an agent must never forge it
+            # the human tag lets the user's `!` shell push, so an agent must never forge it
             "CARTER_HUMAN_SHELL=1 carter push",
             "env CARTER_HUMAN_SHELL=1 carter push",
             "export CARTER_HUMAN_SHELL=1 && carter push",
@@ -275,7 +275,7 @@ class TestInterpreters:
 
 
 class TestOpencodeService:
-    """Plan 004 step 36 (security review): a service restarted from an agent shell would inherit
+    """(security review): a service restarted from an agent shell would inherit
     that shell's isolated environment (no SSH agent, agent signals) and degrade the human's
     `!` shells. Reads of the service stay allowed."""
 

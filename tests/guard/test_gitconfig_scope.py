@@ -1,11 +1,11 @@
-"""D61 prerequisite (RFC-0007 §4.4, §9): git reports a hook defined in a file pulled in by
+"""git reports a hook defined in a file pulled in by
 ``include.path`` from the *global* config as scope ``global``.
 
-This pins what the plan-003 step-2 spike found on git 2.56, so step 13 (Carter's own
-``~/.carter/gitconfig`` behind one include line) can rely on it. Everything runs in the
+This pins what git 2.56 does, so Carter's own ``~/.carter/gitconfig`` behind one include
+line can rely on it. Everything runs in the
 hermetic fixture home: ``GIT_CONFIG_GLOBAL`` points at a scratch file, never the real one.
 
-``hook_scopes`` is the behavioural detection; since plan 003 step 13 it lives in
+``hook_scopes`` is the behavioural detection; it lives in
 ``carter.guard.gitconfig`` (the production probe) and this file imports it: do not parse
 versions, ask git where it read the hook from.
 """
@@ -133,7 +133,7 @@ class TestIncludedHookIsGlobal:
 
 
 class TestGuardReadForm:
-    """``git config --global --includes --get`` is the form the guard reads (RFC §4.4)."""
+    """``git config --global --includes --get`` is the form the guard reads."""
 
     def read(self, repo: Path, *pre: str) -> str:
         return git(

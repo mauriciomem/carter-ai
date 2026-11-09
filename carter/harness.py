@@ -239,7 +239,7 @@ class DebugConfigError(Exception):
     """``opencode debug config`` could not be read or parsed.
 
     The message never carries OpenCode's output: the resolved config holds provider
-    settings (RFC-0007 App C.6.3), so only exit codes and parser positions are reported."""
+    settings, so only exit codes and parser positions are reported."""
 
 
 def read_debug_config(
@@ -392,7 +392,7 @@ def agent_deny_gaps(
     agents: Sequence[Mapping[str, Any]], *, exempt: Sequence[str] = EXEMPT_AGENTS
 ) -> list[tuple[str, str]]:
     """``(agent, action)`` pairs where the effective rule is not ``deny`` (last matching rule
-    wins, resource ``*``), for every agent except ``exempt`` (spike D)."""
+    wins, resource ``*``), for every agent except ``exempt``."""
     gaps: list[tuple[str, str]] = []
     for agent in agents:
         name = str(agent.get("id", ""))

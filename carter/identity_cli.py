@@ -1,4 +1,4 @@
-"""``carter identity unlock | lock`` (RFC-0007 App B, D50, D54, D58; plan 005 step 11).
+"""``carter identity unlock | lock``.
 
 The only code that makes the user type a passphrase, and it refuses everywhere an agent or a
 non-terminal could be: an AD1 agent signal or ``OPENCODE_TERMINAL`` (set in every OpenCode-spawned
@@ -306,7 +306,7 @@ def verify_cmd(remote: str | None, sha: str | None, rev: str | None, quiet: bool
 @verbose_option
 def remove_cmd(assume_yes: bool, dry_run: bool) -> None:
     """Remove the LLM identity (your key file stays)."""
-    del assume_yes  # accepted and ignored: nothing is asked any more (D68 h)
+    del assume_yes  # accepted and ignored: nothing is asked any more
 
     def run() -> int:
         from carter import identity_remove

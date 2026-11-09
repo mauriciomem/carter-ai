@@ -1,4 +1,4 @@
-"""The ``real_ssh_agent`` fixtures are safe to use (plan 005, step 7).
+"""The ``real_ssh_agent`` fixtures are safe to use.
 
 Throwaway keys, one dedicated agent under a short base directory, a PTY driver that scrubs what
 it types, a reaper that cannot be cheated, and a proof that the real ``$SSH_AUTH_SOCK`` and
@@ -58,7 +58,7 @@ class TestThrowawayKeys:
             stdin=subprocess.DEVNULL,
             start_new_session=True,
         )
-        assert done.returncode == 0  # D54: exit 0 means no passphrase
+        assert done.returncode == 0  # exit 0 means no passphrase
 
     def test_a_passphrase_key_uses_a_runtime_sentinel(self, throwaway_key: Any) -> None:
         key: KeyPair = throwaway_key("ed25519", True)

@@ -1,6 +1,6 @@
-"""Schema check of ``isolation.json`` (G4, B9): exactly schema v2, anything else is invalid.
+"""Schema check of ``isolation.json``: exactly schema v2, anything else is invalid.
 
-Schema 2 (slice B) adds the plugin keys for the broker tools. A plugin and a file of different
+Schema 2 adds the plugin keys for the broker tools. A plugin and a file of different
 schemas refuse each other (``E-ISOLATION-MISSING``): they are installed together, so a mixed
 pair means something was edited or half-installed, and agent shells are then not created.
 
@@ -18,7 +18,7 @@ from typing import Any
 from carter.identity.errors import E_ISOLATION_MISSING, IdentityError
 from carter.identity.policyset import consent_groups
 
-SCHEMA_VERSION = 2  # slice B: plugin.{b_enabled, b_caller, broker_args, b_git, b_gh}
+SCHEMA_VERSION = 2  # plugin.{b_enabled, b_caller, broker_args, b_git, b_gh}
 TOP_KEYS = frozenset(
     {"schema_version", "env", "git_config", "blocking_git_config", "pollution", "plugin"}
 )

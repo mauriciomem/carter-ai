@@ -1,4 +1,4 @@
-"""``python -I -m carter.gate --json [--cwd DIR] [--skip-groups CSV]`` (freeze G6).
+"""``python -I -m carter.gate --json [--cwd DIR] [--skip-groups CSV]``.
 
 The command line to judge arrives on stdin as UTF-8. One JSON object goes to stdout:
 ``{"decision": "allow"|"deny", "rule": str|null, "message": str|null}``; exit 0 = allow, exit 1 =

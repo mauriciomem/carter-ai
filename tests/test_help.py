@@ -1,4 +1,4 @@
-"""Every ``--help`` is short and free of internal notes (D68 b)."""
+"""Every ``--help`` is short and free of internal notes ()."""
 
 from __future__ import annotations
 

@@ -1,7 +1,7 @@
 # ruff: noqa: E501
-"""``carter check --host``, the slice-B items (plan 007 step 18, freeze B9, B11, B17).
+"""``carter check --host``: the push tool items.
 
-Library-level with injected readers, like ``test_hostcheck_2a``. Read-only, names only.
+Library-level with injected readers, like ``test_hostcheck_plugin``. Read-only, names only.
 """
 
 from __future__ import annotations
@@ -54,7 +54,7 @@ def test_a_fresh_full_install_reports_b_on_and_nothing_red(stack) -> None:
     assert find(items, "enabled for devops only", "ok")
     assert find(items, "headless profile present", "ok")
     assert not [i for i in b_items(items) if i.level == "red"]
-    assert not find(items, "B tools", "red")
+    assert not find(items, "push tool", "red")
 
 
 def test_g2_at_revision_2_says_b_is_off_and_pending(stack) -> None:
@@ -69,8 +69,8 @@ def test_g2_at_revision_2_says_b_is_off_and_pending(stack) -> None:
     )  # what a revision-2 install wrote
     isolation_path(None).write_text(json.dumps(doc))
     items = check()
-    assert find(items, "off: confirm g2 revision 3", "info")
-    assert find(items, "g2 rev 3 pending: the B tool", "info")
+    assert find(items, "off: confirm it with", "info")
+    assert find(items, "g2 update pending: the push tool", "info")
     assert not find(items, "headless profile")
 
 
@@ -80,7 +80,7 @@ def test_isolation_enabling_b_without_the_consent_is_red(stack) -> None:
     state.consent("g2", "accepted", "2026-11-01", 2)
     save(state, guard_state_path(None))  # the file still says b_enabled true
     items = check()
-    assert find(items, "enables the B tools but guard state does not have g2 at revision 3", "red")
+    assert find(items, "enables the push tool but guard state does not have it confirmed", "red")
 
 
 def test_consent_without_b_in_isolation_is_a_warning(stack) -> None:
@@ -88,7 +88,7 @@ def test_consent_without_b_in_isolation_is_a_warning(stack) -> None:
     doc = json.loads(isolation_path(None).read_text())
     doc["plugin"]["b_enabled"] = False
     isolation_path(None).write_text(json.dumps(doc))
-    assert find(check(), "has the B tools off", "warn")
+    assert find(check(), "isolation.json has it off", "warn")
 
 
 def test_an_edited_profile_is_a_warning(stack) -> None:
@@ -183,7 +183,7 @@ class TestServers:
     def test_a_polluted_server_is_named_by_its_variables_only(self, stack) -> None:
         installed(stack)
         items = check(servers=lambda: {7: {"AGENT": "1", "OPENCODE_SESSION_ID": "ses_secret"}})
-        (warn,) = find(items, "B refuses it with E-B-POLLUTED", "warn")
+        (warn,) = find(items, "refused with E-B-POLLUTED", "warn")
         assert "AGENT" in warn.text and "ses_secret" not in " ".join(i.render() for i in items)
 
     def test_a_missing_socket_is_noagent(self, stack) -> None:
@@ -245,4 +245,4 @@ class TestOriginAndTools:
 def test_exit_code_is_only_red_driven(stack) -> None:
     installed(stack)
     res = check_host()
-    assert "B tools" in res.output
+    assert "push tool" in res.output

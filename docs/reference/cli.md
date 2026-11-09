@@ -17,11 +17,14 @@ the output is not a terminal, with `NO_COLOR` set, or with `--no-color`.
 | [`uninstall`](#carter-uninstall) | Remove what `install` wrote |
 | [`init`](#carter-init) | Create a workspace in a project directory |
 | [`update`](#carter-update) | Regenerate a workspace's agents from `carter.yaml` |
-| [`check`](#carter-check) | Validate a workspace and confirm OpenCode loads it |
+| [`check`](#carter-check) | Validate a workspace, or this machine with `--host` |
+| [`guard`](#carter-guard) | Install, inspect and remove the guards |
 | [`identity`](#carter-identity) | Set up, check, unlock and lock the LLM identity and its signing key |
 | [`commit`](#carter-commit) | `git commit` as the LLM identity: signed at T2, with the trailer |
 | [`github-token`](#carter-github-token) | Store and check the read-only GitHub token |
 | [`push`](#carter-push) | Push the current branch to `origin` |
+| [`ci`](#carter-ci) | Install and check the review-only CI workflow |
+| [`gate`](#carter-gate) | Ask the command gate about a command |
 | [`save`](#carter-save) | Commit the workspace state to its private history |
 | [`ops`](#carter-ops) | Audit log and config helper used by the `ops:` flow |
 
@@ -43,10 +46,11 @@ Install Carter for OpenCode 2.1 or newer. Writes to `~/.config/opencode/` and
 | `--debug` | Debug output |
 
 A normal run prints warnings and one line (`✓ installed  8 agents · 27 skills`), then the guard
-step ([`carter guard install`](#carter-guard-install)), which asks one question. Safe to re-run. It also creates `~/.carter/config.toml` (schema 2) on a first install;
-an existing file is never rewritten. Keys Carter no longer reads are named at the end, once each,
-with their file (``⚠ unknown key `attribution.name` in <path> → delete it``); nothing is migrated.
-If your global `AGENTS.md` has your own edits, it is left alone and reported as user-modified.
+step ([`carter guard install`](#carter-guard-install)), which asks one question. Safe to re-run. It also
+creates `~/.carter/config.toml` on a first install; an existing file is never rewritten. A key in it
+that Carter doesn't read is named at the end, once, with its file
+(``⚠ unknown key `x.y` in <path> → delete it``). If your global `AGENTS.md` has your own edits, it is
+left alone and reported as user-modified.
 See [Install](../guides/install.md#upgrade) and [MCP servers](../guides/mcp-servers.md).
 
 ## carter uninstall
@@ -90,17 +94,16 @@ carter update [--dry-run] [-v] [TARGET_DIR]
 ```
 
 Regenerate the `carter-*` agent files from `.carter/carter.yaml`. `AGENTS.md` is
-created only if missing; if yours still has the old commit rule, `update` says so and
-prints the current rule without rewriting the file. `--dry-run` lists the files without
-writing them.
+created only if missing; if its commit rule is out of date, `update` says so and prints the
+current rule without rewriting the file. `--dry-run` lists the files without writing them.
 
 `update` is also the only place that applies the `identity` policy of `carter.yaml`
 (`role` and `require_tier`, see [Configuration](configuration.md#identity)). It pins the
 values in `~/.carter/config.toml` under `[workspaces."<path>"]`, refreshes the tier mirror and the
-D52 opt-outs (the agents' rules are re-rendered from `config.toml`), and asks nothing; with `-v`
-it shows each change and its source. An agent shell never pins, writes the mirror or refreshes the
-global agent files. Editing `carter.yaml` alone changes nothing until the next `update`. It ends
-with the unknown-key report (each retired key once, with its file).
+`allow_project_opencode_edit` opt-outs (the agents' rules are re-rendered from `config.toml`), and
+asks nothing; with `-v` it shows each change and its source. An agent shell never pins, writes the
+mirror or refreshes the global agent files. Editing `carter.yaml` alone changes nothing until the
+next `update`. It ends with the unknown-key report (each unknown key once, with its file).
 
 | Option | Description |
 |--------|-------------|
@@ -124,30 +127,25 @@ read-only and works anywhere. Errors print as `✗ <cause>`, `→ <fix>` and the
 carter guard install [--dry-run] [--yes] [--only GROUPS] [-v]
 ```
 
-Renders the consented deny set into the `permissions:` of the Carter agent files (D71: G2
-applies only to Carter agents and Carter workspaces), writes the per-agent `carter_push` denies for
-OpenCode's own agents into your OpenCode config (`opencode.json` or `.jsonc`) in one atomic,
-verified write, removes the global `policies` an earlier Carter wrote (printing `✓ G2 now applies
-only to Carter agents and Carter workspaces; global OpenCode policies removed.`), and records what
-it owns in `~/.carter/guard-state.json`. It asks **one** question: a summary of three or four lines and
-`Install? [Y/n]` (Enter is yes). That yes is the consent for every group it lists, revisions
-included; a no installs nothing, and for a group you had accepted at an older revision it is
-remembered and not asked again. `--yes` skips the question. Groups you declined earlier stay
-declined, and the optional `alias` group only comes with `--only alias`. A run ends with
-`✓ guards installed  g2 r3 · hooks r2 · ...`; `-v` shows the explanation of each revision and the
-diff. The `g2` group at revision 2 also installs the Carter plugin
-(`~/.config/opencode/plugins/carter/`, found by OpenCode without any registration),
-`~/.carter/isolation.json` and `~/.carter/run/`. The plugin changes every agent shell, so a
-bare `--yes`, `carter install --yes` and a run without a terminal never upgrade an existing
-revision 1: they print "plugin and isolation need your confirmation". Only a yes to the question,
-or `--yes --only g2`, does. Restart the OpenCode server after the plugin is installed.
+Renders the deny set into the `permissions:` of the Carter agent files (the guards apply to Carter
+agents and Carter workspaces only), writes the per-agent `carter_push` denies for OpenCode's own agents
+into your OpenCode config (`opencode.json` or `.jsonc`) in one atomic, verified write, installs the
+Carter plugin (`~/.config/opencode/plugins/carter/`, found by OpenCode without any registration),
+`~/.carter/isolation.json` and `~/.carter/run/`, and records what it owns in
+`~/.carter/guard-state.json`.
+
+It asks **one** question: a summary of three or four lines and `Install? [Y/n]` (Enter is yes). That
+yes is the consent for every group it lists; a no installs nothing. `--yes` skips the question.
+Groups you declined earlier stay declined, and the optional `alias` group only comes with
+`--only alias`. A run ends with `✓ guards installed  g2 · hooks · ...`; `-v` shows the explanation
+of each group and the diff. Restart the OpenCode server after the plugin is installed.
 
 | Option | Description |
 |--------|-------------|
 | `--dry-run` | Show the groups, how many rules the Carter agents would carry and the per-agent denies; write nothing |
 | `-y`, `--yes` | Skip the question. Without a terminal and without `--yes` nothing is installed (a notice says so, exit 0) |
-| `--only GROUPS` | Comma-separated: `g2`, `hooks`, `sudo-docker`, `read-edit-denies`, `config-edit`, `alias`, `repo_hooks`. `hooks` needs git 2.54 and `repo_hooks` is for older git (the one that does not apply is skipped). `--only g2` with `--yes` confirms the plugin (revision 2); `plugin` is not accepted here |
-| `-v`, `--verbose` | Show the explanation of each revision and the diff |
+| `--only GROUPS` | Comma-separated: `g2`, `hooks`, `sudo-docker`, `read-edit-denies`, `config-edit`, `alias`, `repo_hooks`. `hooks` needs git 2.54 and `repo_hooks` is for older git (the one that does not apply is skipped). `--yes --only g2` accepts that group without the question, for scripts. `plugin` is not accepted here |
+| `-v`, `--verbose` | Show the explanation of each group and the diff |
 
 If a provider is missing after the write, the config is restored from the
 backup and the command fails with `E-POLICIES-MISSING`. See
@@ -171,7 +169,7 @@ It works with an absent or corrupt guard state and says so.
 
 `--reset-b` clears the rejection counters that stop `carter_push` after
 three rejections in one session family. Human terminal only (an agent shell is refused, and
-nothing an agent can call resets it). See [Push tool](../guides/push-and-pr-tools.md).
+nothing an agent can call resets it). See [Write operations](../guides/write-operations.md#letting-devops-ask-you-to-push).
 
 ### carter guard remove
 
@@ -189,7 +187,7 @@ unchanged since Carter wrote it (anything you edited is kept and reported). Keep
 |--------|-------------|
 | `--dry-run` | Show what would be removed; write nothing |
 | `-v`, `--verbose` | List each statement and file removed or kept |
-| `--only GROUPS` | Remove only these groups' statements (and forget their consent). `plugin` removes just the plugin, `isolation.json` and `~/.carter/run/` and puts `g2` back to revision 1: the agent rules, per-agent denies, hooks and the token stay, and a bare `carter guard install --yes` never brings the plugin back. `broker` turns only the [B tool](../guides/push-and-pr-tools.md) off: `g2` goes back to revision 2, the plugin and `isolation.json` are re-rendered together with B off, and the headless profile is removed. They can be combined with group names |
+| `--only GROUPS` | Remove only these groups (and forget their consent). `plugin` removes just the plugin, `isolation.json` and `~/.carter/run/`: the agent rules, per-agent denies, hooks and the token stay, and a bare `carter guard install --yes` doesn't bring the plugin back. `broker` turns only [`carter_push`](../guides/write-operations.md#letting-devops-ask-you-to-push) off: the plugin and `isolation.json` are re-rendered without it, and the headless profile is removed. They can be combined with group names |
 
 **Emergency rollback without Carter.** If `carter` itself is broken, delete the plugin
 directory from your own terminal: `rm -r ~/.config/opencode/plugins/carter`. A running
@@ -376,9 +374,8 @@ as an alias. The exit code is git's.
 - **T2, key loaded:** you stay the author (your git identity), the committer and signer are the LLM
   (`%G?` is `G`, `git verify-commit` is good), and `Co-authored-by: <login> <noreply address>` is
   added once. `--amend` keeps the author and date and signs again as the LLM.
-- **T2, key locked:** at your terminal you are asked **once** whether to unlock now (`[Y/n]`). On no (or a
-  failed unlock) the commit is made **unsigned** with the trailer and `E-SIGN-HUMAN-FALLBACK` says it
-  shows Unverified. In an agent shell it is refused (`E-SIGN-AGENT-REFUSE`) and your changes stay
+- **T2, key locked:** at your terminal nothing is asked. It prints `✗ key locked → carter identity unlock`
+  and the commit is made **unsigned** with the trailer; `E-SIGN-HUMAN-FALLBACK` says it shows Unverified. In an agent shell it is refused (`E-SIGN-AGENT-REFUSE`) and your changes stay
   staged.
 - **T1:** unsigned, you as author and committer, with the trailer (`E-COMMIT-T1`). **T0:**
   unsigned, with `Assisted-by: Carter`. A workspace `max_tier` lowers the tier for commits made
@@ -414,7 +411,7 @@ Reads one fine-grained `github_pat_` token from standard input (a hidden prompt 
 terminal, or a pipe) and stores it in `~/.carter/secrets/gh-read.token` (directory 0700, file
 0600, written atomically), then records the path under `[github] read_token_file` in
 `~/.carter/config.toml`. It prints `✓ token stored` and `→ next: carter github-token check`. It
-takes no arguments, so the token never reaches your shell history, and it needs a terminal. Classic (`ghp_`), OAuth (`gho_`), user, server and refresh
+takes no arguments, so the token never reaches your shell history, and stderr must be a terminal. Classic (`ghp_`), OAuth (`gho_`), user, server and refresh
 tokens are refused with `E-PAT-TYPE`.
 
 ### carter github-token check
@@ -431,7 +428,7 @@ repository you own (or `[github] probe_repo`); its name is never printed.
 - **Contents write is a failure.** The check asks GitHub to create a branch at an all-zero
   commit, which no token can complete. "Resource not accessible" means the token cannot push;
   any other answer is red. With no repository of yours visible the probe is skipped (INFO).
-- **Pull requests write is wanted** (D72): the check posts an empty body to the pull-request
+- **Pull requests write is wanted:** the check posts an empty body to the pull-request
   endpoint, which can never create anything. A validation error (HTTP 422) means the token may
   open PRs (`✓ agents can open PRs`); "Resource not accessible" is a warning, not a failure:
   ``⚠ agents can't open PRs → add "Pull requests: write" to the token``.
@@ -467,7 +464,7 @@ the files and hook or CI paths checked; signatures of LLM-committed commits must
 
 ## carter ci
 
-Review-only CI (context E). Guide: [Review-only CI](../guides/ci-review.md).
+Review-only CI. Guide: [Review-only CI](../guides/ci-review.md).
 
 ### carter ci install
 
@@ -559,15 +556,15 @@ its fix) and one summary line (`✓ host  2 warnings`); `-v` prints every row as
   files Carter did not write, listed by name;
 - the server environment, by name only: agent or human signals, Carter's isolation markers
   and `GH_TOKEN`/`GITHUB_TOKEN` in the OpenCode server's environment;
-- the [B tool](../guides/push-and-pr-tools.md) (`B ...` rows): on or off against the `g2` revision, the
-  headless profile, the audit store (modes, counts of decisions, nothing else), the rejection counters,
+- [`carter_push`](../guides/write-operations.md#letting-devops-ask-you-to-push) (`B ...` rows): on or off,
+  the headless profile, the audit store (modes, counts of decisions, nothing else), the rejection counters,
   a persisted auto-accept or an OpenCode started with `--auto` (the dwell rule refuses every use),
   whether the server's environment and SSH agent would be accepted, an HTTPS `origin`, and
   `git`/`gh`/`ssh` not owned by root;
 - every agent's effective `carter_push` rule from `opencode debug agents`
   (`RED` names the agent; an agent whose config entry OpenCode dropped gets a hint);
 - OpenCode and git version bands (`E-OPENCODE-VERSION`, `E-GIT-OLD`);
-- the accepted residual (D67): shell writes outside Carter's own control paths are not gated;
+- the accepted residual: shell writes outside Carter's own control paths are not gated;
 - the read-only GitHub token, if you stored one: its file, type, expiry and that it cannot
   write (the same checks as [`github-token check`](#carter-github-token-check)), and that the
   `carter-github` MCP entry reads the token file;
@@ -588,11 +585,10 @@ its fix) and one summary line (`✓ host  2 warnings`); `-v` prints every row as
   current directory (`RED` with `E-HUMAN-IDENTITY` and a short reason if unusable), whether GitHub
   knows your address (`WARN` if not; the lookup runs in your own terminal and is cached for 7
   days, in an agent shell only the cache is read), a DCO file in the repository (`WARN`), a
-  precedence conflict (`WARN`), and a commit hook script from an older Carter (`RED`). Your name
+  precedence conflict (`WARN`), and an out-of-date commit hook script (`RED`). Your name
   and address are never printed.
 
-Without the plugin the check says "plugin not installed" (never a pass), and shows
-"g2 rev 2 pending" when the plugin is waiting for your confirmation.
+Without the plugin the check says "plugin not installed" (never a pass).
 
 ### carter check --probe
 
@@ -657,6 +653,7 @@ The values are resolved when you run it, from `~/.carter/config.toml` and the en
 | `tier` | `t0` (nothing configured), `t1` (LLM account, no key) or `t2` (account and key) |
 | `role`, `role_source` | `co-author` or `author`, and where it came from (`workspace`, `env`, `config`, `default`) |
 | `author`, `committer` | `human` or `llm`: who git records. The author is `llm` only in role `author` at T2 |
+| `signer_fpr` | The LLM key's public fingerprint at T2, else empty |
 | `coauthor_trailer` | The trailer line for commit messages: `Assisted-by: Carter` at T0, `Co-authored-by: <login> <noreply address>` above; in role `author` it is **your** line, `Co-authored-by: <user.name> <user.email>` |
 | `coauthor_linked` | Whether GitHub credits that trailer (from the cache; role `author` needs your address linked) |
 | `mode` | `interactive`, or `review` in a CI review run ([Review-only CI](../guides/ci-review.md)) |
@@ -670,7 +667,7 @@ until it is fixed. Carter never reads your signing key.
 
 ### carter ops audit
 
-Append one entry to `~/.carter/audit.log` after an operation. It prints nothing on success.
+Append one entry to `~/.carter/state/audit/audit.log` after an operation. It prints nothing on success.
 
 | Option | Required | Description |
 |--------|----------|-------------|

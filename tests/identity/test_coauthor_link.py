@@ -1,6 +1,5 @@
 # ruff: noqa: E501
-"""Linking the human's co-author email to GitHub, the cache, and ``--emit`` for role b
-(plan 006 step 6; freeze K7, K11)."""
+"""Linking the human's co-author email to GitHub, the cache, and ``--emit`` for role author"""
 
 from __future__ import annotations
 

@@ -1,4 +1,4 @@
-"""Loader for the golden vectors shared by pytest, ``node --test`` and the sh tests (G17)."""
+"""Loader for the golden vectors shared by pytest, ``node --test`` and the sh tests."""
 
 from __future__ import annotations
 

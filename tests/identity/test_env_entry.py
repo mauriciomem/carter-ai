@@ -1,4 +1,4 @@
-"""``python -I -m carter.identity.env --json`` (plan 004 step 15, freeze G13)."""
+"""``python -I -m carter.identity.env --json``."""
 
 from __future__ import annotations
 
@@ -65,7 +65,7 @@ def run(tmp_path: Path, config: str | None, cwd: Path | None = None, *, shim: bo
 
 
 class TestReviewMode:
-    """Plan 008 step 4: in CI (context E) the entry answers ``review-mode``, never a block."""
+    """in CI (context E) the entry answers ``review-mode``, never a block."""
 
     def test_a_full_t2_setup_in_ci_gets_no_signing_block(self, tmp_path: Path) -> None:
         path = tmp_path / "config.toml"
@@ -182,7 +182,7 @@ class TestAnswer:
     def test_a_person_named_carter_with_a_real_address_is_a_valid_human(
         self, tmp_path: Path
     ) -> None:
-        """K2 narrowed: only the pair `Carter` + `state@carter.invalid` is Carter's fallback."""
+        """Only the pair `Carter` + `state@carter.invalid` is Carter's fallback."""
         role_b = IDENT.replace("[identity]\n", '[identity]\nrole = "author"\n') + SIGNING
         for name, email in (
             ("Carter", "carter@example.invalid"),
@@ -337,7 +337,7 @@ class TestCommandLine:
         assert doc["signing"]["git_config"][2][1] == str(shim_path(tmp_path / "home"))
 
     def test_it_stays_fast_with_the_signing_block(self, tmp_path: Path) -> None:
-        """The 2 s env_timeout_ms has ~40x margin (plan 004 notes: ~41 ms); keep it that way."""
+        """The 2 s env_timeout_ms has ~40x margin ~41 ms); keep it that way."""
         times = []
         for _ in range(7):
             start = time.perf_counter()

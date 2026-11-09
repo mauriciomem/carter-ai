@@ -1,6 +1,6 @@
 """The `opencode debug config` / `debug agents` contract of OpenCode 2.1.4.
 
-Recorded from the real binary in an isolated HOME (plan 003 step 26 spike; fixtures in
+Recorded from the real binary in an isolated HOME spike; fixtures in
 ``tests/data/opencode-2.1.4-*.json``, all values made up). What the real thing does, as found:
 
 - ``debug config`` prints a JSON **list of config sources**, not one merged object:
@@ -206,7 +206,7 @@ class TestAgentIdsRetryTheColdStart:
 class TestPerAgentDeniesInDebugAgents:
     """What ``opencode debug agents`` carries once Carter's per-agent denies are installed.
 
-    Plan 004 step 5 (spike D), recorded from the real 2.1.4 after ``carter install --yes`` in an
+    recorded from the real 2.1.4 after ``carter install --yes`` in an
     isolated HOME (fixture ``debug-agents-denies``, trimmed, all values made up):
 
     - the rule ``{"action": "carter_push", "resource": "*", "effect": "deny"}`` is in
@@ -219,7 +219,7 @@ class TestPerAgentDeniesInDebugAgents:
       (``debug-config-agent-dropped``), and OpenCode logs a ``configuration normalization
       diagnostic`` for ``$.agents.<name>`` with no rule detail.
 
-    ``harness.agent_deny_gaps`` is what ``check --host`` uses (plan 004 step 30); the strict
+    ``harness.agent_deny_gaps`` is what ``check --host`` uses; the strict
     ``xfail`` markers written in step 5 were removed when it landed.
     """
 

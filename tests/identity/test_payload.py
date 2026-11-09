@@ -1,4 +1,4 @@
-"""``build_payload`` / ``to_git_env`` (plan 005 step 8, freeze H3, RFC-0007 §4.3)."""
+"""``build_payload`` / ``to_git_env``."""
 
 from __future__ import annotations
 
@@ -106,14 +106,14 @@ class TestBlock:
             {"agent_socket": "/home/test/.1password/agent.sock"},
             {"program": "/opt/vault/sign"},
             {"private_key_path": "/home/test/.ssh/llm", "ttl": "2h"},
-            {"private_key_path": "/home/test/.ssh/llm", "mode": "file"},  # D68 d: no passphrase
+            {"private_key_path": "/home/test/.ssh/llm", "mode": "file"},  # no passphrase
         ],
         ids=["agent socket", "program", "private key and ttl", "file mode"],
     )
     def test_password_manager_and_key_file_setups_keep_the_same_block(self, signing: dict) -> None:
         base = cfg()
         other = cfg(signing=replace(base.signing, **signing))
-        assert build(other).block == build(base).block  # the shim, not the block, differs (H8)
+        assert build(other).block == build(base).block  # the shim, not the block, differs
 
     def test_no_private_key_path_or_socket_is_ever_printed(self) -> None:
         c = cfg(
@@ -124,7 +124,7 @@ class TestBlock:
 
 
 class TestRoleB:
-    """Plan 006 step 4 (freeze K3-K5): the author joins the same atomic block."""
+    """the author joins the same atomic block."""
 
     def test_the_role_b_block_has_all_five_env_keys_in_the_frozen_order(self) -> None:
         got = build(cfg(role="author"))
@@ -372,7 +372,7 @@ class TestToGitEnv:
             )
 
     def test_the_golden_role_b_apply_vectors_and_the_block_equals_build_payload(self) -> None:
-        """Plan 006 step 9: a polluted inherited GIT_AUTHOR_* is overwritten by the block."""
+        """a polluted inherited GIT_AUTHOR_* is overwritten by the block."""
         block_b = V["signing"]["block_role_b"]
         assert tuple(block_b["env"]) == payload.SIGNING_ENV_KEYS_B
         built = build(cfg(role="author", name="LLM Bot"))

@@ -1,6 +1,6 @@
-"""Isolated OpenCode rig for the opt-in e2e suite (plan 004, step 2).
+"""Isolated OpenCode rig for the opt-in e2e suite.
 
-What it guarantees (plan 003 lessons, RFC-0007 App C.8 contract tests):
+What it guarantees:
 
 * The server and the mock model run with a **from-scratch environment**: own ``HOME`` and
   ``XDG_*`` under a short base directory, no ``SSH_AUTH_SOCK``, no tokens, no ``OPENCODE_*``
@@ -174,7 +174,7 @@ class Rig:
     """A real OpenCode server in an isolated HOME with a scripted mock model.
 
     Use as a context manager. ``plugins`` maps a directory name to the source of an
-    ``index.ts`` copied to ``~/.config/opencode/plugins/<name>/`` (registration form: step 3).
+    ``index.ts`` copied to ``~/.config/opencode/plugins/<name>/``.
     ``extra_files`` maps a path relative to the isolated HOME to file content (other registration
     forms, broken plugins); ``ws_files`` is the same relative to the workspace (a project
     ``.opencode/``).
@@ -191,7 +191,7 @@ class Rig:
     executable: Sequence[str] = ()  # extra_files paths to chmod 0755
     ws_files: Mapping[str, str] = field(default_factory=dict)
     server_env_extra: Mapping[str, str] = field(default_factory=dict)
-    # D71: the plugin acts for Carter agents only, so a rig that exercises it needs one. With this
+    # the plugin acts for Carter agents only, so a rig that exercises it needs one. With this
     # on, ``prepare`` writes a minimal ``carter-engineer`` (model: the mock) and ``new_session``
     # uses it unless a test names another agent (``build`` for the out-of-scope cases).
     carter_agent: bool = False

@@ -1,4 +1,4 @@
-"""The gate's lexer and wrapper handling (RFC-0007 C.4.2 rules 1-5; plan 004 step 18)."""
+"""The gate's lexer and wrapper handling."""
 
 from __future__ import annotations
 

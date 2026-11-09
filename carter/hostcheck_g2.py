@@ -1,4 +1,4 @@
-"""The slice-2a items of ``carter check --host`` (plan 004 steps 29 and 30; RFC App B §3).
+"""The plugin, hook and isolation items of ``carter check --host``.
 
 Read-only, names only: no environment value, no token, no socket path ever reaches an item.
 ``gitconfig_first`` runs before anything that calls plain ``git`` or ``opencode``: a malformed
@@ -19,7 +19,6 @@ from carter.checkitems import Item, Level
 from carter.guard import consent, gitconfig, hooks, plugin, repohooks
 from carter.guard.state import GuardState
 from carter.identity.errors import E_GIT_OLD, E_OPENCODE_VERSION, registry
-from carter.identity.policyset import consent_groups
 from carter.identity.rules import pollution_hits
 from carter.install import prereqs
 from carter.install.paths import carter_gitconfig_path, isolation_path, plugin_dir, run_dir
@@ -30,9 +29,9 @@ DROPPED_HINT = (
     "OpenCode drops an agent's whole config entry when one of its rules is invalid; fix or "
     "remove `agents.{name}` in {config}, then rerun `carter guard install`"
 )
-D67 = (
+RESIDUAL = (
     "shell writes to the global OpenCode config, ~/.gitconfig, ~/.config/git, a repo's "
-    ".opencode/, opencode.json and .git/hooks or .git/config are not gated (D67); the edit tool "
+    ".opencode/, opencode.json and .git/hooks or .git/config are not gated; the edit tool "
     "is denied there"
 )
 
@@ -60,7 +59,7 @@ def include_items(state: GuardState, base_dir: Path | None) -> list[Item]:
         return []
     line = gitconfig.include_line(base_dir)
     if state.gitconfig is not None:
-        return []  # Carter wrote the line: the 1G item reports it (present, or RED + the line)
+        return []  # Carter wrote the line: the guard-files item reports it
     have = gitconfig.manual_include_state(base_dir)
     if have == "present":
         return [Item("ok", "git", "include.path present (added by you, not by Carter)")]
@@ -110,24 +109,22 @@ def file_items(state: GuardState, base_dir: Path | None) -> list[Item]:
 
 def g2_items(state: GuardState, base_dir: Path | None) -> list[Item]:
     out: list[Item] = []
-    revs = {g.id: g.rev for g in consent_groups()}
     for group in consent.reconsent_pending(state):
         offer = state.offer(group) or {}
-        rev = revs[group]
         if offer.get("decision") == "declined":
             when = offer.get("date", "?")
-            text = f"{group} rev {rev} declined on {when}; `carter guard install --only {group}` to reconsider"  # noqa: E501
+            text = (
+                f"{group} update declined on {when}; `carter guard install --only {group}` to redo"
+            )
             out.append(Item("info", "consent", text))
         else:
             what = {
-                "g2": "the B tool (carter_push for devops)"
+                "g2": "the push tool (carter_push for devops)"
                 if consent.plugin_wanted(state)
-                else "the plugin and the B tools"
+                else "the plugin and the push tool"
             }.get(group, "the new content")
             out.append(
-                Item(
-                    "info", "consent", f"{group} rev {rev} pending: {what} needs your confirmation"
-                )
+                Item("info", "consent", f"{group} update pending: {what} needs your confirmation")
             )
     iso = isolation_path(base_dir)
     if iso.exists():
@@ -205,7 +202,7 @@ def status_items(
 
 
 def foreign_plugin_items(base_dir: Path | None, cwd: Path) -> list[Item]:
-    """Plugin code Carter did not write, by name (D66): global ``plugin/`` and ``plugins/``."""
+    """Plugin code Carter did not write, by name (): global ``plugin/`` and ``plugins/``."""
     names = plugin.unexpected_files(base_dir)
     for sub in ("plugin", "plugins"):
         folder = cwd / ".opencode" / sub
@@ -318,4 +315,4 @@ def version_items(opencode: tuple[int, int, int] | None, git: tuple[int, int] | 
 
 
 def residual_items() -> list[Item]:
-    return [Item("info", "residual", D67)]
+    return [Item("info", "residual", RESIDUAL)]

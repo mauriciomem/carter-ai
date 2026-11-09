@@ -1,4 +1,4 @@
-"""The SSH client-config check (RFC-0007 App C.5 "SSH client config").
+"""The SSH client-config check.
 
 1. A **textual** scan of ``~/.ssh/config`` and the files it ``Include``s for ``Match ... exec``,
    because ``ssh -G`` itself would run that command. If it finds one, ``ssh -G`` is not run.
@@ -7,7 +7,8 @@
    ``KnownHostsCommand``. ``ssh_bin_dir`` defaults to ``/usr/bin`` (Apple OpenSSH) and is the
    only place ``ssh`` is looked up: never ``$PATH`` order.
 
-B refuses on these findings (``E-B-REPOCFG``, "ssh config"); A+ shows them and asks. A finding
+The broker refuses on these findings (``E-B-REPOCFG``, "ssh config"); `carter push` shows them
+and asks. A finding
 names the option and the file, never its value. The system-wide ``/etc/ssh/ssh_config`` is
 admin-owned and not scanned textually (``ssh -G`` still reports what it sets).
 """
@@ -47,7 +48,7 @@ def _include_targets(arguments: str, ssh_dir: Path) -> list[Path]:
 
 
 def _runs_command(criteria: str) -> bool:
-    """Does a ``Match`` line carry an ``exec`` criterion? ``ssh -G`` runs it (spike C4).
+    """Does a ``Match`` line carry an ``exec`` criterion? ``ssh -G`` runs it.
 
     ``Match !exec "cmd"`` and ``Match exec="cmd"`` run too, so a token counts when, lower-cased
     and stripped of ``!``, quotes, it is ``exec`` or starts with ``exec=``."""
@@ -124,8 +125,8 @@ def check_ssh_config(
     """Pre-scan, then ``ssh -G <user>@<host>``; a missing or failing ``ssh`` is a finding.
 
     ``-G git@github.com`` (not the bare host) so that ``Match user git`` blocks apply, as they
-    will in the push (freeze B14, erratum T4). ``home`` must be the directory OpenSSH reads:
-    the passwd home, not ``$HOME`` (spike C3)."""
+    will in the push. ``home`` must be the directory OpenSSH reads:
+    the passwd home, not ``$HOME``."""
     found = scan_match_exec(home)
     if found:
         return found

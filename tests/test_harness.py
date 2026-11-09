@@ -374,7 +374,7 @@ class TestCheckWorkspaceFiles:
         assert "Unparseable frontmatter" not in result.output
 
 
-# --- `opencode debug config` reader (plan 003 step 10; RFC-0007 App C.6.3 step 4) ---------
+# --- `opencode debug config` reader ---------
 
 SENTINEL = "sk-SENTINEL-provider-key-0123456789"
 DEBUG_CONFIG = {
@@ -471,11 +471,11 @@ class TestReadDebugConfig:
 
     def test_provider_ids_and_statements_helpers(self) -> None:
         assert harness.provider_ids(DEBUG_CONFIG) == {"anthropic", "openai"}
-        assert harness.provider_ids({"provider": {"acme": {}}}) == set()  # D70: only `providers`
+        assert harness.provider_ids({"provider": {"acme": {}}}) == set()  # only `providers`
         assert harness.provider_ids({}) == set()
         assert harness.policy_statements(DEBUG_CONFIG) == [
             {"action": "tool.use", "resource": "shell:sudo *", "effect": "deny"}
         ]
         old = {"experimental": {"policies": [{"action": "a", "resource": "r", "effect": "deny"}]}}
-        assert harness.policy_statements(old) == []  # D70: the older spelling is not read
+        assert harness.policy_statements(old) == []  # the older spelling is not read
         assert harness.policy_statements({"policies": "junk"}) == []

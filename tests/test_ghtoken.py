@@ -1,8 +1,8 @@
-"""``carter github-token set|check`` (RFC-0007 App C.7; plan 003 step 16).
+"""``carter github-token set|check``.
 
 The token in these tests is a made-up sentinel, never a real credential, and the real
 ``~/.carter/secrets`` is never reachable (the sandbox home). ``check`` talks to a loopback
-fake of api.github.com whose 403/422 bodies are the strings recorded in spike 4."""
+fake of api.github.com whose 403/422 bodies are the strings recorded in."""
 
 from __future__ import annotations
 
@@ -362,7 +362,7 @@ class TestCheck:
             ("GET", "/user"),
             ("GET", "/user/repos"),
             ("POST", f"/repos/{OWNED}/git/refs"),
-            ("POST", f"/repos/{OWNED}/pulls"),  # D72: the PR probe, an empty body
+            ("POST", f"/repos/{OWNED}/pulls"),  # the PR probe, an empty body
         ]
         assert github_api.unexpected == []
         post = github_api.requests[-2]
@@ -623,7 +623,7 @@ class TestProbeRepository:
         return tmp_path
 
     def posts(self, github_api) -> list[str]:
-        # the write probe only; the D72 PR probe has its own tests (tests/test_d72.py)
+        # the write probe only; the PR probe has its own tests (tests/test_pull_requests.py)
         return [
             r.path
             for r in github_api.requests

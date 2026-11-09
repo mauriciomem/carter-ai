@@ -1,4 +1,4 @@
-"""Turn the failures a command expects into ``✗ cause`` / ``→ fix`` and exit 1 (D68 a)."""
+"""Turn the failures a command expects into ``✗ cause`` / ``→ fix`` and exit 1."""
 
 from __future__ import annotations
 

@@ -1,7 +1,7 @@
 """The gate's view of ``g2_rules.json``, read by file path (no ``carter.identity`` import).
 
 Importing ``carter.identity`` would pull ``config``, ``errors`` and ``importlib.resources`` (about
-25 ms, plan 004 spike F), and the gate runs on every agent shell command. The single data file stays
+25 ms), and the gate runs on every agent shell command. The single data file stays
 the only source of every list: this module only reshapes it into what the rules need.
 """
 

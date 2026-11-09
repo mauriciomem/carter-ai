@@ -1,4 +1,4 @@
-"""``policy_set`` and friends in ``g2_rules.json`` (RFC-0007 App C.1, C.6.3; plan 003 step 8)."""
+"""``policy_set`` and friends in ``g2_rules.json``."""
 
 from __future__ import annotations
 
@@ -52,18 +52,14 @@ def statements() -> list[Statement]:
 
 
 class TestOldLoaderContract:
-    def test_slice_1_keys_keep_their_shape(self) -> None:
+    def test_core_keys_keep_their_shape(self) -> None:
         data = raw()
         assert data["version"] == 1
         for key in ("agent_signals", "human_signals", "forbidden", "credential_paths"):
             assert data[key]
         assert load_rules().credential_paths[0] == "/.ssh/"
 
-    def test_nothing_is_reserved_after_2a(self) -> None:  # 1G filled two keys, 2a the last
-        assert raw()["reserved"] == []
-        assert raw()["isolation_vars"]
-
-    def test_filled_keys_are_not_empty_any_more(self) -> None:
+    def test_the_policy_and_allowlist_keys_are_not_empty(self) -> None:
         assert raw()["policy_set"] and raw()["gh_read_allowlist"]
 
     def test_new_keys_are_additive(self) -> None:
@@ -73,34 +69,26 @@ class TestOldLoaderContract:
         assert "~/.carter/guard-state.json" in raw()["control_paths"]
         assert "/.carter/secrets/" in raw()["credential_paths"]
 
-    def test_current_slice_is_ci_e_after_plan_008(self) -> None:
-        from carter.identity.rules import CURRENT_SLICE
-
-        assert CURRENT_SLICE == "CI-E"
-
 
 class TestStatementShape:
-    def test_entries_have_the_frozen_fields(self) -> None:
+    def test_entries_have_the_expected_fields(self) -> None:
         for entry in raw()["policy_set"]:
-            assert set(entry) == {"id", "group", "action", "resource", "effect", "rfc"}, entry
+            assert set(entry) == {"id", "group", "action", "resource", "effect"}, entry
 
     def test_groups_are_in_the_frozen_set(self) -> None:
         assert {e["group"] for e in raw()["policy_set"]} == FROZEN_GROUPS
 
-    def test_every_statement_belongs_to_a_known_live_group(self) -> None:
-        live = {g.id for g in policyset.consent_groups() if g.live}
-        assert {s.group for s in policy_set()} <= live
+    def test_every_statement_belongs_to_a_known_group(self) -> None:
+        known = {g.id for g in policyset.consent_groups()}
+        assert {s.group for s in policy_set()} <= known
 
     def test_data_holds_only_tool_use_denies(self) -> None:
-        # gh allows are generated from gh_read_allowlist; D52 allows are computed.
+        # gh allows are generated from gh_read_allowlist; allows are computed.
         assert {(e["action"], e["effect"]) for e in raw()["policy_set"]} == {("tool.use", "deny")}
 
     def test_resources_are_action_colon_value(self) -> None:
         for st in policy_set():
             assert re.match(r"^(shell|read|edit):\S", st.resource), st.id
-
-    def test_every_statement_cites_its_rfc_row(self) -> None:
-        assert all(s.rfc for s in policy_set())
 
     def test_sudo_docker_holds_only_sudo_docker_podman_denies(self) -> None:
         group = [s for s in policy_set() if s.group == "sudo-docker"]
@@ -114,10 +102,10 @@ class TestStatementShape:
     def test_the_consent_group_map_is_total(self) -> None:
         groups = {g.id for g in policyset.consent_groups()}
         assert all(s.group in groups for s in policy_set())
-        # ... and each live group with policy content has at least one statement; the hook
-        # groups (2a) install files and git keys, not OpenCode statements
+        # ... and each group with policy content has at least one statement; the other groups
+        # install files and git keys, not statements
         hook_groups = {"hooks", "repo_hooks", "alias"}
-        assert {g.id for g in policyset.consent_groups() if g.live} - hook_groups <= {
+        assert {g.id for g in policyset.consent_groups()} - hook_groups <= {
             s.group for s in policy_set()
         }
 
@@ -127,14 +115,14 @@ class TestStatementShape:
 
 class TestPushVerbsAreDenied:
     def test_every_forbidden_push_literal_has_a_deny(self, statements) -> None:
-        (push,) = [c for c in forbidden_classes(all_slices=True) if c.id == "push-verbs"]
+        (push,) = [c for c in forbidden_classes() if c.id == "push-verbs"]
         for verb in push.items:
             assert decide(statements, "shell", f"{verb} origin main") == "deny", verb
             assert decide(statements, "shell", verb) == "deny", verb
 
     def test_no_allow_statement_can_lift_a_forbidden_verb(self, statements) -> None:
         allows = [s for s in statements if s.effect == "allow"]
-        for cls in forbidden_classes(all_slices=True):
+        for cls in forbidden_classes():
             if cls.id not in {"push-verbs"}:
                 continue
             for lit in cls.literals:
@@ -162,19 +150,12 @@ class TestGhAllowlist:
             "run list",
             "repo view",
             "search",
-        ]  # fmt: skip (D72 adds create, edit and comment: PRs are allowed)
+        ]  # fmt: skip
 
-    def test_gh_status_was_dropped_after_spike_4_and_nothing_is_pending(self, statements) -> None:
-        # Spike 4: `gh status` -> HTTP 403 "Resource not accessible by personal access token".
+    def test_gh_status_is_not_allowed(self, statements) -> None:
+        # `gh status` -> HTTP 403 "Resource not accessible by personal access token".
         assert "status" not in [v.verb for v in gh_allowlist()]
-        assert [v for v in gh_allowlist() if v.pending] == []
         assert decide(statements, "shell", "gh status") == "deny"
-        assert "gh status" in raw()["gh_notes"]["dropped"] and "403" in raw()["gh_notes"]["dropped"]
-
-    def test_repo_view_and_search_repos_are_positional_not_dash_r(self) -> None:
-        note = raw()["gh_notes"]["positional"]
-        assert "gh repo view <owner>/<repo>" in note and "gh search repos <query>" in note
-        assert "never `-R`" in note and "after the subcommand" in note
 
     def test_gh_api_is_never_allowed(self, statements) -> None:
         for cmd in ("gh api repos/o/r", "gh api -X POST /x", "gh api"):
@@ -216,13 +197,12 @@ class TestGhAllowlist:
             assert decide(statements, "shell", cmd) == "allow", cmd
 
     def test_a_leading_repo_flag_fails_closed_by_construction(self, statements) -> None:
-        # The gate (2a) rejects it with a message; the statements simply never match.
+        # The gate rejects it with a message; the statements simply never match.
         assert decide(statements, "shell", "gh -R o/r pr view 3") == "deny"
         assert decide(statements, "shell", "gh --repo o/r pr view 3") == "deny"
 
     def test_no_statement_mentions_the_repo_flag(self, statements) -> None:
         assert not [s for s in statements if "-R" in s.resource or "--repo" in s.resource]
-        assert "gate" in raw()["gh_notes"]["leading_repo_flag"]
 
     def test_allows_come_after_every_deny(self, statements) -> None:
         effects = [s.effect for s in statements]
@@ -245,7 +225,7 @@ class TestReadAndEditDenies:
         assert decide(statements, "read", path) == "deny"
 
     def test_credential_path_data_is_covered(self, statements) -> None:
-        # The five segments of C.1 that the read tool can reach (the rest is gate-only).
+        # The five segments that the read tool can reach (the rest is gate-only).
         covered = {
             "/.ssh/",
             "/.config/gh/",
@@ -371,7 +351,7 @@ class TestRendering:
 
 class TestPerAgentBlock:
     def test_the_deny_is_carter_push_and_not_global(self) -> None:
-        assert policyset.agent_permission_denies() == ("carter_push",)  # D72: no carter_pr
+        assert policyset.agent_permission_denies() == ("carter_push",)  # no carter_pr
         for st in policy_set():
             assert "carter_push" not in st.resource
 

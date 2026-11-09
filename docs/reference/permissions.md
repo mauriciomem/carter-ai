@@ -30,9 +30,10 @@ OpenCode applies the **last matching rule**, so later rules refine earlier ones
 | 4 | `edit` / `~/.carter/memories/*` (agents with local-write only) | allow |
 | 5 | `subagent` / `*` | deny |
 | 5 | `subagent` / `carter-*` (Maestro only) | allow |
+| 5 | `carter_push` / `*` (every agent except DevOps) | deny |
 | 6 | `edit`, `shell`, `webfetch` / `*` | allow with local-write, otherwise ask |
 | 7 | `shell` / each risky command below | the category's effect if the agent holds it, otherwise deny |
-| 8 | G2's deny set, once you installed the guards: pushes, `gh` (with the allowlist lifted again), `sudo`/`docker`, reads of credentials, edits of OpenCode, git and Carter config (D71) | deny (the `gh` allowlist and the D52 opt-outs: allow) |
+| 8 | G2's deny set, once you installed the guards: pushes, `gh` (with the allowlist lifted again), `sudo`/`docker`, reads of credentials, edits of OpenCode, git and Carter config | deny (the `gh` allowlist and the `allow_project_opencode_edit` opt-outs: allow) |
 
 Anything not listed (MCP tools, `websearch`, other tools) falls back to rule 1 and
 asks.
@@ -52,7 +53,7 @@ falls to rule 6.
 `git push *`, merging, closing, reviewing and readying a pull request, issue and release
 writes and `gh api *` are denied to every agent, DevOps included, and `gh api` is denied even for
 reads. Opening, editing and commenting on a pull request (`gh pr create|edit|comment`) is allowed
-(D72). Pushing is done by you with `carter push`.
+Pushing is done by you with `carter push`.
 
 ## Effects per level
 

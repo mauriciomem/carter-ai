@@ -1,5 +1,5 @@
 # ruff: noqa: E501
-"""The structural checker: each bad workflow fails for the right reason (plan 008 step 5; App C.10).
+"""The structural checker: each bad workflow fails for the right reason.
 
 The good workflow is the rendered template (both variants). Bad ones are single mutations of it,
 so each fails for exactly the rule it breaks, plus a few classic real-world fixtures on disk.

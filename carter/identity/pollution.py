@@ -1,17 +1,17 @@
-"""Server-environment pollution and ``GIT_CONFIG_COUNT`` state (RFC-0007 App C.1, C.2).
+"""Server-environment pollution and ``GIT_CONFIG_COUNT`` state.
 
 Stdlib-only, like the rest of ``carter.identity``. Two pure functions, each with a shared
 golden-vector table in ``tests/data/plugin_vectors.json`` that the TypeScript plugin core also
 passes (``node --test``) so the two implementations cannot drift:
 
 - ``pollution(env, home)``: names in an inherited environment that show it was started from an
-  agent shell or that already carries Carter's isolation (App C.1 ``pollution_set``). Signals
+  agent shell or that already carries Carter's isolation (``pollution_set``). Signals
   match by name, isolation markers only by Carter's exact value. ``SSH_AUTH_SOCK`` and other
   desktop values are never pollution, and ``GH_TOKEN``/``GITHUB_TOKEN`` only warrant a warning.
 - ``count_state(env)``: whether an inherited ``GIT_CONFIG_COUNT`` can be appended to. Anything
   git would reject, or that git accepts but a strict parser should not (leading space, ``+1``),
   is ``polluted``: the plugin then starts a fresh count at 0 and appends the commit-blocking
-  entries (C.2; spike E found that a bad count makes *every* git command fatal).
+  entries (a bad count makes *every* git command fatal).
 """
 
 from __future__ import annotations

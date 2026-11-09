@@ -1,4 +1,4 @@
-"""One safe edit of the user's live OpenCode config (RFC-0007 App C.6.3).
+"""One safe edit of the user's live OpenCode config.
 
 A broken config drops *all* policies and the providers, so every edit follows the same
 transaction: parse → mutate a copy → (if it changed) read ``opencode debug config`` →

@@ -1,9 +1,9 @@
-"""Carter's own git config, pulled in by ONE ``include.path`` line (RFC-0007 C.6.4, D61).
+"""Carter's own git config, pulled in by ONE ``include.path`` line.
 
 Every global git key Carter owns lives in ``~/.carter/gitconfig``. The user's global config
 gets a single ``include.path = <abs>/.carter/gitconfig`` line; Carter rewrites only its own
 file (atomically, hash-tracked) and removal is ``git config --fixed-value --unset-all
-include.path <that value>``. Rules, from the plan-003 freeze:
+include.path <that value>``. Rules:
 
 - The include value is **absolute and unresolved** (a relative path breaks through a
   symlinked ``~/.gitconfig``; a resolved one would not match ``--fixed-value --unset``).
@@ -13,13 +13,12 @@ include.path <that value>``. Rules, from the plan-003 freeze:
   ``include`` (global: use the include), ``direct`` (hooks work but not as ``global``:
   write the keys straight into the global config, tracked key by key) or
   ``no-config-hooks`` (git < 2.54: plain keys still use the include, hook entries need the
-  per-repo fallback of slice 2a). No version parsing.
-- 1G shipped **no** Carter git key. 2a adds the first ones, under the ``hooks`` consent (the
-  ``pre-push`` hook entries) and ``repo_hooks`` (``init.templateDir``); ``carter.tier`` and the
-  alias are 2b. With no entry accepted there is no file and no include line: the include line
-  is written with the first key, under that key's consent.
+  per-repo fallback). No version parsing.
+- Carter's keys come under the ``hooks`` consent (the hook entries), ``repo_hooks``
+  (``init.templateDir``) and ``alias``. With no entry accepted there is no file and no include
+  line: the include line is written with the first key, under that key's consent.
 - A missing or even absent Carter file never breaks git: ``include.path`` to a missing file
-  is silent (spike 1), so a half-installed state cannot block the human's commit or push.
+  is silent, so a half-installed state cannot block the human's commit or push.
 
 Every git call names its config file explicitly (``--file``), so tests and ``--dry-run``
 never reach the default global config.
@@ -119,7 +118,7 @@ def hook_scopes(
 
 
 def probe_scope(*, runner: Runner | None = None) -> Mode:
-    """Behavioural D61 detection in a scratch config (never the real one, never the real HOME)."""
+    """Behavioural detection in a scratch config (never the real one, never the real HOME)."""
     run = runner or run_git
     scratch = Path(tempfile.mkdtemp(prefix="carter-probe-"))
     try:
@@ -406,32 +405,6 @@ def remove_direct(path: Path, state: GuardState) -> DirectRemoval:
     return out
 
 
-# -- single-valued keys ---------------------------------------------------------------------
-
-
-@dataclass
-class SingleResult:
-    status: Literal["set", "kept-user-value"]
-    snippet: str = ""
-
-
-def set_single_valued(path: Path, key: str, value: str) -> SingleResult:
-    """Set ``init.templateDir`` / ``alias.ai-commit`` only if the user's config has none
-    (includes followed); otherwise leave theirs and return the snippet to chain by hand."""
-    have = _file_git(str(path), "--includes", "--get", key)
-    if have.returncode == 0:
-        snippet = (
-            f"{key} is already set in your git config; Carter kept it. "
-            f"To use Carter's too, chain it yourself: {key} = {value}"
-        )
-        return SingleResult("kept-user-value", snippet)
-    _checked(str(path), key, value)
-    return SingleResult("set")
-
-
-# -- the whole step ---------------------------------------------------------------------------
-
-
 def carter_git_entries(
     accepted: Sequence[str] = (),
     *,
@@ -518,7 +491,7 @@ class RemoveAll:
 
 
 def remove_all(base_dir: Path | None, state: GuardState) -> RemoveAll:
-    """Teardown order (C.6.2): the include line, then the file and fragments, then direct keys."""
+    """Teardown order: the include line, then the file and fragments, then direct keys."""
     out = RemoveAll()
     if state.gitconfig:
         rec = state.gitconfig

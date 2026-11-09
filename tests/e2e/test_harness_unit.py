@@ -1,4 +1,4 @@
-"""Unit tests for the e2e harness (plan 004, step 2). None of them starts OpenCode."""
+"""Unit tests for the e2e harness. None of them starts OpenCode."""
 
 from __future__ import annotations
 

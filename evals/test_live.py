@@ -320,7 +320,7 @@ class TestLiveCarterOps:
     def test_b_tools_rules_hold(
         self, name: str, ops_skill_content: str, ops_scenarios: list[dict]
     ) -> None:
-        """Slice B (plan 007 step 21): no push tool for others; a rejection is not retried."""
+        """Only devops has a push tool; no push tool for others; a rejection is not retried."""
         scenario = next(s for s in ops_scenarios if s["name"] == name)
         system = _build_system_prompt(ops_skill_content)
 

@@ -1,5 +1,5 @@
 # ruff: noqa: E501
-"""Validators and the fixed push argv (plan 007 step 8, freeze B13, errata T3)."""
+"""Validators and the fixed push argv )."""
 
 from __future__ import annotations
 
@@ -47,15 +47,26 @@ def test_every_hostile_remote_is_refused_and_the_good_ones_accepted(case: dict[s
         assert exc.value.code in (E_B_ARGS, E_B_HTTPS)
 
 
+_REFSPEC = re.compile(rf"(?P<sha>{argv._SHA}):refs/heads/(?P<branch>[^\n]+)")
+
+
+def parse_refspec(refspec: str) -> tuple[str, str]:
+    """``(sha, branch)`` of a refspec of exactly the shape the broker builds; else refused."""
+    match = _REFSPEC.fullmatch(refspec)
+    if not match or not argv.valid_branch(match["branch"]):
+        raise argv._args("the refspec is not <sha>:refs/heads/<branch>")
+    return match["sha"], match["branch"]
+
+
 @pytest.mark.parametrize("case", cases("refspec"))
 def test_every_hostile_refspec_is_refused_and_the_good_ones_accepted(case: dict[str, Any]) -> None:
     spec = materialise(case["operands"][1])
     if case["expect_validator"] == "accept":
-        sha, branch = argv.parse_refspec(spec)
+        sha, branch = parse_refspec(spec)
         assert argv.build_refspec(sha, branch) == spec
     else:
         with pytest.raises(IdentityError) as exc:
-            argv.parse_refspec(spec)
+            parse_refspec(spec)
         assert exc.value.code == E_B_ARGS
 
 

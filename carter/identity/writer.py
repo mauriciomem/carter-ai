@@ -1,4 +1,4 @@
-"""Schema-only TOML writer (D55). Only explicit commands call it (install,
+"""Schema-only TOML writer. Only explicit commands call it (install,
 ``carter update``); read paths never import it.
 
 Serialises exactly the schema-2 model (basic strings, ints, bools, string lists, tables)

@@ -1,4 +1,4 @@
-"""Consent groups and the statements that follow them (plan 003 step 11; App C.6.2)."""
+"""Consent groups and the statements that follow them."""
 
 from __future__ import annotations
 
@@ -76,7 +76,7 @@ class TestStatementsFollowConsent:
     def test_optouts_ride_only_with_config_edit(self) -> None:
         extra = [
             policyset.Statement(
-                "optout-x-json", "config-edit", "tool.use", "edit:/w/opencode.json", "allow", "t"
+                "optout-x-json", "config-edit", "tool.use", "edit:/w/opencode.json", "allow"
             )
         ]
         with_edit = consent.desired_statements(
@@ -131,23 +131,6 @@ class TestResolve:
         )
         assert asked == ["g2", "sudo-docker"] and plan.accepted == ["g2", "sudo-docker"]
 
-    def test_reserved_groups_are_never_prompted_or_recorded_even_with_only(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        data = json.loads(json.dumps(policyset._data()))
-        data["consent_groups"].append({"id": "later", "live": False, "effect": "not yet"})
-        monkeypatch.setattr(policyset, "_data", lambda: data)
-        ask, asked = self.ask_all(True)
-        plan = consent.resolve_consents(
-            GuardState(), only=["later"], assume_yes=True, interactive=True, ask=ask
-        )
-        assert asked == [] and plan.accepted == [] and plan.asked == []
-        assert plan.reserved == ["later"]
-        assert all("nothing to install" in n for n in plan.notices())
-        st = GuardState()
-        consent.record(st, plan, today="2026-11-02")
-        assert st.consents == {}
-
     def test_an_optional_group_is_accepted_only_by_name_or_a_terminal_yes(self) -> None:
         ask, asked = self.ask_all(False)  # the terminal default for an optional group is No
         named = consent.resolve_consents(
@@ -170,7 +153,7 @@ class TestResolve:
         assert "alias" not in st.consents  # not accepted, not declined: asked again next time
 
     def test_a_group_unavailable_on_this_machine_is_never_asked_or_recorded(self) -> None:
-        """G10: no consent for nothing: ``hooks`` on git < 2.54, ``repo_hooks`` on newer git."""
+        """No consent for nothing: ``hooks`` on git < 2.54, ``repo_hooks`` on newer git."""
         ask, asked = self.ask_all(True)
         why = {"hooks": "E-GIT-OLD: old", "repo_hooks": "not needed"}
         plan = consent.resolve_consents(
@@ -256,7 +239,7 @@ class TestUpgrade:
         data = json.loads(json.dumps(policyset._data()))
         data["policy_set"].append(
             {"id": "deny-podman", "group": "sudo-docker", "action": "tool.use",
-             "resource": "shell:podman *", "effect": "deny", "rfc": "t"}
+             "resource": "shell:podman *", "effect": "deny"}
         )  # fmt: skip
         monkeypatch.setattr(policyset, "_data", lambda: data)
         newer = consent.desired_statements(st, home=str(tmp_path))
@@ -269,10 +252,10 @@ class TestUpgrade:
     ) -> None:
         st = accepted("g2")
         data = json.loads(json.dumps(policyset._data()))
-        data["consent_groups"].append({"id": "newgroup", "live": True, "effect": "something new"})
+        data["consent_groups"].append({"id": "newgroup", "effect": "something new"})
         data["policy_set"].append(
             {"id": "deny-new", "group": "newgroup", "action": "tool.use",
-             "resource": "shell:new *", "effect": "deny", "rfc": "t"}
+             "resource": "shell:new *", "effect": "deny"}
         )  # fmt: skip
         monkeypatch.setattr(policyset, "_data", lambda: data)
         assert "deny-new" not in [s.id for s in consent.desired_statements(st, home=HOME)]

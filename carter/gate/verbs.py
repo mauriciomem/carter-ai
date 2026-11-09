@@ -1,4 +1,4 @@
-"""git rules (RFC-0007 App C.4.1 rows 1-3, 5-7; C.4.2 rules 6-7).
+"""git rules.
 
 Global options are consumed before the subcommand, flags are scoped per subcommand (``-n`` means
 ``--no-verify`` only for ``commit`` and ``am``; ``-s`` means sign-off only where git says so), and

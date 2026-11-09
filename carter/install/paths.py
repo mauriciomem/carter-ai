@@ -53,7 +53,7 @@ def guard_state_path(base_dir: Path | None) -> Path:
 
 
 def carter_gitconfig_path(base_dir: Path | None) -> Path:
-    """``~/.carter/gitconfig``: every global git key Carter owns (D61), included by one line."""
+    """``~/.carter/gitconfig``: every global git key Carter owns, included by one line."""
     return _carter_base(base_dir) / "gitconfig"
 
 
@@ -63,12 +63,12 @@ def plugin_dir(base_dir: Path | None) -> Path:
 
 
 def isolation_path(base_dir: Path | None) -> Path:
-    """``~/.carter/isolation.json``: the rendered shell-isolation block (RFC App C.2)."""
+    """``~/.carter/isolation.json``: the rendered shell-isolation block."""
     return _carter_base(base_dir) / "isolation.json"
 
 
 def headless_profile_path(base_dir: Path | None) -> Path:
-    """``~/.carter/opencode-headless.json``: the static profile that denies B (RFC App C.9)."""
+    """``~/.carter/opencode-headless.json``: the static profile that denies B."""
     return _carter_base(base_dir) / "opencode-headless.json"
 
 
@@ -85,7 +85,7 @@ def guard_script_path(base_dir: Path | None) -> Path:
 def managed_roots(base_dir: Path | None) -> tuple[Path, ...]:
     """Directories whose files uninstall may delete (path-component containment, resolved).
 
-    ``~/.carter/{bin,hooks,run}`` are listed for the files slice 2a installs there; in 1G they
+    ``~/.carter/{bin,hooks,run}`` are listed for the files the guards install there; they
     hold nothing. ``guard remove`` deletes its own files by code, not through these roots."""
     carter = _carter_base(base_dir)
     return tuple(
@@ -101,7 +101,7 @@ def managed_roots(base_dir: Path | None) -> tuple[Path, ...]:
 
 
 def token_path(base_dir: Path | None) -> Path:
-    """``~/.carter/secrets/gh-read.token``: the read-only fine-grained PAT (App C.7)."""
+    """``~/.carter/secrets/gh-read.token``: the read-only fine-grained PAT."""
     return _carter_base(base_dir) / "secrets" / "gh-read.token"
 
 

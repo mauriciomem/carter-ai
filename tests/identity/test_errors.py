@@ -1,4 +1,4 @@
-"""The identity error registry (RFC-0007 Appendix B §2; plan 002 step 14)."""
+"""The identity error registry."""
 
 from __future__ import annotations
 
@@ -18,28 +18,12 @@ from carter.identity.errors import (
     E_TIER_REQUIRED,
     ERRORS_BEGIN,
     ERRORS_END,
-    SLICES,
     registry,
     render_error_table,
 )
 
 REPO = Path(__file__).resolve().parents[2]
-RFC_APPENDIX = (
-    REPO / "docs" / "rfcs" / "0007-llm-attribution-signing" / "appendix-b-cli-and-errors.md"
-)
 CODE_RE = re.compile(r"^E-[A-Z0-9]+(?:-[A-Z0-9]+)*$")
-SLICE_1 = {E_CONFIG, E_ROLE_B_TIER, E_TIER_REQUIRED, E_COMMIT_T1}
-ADDED_BEYOND_APPENDIX_B = {
-    "E-CI-REVIEW",  # plan 008 C4
-    "E-HUMAN-TERMINAL",
-    "E-STATE-INVALID",
-    "E-APLUS-ARGS",
-    "E-PROBE-SCOPE",  # plan 004 G14
-    "E-FALSE-MISSING",
-    "E-IDENTITY-CHECK",  # plan 005 H16
-    "E-GITHUB-UNREACHABLE",
-    "E-HUMAN-IDENTITY",  # plan 006 K3
-}
 
 
 class TestRegistry:
@@ -52,21 +36,9 @@ class TestRegistry:
     def test_every_entry_is_complete(self):
         for entry in registry().values():
             assert entry.code and entry.where.strip() and entry.message.strip()
-            assert entry.slice in SLICES
             assert isinstance(entry.remediation, str)
 
-    def test_slice_1_codes(self):
-        assert {c for c, e in registry().items() if e.slice == "1"} == SLICE_1
-
-    def test_other_codes_are_registered_for_their_own_slice(self):
-        others = {c: e.slice for c, e in registry().items() if c not in SLICE_1}
-        assert others and "1" not in others.values()
-        assert others["E-GATE"] == "2a"
-        assert others["E-SIGN-LOCKED"] == "2b"
-        assert others["E-B-DEFAULT"] == "B"
-        assert others["E-PAT-TYPE"] == "1G"
-
-    def test_slice_1_wording_is_appendix_b_verbatim(self):
+    def test_core_wording(self):
         r = registry()
         assert (
             r[E_CONFIG].message == "config.toml is invalid; agent commits are disabled until fixed."
@@ -84,21 +56,6 @@ class TestRegistry:
             r[E_COMMIT_T1].message
             == "No LLM signing key (T1): committed unsigned with `Co-authored-by: LLM`."
         )
-
-    @pytest.mark.skipif(not RFC_APPENDIX.is_file(), reason="local RFC files are absent (CI)")
-    def test_codes_match_the_rfc_error_table(self):
-        text = RFC_APPENDIX.read_text(encoding="utf-8")
-        table = text.split("## 2. Error table")[1].split("## 3.")[0]
-        in_rfc: set[str] = set()
-        for row in table.splitlines():
-            if row.startswith("| E-"):
-                first = row.split("|")[1]
-                in_rfc.update(re.findall(r"E-[A-Z0-9-]+", first))
-        # Codes the 1G architect gate added beyond Appendix B (plan 003 step 6, F10).
-        # E-UNLOCK-NOPASS left with D50 (D68 d): the RFC table still lists it.
-        # D72 removed E-HANDOFF and E-SECRET-SCAN with `carter pr`; the RFC stays as history.
-        gone = {"E-UNLOCK-NOPASS", "E-HANDOFF", "E-SECRET-SCAN"}
-        assert (set(registry()) | gone) - ADDED_BEYOND_APPENDIX_B == in_rfc
 
 
 class TestUsedByCode:
@@ -192,29 +149,17 @@ class TestRenderErrorTable:
         assert table.startswith(ERRORS_BEGIN + "\n") and table.rstrip().endswith(ERRORS_END)
         assert table == render_error_table()
 
-    def test_slice_1_lists_only_slice_1_codes_in_registry_order(self):
-        rows = [ln for ln in render_error_table(current="1").splitlines() if ln.startswith("| `E-")]
-        codes = [re.match(r"\| `([^`]+)`", ln).group(1) for ln in rows]
-        assert codes == [c for c in registry() if c in SLICE_1]
-
-    def test_the_current_slice_is_ci_e_and_lists_every_agent_facing_code_up_to_it(self):
-        # plan 005 step 27: one constant (rules.CURRENT_SLICE), imported by errors.py
-        assert errors_mod.CURRENT_SLICE == "CI-E"
+    def test_it_lists_every_agent_facing_code_and_no_human_facing_one(self):
         rows = [ln for ln in render_error_table().splitlines() if ln.startswith("| `E-")]
         codes = {re.match(r"\| `([^`]+)`", ln).group(1) for ln in rows}
-        upto = {
-            c for c, e in registry().items()
-            if e.slice in {"1", "1G", "2a", "2b", "2c", "B", "CI-E"}
-            and c not in errors_mod.HUMAN_FACING
-        }  # fmt: skip
-        assert codes == upto
+        assert codes == set(registry()) - errors_mod.HUMAN_FACING
         agent_2b = {
             "E-SIGN-LOCKED", "E-SIGN-NOAGENT", "E-SIGN-UNAVAILABLE", "E-SIGN-AGENT-REFUSE",
             "E-SHIM-REFUSED", "E-GUARD-NOIDENT", "E-GUARD-COMMITTER", "E-GUARD-SIGNCFG",
             "E-GUARD-TRAILER", "E-GUARD-T01SIGN", "E-GUARD-UNSIGNED", "E-TIER-CAPPED",
             "E-TIER-REQUIRED", "E-ROLE-B-TIER",
         }  # fmt: skip
-        assert agent_2b <= codes and "E-HUMAN-IDENTITY" in codes  # plan 006 K13
+        assert agent_2b <= codes and "E-HUMAN-IDENTITY" in codes
         human = {
             "E-UNLOCK-TTY",
             "E-UNLOCK-OPENCODE",
@@ -234,12 +179,7 @@ class TestRenderErrorTable:
         assert {
             "E-B-CALLER", "E-B-DWELL", "E-B-TIMEOUT", "E-B-HEADLESS", "E-B-POLLUTED", "E-B-NOAGENT",
             "E-B-HTTPS", "E-B-MOVED", "E-B-DEFAULT", "E-B-ARGS", "E-B-REJECTED",
-        } <= codes  # slice B (plan 007): devops meets these  # fmt: skip
-
-    def test_earlier_slices_are_a_prefix_and_later_ones_extend_it(self):
-        assert "E-GATE" not in render_error_table(current="1G")
-        assert "E-GATE" in render_error_table(current="2a")
-        assert "E-GUARD-UNSIGNED" in render_error_table(current="2b")
+        } <= codes  # fmt: skip
 
     def test_cells_escape_pipes(self):
         assert "\\|" not in render_error_table() or all(
@@ -255,7 +195,7 @@ class TestRenderErrorTable:
 
 
 class TestObservedTexts:
-    """Spike 4 (plan 003, 2026-11-02): the strings GitHub really sent for a read-only PAT."""
+    """The strings GitHub sends for a token that cannot write."""
 
     def test_gh_readonly_stores_the_observed_lines_and_the_api_message(self):
         entry = registry()["E-GH-READONLY"]

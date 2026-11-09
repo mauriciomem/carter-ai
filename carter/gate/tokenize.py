@@ -1,4 +1,4 @@
-"""Shell lexer and command builder for the gate (RFC-0007 App C.4.2 rules 1-5).
+"""Shell lexer and command builder for the gate.
 
 ``shlex`` cannot answer the questions the gate asks (which words are code, which are data, what
 runs inside ``$(...)``), so this is a small explicit scanner: quotes, escapes, ``$'...'``,

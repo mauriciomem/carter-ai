@@ -1,6 +1,6 @@
 """Runs the TypeScript plugin tests (``tests/plugin/*.test.ts``) with plain ``node --test``.
 
-Plan 004 step 9: no npm dependencies and no build step. Node >= 22.18 strips types by
+no npm dependencies and no build step. Node >= 22.18 strips types by
 default (Node 24 in CI), so ``node:test`` runs the ``.ts`` sources as they are. Skipped, with
 the reason, when Node is missing or older. The CI job ``plugin`` runs the same command on
 Linux and macOS; this wrapper keeps ``pytest`` honest on developer machines that have Node.

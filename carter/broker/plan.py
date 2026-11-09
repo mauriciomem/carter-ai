@@ -1,12 +1,12 @@
-"""``broker push --plan``: everything B can know **before** the human approves (App C.5).
+"""``broker push --plan``: everything B can know **before** the human approves.
 
-No network call and no credential is used here: the plan reads local refs only (the A+ range
-rule: ``origin/<branch>`` if it exists, else ``merge-base(origin/HEAD, HEAD)``, labelled "as of
-<ref>"). It refuses, in this order and with the registry codes of Appendix B:
+No network call and no credential is used here: the plan reads local refs only (the `carter push`
+range rule: ``origin/<branch>`` if it exists, else ``merge-base(origin/HEAD, HEAD)``, labelled "as
+of <ref>"). It refuses, in this order and with the registry codes:
 
 caller (``E-B-CALLER``) and rejection counter (``E-B-REJECTED``) -> tools -> repo and SSH config
 (``E-B-REPOCFG``) -> origin URL (``E-B-HTTPS`` / ``E-B-ARGS``) -> current branch (detached HEAD,
-bad name) -> the remote default branch (``E-B-DEFAULT``, D63: routed to A+) -> the range
+bad name) -> the remote default branch (``E-B-DEFAULT``: routed to `carter push`) -> the range
 (non-fast-forward, empty) -> signatures of LLM-committed commits (``E-B-UNSIGNED``) -> the SSH
 agent (``E-B-NOAGENT``, so the human is not asked for something that cannot work).
 
@@ -35,11 +35,10 @@ from carter.identity.errors import (
     IdentityError,
 )
 
-DWELL_DEFAULT_MS = 500
-DWELL_FLOOR_MS = 500  # freeze B3 / erratum T5: configurable upward only
+DWELL_FLOOR_MS = 500  # configurable upward only
 DWELL_CAP_MS = 10_000
 TIMEOUT_MS = 120_000  # fixed, not configurable
-ASSUMED_DEFAULTS = ("main", "master")  # never pushed by B even if origin/HEAD says otherwise (S2)
+ASSUMED_DEFAULTS = ("main", "master")  # never pushed by B even if origin/HEAD says otherwise
 MAX_COMMITS_SHOWN = 20
 SUBJECT_CHARS = 72
 SHORT = 12
@@ -49,7 +48,7 @@ _ID = re.compile(r"[A-Za-z0-9_.:-]{1,80}")
 
 def clean(text: str, limit: int = 100) -> str:
     """Printable, single-line, bounded text for a prompt: controls, bidi overrides, zero-width and
-    line-separator characters become ``?`` (security review S3: a branch or commit subject must not
+    line-separator characters become ``?`` (a branch or commit subject must not
     reorder or hide what the human reads in the approval prompt)."""
     plain = "".join("?" if unicodedata.category(c) in ("Cc", "Cf", "Zl", "Zp") else c for c in text)
     return _CONTROL.sub("?", plain)[:limit]
@@ -104,7 +103,7 @@ class PushPlan:
 
 
 def read_env(server: Mapping[str, str], ctx: checks.Context) -> dict[str, str]:
-    """The base of every read-only git call: B's own child environment, never the server's."""
+    """The base of every read-only git call: the broker's child environment, never the server's."""
     return env.child_env("push", server, ctx.tools, ctx.home)
 
 
@@ -174,7 +173,7 @@ def _push_plan(cwd: Path, ctx: checks.Context, server: Mapping[str, str]) -> Pus
     pinned = _git(["rev-parse", "--verify", "-q", "HEAD^{commit}"], repo) or ""
     argvmod.build_refspec(pinned, branch)  # validates the sha shape
     # `refs/remotes/origin/HEAD` is a local ref a shell can move (`git remote set-head`): the names
-    # that are the default almost everywhere stay refused whatever it says (security review S2)
+    # that are the default almost everywhere stay refused whatever it says
     if _default_branch(repo) == branch or branch in ASSUMED_DEFAULTS:
         raise refusal(E_B_DEFAULT, f"{branch} is the default branch", branch=branch)
     rng = rangecalc.compute_range(repo)

@@ -1,4 +1,4 @@
-"""The mirror step of ``carter update`` and of ``identity add|remove`` (plan 005 step 13, D64).
+"""The mirror step of ``carter update`` and of ``identity add|remove``.
 
 ``plan`` is read-only and answers "what would change in ``~/.carter/gitconfig`` and its cap
 fragments"; ``apply`` writes it (fragments first, then the file, then the guard state, which is

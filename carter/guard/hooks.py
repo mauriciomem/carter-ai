@@ -1,9 +1,8 @@
-"""``carter-guard``: the POSIX ``pre-push`` backstop and the self-contained hook command
-(RFC-0007 §4.4, C.6.4; plan 004 step 22, freeze G3/G17).
+"""``carter-guard``: the POSIX ``pre-push`` backstop and the self-contained hook command.
 
-The hooks act only on ``CARTER_AGENT_SHELL=1`` (D71): the plugin sets that tag solely in
+The hooks act only on ``CARTER_AGENT_SHELL=1``: the plugin sets that tag solely in
 Carter's scope (a ``carter-*`` agent, its subagents, or a Carter workspace), so another agent's
-shell is never blocked here. ``AGENT=1`` and ``OPENCODE_SESSION_ID`` alone no longer count:
+shell is never blocked here. ``AGENT=1`` and ``OPENCODE_SESSION_ID`` alone do not count:
 OpenCode 2.1 sets ``AGENT`` to the constant ``1``, not to the agent's id, so a ``carter-*`` test
 on it is impossible. Residual: with the plugin not loaded there is no hook backstop
 (``carter check --host`` is RED, and the Carter agents' own ``git push *`` deny stays).
@@ -44,13 +43,12 @@ from carter.install.paths import guard_script_path
 
 GUARD_VERSION = "2.2.0"
 EVENT = "pre-push"
-HOOK_NAME = "carter-guard-pre-push"
 COMMIT_EVENTS = ("prepare-commit-msg", "commit-msg", "post-commit")
 EVENTS = (EVENT, *COMMIT_EVENTS)  # revision 2 of the `hooks` group wires all four
 # Hints that follow a reject; not registry entries (the registry holds the message and fix).
 STALE_HINT = "If you just changed `max_tier`, run `carter update`."
 RESTART_HINT = "If this persists, restart the agent from a clean terminal."
-# 2c (K1): the amend rule has its own text under the registered code E-GUARD-COMMITTER.
+# The amend rule has its own text under the registered code E-GUARD-COMMITTER.
 AUTHOR_CHANGED = (
     f"carter-guard: commit rejected ({E_GUARD_COMMITTER}): "
     "an agent may not change a commit's author"
@@ -73,7 +71,7 @@ def _name(value: str) -> str:
 
 
 def hook_is_agent(env: Mapping[str, str]) -> bool:
-    """The Python oracle of the shell test below: only the plugin's tag counts (D71)."""
+    """The Python oracle of the shell test below: only the plugin's tag counts."""
     return env.get(STRONG_AGENT_SIGNAL) == "1"
 
 
@@ -150,7 +148,7 @@ _FALLBACK = re.compile(r"[a-z0-9@._*-]+\Z")
 
 
 def human_rules_statements() -> str:
-    """``human_fallback_email`` / ``human_fallback_pair``: the K2 fallbacks from ``g2_rules.json``
+    """``human_fallback_email`` / ``human_fallback_pair``: the fallbacks from ``g2_rules.json``
     as ``case`` patterns over a lower-cased argument (a pattern ends up in shell source: only
     safe characters are accepted)."""
     rules = human_identity_rules()
@@ -241,7 +239,7 @@ def hook_command(script: Path | str, event: str = EVENT) -> str:
 
 
 def repo_hook_text(script: Path | str, event: str = EVENT) -> str:
-    """The per-repo ``.git/hooks/<event>`` file (git < 2.54, C.6.5): the same wrapper."""
+    """The per-repo ``.git/hooks/<event>`` file (git < 2.54): the same wrapper."""
     head = (
         f"#!/bin/sh\n# {MARKER} (`carter guard`, repo hook). Do not edit: a changed file is kept.\n"
     )

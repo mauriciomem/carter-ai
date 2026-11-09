@@ -1,4 +1,4 @@
-"""Structural checker for Carter's review-only workflow (RFC-0007 App C.10; plan 008 freeze C9).
+"""Structural checker for Carter's review-only workflow.
 
 Pure Python (PyYAML, already a dependency), no network. ``actionlint`` is run on top of this
 when it is installed; this checker is the floor and also enforces rules actionlint does not
@@ -126,7 +126,7 @@ _StrictLoader.add_constructor(yaml.resolver.BaseResolver.DEFAULT_MAPPING_TAG, _n
 
 
 def check(text: str) -> list[Finding]:
-    """All findings for the workflow ``text`` (empty means it keeps every C.10 rule)."""
+    """All findings for the workflow ``text`` (empty means it keeps every workflow rule)."""
     try:
         doc = yaml.load(text, Loader=_StrictLoader)  # noqa: S506 - SafeLoader subclass
     except yaml.YAMLError:

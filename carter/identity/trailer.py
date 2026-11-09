@@ -1,7 +1,6 @@
-"""The attribution trailer for a resolved identity (RFC-0007 §4.1 tiers). Pure.
+"""The attribution trailer for a resolved identity. Pure.
 
 T0 credits Carter without an email; T1 credits the LLM account by its noreply address.
-In slice 1 T2 uses the same co-author trailer (nothing is signed yet; that is slice 2b).
 A refused resolution has no trailer: Carter does not attribute commits it will not make.
 """
 

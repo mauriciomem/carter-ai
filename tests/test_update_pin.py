@@ -1,4 +1,4 @@
-"""``carter update`` pins ``carter.yaml identity.role``/``require_tier`` (D62, step 12).
+"""``carter update`` pins ``carter.yaml identity.role``/``require_tier``.
 
 Nothing in carter.yaml changes attribution at runtime: only a human-run ``update`` copies
 the policy into ``~/.carter/config.toml [workspaces."<abs path>"]``.
@@ -49,7 +49,7 @@ def set_policy(ws: Path, **identity) -> None:
 
 
 def update(ws: Path, *args: str, env: dict[str, str] | None = None):
-    """``carter update`` asks nothing (D68 h); ``-v`` shows the details these tests read."""
+    """``carter update`` asks nothing (); ``-v`` shows the details these tests read."""
     return CliRunner().invoke(main, ["update", "-v", str(ws), *args], env=env)
 
 
@@ -242,7 +242,7 @@ class TestRefusals:
         assert snap(cfg_path) == before
 
     def test_role_author_next_to_a_cap_is_refused_and_nothing_is_written(self, ws, cfg_path):
-        """Plan 006 K8: role b needs T2, a cap is always below it; never downgraded."""
+        """role author needs T2, a cap is always below it; never downgraded."""
         cfg_path.parent.mkdir(parents=True)
         cfg_path.write_text(T1 + f'[workspaces."{ws.resolve()}"]\nmax_tier = "t1"\n')
         before = snap(cfg_path)
@@ -362,7 +362,7 @@ class TestRetiredKeysAreReported:
 
 class TestWorkspaceLevelNoteOnly:
     """`carter update` mentions the workspace AGENTS.md only; the global note belongs to
-    `carter install` (plan 002 step 17)."""
+    `carter install`."""
 
     OLD = (
         "- **Commits**: The user is the author (signed `-S`); credit Carter only with a "

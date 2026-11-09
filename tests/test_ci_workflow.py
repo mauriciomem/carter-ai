@@ -1,4 +1,4 @@
-"""The CI workflow keeps its promises (plan 004 step 33; RFC-0007 App A T17).
+"""The CI workflow keeps its promises.
 
 CI runs only after the human pushes, so locally the workflow is validated for syntax, pinning,
 permissions and that every command that names a repo script or test path points at something
@@ -100,8 +100,8 @@ class TestJobs:
         text = yaml.dump(job)
         assert (
             "tests/identity" in text
-            and "test_carter_guard_2b.py" in text
-            and "test_carter_guard_2c.py" in text
+            and "test_carter_guard_commit_events.py" in text
+            and "test_carter_guard_role_author.py" in text
             and "/usr/bin/ssh -V" in text
         )
         last = job["steps"][-1]
@@ -112,14 +112,14 @@ class TestJobs:
             last = ci["jobs"][name]["steps"][-1]
             assert last.get("if") == "always()" and "ssh-agent" in last["run"], name
 
-    def test_the_2b_checks_are_in_the_existing_jobs(self, ci: dict) -> None:
+    def test_the_signing_checks_are_in_the_existing_jobs(self, ci: dict) -> None:
         text = lambda name: yaml.dump(ci["jobs"][name])  # noqa: E731
         assert "test_plugin_entry_roundtrip.py" in text("plugin")
-        assert "test_repohooks_2b.py" in text("git-old") and "test_hook_matrix.py" in text(
+        assert "test_repohooks_commit_hooks.py" in text(
             "git-old"
-        )
+        ) and "test_hook_matrix.py" in text("git-old")
         assert "test_shim.py" in text("macos-sh") and "socket path length" in text("macos-sh")
-        assert "includes the 2b scenarios" in text("e2e-contract")
+        assert "includes the signing scenarios" in " ".join(text("e2e-contract").split())
 
     def test_git_old_runs_the_marker_in_a_bookworm_container(self, ci: dict) -> None:
         job = ci["jobs"]["git-old"]

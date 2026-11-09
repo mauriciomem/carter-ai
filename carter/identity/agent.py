@@ -1,4 +1,4 @@
-"""The on-demand dedicated ssh-agent: unlock and lock (RFC-0007 §4.3 "Key custody", report 22 §4).
+"""The on-demand dedicated ssh-agent: unlock and lock.
 
 A library with no click and no terminal handling: the CLI passes ``run_with_terminal``, a callable
 that runs ``ssh-add`` with the user's terminal attached (tests pass a PTY driver). Carter's process
@@ -131,7 +131,7 @@ def unlock(setup: Setup, run_with_terminal: Runner, *, extend: bool = False) -> 
             started, state = True, _probe(setup)
         if state.state == "ok" and not extend:
             return UnlockResult("already-unlocked")
-        lifetime = ["-t", setup.ttl] if setup.ttl else []  # D68 e: no lifetime by default
+        lifetime = ["-t", setup.ttl] if setup.ttl else []  # no lifetime by default
         argv = [os.path.join(setup.ssh_bin_dir, "ssh-add"), *lifetime, setup.private_key]
         code = run_with_terminal(argv, child_env(setup.home, sock))
         after = _probe(setup)

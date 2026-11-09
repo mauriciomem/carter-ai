@@ -1,4 +1,4 @@
-"""``carter identity unlock | lock`` (plan 005 step 11, freeze H10/H12; D50, D54, D58).
+"""``carter identity unlock | lock``.
 
 Refusals are tested in-process with a faked terminal (``CliRunner`` has none); the flows run the
 real command on a real PTY against a real dedicated agent in the ``/tmp/c2b-*`` base. The one thing
@@ -137,7 +137,7 @@ class TestRegistration:
 
 
 class TestRefusals:
-    """Before any process starts, in the order OpenCode, then terminal (H10)."""
+    """Before any process starts, in the order OpenCode, then terminal."""
 
     @pytest.mark.parametrize(
         "variable",
@@ -251,7 +251,7 @@ class TestUnlockFlows:
         first = cli_env.run("unlock", answers=[pw])
         assert first.rc == 0, first.output
         assert "unlocked" in first.output and cli_env.key.fingerprint[:19] in first.output
-        assert "8h" not in first.output  # D68 e: no lifetime unless --ttl
+        assert "8h" not in first.output  # no lifetime unless --ttl
         assert pw not in first.output
         second = cli_env.run("unlock")  # nothing typed: a prompt would time out
         assert second.rc == 0 and "already unlocked" in second.output
@@ -275,7 +275,7 @@ class TestUnlockFlows:
         assert not cli_env.agents  # the agent it started was not left behind
 
     def test_a_key_without_a_passphrase_in_agent_mode_just_loads(self, plain_env: Env) -> None:
-        done = plain_env.run("unlock")  # D68 d: no flag, no warning
+        done = plain_env.run("unlock")  # no flag, no warning
         assert done.rc == 0, done.output
         assert "unlocked" in done.output and "any process" not in done.output
 
@@ -391,4 +391,4 @@ class TestLockFlows:
 def test_the_registry_texts_the_cli_prints_exist() -> None:
     reg: Any = registry()
     for code in (E_UNLOCK_TTY, E_UNLOCK_OPENCODE, E_UNLOCK_PATH):
-        assert reg[code].slice == "2b"
+        assert reg[code].message

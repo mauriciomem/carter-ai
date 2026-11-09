@@ -1,6 +1,6 @@
 """Limits never hide a path or a command: past a cap the gate refuses, it does not truncate.
 
-Review of plan 004 step 21 found five caps that silently ignored the tail of a command (first 64
+Review of found five caps that silently ignored the tail of a command (first 64
 words, 64 candidates per word, 32 brace results, 32 glob matches, 12 wrappers). Each is pinned here.
 """
 

@@ -1,4 +1,4 @@
-"""Reading and writing the ``carter.*`` mirror inside ``~/.carter/gitconfig`` (plan 005 step 13).
+"""Reading and writing the ``carter.*`` mirror inside ``~/.carter/gitconfig``.
 
 One file holds three kinds of entries: the **mirror** (``carter.*`` keys and the ``includeIf``
 cap sections, written by ``identity add|remove`` and ``carter update``), the **hook** entries
@@ -79,14 +79,11 @@ def write_entries(
     mirror_entries: list[Entry],
     others: list[Entry],
     frags: dict[Path, str],
-    *,
-    include_value: str | None = None,
 ) -> SyncResult:
     """Write fragments, then the main file (mirror entries first, then ``others``).
 
     With no entries at all the file is deleted (only if it is still Carter's, unchanged); stale
-    fragments are removed the same way. ``include_value`` is unused here: the include line is the
-    business of the hook and alias installer."""
+    fragments are removed the same way."""
     out = SyncResult()
     main = carter_gitconfig_path(base_dir)
     out.file = str(main)
@@ -135,14 +132,6 @@ def remove_mirror(base_dir: Path | None, state: GuardState) -> SyncResult:
     """``identity remove``: the mirror and its fragments go; hooks, template and alias stay."""
     _, others = split(read_entries(carter_gitconfig_path(base_dir)))
     return write_entries(base_dir, state, [], others, {})
-
-
-def replace_others(base_dir: Path | None, state: GuardState, others: list[Entry]) -> SyncResult:
-    """The guard installer's write: new hook/template/alias entries, the mirror carried over."""
-    mine, _ = split(read_entries(carter_gitconfig_path(base_dir)))
-    carter = carter_dir(base_dir)
-    frags = {p: p.read_text() for p in (carter / mirror.FRAGMENTS_DIR).glob("*")} if mine else {}
-    return write_entries(base_dir, state, mine, others, frags)
 
 
 def identity_files(base_dir: Path | None, state: GuardState) -> list[str]:

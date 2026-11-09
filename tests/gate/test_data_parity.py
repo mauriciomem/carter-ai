@@ -55,7 +55,7 @@ def test_every_human_only_carter_verb_is_refused(item: str) -> None:
 @pytest.mark.parametrize("item", items("commit-flags"))
 def test_every_commit_flag_is_refused(item: str) -> None:
     if item in ("-S", "--gpg-sign"):
-        assert rule_of(f"git commit {item} -m x") is None  # bare forms are allowed (RFC C.4.1)
+        assert rule_of(f"git commit {item} -m x") is None  # bare forms are allowed
         return
     flag = item.replace("<arg>", "X")
     assert rule_of(f"git commit {flag} -m x") == "commit-flags", item

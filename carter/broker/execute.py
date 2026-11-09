@@ -1,4 +1,4 @@
-"""``broker push --exec``: the approved push (RFC-0007 App C.5 "Two-phase Python core", B3, B5).
+"""``broker push --exec``: the approved push.
 
 Order, each step a refusal with a registry code and an audit line:
 
@@ -122,7 +122,7 @@ def refuse_and_log(
     info: dict[str, Any],
     dwell: int | None = None,
 ) -> None:
-    """Audit a refusal; dwell and timeout also count as a rejection (B5)."""
+    """Audit a refusal; dwell and timeout also count as a rejection."""
     decision = {E_B_DWELL: "dwell", E_B_TIMEOUT: "timeout"}.get(exc.code, "refused")
     if decision in ("dwell", "timeout"):
         with contextlib.suppress(counter.CounterError):
@@ -200,7 +200,7 @@ def _push(
     info: dict[str, Any], dwell: int | None,
 ) -> dict[str, Any]:  # fmt: skip
     # The last look before the push (inside the lock): a repo or ssh config written since the plan
-    # is refused here (security review S1: the window is now a few milliseconds, not the checks).
+    # is refused here (the window is a few milliseconds, not the checks).
     with run.forced_env(child):
         checks.require_clean(checks.vet(current.toplevel, current.url.url, ctx))
     proc = _run_child(

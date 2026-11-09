@@ -141,7 +141,7 @@ def model_advisory(config: dict[str, Any]) -> str:
 
 
 def _guard_rules(rules: list[dict[str, str]] | None) -> list[dict[str, str]]:
-    """G2's rules for the agent files: the given ones, else this machine's guard state (D71)."""
+    """G2's rules for the agent files: the given ones, else this machine's guard state."""
     if rules is not None:
         return rules
     from carter.guard.agent_rules import current_rules  # noqa: PLC0415
@@ -202,7 +202,7 @@ def render_agents(
 ) -> dict[str, str]:
     """Render all configured agent templates.
 
-    ``guard_rules`` are G2's consented deny rules (D71); ``None`` reads this machine's guard
+    ``guard_rules`` are G2's consented deny rules; ``None`` reads this machine's guard
     state, so a workspace render and the global one carry the same set.
 
     Returns a dict of {filename: rendered_content}. Filenames and internal

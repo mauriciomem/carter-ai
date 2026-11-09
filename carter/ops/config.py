@@ -75,7 +75,7 @@ class Config:
         warnings = list(res.warnings)
         refusal, linked = res.refusal_reason, trailer.startswith("Co-authored-by:")
         if res.role == "author" and res.tier == "t2" and res.commits == "allowed":
-            # Role b (K11): the trailer credits the human, read from git config in the working
+            # Role author: the trailer credits the human, read from git config in the working
             # directory; `linked` comes from the cache only (no network, no gh here).
             human = human_identity(os.getcwd(), noreply_email(parsed))
             if human.ok:

@@ -18,7 +18,7 @@ and post-hoc audit logging. Run commands directly in the terminal — no interme
   included, and the harness denies it to all of them. You finish the local work and tell the
   user to run `carter push` (see "Push and PR"). One narrow exception: **carter-devops only**
   has the tool `carter_push`, which does not run a command of yours but *asks the human to
-  approve each use* (see "B tool"). No other agent has it.
+  approve each use* (see "Push tool"). No other agent has it.
 - **Pull requests** — once the branch is pushed, any agent may open (`gh pr create`), edit
   (`gh pr edit`) and comment on (`gh pr comment`) a PR. Merging, closing, reviewing and marking
   it ready, issues, releases and `gh api` stay with the human.
@@ -48,7 +48,7 @@ example values. The keys:
 |-----|--------------------|
 | `tier` | `t0` (nothing configured), `t1` (LLM account, no key) or `t2` (account and key) |
 | `role`, `role_source` | Who the commit is attributed to, and where that setting came from |
-| `author`, `committer` | `human` or `llm`: who git records. At T2 the committer is `llm` and the plugin sets it up; below T2 both are `human`. The author is `llm` only in role b (`role` is `author`, T2 only) |
+| `author`, `committer` | `human` or `llm`: who git records. At T2 the committer is `llm` and the plugin sets it up; below T2 both are `human`. The author is `llm` only in role `author` (T2 only) |
 | `signer_fpr` | The LLM key's public fingerprint at T2, else empty. Use it only to compare with `git log` |
 | `coauthor_trailer`, `coauthor_linked` | The exact trailer line for every commit message you make, and whether GitHub credits it (`true` for `Co-authored-by`) |
 | `mode` | `interactive`, or `review` in a CI review run (see "Review runs" below) |
@@ -80,12 +80,10 @@ never set `GIT_COMMITTER_*` or any `-c` signing option, and never add a `Signed-
 user asks for it on that commit. Do not run `carter commit` or `git ai-commit`: they are for the
 user's own terminal.
 
-**What the guards are:** the policies that deny `git push` and GitHub writes are literal
-command matches. Once the user has confirmed group `g2` at revision 2, the Carter plugin is
-installed as well: your shell is isolated and every command you run goes through a command
-gate. Until then the plugin and shell isolation are not installed yet (`carter guard status`
-says "Plugin: not installed") and the literal matches are only a speed bump. Either way, do
-not test them and do not look for another way to push: there is none to use, and trying is a
+**What the guards are:** your own permissions deny `git push` and the GitHub writes; the Carter
+plugin isolates your shell and a command gate screens every command (both act for Carter agents
+and in Carter workspaces; `carter guard status` says whether the plugin is installed). Do not
+test the guards and do not look for another way to push: there is none to use, and trying is a
 violation, not a workaround.
 
 </config>
@@ -106,7 +104,7 @@ Never run any of these (generated from `g2_rules.json`):
 - **git config:** `git config --global`, `git config --system`, `git config --file`, `git config --worktree`, `git config <key> <value>`. Any write at any scope is forbidden; only `--get*`, `--list` and `--show-*` pass.
 - **-c and --config-env=:** `hook.*`, `core.hooksPath`, `core.sshCommand`, `core.askPass`, `core.fsmonitor`, `commit.gpgsign`, `user.*`, `gpg.*`, `alias.*`, `include*`, `credential.*`, `url.*`, `remote.*`, `http.*`, `protocol.*`, `carter.*`.
 - **Plumbing:** `commit-tree`, `fast-import`, `filter-branch`, `filter-repo`, `replace`, `update-ref`. `update-ref` is forbidden with a raw SHA.
-- **Other verbs:** `sudo`, `docker`, `podman`, `systemd-run`, `crontab`, `at`, `opencode run`, `opencode serve`, `gh api`. `docker` and `podman` belong to consent group `sudo-docker`; `gh` is limited to the allowlist (reads, and `pr create|edit|comment`, D72) and a leading `gh -R` is refused.
+- **Other verbs:** `sudo`, `docker`, `podman`, `systemd-run`, `crontab`, `at`, `opencode run`, `opencode serve`, `gh api`. `docker` and `podman` belong to consent group `sudo-docker`; `gh` is limited to the allowlist (reads, and `pr create|edit|comment`) and a leading `gh -R` is refused.
 - **Human-only Carter verbs:** `carter push`, `carter identity add/remove/unlock/lock`, `carter guard *`, `carter github-token set`, `carter broker *`, `carter ci install`.
 - **Credential paths:** `security find-generic-password`, `security find-internet-password`. Any token that references `credential_paths` after normalization.
 - **Control files:** `tee`, `sed -i`, `cp`, `mv`, `rm`, `ln`, `chmod`, `truncate`. Write-capable references to `control_paths`: redirections (`>`, `>>`) and these commands, or interpreter args naming them.
@@ -118,17 +116,17 @@ Never run any of these (generated from `g2_rules.json`):
 | `E-SIGN-LOCKED` | agent `git commit` | The LLM signing key isn't loaded. Nothing was committed; your changes are still staged. Run `carter identity unlock` in your own terminal, then ask me to retry. | A password-manager variant says "approve the signing request in <app>". |
 | `E-SIGN-NOAGENT` | agent `git commit` | The LLM signing key isn't loaded. Nothing was committed; your changes are still staged. Run `carter identity unlock` in your own terminal, then ask me to retry. | Same; `unlock` restarts a stale agent. |
 | `E-COMMIT-T1` | `carter commit`, T1 | No LLM signing key (T1): committed unsigned with `Co-authored-by: LLM`. | — |
-| `E-SIGN-AGENT-REFUSE` | `carter commit`, agent shell | Refusing: key locked and this is an agent shell [D36]. Changes left staged. | — |
+| `E-SIGN-AGENT-REFUSE` | `carter commit`, agent shell | Refusing: key locked and this is an agent shell. Changes left staged. | — |
 | `E-SHIM-REFUSED` | shim | Signing refused: only the configured LLM key via the agent may sign (no `-S<key>`). | — |
 | `E-ISOLATION-MISSING` | plugin, agent shell creation | Carter isolation file is missing, invalid, or doesn't match its install-time hash; agent shells are disabled. Run `carter guard install` in your terminal. | — |
 | `E-SIGN-UNAVAILABLE` | plugin, agent `git commit` at T2 | The LLM signing identity is unavailable (<reason>); agent commits are blocked, not downgraded. Changes are still staged. Run `carter check --host`. | <reason> is one of: config-error, tier-required, key-missing, fingerprint-mismatch, shim-missing, human-identity-invalid, sign-unavailable. |
-| `E-SELFTEST` | first shell-tool call (state `failed`) | Carter plugin self-test failed on OpenCode <v>: all shells are treated as agent shells and B is disabled. See `carter check --host`. | — |
+| `E-SELFTEST` | first shell-tool call (state `failed`) | Carter plugin self-test failed on OpenCode <v>: all shells are treated as agent shells and the push tool is disabled. See `carter check --host`. | — |
 | `E-GUARD-NOIDENT` | prepare-commit-msg (T2) | carter-guard: agent commits need the Carter identity block (plugin not loaded?). | Check the plugin is loaded (`carter check --host`); restart OpenCode; no per-command fallback. |
 | `E-GUARD-COMMITTER` | prepare-commit-msg (T2) | carter-guard: commit rejected: committer is <x>, expected <y> | Remove `GIT_COMMITTER_*` overrides; re-run `carter identity add` if `carter.llmEmail` is stale. |
 | `E-GUARD-SIGNCFG` | prepare-commit-msg (T2) | commit.gpgsign is not true / gpg.format is not ssh / user.signingkey is not a key:: literal / gpg.ssh.program is not the Carter shim | Don't pass `-c` signing overrides (forbidden list). |
 | `E-GUARD-TRAILER` | commit-msg | Co-authored-by trailer missing | `prepare-commit-msg` adds it; re-run without editing it out. |
-| `E-GUARD-T01SIGN` | prepare-commit-msg (T0/T1, capped) | Signing attempted below T2: agent commits here are unsigned [D51]. Don't pass `-S` or override `commit.gpgsign`. If you just changed `max_tier`, run `carter update`. | — |
-| `E-GUARD-UNSIGNED` | post-commit (warn only) | carter-guard(post-commit): HEAD <sha> is unsigned or not signed by the LLM key | Warning, never undone; re-commit without `--no-gpg-sign`; A+/B will refuse the push otherwise. |
+| `E-GUARD-T01SIGN` | prepare-commit-msg (T0/T1, capped) | Signing attempted below T2: agent commits here are unsigned. Don't pass `-S` or override `commit.gpgsign`. If you just changed `max_tier`, run `carter update`. | — |
+| `E-GUARD-UNSIGNED` | post-commit (warn only) | carter-guard(post-commit): HEAD <sha> is unsigned or not signed by the LLM key | Warning, never undone; re-commit without `--no-gpg-sign`; `carter push` and `carter_push` will refuse the push otherwise. |
 | `E-PUSH-GUARD` | pre-push | carter-guard: agent push blocked (<reason>) | Pushes are human-only: tell the user: Run `carter push` yourself, in your terminal or as `!carter push` in OpenCode, not through an agent. |
 | `E-PUSH-ISOLATED` | agent `git push origin` | fatal: 'no_push' does not appear to be a git repository | Same: pushes are human-only. |
 | `E-POLICY` | OpenCode policy | permission.rejected: Blocked by configuration policy | Same; for gh, use an allowlisted read verb: `gh pr\|issue\|run <verb> -R <owner>/<repo>` (put `-R` after the subcommand), and `gh repo view <owner>/<repo>` or `gh search repos <query>` positionally, with no `-R`. |
@@ -138,38 +136,38 @@ Never run any of these (generated from `g2_rules.json`):
 | `E-PAT-TYPE` | `github-token set` / plugin / check | Only fine-grained `github_pat_` tokens are accepted. | Create a fine-grained token on the repositories Carter works on (Contents: read, Pull requests: write), then pipe it to `carter github-token set` in your own terminal. |
 | `E-PAT-PERM` | `github-token set` / plugin / check | Token file must be 0600, yours, not a symlink, outside any repo. | Fix the mode or location (the secrets directory must be 0700), or run `carter github-token set` again. |
 | `E-SSH-ISOLATED` | agent `ssh -T git@github.com` | Permission denied (publickey). | Expected; agent fetch uses HTTPS + PAT. |
-| `E-B-CALLER` | B | `carter_push` is devops-only. | — |
-| `E-B-DWELL` | B | carter_push refused: approval arrived in <n>ms (< <min>ms), looks like client auto-accept | Disable autoaccept / `--auto`; approve manually. |
-| `E-B-TIMEOUT` | B | No approval within 120 s; refused. | Use A+. |
-| `E-B-HEADLESS` | `opencode run` without `--auto` | permission requested: carter_push (…); auto-rejecting | B needs an interactive approver (C8); use A+. |
-| `E-B-POLLUTED` | B | The OpenCode server env contains agent/human signals or Carter isolation values (`<names>`); restart it from a clean terminal (see `carter check --host`). | — |
-| `E-B-REPOCFG` | B, A+ | Config, hooks or SSH config at scope `<scope>` (`<key>`) could run code with your credentials; use `carter push` and review. | — |
-| `E-B-NOAGENT` | B | Your SSH agent socket in the OpenCode server env is stale or not yours; restart OpenCode or use `carter push`. | — |
-| `E-B-HTTPS` | B | `origin` is HTTPS; B pushes over SSH only. Use `carter push`. | — |
-| `E-B-MOVED` | B `--exec` | HEAD moved after approval (`<pinned>` → `<now>`); refused. | — |
-| `E-B-UNSIGNED` | B, A+ | Commits `<shas>` have the LLM as committer but no valid LLM signature; refused. | — |
-| `E-B-DEFAULT` | B | `<branch>` is the remote default branch; B never pushes it. Run `carter push` yourself, in your terminal or as `!carter push` in OpenCode, not through an agent; `carter push` pushes it for you. | — |
-| `E-B-ARGS` | B | Only fast-forward of the current non-default branch to `origin` is allowed. | — |
-| `E-B-REJECTED` | B | B refused: 3 rejections in this session family. Start a new session or run `carter guard status --reset-b`. | — |
+| `E-B-CALLER` | `carter_push` | `carter_push` is devops-only. | — |
+| `E-B-DWELL` | `carter_push` | carter_push refused: approval arrived in <n>ms (< <min>ms), looks like client auto-accept | Disable autoaccept / `--auto`; approve manually. |
+| `E-B-TIMEOUT` | `carter_push` | No approval within 120 s; refused. | Use `carter push`. |
+| `E-B-HEADLESS` | `opencode run` without `--auto` | permission requested: carter_push (…); auto-rejecting | The push tool needs an interactive approver; use `carter push`. |
+| `E-B-POLLUTED` | `carter_push` | The OpenCode server env contains agent/human signals or Carter isolation values (`<names>`); restart it from a clean terminal (see `carter check --host`). | — |
+| `E-B-REPOCFG` | `carter_push`, `carter push` | Config, hooks or SSH config at scope `<scope>` (`<key>`) could run code with your credentials; use `carter push` and review. | — |
+| `E-B-NOAGENT` | `carter_push` | Your SSH agent socket in the OpenCode server env is stale or not yours; restart OpenCode or use `carter push`. | — |
+| `E-B-HTTPS` | `carter_push` | `origin` is HTTPS; `carter_push` pushes over SSH only. Use `carter push`. | — |
+| `E-B-MOVED` | `carter_push`, after approval | HEAD moved after approval (`<pinned>` → `<now>`); refused. | — |
+| `E-B-UNSIGNED` | `carter_push`, `carter push` | Commits `<shas>` have the LLM as committer but no valid LLM signature; refused. | — |
+| `E-B-DEFAULT` | `carter_push` | `<branch>` is the remote default branch; `carter_push` never pushes it. Run `carter push` yourself, in your terminal or as `!carter push` in OpenCode, not through an agent; `carter push` pushes it for you. | — |
+| `E-B-ARGS` | `carter_push` | Only fast-forward of the current non-default branch to `origin` is allowed. | — |
+| `E-B-REJECTED` | `carter_push` | `carter_push` refused: 3 rejections in this session family. Start a new session or run `carter guard status --reset-b`. | — |
 | `E-CONFIG` | any identity command | config.toml is invalid; agent commits are disabled until fixed. | Never falls back to defaults. |
 | `E-HUMAN-IDENTITY` | plugin / `carter ops config --emit` / prepare-commit-msg, role `author` | Role `author` needs your git identity (`user.name` and `user.email`): empty, the LLM's or a Carter fallback; refusing (no downgrade). | Set `user.name` and `user.email` in your own git config (a workspace `includeIf` override counts), then ask the agent to retry. |
 | `E-CI-REVIEW` | `carter commit` / plugin / `identity env` / `carter ops config --emit`, mode `review` (CI context E) | This is a review run: report findings and make no commits. | Context E is review-only by design (no commits, `contents: read`). Commits in CI (contexts C and D) are not built. |
-| `E-ROLE-B-TIER` | role b without T2 | Role `author` needs a signing key; refusing (no downgrade). | — |
+| `E-ROLE-B-TIER` | role author without T2 | Role `author` needs a signing key; refusing (no downgrade). | — |
 | `E-TIER-CAPPED` | plugin / `carter commit` / commit-msg | This workspace caps the tier at `<t>` (`max_tier`): agent commits are unsigned human/human with the `<t>` trailer. | A stale mirror in either direction rejects the agent commit with "run `carter update`". |
 | `E-TIER-REQUIRED` | plugin (agent commit blocked) / `carter commit`, below the pinned `require_tier` | This workspace requires tier `<t>`; configure the LLM identity. | — |
 | `E-POLICIES-MISSING` | `carter check --host`, `carter guard install` (verify and rollback) | Policy `<statement>` not loaded — a broken OpenCode config drops all of them and your providers. | — |
-| `E-APLUS-ARGS` | `carter push` (added beyond Appendix B, plan 003 step 6 F10) | `carter push` pushes only the current branch to `origin`. | Check out the branch you want to push; there are no flags for force, tags or other remotes. |
-| `E-HUMAN-TERMINAL` | `carter guard install\|remove`, `github-token set\|check`, `push`, `pr` (added beyond Appendix B, plan 003 step 6 F10) | This command is for you, not an agent: run it in your own terminal. | Open a terminal that OpenCode did not start and run the command there. |
-| `E-STATE-INVALID` | `carter guard *` (added beyond Appendix B, plan 003 step 6 F10) | ~/.carter/guard-state.json is unreadable or from a newer Carter. | Run `carter guard status` to see the problem; fix or move the file yourself. Carter never rebuilds it. |
+| `E-APLUS-ARGS` | `carter push` | `carter push` pushes only the current branch to `origin`. | Check out the branch you want to push; there are no flags for force, tags or other remotes. |
+| `E-HUMAN-TERMINAL` | `carter guard install\|remove`, `github-token set\|check`, `push` | This command is for you, not an agent: run it in your own terminal. | Open a terminal that OpenCode did not start and run the command there. |
+| `E-STATE-INVALID` | `carter guard *` | ~/.carter/guard-state.json is unreadable or from a newer Carter. | Run `carter guard status` to see the problem; fix or move the file yourself. Carter never rebuilds it. |
 | `E-OPENCODE-VERSION` | install / check | G2 untested on OpenCode <v>; relying on the plugin self-test. | < 2.1: hard fail; 2.1.0–2.1.3 or above tested: warn. |
 | `E-GIT-OLD` | install / check | Global guards need git ≥ 2.54 (`brew upgrade git`); per-repo hooks offered. LLM signing (T2) needs git ≥ 2.40 (`-U` for `key::` literals). | Unguarded repo while T2 is set: FAIL in `check --host`. Below 2.40 `carter identity add` refuses and writes nothing. |
-| `E-PROBE-SCOPE` | `carter check --probe` (added beyond Appendix B, plan 004 step 8 G14) | `carter check --probe` runs only inside an agent shell: ask your agent to run it. | `E-HUMAN-TERMINAL` means the opposite (a human-only command run by an agent), so it is not reused. |
-| `E-FALSE-MISSING` | `carter guard install` (added beyond Appendix B, plan 004 step 8 G14; RFC C.2.1) | no root-owned `false` found at /usr/bin/false or /bin/false; G2 cannot be installed | Nothing was written. The isolation block needs a `false` that the user cannot modify (never one found through the command search path). |
+| `E-PROBE-SCOPE` | `carter check --probe` | `carter check --probe` runs only inside an agent shell: ask your agent to run it. | `E-HUMAN-TERMINAL` means the opposite (a human-only command run by an agent), so it is not reused. |
+| `E-FALSE-MISSING` | `carter guard install` | no root-owned `false` found at /usr/bin/false or /bin/false; G2 cannot be installed | Nothing was written. The isolation block needs a `false` that the user cannot modify (never one found through the command search path). |
 <!-- errors:end -->
 
 ## When the gate or the isolation answers
 
-With the plugin installed, your shell has no SSH agent and a read-only GitHub token, and the
+With the plugin installed, your shell has no SSH agent and only the GitHub token, and the
 Carter command gate screens every command before it runs. What that means for you:
 
 - **A rejection names a rule** (`Refused by the Carter command gate (rule \`<id>\`): ...`).
@@ -177,11 +175,11 @@ Carter command gate screens every command before it runs. What that means for yo
   rephrase the command**: another flag order, a wrapper, an interpreter or a script is the same
   request and the same violation. Never write a script to get around a rejection.
 - Pushes stay human-only from a shell. Tell the user to run `carter push` in their own
-  terminal (carter-devops may also ask through its approval tool, see "B tool"). Opening, editing
+  terminal (carter-devops may also ask through its approval tool, see "Push tool"). Opening, editing
   and commenting on a PR with `gh` is allowed.
 - Put `-R <owner>/<repo>` after the `gh` subcommand, never before it.
 - Stage explicit paths. `git add -A`, `git add .` and `git commit -a` are rejected.
-- There is no SSH in your shell: fetch and pull use HTTPS with a read-only token, which works
+- There is no SSH in your shell: fetch and pull use HTTPS with the GitHub token, which works
   only for repositories that token covers. When a fetch fails, ask the user to fetch.
 - Below T2 your commits are unsigned and the user stays author and committer; at T2 they are signed by the LLM key (see "Signing failures"). Never ask for signing flags.
 - `E-ISOLATION-MISSING`, `E-SELFTEST` and `E-GATE-FAIL` mean the plugin or its files need the
@@ -334,7 +332,7 @@ permission is missing). Merging, closing, reviewing and marking a PR ready, issu
 
 <broker-tools>
 
-## B tool (carter-devops only): ask the human to approve a push
+## Push tool (carter-devops only): ask the human to approve a push
 
 `carter_push` exists only for **carter-devops**, only after the user confirmed it
 (`carter guard install`, group `g2` revision 3). A subagent of devops does not have it.
@@ -356,7 +354,7 @@ The human-run `carter push` stays the default path: if you do not see the tool, 
   `E-B-UNSIGNED`, `E-B-NOAGENT`, `E-B-POLLUTED`, `E-B-MOVED` and `E-B-ARGS` all
   mean: stop, tell the user the code, and ask them to run `carter push`
   in their own terminal. Do not try to fix a config, the SSH agent or a hook yourself.
-- B only pushes the current non-default branch as a fast-forward. It never forces, tags, deletes
+- The tool only pushes the current non-default branch as a fast-forward. It never forces, tags, deletes
   or pushes another branch. Open the PR afterwards with `gh pr create`.
 
 </broker-tools>

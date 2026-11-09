@@ -1,8 +1,8 @@
-"""Helpers behind the hermetic fixture's host and network guards (plan 003, step 5).
+"""Helpers behind the hermetic fixture's host and network guards.
 
 Pure functions, so the guard logic itself can be unit-tested without touching anything real:
 
-- ``digest_host`` / ``changed`` fingerprint the files a bug in slice 1G could rewrite
+- ``digest_host`` / ``changed`` fingerprint the files a bug in the guards could rewrite
   (the human's git config, the OpenCode config, Carter's own state). Only hashes are kept,
   never contents.
 - ``is_local_host`` / ``is_allowed_connect`` decide what a unit test may open a socket to.
@@ -16,7 +16,7 @@ import os
 import socket
 from pathlib import Path
 
-# Relative to the home directory. Keep in sync with what 1G writes (RFC-0007 §4.4, §4.7).
+# Relative to the home directory. Keep in sync with what the guards write.
 HOST_FILES = (
     ".gitconfig",
     ".config/opencode/opencode.json",
@@ -35,7 +35,7 @@ STAT_ONLY_FILES = (".carter/secrets/gh-read.token",)
 ABSENT = "absent"
 
 # Extra roots a test may open unix sockets under besides pytest's temp tree: the short base
-# directories of the ``real_ssh_agent`` fixtures (plan 005 step 7). Registered for the length of
+# directories of the ``real_ssh_agent`` fixtures. Registered for the length of
 # one fixture only; the real ``SSH_AUTH_SOCK`` is never under one of them.
 _UNIX_ROOTS: list[Path] = []
 

@@ -1,4 +1,4 @@
-"""Per-agent permission denies for the agents Carter did not write (D46, F6).
+"""Per-agent permission denies for the agents Carter did not write.
 
 ``carter_push`` is denied per agent, never as global policies: devops must
 stay able to call it. Carter's own agents get the rule in their rendered front matter
@@ -6,7 +6,7 @@ stay able to call it. Carter's own agents get the rule in their rendered front m
 here, in the user's global OpenCode config: ``agents.<name>.permissions`` is an ordered rule
 list and Carter appends ``{action: <tool>, resource: "*", effect: "deny"}`` (last match
 wins, so it wins over any earlier user rule). Their only effect is hiding a Carter tool, so
-non-Carter agents are otherwise untouched (D71).
+non-Carter agents are otherwise untouched.
 
 The user's other keys and rules are merged, never replaced. A rule or value that is already
 exactly as Carter would write it is ``preexisting`` and never removed. Removal deletes only

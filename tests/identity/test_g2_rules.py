@@ -1,4 +1,4 @@
-"""``g2_rules.json`` (RFC-0007 App C.1, C.4.1): the single data file behind the skill's
+"""``g2_rules.json``: the single data file behind the skill's
 forbidden list, the eval ``commands_not_contain`` lists and, later, the gate and guard.
 """
 
@@ -13,20 +13,17 @@ from pathlib import Path
 
 import pytest
 
-from carter.identity import rules
 from carter.identity.rules import (
-    CURRENT_SLICE,
     forbidden_classes,
     load_rules,
     pollution_hits,
     render_forbidden_block,
     render_forbidden_commands,
-    warn_hits,
 )
 
 REPO = Path(__file__).resolve().parents[2]
 
-# App C.1 table: key -> required JSON type.
+# key -> required JSON type.
 REQUIRED = {
     "agent_signals": list,
     "human_signals": list,
@@ -63,19 +60,16 @@ class TestSchema:
         for marker in raw()["isolation_markers"]:
             assert set(marker) == {"name", "match", "value"}
 
-    def test_nothing_is_reserved_any_more(self):  # 1G filled two keys, 2a fills isolation_vars
+    def test_isolation_vars_are_strings(self):
         data = raw()
-        assert data["reserved"] == []
         assert data["isolation_vars"] and all(isinstance(v, str) for v in data["isolation_vars"])
 
-    def test_every_forbidden_entry_is_traceable_and_complete(self):
+    def test_every_forbidden_entry_is_complete(self):
         ids = set()
         for entry in raw()["forbidden"]:
-            assert {"id", "class", "applies_from", "items", "literals", "rfc"} <= set(entry)
-            assert entry["rfc"].startswith("C.4.1 row ")
+            assert {"id", "class", "items", "literals"} <= set(entry)
             assert entry["items"] and all(isinstance(i, str) for i in entry["items"])
             assert all(isinstance(i, str) for i in entry["literals"])
-            assert entry["applies_from"] in rules.SLICES
             assert entry["id"] not in ids
             ids.add(entry["id"])
 
@@ -117,8 +111,8 @@ class TestValuesFollowTheRfc:
             "~/.carter/gitconfig.d/",
             "~/.carter/config.toml",
             "~/.carter/guard-state.json",
-            "~/.carter/state/audit/",  # slice B (plan 007 security review): the B audit store
-            "~/.config/opencode/plugin/",  # G9: both directories load plugins (spike B)
+            "~/.carter/state/audit/",  # the audit store
+            "~/.config/opencode/plugin/",  # both directories load plugins
             "~/.config/opencode/plugins/",
         )
 
@@ -167,7 +161,7 @@ class TestPollution:
     def test_gh_tokens_are_a_warning_not_pollution(self):
         env = {"GH_TOKEN": "x", "GITHUB_TOKEN": "y"}
         assert pollution_hits(env, home="/h") == []
-        assert warn_hits(env) == ["GH_TOKEN", "GITHUB_TOKEN"]
+        assert [n for n in load_rules().warn_only if n in env] == ["GH_TOKEN", "GITHUB_TOKEN"]
 
     def test_hits_never_carry_values(self):
         assert "secret" not in repr(pollution_hits({"AGENT": "secret"}, home="/h"))
@@ -175,7 +169,7 @@ class TestPollution:
 
 class TestForbiddenCoversEveryClassOfC41:
     def test_every_class_of_the_rfc_table_is_present(self):
-        classes = {e.class_ for e in forbidden_classes(all_slices=True)}
+        classes = {e.class_ for e in forbidden_classes()}
         assert classes == {
             "Commit-creating verbs",
             "Staging",
@@ -191,7 +185,7 @@ class TestForbiddenCoversEveryClassOfC41:
         }
 
     def test_n_is_no_verify_only_for_commit(self):
-        (entry,) = [e for e in forbidden_classes(all_slices=True) if e.id == "commit-flags"]
+        (entry,) = [e for e in forbidden_classes() if e.id == "commit-flags"]
         assert [(f["flag"], f["verbs"]) for f in entry.scoped_flags] == [
             ("-n", ["commit", "am"])
         ]  # git am -n is --no-verify too
@@ -206,33 +200,27 @@ class TestForbiddenCoversEveryClassOfC41:
         }
 
     def test_commit_flags_are_the_c41_row(self):
-        (entry,) = [e for e in forbidden_classes(all_slices=True) if e.id == "commit-flags"]
+        (entry,) = [e for e in forbidden_classes() if e.id == "commit-flags"]
         for flag in ("--no-verify", "--no-gpg-sign", "--signoff", "--reset-author", "--author"):
             assert any(flag in item for item in entry.items), flag
 
     def test_config_flag_keys_include_carter_star(self):
-        (entry,) = [e for e in forbidden_classes(all_slices=True) if e.id == "config-flags"]
+        (entry,) = [e for e in forbidden_classes() if e.id == "config-flags"]
         assert "carter.*" in entry.items and "commit.gpgsign" in entry.items
 
     def test_staging_and_push_and_plumbing(self):
-        by_id = {e.id: e for e in forbidden_classes(all_slices=True)}
+        by_id = {e.id: e for e in forbidden_classes()}
         assert by_id["staging"].items == ("git add -A", "git add .", "git commit -a")
         assert "update-ref" in by_id["plumbing"].items
         assert by_id["push-verbs"].items == ("git push", "git send-pack")
         assert "commit-tree" in by_id["plumbing"].items
         assert "raw SHA" in by_id["plumbing"].note
 
-    def test_slice_2a_enforces_every_class_of_the_table(self):
+    def test_every_class_of_the_table_is_enforced(self):
         enforced = {e.id for e in forbidden_classes()}
-        assert CURRENT_SLICE == "CI-E"  # bumped by plan 008; 2a classes stay enforced
         assert {"commit-flags", "staging", "env-overrides", "git-config-writes"} <= enforced
-        assert {"push-verbs", "human-only-carter"} <= enforced  # plan 003 step 22
-        # plan 004 step 34: the gate and control-plane rules are text now, no longer data only
+        assert {"push-verbs", "human-only-carter"} <= enforced
         assert {"other-verbs", "credential-paths", "control-files"} <= enforced
-
-    def test_an_earlier_slice_enforces_fewer_without_a_schema_change(self):
-        earlier = {e.id for e in forbidden_classes(current="1G")}
-        assert {"push-verbs"} <= earlier and not {"other-verbs", "credential-paths"} & earlier
 
 
 class TestLoader:
@@ -284,15 +272,14 @@ class TestRenderers:
     def test_commands_follow_the_data_file(self):
         expected = []
         for entry in raw()["forbidden"]:
-            if rules.SLICES.index(entry["applies_from"]) <= rules.SLICES.index(CURRENT_SLICE):
-                expected += [lit for lit in entry["literals"] if lit not in expected]
+            expected += [lit for lit in entry["literals"] if lit not in expected]
         assert render_forbidden_commands() == expected
 
-    def test_slice_1_commands_cover_the_recipe_hazards(self):
+    def test_commands_cover_the_recipe_hazards(self):
         cmds = render_forbidden_commands()
         for needed in ("--author", "--no-verify", "git commit -S", "git add -A", "git add ."):
             assert needed in cmds
-        assert "git push" in cmds and "git send-pack" in cmds  # enforced from 1G (step 22)
+        assert "git push" in cmds and "git send-pack" in cmds
 
     def test_block_is_marked_and_names_every_enforced_item(self):
         block = render_forbidden_block()

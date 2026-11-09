@@ -1,7 +1,7 @@
 """``~/.carter/guard-state.json``: everything Carter owns on the user's machine for G2.
 
-RFC-0007 App C.6.1, freeze F2. It lives apart from ``manifest.json`` so an older installer
-(which rebuilds the manifest) can never drop it. It is updated in place: ``load`` →
+It lives apart from ``manifest.json`` so an installer that rebuilds the manifest can
+never drop it. It is updated in place: ``load`` →
 change → ``save``, never rebuilt from scratch. Unknown top-level keys from a newer Carter
 are carried forward. A file that cannot be read, or that has a newer ``schema``, is
 refused (``E-STATE-INVALID``) and never overwritten.
@@ -90,7 +90,7 @@ class GuardState:
         except OSError:  # missing, a directory, unreadable
             return False
 
-    # -- consent offers (D65): a declined re-ask is an additive top-level key ----------------
+    # -- consent offers: a declined re-ask is an additive top-level key ----------------
     def offer(self, group: str) -> dict[str, Any] | None:
         found = (self.extra.get("consent_offers") or {}).get(group)
         return found if isinstance(found, dict) else None

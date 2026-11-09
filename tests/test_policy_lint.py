@@ -57,9 +57,9 @@ _DANGEROUS = (
 
 
 _VAULT = ("vault read *", "vault write *")  # the only shell verbs left in remote-write
-# Plan 003 step 12 (T13): GitHub writes are denied for EVERY agent, devops included, and sit
+# GitHub writes are denied for EVERY agent, devops included, and sit
 # last so no earlier rule (e.g. `git push --force *` under dangerous) can re-open one.
-# D72: opening, editing and commenting on a PR are allowed; merge, close, review and ready are not.
+# opening, editing and commenting on a PR are allowed; merge, close, review and ready are not.
 _GITHUB_WRITE = (
     "git push *",
     "gh pr merge *",
@@ -72,7 +72,7 @@ _GITHUB_WRITE = (
     "gh release *",
     "gh api *",
 )
-_BROKER = [_r("carter_push", "*", "deny")]  # D46, all but devops
+_BROKER = [_r("carter_push", "*", "deny")]  # all but devops
 _MCP_GITHUB = _r("carter_github_*", "*", "deny")  # C14, roles that do not need it
 
 

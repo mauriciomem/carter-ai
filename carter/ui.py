@@ -1,4 +1,4 @@
-"""One small output layer for every Carter command (D68 a).
+"""One small output layer for every Carter command.
 
 ``ok`` / ``warn`` / ``info`` / ``fail`` print one line each; ``kv`` prints a compact two-column
 table; ``detail`` prints only with ``-v``. A normal run ends in one to three lines.
@@ -107,12 +107,16 @@ def warn(text: str, fix: str = "") -> None:
     _emit(err, *lines)
 
 
-def fail(cause: str, fix: str = "", code: str = "") -> None:
-    """``✗ cause`` / ``→ fix`` with the error code dimmed at the end, on stderr."""
+def fail(cause: str, fix: str = "", code: str = "", *, inline: bool = False) -> None:
+    """``✗ cause`` / ``→ fix`` with the error code dimmed at the end, on stderr.
+
+    ``inline`` puts the fix on the cause's line: ``✗ cause → fix``."""
     err = sys.stderr
     tail = [(f"  {code}", "dim")] if code else []
     first = [(_glyph("fail", err), "red bold"), (f" {cause}", "")]
-    if fix:
+    if fix and inline:
+        _emit(err, [*first, (f" {_glyph('fix', err)} ", "cyan"), (fix, ""), *tail])
+    elif fix:
         _emit(err, [*first], [(_glyph("fix", err), "cyan"), (f" {fix}", ""), *tail])
     else:
         _emit(err, [*first, *tail])

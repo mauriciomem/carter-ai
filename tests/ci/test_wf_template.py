@@ -1,5 +1,5 @@
 # ruff: noqa: E501
-"""The review-only workflow template (App C.10; plan 008 step 5)."""
+"""The review-only workflow template."""
 
 from __future__ import annotations
 
@@ -12,7 +12,7 @@ import yaml
 from carter.ci import ENVIRONMENT, OPENCODE_VERSION, SECRET, WORKFLOW_REL, template
 from ci.helpers import find_actionlint, run_actionlint
 
-PINS = {  # the repository's own pins (plan 008 notes), reused, not invented
+PINS = {  # the repository's own pins reused, not invented
     "actions/checkout": "3d3c42e5aac5ba805825da76410c181273ba90b1",
     "actions/setup-node": "949feb2413d6458794dcd2491c4babbbce0c15c1",
     "astral-sh/setup-uv": "07a047e608db84b3d8c06cd9a7c7dcc9c355c18e",

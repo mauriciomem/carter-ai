@@ -124,7 +124,7 @@ class TestAuditSubcommand:
 
         monkeypatch.setattr(carter_ops, "AUDIT_LOG", tmp_path / "audit.log")
         assert carter_ops.main(["audit", "--operation", "git-flow", "--result", "success"]) == 0
-        assert capsys.readouterr().out == ""  # D68 i: no JSON echo for the agent to repeat
+        assert capsys.readouterr().out == ""  # no JSON echo for the agent to repeat
 
     def test_audit_missing_operation(self, capsys: pytest.CaptureFixture) -> None:
         from carter.ops import carter_ops
@@ -398,8 +398,8 @@ class TestHelp:
 
 
 class TestPolicyOverrideRefusesGithubWrites:
-    """Plan 003 step 22 (C21, D31): every GitHub write is human-only, so the override ledger
-    cannot be used to weaken it. The refusal points at A+ and is itself audited."""
+    """every GitHub write is human-only, so the override ledger
+    cannot be used to weaken it. The refusal points at `carter push` and is itself audited."""
 
     GITHUB_WRITES = [
         "git push",
@@ -427,7 +427,7 @@ class TestPolicyOverrideRefusesGithubWrites:
         "post release notes in Slack",
         "add a Jira comment",
         "gh pr view 3",
-        "gh pr create --title x",  # D72: opening, editing and commenting are allowed
+        "gh pr create --title x",  # opening, editing and commenting are allowed
         "gh pr edit 3",
         "gh pr comment 3",
         "gh issue list",

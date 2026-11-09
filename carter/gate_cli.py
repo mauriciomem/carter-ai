@@ -1,7 +1,7 @@
 """``carter gate check``: the human/test wrapper over the same code as ``python -m carter.gate``.
 
 Read-only, so it is allowed anywhere (agent shells included); it refuses nothing. Exit 0 = allow,
-1 = deny (RFC-0007 App C.4.2, freeze G15).
+1 = deny.
 """
 
 from __future__ import annotations

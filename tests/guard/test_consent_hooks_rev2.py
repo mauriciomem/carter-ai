@@ -1,5 +1,5 @@
 # ruff: noqa: E501
-"""``hooks`` revision 2 asks again and never upgrades silently (plan 005 step 19; D65, H15).
+"""``hooks`` revision 2 asks again and never upgrades silently.
 
 Revision 1 wired ``pre-push`` only. Revision 2 adds the three commit events. A user who accepted
 revision 1 keeps exactly the pre-push hook until a human confirms revision 2 in a terminal (or
@@ -18,7 +18,7 @@ from carter.guard.state import GuardState, load, save
 from carter.install.paths import carter_gitconfig_path, guard_state_path
 from guard.helpers import debug_config, verbose
 
-PENDING = "the commit checks need your confirmation (`hooks` revision 2)"
+PENDING = "the commit checks need your confirmation"
 FOUR = {"pre-push", "prepare-commit-msg", "commit-msg", "post-commit"}
 
 
@@ -35,7 +35,7 @@ def written_events() -> set[str]:
 
 
 def downgrade_to_rev1(stack) -> None:
-    """An existing 2a install: hooks accepted at revision 1, only pre-push in the file."""
+    """An install from before the commit hooks: hooks accepted at revision 1, only pre-push in the file."""
     stack.fake()
     assert guard("install", "--yes").exit_code == 0
     state = load(guard_state_path(None))
@@ -107,7 +107,9 @@ class TestUpgradeFromRevision1:
         res = guard("install", input="y\n")
         assert res.exit_code == 0, res.output
         out = res.output
-        assert out.index("hooks now also checks agent commits") < out.index("Install?")
+        assert out.index(
+            "hooks blocks pushes by Carter agent shells and checks their commits"
+        ) < out.index("Install?")
         assert (
             written_events() == FOUR and load(guard_state_path(None)).consents["hooks"]["rev"] == 2
         )
@@ -118,7 +120,9 @@ class TestUpgradeFromRevision1:
         stack.fake(before=debug_config(stack.live))
         res = guard("install", "--yes", "--only", "hooks")
         assert res.exit_code == 0, res.output
-        assert "hooks now also checks agent commits" in res.output  # explained even unasked
+        assert (
+            "hooks blocks pushes by Carter agent shells and checks their commits" in res.output
+        )  # explained even unasked
         assert written_events() == FOUR
 
     def test_a_terminal_no_keeps_pre_push_and_does_not_nag(self, stack, human_tty) -> None:
@@ -138,7 +142,7 @@ class TestUpgradeFromRevision1:
         downgrade_to_rev1(stack)
         stack.fake()
         res = guard("install", "--dry-run")
-        assert "needs your confirmation for revision 2" in res.output
+        assert "needs your confirmation again" in res.output
 
 
 class TestRemoveKeepsTheMirror:

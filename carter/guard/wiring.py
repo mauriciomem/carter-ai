@@ -1,4 +1,4 @@
-"""How ``carter install`` and ``carter uninstall`` call the guard (plan 003 step 15, D68 h).
+"""How ``carter install`` and ``carter uninstall`` call the guard.
 
 Both are the same engine as ``carter guard``, with the rules that make a combined command
 safe: an agent shell never changes guards; without a terminal and without ``--yes`` the
@@ -58,7 +58,7 @@ def install_guards(base_dir: Path | None, *, assume_yes: bool) -> int:
 
 def uninstall_guards(base_dir: Path | None, *, assume_yes: bool) -> int:
     """The guard step of ``carter uninstall`` (skipped silently when Carter owns nothing)."""
-    del assume_yes  # nothing is asked any more (D68 h)
+    del assume_yes  # nothing is asked any more
     if not guard_state_path(base_dir).exists():
         return 0
     if terminal.is_agent_shell():

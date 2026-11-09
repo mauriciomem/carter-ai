@@ -1,4 +1,4 @@
-"""One probe of the dedicated agent (RFC-0007 App B table, freeze H11).
+"""One probe of the dedicated agent.
 
 ``show``, ``unlock``, ``lock``, ``check --host`` and ``carter commit`` all call ``probe``. It reads
 exit codes, never ``ssh-add`` prose (the one thing read from ``ssh-add -l`` is the fingerprint
@@ -29,7 +29,6 @@ from pathlib import Path
 
 from carter.identity.agent_paths import child_env
 
-STATES = ("none", "bad", "stale", "empty", "wrong-key", "ok")
 PROBE_TIMEOUT = 2.0
 
 

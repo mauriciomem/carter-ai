@@ -1,7 +1,8 @@
-"""The repo-config check of RFC-0007 App C.5, as A+ uses it (plan 003 step 18).
+"""The repo-config check that `carter push` runs.
 
-``git config --list --show-scope --show-origin --includes`` is judged key by key. B refuses
-on a finding; A+ **shows** it (``Finding`` with ``code = E-B-REPOCFG``) and the human decides.
+``git config --list --show-scope --show-origin --includes`` is judged key by key. The broker refuses
+on a finding; `carter push` **shows** it (``Finding`` with ``code = E-B-REPOCFG``) and the
+human decides.
 The rules, by scope of the key (an included file counts at the including scope, with the
 included file as ``origin``):
 
@@ -72,7 +73,7 @@ class CarterOwned:
     """What Carter owns, from guard state (matched exactly, never by pattern)."""
 
     include: tuple[str, ...] = ()  # the single include.path value(s)
-    fragment_dir: str = ""  # directory of the D64 cap fragments
+    fragment_dir: str = ""  # directory of the cap fragments
     gitconfig_files: tuple[str, ...] = ()  # Carter's gitconfig file(s) (origin of hook.* entries)
     hook_files: tuple[str, ...] = ()  # hook files Carter installed (per-repo fallback)
 

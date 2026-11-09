@@ -1,4 +1,4 @@
-"""The ``carter.*`` mirror and the D64 cap fragments (plan 005 step 13, freeze H5/H6)."""
+"""The ``carter.*`` mirror and the cap fragments."""
 
 from __future__ import annotations
 

@@ -1,4 +1,4 @@
-# Commands the gate rightly refuses in the agents' workflow (plan 004 step 36), each with the habit
+# Commands the gate rightly refuses in the agents' workflow, each with the habit
 # that replaces it. The gate must keep refusing them with exactly this rule; `habit` is what the
 # runbook and the docs tell people (and agents) to do instead.
 version: 1

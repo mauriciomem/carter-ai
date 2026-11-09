@@ -1,8 +1,8 @@
-"""A loopback stand-in for api.github.com (plan 003 steps 16, 19, 21).
+"""A loopback stand-in for api.github.com .
 
 Scripted routes, a log of every request (method, path, headers, body) and a list of
 requests nobody scripted, so a test can prove exactly what was sent. The response bodies in
-``SPIKE_*`` are the strings recorded from a real read-only fine-grained PAT (spike 4,
+``SPIKE_*`` are the strings recorded from a real read-only fine-grained PAT,
 2026-11-02), with the repository placeholder ``<o>/<r>``. Never talks to the network.
 """
 
@@ -63,7 +63,7 @@ def fixture(name: str) -> str:
 
 
 def web_base(api_url: str | None) -> str:
-    """The origin that serves ``/<login>.keys`` for a given ``GITHUB_API_URL`` (plan 005 step 5).
+    """The origin that serves ``/<login>.keys`` for a given ``GITHUB_API_URL``.
 
     Default API: ``https://github.com``. A GitHub Enterprise Server API root ends in
     ``/api/v3``: its origin. Anything else (a loopback fake): the same URL, so one server
@@ -190,7 +190,7 @@ class FakeGitHub:
         listing = [{"full_name": owner_repo, "owner": {"login": owner}}]
         self.on("GET", "/user/repos", Reply(200, json.dumps(listing)))
         self.on("POST", f"/repos/{owner_repo}/git/refs", Reply(403, SPIKE_403))
-        # D72: the token may hold `Pull requests: write`; an empty POST then fails validation (422)
+        # the token may hold `Pull requests: write`; an empty POST then fails validation (422)
         # and creates nothing, otherwise GitHub says 403 "Resource not accessible"
         self.on(
             "POST",

@@ -1,4 +1,4 @@
-"""Path normalization, credential paths, control files (RFC-0007 C.4.2 rule 8; plan 004 step 20)."""
+"""Path normalization, credential paths, control files."""
 
 from __future__ import annotations
 
@@ -214,7 +214,7 @@ class TestControlFiles:
         assert rule_of("cd ~/.carter && echo x > isolation.json") == "control-files"
         assert rule_of("cd ~/.carter && echo x > memories/note.md") is None
         assert rule_of("cd ~/.config/opencode && cp x plugin/y.ts") == "control-files"
-        assert rule_of("cd ~/.config/opencode && cp x opencode.jsonc") is None  # D67 residual
+        assert rule_of("cd ~/.config/opencode && cp x opencode.jsonc") is None  # residual
 
     def test_an_ancestor_counts_for_rm_and_mv_and_recursive_forms(self) -> None:
         for cmd in (
@@ -278,7 +278,7 @@ class TestControlFiles:
 
 
 class TestResidualIsAllowedOnPurpose:
-    """D67: the gate guards C.1 control paths only; these section 4.5 paths stay writable."""
+    """the gate guards the control paths only; these paths stay writable."""
 
     @pytest.mark.parametrize(
         "cmd",

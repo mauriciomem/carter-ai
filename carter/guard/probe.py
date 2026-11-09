@@ -1,10 +1,10 @@
-"""``carter check --probe``: is *this* agent shell isolated? (plan 004 step 31; RFC App B §3.)
+"""``carter check --probe``: is *this* agent shell isolated?
 
 Runs only inside an agent shell: the human asks the agent to run it, and the answer lands in the
 transcript, so every line is ``PASS|FAIL|SKIP <name>`` with, at most, a fixed reason. No
-environment value, token (not even a prefix) or path outside ``~/.carter`` is ever printed (S6).
+environment value, token (not even a prefix) or path outside ``~/.carter`` is ever printed.
 The probes use Carter's own processes (git, ssh, gh), not the agent's gate. There is no GitHub
-403 probe (G19): it would make Carter reopen a push route from inside an agent shell.
+403 probe: it would make Carter reopen a push route from inside an agent shell.
 
 ``run_probes`` is pure over an environment mapping and an injectable runner, so every branch is
 tested without a network or a real GitHub.

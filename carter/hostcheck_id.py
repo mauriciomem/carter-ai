@@ -1,4 +1,4 @@
-"""The slice-2b/2c items of ``carter check --host``: the LLM identity and role b (plans 005, 006).
+"""The identity items of ``carter check --host``: the LLM identity and role author.
 
 Read-only and names only: logins, fingerprints, states and file names; never a key, a token, a
 socket path or an environment value. A RED item makes agent commits fail (or lets a wrong key
@@ -46,7 +46,7 @@ Fetch = Callable[[str], KeyLists]
 
 
 def live_fetch(login: str) -> KeyLists:
-    """The unauthenticated client (step 14); any failure leaves a list unread."""
+    """The unauthenticated client; any failure leaves a list unread."""
     from carter.identity import github  # noqa: PLC0415
 
     def blobs(call: Callable[[str], list], pick: Callable[[object], str]) -> list[str] | None:
@@ -228,7 +228,7 @@ def role_items(
     *,
     ask: bool,
 ) -> list[Item]:
-    """Role ``author`` (plan 006 K3, K7, K8, K12). Below T2 it is refused, never downgraded; at T2
+    """Role ``author``. Below T2 it is refused, never downgraded; at T2
     the human identity, the address link, the DCO file and the age of the guard script matter.
     ``ask`` is a live run: the link may be looked up (human terminal only; the cache otherwise)."""
     out = [Item("warn", "role", w) for w in res.warnings]

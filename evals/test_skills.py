@@ -106,13 +106,15 @@ class TestCarterOpsSkillContent:
         assert "carter-atlassian" in ops_skill
         assert "rest/api/" not in ops_skill
 
-    def test_no_legacy_cli_invocations(self, ops_skill: str) -> None:
-        """Skill should not teach the legacy CLI as primary execution method."""
-        # These are legacy patterns that should not be the taught approach
-        # The `carter-ops` binary no longer exists; the CLI is `carter ops`, and it
-        # has no git/gh/jira operations — the model runs those commands directly.
-        for legacy in ("carter-ops git-", "carter-ops gh-", "carter-ops jira-", "carter-ops audit"):
-            assert legacy not in ops_skill
+    def test_the_skill_teaches_direct_commands(self, ops_skill: str) -> None:
+        """The skill has the model run git/gh/jira commands directly; `carter ops` has none."""
+        for command in (
+            "carter-ops git-",
+            "carter-ops gh-",
+            "carter-ops jira-",
+            "carter-ops audit",
+        ):
+            assert command not in ops_skill
         for op in ("git-", "gh-", "jira-"):
             assert f"carter ops {op}" not in ops_skill
 

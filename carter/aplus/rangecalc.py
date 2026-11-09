@@ -1,4 +1,4 @@
-"""The commit range ``carter push`` shows and checks (RFC-0007 App C.6.6).
+"""The commit range ``carter push`` shows and checks.
 
 Base = ``origin/<branch>`` if that remote-tracking branch exists, else
 ``merge-base(origin/HEAD, HEAD)``. The branch's configured upstream is deliberately **not**
@@ -7,8 +7,8 @@ There is no network call here; ``carter push`` fetches the target ref first.
 
 Also lists which paths in the range can run code on someone's machine or in CI (``.husky/``,
 ``.githooks/``, the ``core.hooksPath`` target, ``.pre-commit-config.yaml``, ``lefthook.*``,
-``.github/workflows/``), counting renames (both paths) and deletions, so A+ can show them in
-red. A detached HEAD, a missing ``origin`` or a missing base are ``E-APLUS-ARGS``.
+``.github/workflows/``), counting renames (both paths) and deletions, so `carter push` can show
+them in red. A detached HEAD, a missing ``origin`` or a missing base are ``E-APLUS-ARGS``.
 """
 
 from __future__ import annotations

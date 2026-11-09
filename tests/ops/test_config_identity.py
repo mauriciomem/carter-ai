@@ -1,4 +1,4 @@
-"""``carter ops config`` against the schema-2 identity (plan 002 step 10).
+"""``carter ops config`` against the schema-2 identity.
 
 The human's signing key must never be read, detected or substituted; the identity comes
 from the resolver at runtime; E-CONFIG is a refusal, not a fallback.
@@ -92,10 +92,10 @@ class TestNoHumanKey:
             for p in (REPO / "carter").rglob("*.py")
             if "_data" not in p.parts and pattern.search(p.read_text(encoding="utf-8"))
         }
-        # 2b (plan 005): the *LLM's* signing block names the git key it sets; it never reads one.
+        # 2b: the *LLM's* signing block names the git key it sets; it never reads one.
         block = offenders.pop("carter/identity/payload.py", [])
         # ... and `identity add` compares the LLM key with the human's `user.signingkey` so it can
-        # refuse it (step 15): it reads only a `key::` literal or a `.pub` file, never a private key
+        # refuse it: it reads only a `key::` literal or a `.pub` file, never a private key
         compare = offenders.pop("carter/identity_add.py", [])
         # ... and `check --probe` asks the agent shell's effective config whether the key is the
         # LLM's `key::` literal (a scratch repo, the agent's own environment; never a file)
@@ -110,7 +110,7 @@ class TestNoHumanKey:
         assert "subprocess" not in text and "git config" not in text
 
     def test_the_carter_bot_default_email_no_longer_exists(self):
-        allowed: set[str] = set()  # the global AGENTS.md text no longer quotes it (step 17)
+        allowed: set[str] = set()  # the global AGENTS.md text no longer quotes it
         offenders = [
             str(p.relative_to(REPO))
             for p in (REPO / "carter").rglob("*")
@@ -165,7 +165,7 @@ class TestIdentityFromTheResolver:
             "tier",
             "role",
             "role_source",
-            "mode",  # CI-E (plan 008 C4)
+            "mode",
             "author",
             "committer",
             "signer_fpr",
@@ -314,7 +314,7 @@ class TestReadsNeverWrite:
 
 
 class TestRuntimeFields2b:
-    """Plan 005 step 22 (App A C6): who the author, the committer and the signer are right here."""
+    """who the author, the committer and the signer are right here."""
 
     def test_t0_everything_is_the_human(self, capsys):
         data = emit(capsys)

@@ -2,7 +2,7 @@
 
 The TypeScript plugin core (``carter/plugin/core.ts``) ports this function; the golden vectors in
 ``tests/data/plugin_vectors.json`` (section ``isolation``) are the contract both pass, so a change
-here without the same change there fails a test. Plan 004 step 11; RFC-0007 App C.2.
+here without the same change there fails a test.
 
 Inputs are plain data: the environment the shell would inherit (a ``dict``), the loaded
 ``isolation.json`` document, and the GitHub read token text *already accepted* by the caller

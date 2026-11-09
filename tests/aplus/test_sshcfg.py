@@ -1,4 +1,4 @@
-"""The SSH client-config check (RFC-0007 App C.5 "SSH client config"; plan 003 step 18).
+"""The SSH client-config check.
 
 First a textual pre-scan for ``Match ... exec`` (``ssh -G`` would run it), then ``ssh -G``
 parsed for the four options that execute a command. ``ssh -G`` is offline: it prints the
@@ -71,7 +71,7 @@ class TestMatchExecPrescan:
             "  Match all exec true",
             "Match=host github.com exec true",
             'Match originalhost github.com user git exec "x"',
-            'Match !exec "touch /x"',  # plan 007 T7: these two also run under `ssh -G`
+            'Match !exec "touch /x"',  # these two also run under `ssh -G`
             'Match exec="touch /x"',
             'Match host github.com !EXEC="x"',
         ],
@@ -182,7 +182,7 @@ class TestCheck:
         write_config(home, "Host github.com\n  IdentityFile ~/.ssh/id\n")
         log = fake_ssh(tmp_path / "bin", APPLE_STYLE_G)
         assert sshcfg.check_ssh_config(home, ssh_bin_dir=tmp_path / "bin") == []
-        assert log.read_text().split() == ["-G", "git@github.com"]  # Match user git applies (T4)
+        assert log.read_text().split() == ["-G", "git@github.com"]  # Match user git applies
 
     def test_match_exec_stops_before_ssh_g_runs(self, home: Path, tmp_path: Path) -> None:
         write_config(home, "Match exec true\n")

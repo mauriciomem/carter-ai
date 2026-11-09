@@ -1,4 +1,4 @@
-"""``carter identity add`` (plan 005 step 15, freeze H9/H12/H13/H16; RFC App B).
+"""``carter identity add``.
 
 Fake GitHub on loopback, throwaway keys, the hermetic home. The invariant under test: every check
 runs before any write, so a failure leaves the tree byte-identical; a success writes the config,
@@ -557,7 +557,7 @@ class TestCommand:
 def test_a_t2_identity_made_here_signs_a_commit_through_the_real_shim(
     fake: FakeGitHub, home: Path, key: KeyPair, real_ssh_agent, tmp_path: Path
 ) -> None:  # type: ignore[no-untyped-def]
-    """Step 21/25 sign with what step 15 writes: shim, config and agent agree end to end."""
+    """Signing uses what `identity add` writes: shim, config and agent agree end to end."""
     import subprocess
 
     from carter.identity.payload import to_git_env

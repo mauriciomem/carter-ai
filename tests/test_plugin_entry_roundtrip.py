@@ -1,5 +1,5 @@
 # ruff: noqa: E501
-"""The real ``identity env`` entry and the plugin core together, no OpenCode (plan 005 step 23).
+"""The real ``identity env`` entry and the plugin core together, no OpenCode.
 
 Python writes the answer, node (``tests/plugin/roundtrip.mjs``) applies it the way the plugin does
 (isolation entries, then the signing block on top), and real git runs with the resulting env:
@@ -20,7 +20,7 @@ import pytest
 
 from carter.identity import shim
 from carter.identity.payload import shim_path
-from guard.test_carter_guard_2b import EMAIL, LOGIN, World
+from guard.test_carter_guard_commit_events import EMAIL, LOGIN, World
 from ssh_rig import KeyPair, real_ssh
 
 REPO = Path(__file__).resolve().parent.parent
@@ -270,7 +270,7 @@ def pin_role_author(world: World) -> None:
 
 @real_ssh
 class TestRoleB:
-    """Plan 006 step 4/9: the real entry, the plugin core and real git, role ``author``."""
+    """the real entry, the plugin core and real git, role ``author``."""
 
     def test_with_a_human_identity_the_commit_is_l_l_g_and_the_human_is_not_in_the_block(
         self, world: World

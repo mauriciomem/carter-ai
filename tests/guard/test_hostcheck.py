@@ -1,7 +1,7 @@
-"""``carter check --host`` (plan 003 step 21; RFC-0007 App B §3): the items that exist in 1G.
+"""``carter check --host``: the host items.
 
 Read-only, names only, and honest: what needs the plugin or hooks is reported as not
-installed in this slice, never as green. The token items reuse ``github-token check`` (step 16).
+installed, never as green. The token items reuse ``github-token check``.
 """
 
 from __future__ import annotations
@@ -39,7 +39,7 @@ def installed(stack) -> None:
 
 
 def installed_with_agents(stack) -> None:
-    """``carter install --yes``: the Carter agent files carry G2's rules (D71)."""
+    """``carter install --yes``: the Carter agent files carry G2's rules ()."""
     stack.fake()
     assert CliRunner().invoke(main, ["install", "--yes"], catch_exceptions=False).exit_code == 0
 
@@ -72,21 +72,21 @@ class TestHealthyInstall:
         installed(stack)
         path = guard_state_path(None)
         state = load(path)
-        state.consent("g2", "accepted", "2026-11-01", 1)  # what a 1G install left behind
+        state.consent("g2", "accepted", "2026-11-01", 1)  # what an early install left behind
         save(state, path)
         stack.fake(before=debug_config(stack.live))
         found = levels(host().output)
         warns = " ".join(found["WARN"])
         assert "plugin not installed: gate, isolation and signing guards are inactive" in warns
         assert "literal denies only" in warns
-        assert any("g2 rev 3 pending" in t for t in found["INFO"])
+        assert any("g2 update pending" in t for t in found["INFO"])
 
     def test_the_git_items_report_the_hook_and_say_keys_are_not_applicable(self, stack) -> None:
         installed(stack)
         stack.fake(before=debug_config(stack.live))
         out = host().output
         assert "pre-push config hook installed" in out and "include.path for" in out
-        assert "not applicable in this slice" in out
+        assert "not applicable" in out
 
     def test_the_env_item_says_when_no_server_runs(self, stack) -> None:
         installed(stack)
@@ -336,7 +336,7 @@ OWNED = "carter-llm/zz-probe-repo"
 
 
 class TestToken:
-    """The token items of ``check --host`` (step 21): the same checks as ``github-token check``."""
+    """The token items of ``check --host``: the same checks as ``github-token check``."""
 
     TOKEN = fine_grained("HOSTSENTINEL")
 

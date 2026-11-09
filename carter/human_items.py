@@ -1,5 +1,4 @@
 """The role-b lines shared by ``carter identity show|add`` and ``carter check --host``
-(plan 006 steps 8 and 11; freeze K7, K11, K12).
 
 In role ``author`` the human is credited by one ``Co-authored-by`` line built from their own git
 config, so three things matter: is that identity usable, does GitHub know the address (it is the
@@ -81,7 +80,7 @@ def human_items(
             Item(
                 "warn",
                 "co-author link",
-                "your address is not known to be linked to a GitHub account: in role b the "
+                "your address is not known to be linked to a GitHub account: in role author the "
                 "Co-authored-by line is your only credit there",
                 "Run `carter check --host` in your own terminal to check it, " + USE_NOREPLY,
             )

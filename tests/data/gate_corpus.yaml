@@ -1,4 +1,4 @@
-# Gate corpus (RFC-0007 C.4.3, plan 004 step 17). FROZEN: tests/gate/test_corpus_frozen.py pins its hash.
+# Gate corpus. FROZEN: tests/gate/test_corpus_frozen.py pins the hash of its commands and expectations.
 # Changing an expected result needs a reviewed change (update the hash in the same commit, say why).
 # Fields: id, command, expect (allow|deny), rule (deny only), why, cwd?, setup?, residual?
 # Placeholders: {tmp} = a fresh temporary directory. `~` and $HOME are the test's fixture home.
@@ -108,7 +108,7 @@ cases:
     )"
   expect: deny
   rule: push-verbs
-  why: unquoted heredoc expands $(...) (rv2-eng S2)
+  why: unquoted heredoc expands $(...)
 - id: rfc-gh-token-reset
   command: GH_TOKEN= gh pr create
   expect: deny
@@ -193,29 +193,29 @@ cases:
   command: gh pr merge 12
   expect: deny
   rule: other-verbs
-  why: gh is deny-by-default outside the allowlist; the human merges (D72)
+  why: gh is deny-by-default outside the allowlist; the human merges
 - id: d72-gh-pr-close
   command: gh pr close 12
   expect: deny
   rule: other-verbs
-  why: the human decides what happens to a PR (D72)
+  why: the human decides what happens to a PR
 - id: d72-gh-pr-review
   command: gh pr review 12 --approve
   expect: deny
   rule: other-verbs
-  why: the human decides what happens to a PR (D72)
+  why: the human decides what happens to a PR
 - id: d72-gh-pr-create
   command: gh pr create --title x --head feat/x
   expect: allow
-  why: PRs are allowed, not gated (D72)
+  why: PRs are allowed, not gated
 - id: d72-gh-pr-edit
   command: gh pr edit 12 --add-label bug
   expect: allow
-  why: PRs are allowed, not gated (D72)
+  why: PRs are allowed, not gated
 - id: d72-gh-pr-comment
   command: gh pr comment 12 --body done
   expect: allow
-  why: PRs are allowed, not gated (D72)
+  why: PRs are allowed, not gated
 - id: rfc-sudo
   command: sudo ls
   expect: deny
@@ -330,7 +330,7 @@ cases:
   command: echo 'x' > ~/.config/opencode/plugin/x.ts
   expect: deny
   rule: control-files
-  why: the singular plugin/ directory loads plugins (D66)
+  why: the singular plugin/ directory loads plugins
 - id: fz-control-plugins-cp
   command: cp x.ts ~/.config/opencode/plugins/carter/index.ts
   expect: deny
@@ -1062,7 +1062,7 @@ cases:
   command: git -c core.pager='sh -c id' log
   expect: deny
   rule: config-flags
-  why: an exec-capable key beyond the RFC list (gate addition)
+  why: an exec-capable key
 - id: x-c-diff-external
   command: git -c diff.external=/tmp/x diff
   expect: deny
@@ -1259,37 +1259,37 @@ cases:
 - id: res-global-opencode-config
   command: echo '{}' > ~/.config/opencode/opencode.jsonc
   expect: allow
-  why: 'D67 accepted residual: the gate guards only C.1 control_paths (global OpenCode config)'
+  why: 'accepted residual: the gate guards only the control paths (global OpenCode config)'
   residual: true
 - id: res-gitconfig
   command: echo '[user]' >> ~/.gitconfig
   expect: allow
-  why: 'D67 accepted residual: the gate guards only C.1 control_paths (~/.gitconfig)'
+  why: 'accepted residual: the gate guards only the control paths (~/.gitconfig)'
   residual: true
 - id: res-xdg-git
   command: mkdir -p ~/.config/git && echo x > ~/.config/git/config
   expect: allow
-  why: 'D67 accepted residual: the gate guards only C.1 control_paths (~/.config/git)'
+  why: 'accepted residual: the gate guards only the control paths (~/.config/git)'
   residual: true
 - id: res-git-hooks
   command: cp hook.sh .git/hooks/pre-commit
   expect: allow
-  why: 'D67 accepted residual: the gate guards only C.1 control_paths (repo .git/hooks)'
+  why: 'accepted residual: the gate guards only the control paths (repo .git/hooks)'
   residual: true
 - id: res-git-config
   command: sed -i s/a/b/ .git/config
   expect: allow
-  why: 'D67 accepted residual: the gate guards only C.1 control_paths (repo .git/config)'
+  why: 'accepted residual: the gate guards only the control paths (repo .git/config)'
   residual: true
 - id: res-project-opencode-dir
   command: cp x.ts .opencode/plugins/x.ts
   expect: allow
-  why: 'D67 accepted residual: the gate guards only C.1 control_paths (repo .opencode/)'
+  why: 'accepted residual: the gate guards only the control paths (repo .opencode/)'
   residual: true
 - id: res-project-opencode-json
   command: echo '{}' > opencode.json
   expect: allow
-  why: 'D67 accepted residual: the gate guards only C.1 control_paths (opencode.json)'
+  why: 'accepted residual: the gate guards only the control paths (opencode.json)'
   residual: true
 - id: res-script-path
   command: python3 scripts/tool.py --flag
@@ -1310,14 +1310,14 @@ cases:
     EOF
     )"
   expect: allow
-  why: 'RFC allow: the quoted heredoc is data'
+  why: 'the quoted heredoc is data'
 - id: ok-heredoc-quoted-subst
   command: |-
     cat <<'EOF'
     $(git push)
     EOF
   expect: allow
-  why: 'RFC allow: a quoted heredoc with $(git push) is data'
+  why: 'a quoted heredoc with $(git push) is data'
 - id: ok-heredoc-dq-delim
   command: |-
     cat <<"EOF"
@@ -1341,31 +1341,31 @@ cases:
 - id: ok-commit-msg-push
   command: git commit -m "fix push"
   expect: allow
-  why: 'RFC allow: prose'
+  why: 'prose'
 - id: ok-commit-msg-quotes
   command: git commit -m 'revert "push"'
   expect: allow
-  why: RFC allow
+  why: allowed
 - id: ok-log-grep
   command: git log --grep=push
   expect: allow
-  why: RFC allow
+  why: allowed
 - id: ok-echo-push
   command: echo "git push"
   expect: allow
-  why: 'RFC allow: quoted text is data'
+  why: 'quoted text is data'
 - id: ok-grep-push
   command: grep -r "git push" docs
   expect: allow
-  why: RFC allow
+  why: allowed
 - id: ok-add-commit
   command: git add a.py && git commit -m x
   expect: allow
-  why: RFC allow
+  why: allowed
 - id: ok-gh-pr-view
   command: gh pr view 12 --repo o/r
   expect: allow
-  why: 'RFC allow: -R after the subcommand'
+  why: '-R after the subcommand'
 - id: ok-gh-pr-list
   command: gh pr list --json number,title
   expect: allow
@@ -1397,11 +1397,11 @@ cases:
 - id: ok-add-n
   command: git add -n a.py
   expect: allow
-  why: 'RFC allow: -n is a dry run for add'
+  why: '-n is a dry run for add'
 - id: ok-merge-n
   command: git merge -n feature
   expect: allow
-  why: 'RFC allow: --no-stat'
+  why: '--no-stat'
 - id: ok-push-word-arg
   command: git log --oneline -- docs/push.md
   expect: allow
@@ -1409,7 +1409,7 @@ cases:
 - id: ok-config-get
   command: git config --get user.email
   expect: allow
-  why: RFC allow
+  why: allowed
 - id: ok-config-one
   command: git config user.email
   expect: allow
@@ -1425,7 +1425,7 @@ cases:
 - id: ok-cat-carter-gitconfig
   command: cat ~/.carter/gitconfig
   expect: allow
-  why: 'RFC allow: read, not write'
+  why: 'read, not write'
 - id: ok-cat-carter-config
   command: cat ~/.carter/config.toml
   expect: allow
@@ -1835,41 +1835,41 @@ cases:
   command: python -I -m carter.broker_cli push --plan --cwd . --agent a --session s --root r --git /usr/bin/git
   expect: deny
   rule: human-only-carter
-  why: slice B (plan 007 B2/T6) - the broker's Python core is spawned by the plugin, never by an agent shell
+  why: the broker's Python core is spawned by the plugin, never by an agent shell
 - id: b-broker-module-attached
   command: python3 -mcarter.broker_cli record --outcome rejected --agent a --session s --root r
   expect: deny
   rule: human-only-carter
-  why: slice B - the attached -m form
+  why: the attached -m form
 - id: b-broker-import
   command: python -c "import carter.broker.counter as c; c.reset()"
   expect: deny
   rule: human-only-carter
-  why: slice B - an interpreter program that imports the broker (it could reset the counter)
+  why: an interpreter program that imports the broker (it could reset the counter)
 - id: b-broker-subcommand
   command: carter broker push --plan
   expect: deny
   rule: human-only-carter
-  why: slice B - `carter broker *` is human-only (App C.4.1 row 9)
+  why: '`carter broker *` is human-only'
 - id: ok-python-m-other-module
   command: python -m json.tool data.json
   expect: allow
-  why: slice B - only carter.broker modules are special
+  why: only carter.broker modules are special
 - id: b-audit-redirect
   command: echo '{"decision":"approved"}' >> ~/.carter/state/audit/b.jsonl
   expect: deny
   rule: control-files
-  why: slice B security review - the B audit store is a control path (a shell may not forge a line)
+  why: the broker audit store is a control path (a shell may not forge a line)
 - id: ok-read-audit
   command: cat ~/.carter/state/audit/b.jsonl
   expect: allow
-  why: slice B - reading the audit is fine (it holds no secret by construction)
+  why: reading the audit is fine (it holds no secret by construction)
 - id: cie-ci-install
   command: carter ci install review --comment
   expect: deny
   rule: human-only-carter
-  why: slice CI-E - an agent-written workflow is executable config; the installer is human-only (App C.10)
+  why: an agent-written workflow is executable config; the installer is human-only
 - id: ok-ci-review
   command: carter ci review
   expect: allow
-  why: slice CI-E - the review driver is what the workflow runs; it only reads and writes the summary
+  why: the review driver is what the workflow runs; it only reads and writes the summary

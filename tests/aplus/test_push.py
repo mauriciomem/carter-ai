@@ -1,4 +1,4 @@
-"""``carter push`` (plan 003 step 19; RFC-0007 C.6.6): real git, a local bare ``origin``.
+"""``carter push``: real git, a local bare ``origin``.
 
 The only thing faked is the terminal (``human_tty``): the click layer asks one place. A call
 recorder around ``carter.aplus.run`` proves the order of the git calls and that nothing
@@ -76,7 +76,7 @@ class TestRefusals:
         assert calls == [] and "feat/x" not in remote_refs(work)
 
     def test_no_terminal_is_needed(self, work: Path, human_tty: Callable[[bool], None]) -> None:
-        human_tty(False)  # D68 g: OpenCode's `!` shell has no TTY, and it may run this
+        human_tty(False)  # OpenCode's `!` shell has no TTY, and it may run this
         res = push_cli()
         assert res.exit_code == 0, res.output
         assert "refs/heads/feat/x" in remote_refs(work)
@@ -263,7 +263,7 @@ class TestFlow:
 
 
 class TestDefaultBranch:
-    """D68 f reverses D63: the default branch is pushed like any other, with no typed name."""
+    """reverses the default branch is pushed like any other, with no typed name."""
 
     def test_it_is_pushed_without_asking(self, with_origin: Path, monkeypatch, human_tty) -> None:
         commit_file(with_origin, "direct.txt", message="fix: straight to main")
@@ -283,7 +283,7 @@ class TestFindingsAreOneWarning:
     ) -> None:
         git("config", "core.sshCommand", "sh -c 'touch /tmp/never'", cwd=work)
         res = push_cli()
-        assert res.exit_code == 0, res.output  # D68 f: a warning, not a question
+        assert res.exit_code == 0, res.output  # a warning, not a question
         warning = [ln for ln in res.output.splitlines() if "could run code" in ln]
         assert len(warning) == 1 and "core.sshcommand" in warning[0].lower()
         assert "touch" not in res.output  # the value is never printed
@@ -333,7 +333,7 @@ class TestWhatYouAreShown:
 
     def test_no_branch_protection_call_or_notice(self, work: Path, calls: Calls) -> None:
         res = push_cli()
-        assert res.exit_code == 0 and "protection" not in res.output  # D68 f
+        assert res.exit_code == 0 and "protection" not in res.output
 
     def test_nothing_secret_reaches_the_output(
         self, work: Path, monkeypatch: pytest.MonkeyPatch

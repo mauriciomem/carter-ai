@@ -15,10 +15,8 @@ import warnings
 from dataclasses import dataclass
 from typing import Any
 
-# Default models for live evals. Canonical Anthropic IDs (hyphens, no dot):
-# `claude-sonnet-4.6` is a 404-causing typo and `claude-sonnet-4-20250514` is
-# deprecated — both previously appeared in code/README and disagreed. Single-sourced
-# here; override per-run with EVAL_MODEL (e.g. a Haiku-class model on the weekly cron).
+# Default model for live evals, single-sourced here. Use canonical Anthropic IDs (hyphens, no
+# dot). Override per run with EVAL_MODEL (e.g. a Haiku-class model on the weekly cron).
 DEFAULT_MODEL = "claude-sonnet-5-5"
 
 # USD price per 1M tokens: model -> (input, output), optionally followed by a

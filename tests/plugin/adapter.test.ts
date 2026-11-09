@@ -1,5 +1,5 @@
 // The thin adapter (index.ts) with a fake OpenCode ctx, a real node:child_process spawn and a fake
-// python interpreter (a shell script), so the gate protocol of freeze G6 is tested end to end.
+// python interpreter (a shell script), so the gate protocol of is tested end to end.
 import { test } from "node:test"
 import assert from "node:assert/strict"
 import { copyFileSync, chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs"
@@ -149,7 +149,7 @@ test("the evaluate hook forces ask for carter_push unless the effect is deny, an
       return e.effect
     }
     assert.equal(run("carter_push", "allow"), "ask")
-    assert.equal(run("carter_pr", "allow"), "allow") // D72: there is no such tool any more
+    assert.equal(run("carter_pr", "allow"), "allow") // there is no such tool any more
     assert.equal(run("carter_push", "deny"), "deny")
     assert.equal(run("shell", "allow"), "allow")
     assert.equal(run("carter_github_search", "allow"), "allow") // the MCP tools are not ours
@@ -244,7 +244,7 @@ test("a broken isolation file refuses the shell call before the gate is even ask
   })
 })
 
-// ---- effective directory (freeze G6, erratum E3) -------------------------------------------
+// ---- effective directory -------------------------------------------
 
 test("workdir: absolute is used as given; relative is resolved against the session directory", async () => {
   await withPlugin({ sessionDir: "/work/repo" }, async (f) => {
@@ -262,7 +262,7 @@ test("the session directory and its parent are each looked up through ctx.sessio
     await f.hooks["tool.execute.before"](call("ls"))
     await f.hooks["tool.execute.before"](call("pwd"))
     await f.hooks["tool.execute.before"](call("pwd", { workdir: "/abs" }))
-    assert.deepEqual(f.sessions, ["ses_1", "ses_1"]) // the directory, then the parent (D71)
+    assert.deepEqual(f.sessions, ["ses_1", "ses_1"]) // the directory, then the parent ()
   })
 })
 

@@ -1,4 +1,4 @@
-"""The identity mode: interactive, or a review-only CI run (RFC-0007 §4.1 CI contexts; plan 008).
+"""The identity mode: interactive, or a review-only CI run.
 
 Stdlib-only and pure, like the resolver that imports it: no file, no process, only the
 environment mapping and the ``[identity] mode`` string the caller passes in.
@@ -14,14 +14,11 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from dataclasses import dataclass
-from typing import Literal
 
 ENV_MODE = "CARTER_IDENTITY_MODE"
 MODES = ("auto", "interactive", "review")
-UNBUILT = ("commit", "scheduled", "ci", "c", "d")  # CI contexts C and D (RFC-0007 §4.1): deferred
+UNBUILT = ("commit", "scheduled", "ci", "c", "d")  # CI contexts C and D: deferred
 _TRUE = ("1", "true", "yes", "on")
-
-ModeSource = Literal["env", "config", "auto", "default"]
 
 
 def in_ci(env: Mapping[str, str]) -> bool:
@@ -53,7 +50,7 @@ def resolve_mode(configured: str, env: Mapping[str, str]) -> ModeResolution:
     if value.lower() in UNBUILT:
         return _fail(
             source,
-            f"{where} asks for a CI context that is not built (contexts C and D, RFC-0007 §4.1);"
+            f"{where} asks for a CI context that is not built (contexts C and D);"
             " only `review` exists in CI",
         )
     if value and value not in MODES:
@@ -61,8 +58,8 @@ def resolve_mode(configured: str, env: Mapping[str, str]) -> ModeResolution:
     if value == "interactive" and ci:
         return _fail(
             source,
-            f"{where} = interactive inside CI would be context C (commits), which is not built "
-            "(RFC-0007 §4.1); a CI run is `review`",
+            f"{where} = interactive inside CI would be context C (commits), which is not built; "
+            "a CI run is `review`",
         )
     if value in ("interactive", "review"):
         return ModeResolution(value, source)

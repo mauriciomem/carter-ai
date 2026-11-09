@@ -1,4 +1,4 @@
-"""The signing shim (plan 005 step 9, freeze H8/H9, RFC-0007 App C.3).
+"""The signing shim.
 
 Three layers: the generator (quoting, determinism, atomic mode-0755 write), the script's contract
 against a *fake* ``ssh-keygen`` that records what it receives (under ``dash`` and
@@ -342,7 +342,7 @@ class TestContract:
 
 @pytest.mark.parametrize("shell", SHELLS)
 class TestFileMode:
-    """D68 d: a key without a passphrase is signed from its configured file, and from no other."""
+    """a key without a passphrase is signed from its configured file, and from no other."""
 
     @pytest.fixture
     def file_lab(self, tmp_path: Path) -> Lab:
@@ -391,7 +391,7 @@ class TestFileMode:
 
 @pytest.mark.parametrize("shell", SHELLS)
 class TestProgramSetups:
-    """``--signing-program`` keeps the shim: only *sign* goes to the program (H8)."""
+    """``--signing-program`` keeps the shim: only *sign* goes to the program."""
 
     def test_sign_goes_to_the_program_and_verify_to_ssh_keygen(
         self, tmp_path: Path, shell: list[str]

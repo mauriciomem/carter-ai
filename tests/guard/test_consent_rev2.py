@@ -1,12 +1,11 @@
 # ruff: noqa: E501
-"""D65: ``g2`` asks again for a new revision, and never upgrades silently (plan 004 step 27).
+"""``g2`` asks again for a new revision, and never upgrades silently.
 
-Slice B moved ``g2`` to revision 3 (the B tools): what these tests said about "revision 2" is true of
-the current revision, 3; the plugin itself is still wanted from revision 2 (``PLUGIN_REV``).
-The revision-2 to revision-3 step has its own file, ``test_consent_rev3.py``.
+``g2`` is at revision 3 (the push tool); the plugin itself is wanted from revision 2
+(``PLUGIN_REV``). The revision-2 to revision-3 step has its own file, ``test_consent_rev3.py``.
 
 The plugin changes the environment of every agent shell. Until a human confirms in a terminal
-(or passes ``--yes --only g2``), the plugin and ``isolation.json`` are not installed and the 1G
+(or passes ``--yes --only g2``), the plugin and ``isolation.json`` are not installed and the
 denies stay.
 """
 
@@ -32,7 +31,7 @@ def guard(*args: str, **kw):
 
 
 def rev1(stack) -> None:
-    """A 1G install: g2 accepted at revision 1, no plugin (what every existing user has)."""
+    """An early install: g2 accepted at revision 1, no plugin (what every existing user has)."""
     stack.fake()
     state = GuardState()
     for g in ("g2", "sudo-docker", "read-edit-denies", "config-edit"):
@@ -186,10 +185,7 @@ class TestNoSilentUpgrade:
         rev1(stack)
         stack.fake()
         res = guard("install", "--dry-run")
-        assert (
-            "needs your confirmation for revision 3" in res.output
-            and "would write" not in res.output
-        )
+        assert "needs your confirmation again" in res.output and "would write" not in res.output
 
 
 class TestExplanation:
@@ -197,13 +193,13 @@ class TestExplanation:
         g2 = next(g for g in consent.consent_groups() if g.id == "g2")
         text = " ".join(g2.explain)
         for fact in (
-            "no SSH agent", "read-only GitHub token", "no push", "unsigned",
+            "no SSH agent", "GitHub token", "no push", "unsigned",
             "does NOT change your own terminal", "`!` shell",
             "guard-state.json", "isolation.json",
             "carter guard remove --only plugin", "plugins/carter", "Restart the OpenCode server",
         ):  # fmt: skip
             assert fact in text, fact
-        assert len(g2.explain) <= 15 and all("slice" not in line for line in g2.explain)
+        assert len(g2.explain) <= 15
 
 
 class TestStateSafety:

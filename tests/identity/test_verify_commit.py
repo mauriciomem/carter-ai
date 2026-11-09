@@ -1,4 +1,4 @@
-"""``carter identity verify --commit REV [--quiet]`` (D68 i): one exit code the agent can read.
+"""``carter identity verify --commit REV [--quiet]`` (): one exit code the agent can read.
 
 The commit is signed by git itself with a throwaway key; the check runs against Carter's own
 ``allowed_signers`` so the user's git config never matters.

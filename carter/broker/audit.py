@@ -1,4 +1,4 @@
-"""The audit store (RFC-0007 App C.5 "Audit", freeze B15): one directory, two files.
+"""The audit store: one directory, two files.
 
 ``~/.carter/state/audit/`` (0700) holds ``b.jsonl`` (one line per B decision) and the ``ops``
 ``audit.log``. Files are 0600 and append-only (``O_APPEND``,
@@ -43,10 +43,6 @@ class AuditError(Exception):
 
 def audit_dir(carter_dir: Path | None = None) -> Path:
     return (carter_dir or carter_home()) / "state" / "audit"
-
-
-def ops_log_path(carter_dir: Path | None = None) -> Path:
-    return audit_dir(carter_dir) / OPS_LOG
 
 
 def _ensure_dir(carter_dir: Path | None) -> Path:

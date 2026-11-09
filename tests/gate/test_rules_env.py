@@ -1,4 +1,4 @@
-"""Environment overrides (RFC-0007 C.4.1 row 4; plan 004 step 19)."""
+"""Environment overrides."""
 
 from __future__ import annotations
 

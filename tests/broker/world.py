@@ -1,5 +1,5 @@
 # ruff: noqa: E501
-"""A local world for B's plan/exec tests: a repo whose ``origin`` is an SSH URL, a bare remote
+"""A local world for the broker's plan/exec tests: a repo whose ``origin`` is an SSH URL, a bare remote
 reached through the fake ``ssh``, a fake agent socket, an account home. No network, no real key
 or agent. Shared by ``test_push_plan``, ``test_push_exec``, ``test_pr`` and ``test_cli``."""
 

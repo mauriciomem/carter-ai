@@ -1,4 +1,4 @@
-"""``carter guard install | status | remove`` (RFC-0007 App B §1, freeze F7-F9, D68 h).
+"""``carter guard install | status | remove``.
 
 A thin click layer over ``engine`` and ``status``. ``install`` and ``remove`` refuse in agent
 shells (AD1). ``install`` asks one question (``--yes`` skips it) and, without a terminal and
@@ -102,7 +102,7 @@ def remove_cmd(
     only: list[str] | None, dry_run: bool, assume_yes: bool, base_dir: Path | None
 ) -> None:
     """Remove the guards Carter installed, where unchanged since."""
-    del assume_yes  # accepted and ignored: nothing is asked any more (D68 h)
+    del assume_yes  # accepted and ignored: nothing is asked any more
 
     def run() -> int:
         terminal.require_human_terminal("guard remove", need_tty=False)

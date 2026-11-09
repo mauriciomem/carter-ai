@@ -1,4 +1,4 @@
-"""GitHub linking of the human's co-author email, and its cache (plan 006 freeze K7).
+"""GitHub linking of the human's co-author email, and its cache.
 
 Split from ``coauthor`` for size; everything here is re-exported there. Stdlib-only.
 """
@@ -20,9 +20,9 @@ from carter.identity.rules import is_agent
 
 Runner = Callable[..., "subprocess.CompletedProcess[str]"]
 
-# In role b the trailer is the human's only GitHub credit, so an email GitHub cannot map to an
+# In role author the trailer is the human's only GitHub credit, so an email GitHub cannot map to an
 # account is worth a warning. ``yes(noreply)``: the id+login address, confirmed by the public
-# ``GET /users/<login>`` (the 2b unauthenticated client); ``yes(verified)``: a verified email of
+# ``GET /users/<login>`` (the unauthenticated client); ``yes(verified)``: a verified email of
 # the human's own account, asked of ``gh api /user/emails`` -- only in a human terminal, because
 # ``gh`` there holds the human's token. The answer is cached as a hash, so ``--emit`` and the
 # plugin path never touch the network or ``gh``.

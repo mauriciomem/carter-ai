@@ -1,11 +1,11 @@
-"""The OpenCode config writes of ``carter guard`` (RFC-0007 App C.6.3, amended by D71).
+"""The OpenCode config writes of ``carter guard``.
 
-Since D71 Carter writes no global ``policies``: G2's deny set lives in the Carter agents' own
+Since Carter writes no global ``policies``: G2's deny set lives in the Carter agents' own
 ``permissions:`` (``agent_rules``). ``apply`` is kept for what remains: it takes out the
 statements an earlier Carter recorded (owned tuples only; a statement the user already had
 verbatim was recorded ``preexisting`` and is never touched, and a recorded statement the user
 edited is no longer ours) and converges the per-agent ``carter_push`` denies of the built-in
-agents (D46), all in one verified write.
+agents, all in one verified write.
 """
 
 from __future__ import annotations
@@ -103,7 +103,7 @@ def apply(
     agents: Sequence[str] = (),
 ) -> ApplyResult:
     """Converge the config onto ``statements`` (ordered: denies, then allows) and onto the
-    per-agent ``carter_push`` denies for ``agents`` (built-ins; D46), in ONE
+    per-agent ``carter_push`` denies for ``agents`` (built-ins), in ONE
     atomic, verified write. Agents recorded earlier but not listed any more are un-denied.
 
     Raises ``PolicyWriteError`` (nothing or the original restored) or ``IdentityError``

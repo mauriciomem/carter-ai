@@ -1,4 +1,4 @@
-// Carter broker tools (RFC-0007 §4.5, App C.5; plan 007 step 15, freeze B2, B6, B19).
+// Carter broker tools.
 //
 // `carter_push` is THIN: schema, caller check, the approval, the timers, and
 // passing JSON between OpenCode and `python -I -m carter.broker_cli`. Every rule (what may be
@@ -10,7 +10,7 @@ import { CarterError, type Clock, type Env, type Iso, type Run } from "./core.ts
 const PREFIX = "carter_"
 const VERBS = ["push"]
 const CALL_MS = { plan: 60_000, exec: 300_000, record: 30_000 }
-const DECLINED = "Permission.DeclinedError" // a plain reject: the turn ends (spike B2)
+const DECLINED = "Permission.DeclinedError" // a plain reject: the turn ends
 const CORRECTED = "Tool.Error" // a reject with a message
 
 export interface BrokerDeps {
@@ -62,7 +62,7 @@ export function registerBroker(deps: BrokerDeps): void {
   }
 
   // Reject OUR pending request (matched by the tool call id). It would otherwise stay in the
-  // human's prompt after the tool gave up, and a late "yes" would do nothing (spike B4, B4c).
+  // human's prompt after the tool gave up, and a late "yes" would do nothing.
   async function dismiss(sessionID: string, callID: string): Promise<void> {
     try {
       const mine = (await permission.list({ sessionID })).find((r) => r?.source?.id === callID)
@@ -99,7 +99,7 @@ export function registerBroker(deps: BrokerDeps): void {
     void input // the tools take no input at all
     const iso = carter.isolation()
     const p = iso.plugin
-    if (!p.b_enabled || carter.state() === "failed") throw new Error("carter: B is not available (see `carter check --host`)")
+    if (!p.b_enabled || carter.state() === "failed") throw new Error("carter: the push tool is not available (see `carter check --host`)")
     if (tctx.agent !== p.b_caller) throw new CarterError("E-B-CALLER")
     const cwd = await deps.sessionDir(tctx.sessionID)
     if (!cwd) throw new Error("carter: the session directory is unknown")

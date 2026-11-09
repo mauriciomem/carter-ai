@@ -327,8 +327,8 @@ class TestShippedMapsAreDictShaped:
 
 
 class TestGithubWritesAreHumanOnly:
-    """Plan 003 step 12 (T12): remote-write keeps Jira/Slack/vault ``ask`` semantics for
-    devops, but every GitHub write verb is ``deny`` for every agent (RFC-0007 D31, C1)."""
+    """remote-write keeps Jira/Slack/vault ``ask`` semantics for
+    devops, but every GitHub write verb is ``deny`` for every agent."""
 
     VERBS = (
         "git push *",
@@ -523,7 +523,7 @@ class TestDocsLanguage:
 
 class TestIdentityPolicyBlock:
     """``identity`` in carter.yaml is policy only: ``role`` and ``require_tier``
-    (plan 002 step 12). ``git_account``/``bot_name`` are unknown keys since D70."""
+    . ``git_account``/``bot_name`` are unknown keys since ."""
 
     @staticmethod
     def _load(tmp_path, identity):
@@ -573,7 +573,7 @@ class TestIdentityPolicyBlock:
 
     @pytest.mark.parametrize("value", [True, False])
     def test_nothing_in_carter_yaml_may_loosen_a_control(self, tmp_path, value):
-        # D52: the opt-out lives only in the edit-denied ~/.carter/config.toml.
+        # the opt-out lives only in the edit-denied ~/.carter/config.toml.
         with pytest.raises(ConfigError, match="allow_project_opencode_edit"):
             self._load(tmp_path, {"allow_project_opencode_edit": value})
 

@@ -1,6 +1,6 @@
 """``carter push`` end to end: real git, a ``file://`` bare remote, a sandbox HOME, a real
 ``ssh-keygen`` for the LLM-signature rule and a real pseudo-terminal for the typed confirmation
-(plan 003 step 19, App A §5 1G integration column)."""
+"""
 
 from __future__ import annotations
 
@@ -200,7 +200,7 @@ class TestRealTerminal:
         assert remote == git("rev-parse", "main", cwd=with_origin).stdout.strip()
 
     def test_a_pipe_for_stdin_works_on_the_real_process(self, branch: Path) -> None:
-        commit_file(branch, "p.txt", message="feat: piped")  # D68 g: no TTY is needed
+        commit_file(branch, "p.txt", message="feat: piped")  # no TTY is needed
         proc = subprocess.run(
             [sys.executable, "-m", "carter.cli", "push"],
             cwd=branch,

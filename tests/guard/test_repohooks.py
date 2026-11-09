@@ -1,7 +1,7 @@
-"""Per-repo ``pre-push`` fallback for git < 2.54 (plan 004 step 25; RFC-0007 C.6.5).
+"""Per-repo ``pre-push`` fallback for git < 2.54.
 
-Old git is simulated with a PATH wrapper whose ``git hook ...`` exits 129 (spike E 6), the way
-003 did; a CI container axis with a real old git comes in step 33. Hooks are written into temp
+Old git is simulated with a PATH wrapper whose ``git hook ...`` exits 129 (6), the way
+003 did; a CI container axis runs a real old git. Hooks are written into temp
 repositories only: the autouse fixture in ``conftest.py`` fails a test that touches this repo.
 """
 
@@ -433,7 +433,7 @@ class TestMigration:
 
 
 class TestStep23MatrixOnARepoLocalInstall:
-    """The pre-push matrix of step 23, with the per-repo wrapper instead of the config hook."""
+    """The pre-push matrix, with the per-repo wrapper instead of the config hook."""
 
     @pytest.fixture
     def rig(self, repo: Path, tmp_path: Path):
@@ -469,7 +469,7 @@ class TestStep23MatrixOnARepoLocalInstall:
 
     def test_no_verify_and_hookspath_skip_the_repo_hook_documented_limits(self, rig) -> None:
         """Weaker than the config hook, which survives ``-c core.hooksPath``: the gate's rules on
-        ``--no-verify`` and ``-c core.hooksPath`` are what hold here (C.4.1)."""
+        ``--no-verify`` and ``-c core.hooksPath`` are what hold here."""
         push, remote_head = rig
         assert (
             push({"CARTER_AGENT_SHELL": "1"}, pre=("-c", "core.hooksPath=/dev/null")).returncode

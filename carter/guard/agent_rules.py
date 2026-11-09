@@ -1,12 +1,11 @@
-"""G2's deny set as Carter-agent permission rules (D71).
+"""G2's deny set as Carter-agent permission rules.
 
-Until D71 the 1G deny set (push, gh, sudo/docker, read and edit denies, the D52 opt-outs) went
-into the top-level ``policies`` of the user's OpenCode config, where it bound **every** agent.
-Now it is rendered into the ``permissions:`` front matter of Carter's own agents, global and
-workspace installs alike, so other agents are untouched. This module turns the consented
-statements into those rules; ``carter.config.permission_rules`` appends them last (OpenCode
-permissions are last-match-wins, so a deny cannot be lifted by an earlier rule, and the gh
-allows and D52 opt-outs, which come after the denies, lift only what they name).
+G2's deny set (push, gh, sudo/docker, read and edit denies, the opt-outs) is rendered into the
+``permissions:`` front matter of Carter's own agents, global and workspace installs alike, so
+other agents are untouched. This module turns the consented statements into those rules;
+``carter.config.permission_rules`` appends them last (OpenCode permissions are last-match-wins, so
+a deny cannot be lifted by an earlier rule, and the gh allows and opt-outs, which come after the
+denies, lift only what they name).
 
 Declined consent groups yield nothing. Read-only: this module never writes.
 """
@@ -39,7 +38,7 @@ def rules_for(state: GuardState, *, home: str, optouts: Sequence[Statement] = ()
 def current_rules(base_dir: Path | None = None, *, home: str | None = None) -> list[Rule]:
     """The rules this machine's guard state calls for (none when nothing is installed).
 
-    The D52 opt-outs are read live from ``config.toml``: they exist only while ``config-edit``
+    The opt-outs are read live from ``config.toml``: they exist only while ``config-edit``
     is accepted, and a broken file contributes none (the denies stay)."""
     read = load_or_empty_readonly(guard_state_path(base_dir))
     if read.status != "ok":

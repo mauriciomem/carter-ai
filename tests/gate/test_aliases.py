@@ -1,4 +1,4 @@
-"""Git alias resolution (RFC-0007 C.4.2 rule 7; freeze G6; plan 004 step 20)."""
+"""Git alias resolution."""
 
 from __future__ import annotations
 

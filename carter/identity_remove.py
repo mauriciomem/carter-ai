@@ -1,9 +1,9 @@
-"""``carter identity remove``: take the 2b identity artifacts away, and only those (plan 005/17).
+"""``carter identity remove``: take the identity artifacts away, and only those.
 
-Ownership discipline (ADR D14): every file is removed only if guard state records it and its hash
+Ownership discipline (ADR): every file is removed only if guard state records it and its hash
 still matches; an edited file stays and is reported. Order: the key leaves Carter's agent first
 (the ``lock --all`` logic, never ``ssh-agent -k``), then the ``[identity]`` and
-``[identity.signing]`` parts of ``config.toml`` (the D55 writer, with a backup; workspace pins and
+``[identity.signing]`` parts of ``config.toml`` (the writer, with a backup; workspace pins and
 the footer stay), the shim, ``allowed_signers``, the dedicated socket directory, the tier mirror
 and its cap fragments.
 The guards, hooks, policies and the ``git ai-commit`` alias are not this command's business
@@ -25,14 +25,6 @@ from carter.identity.config import ConfigError, load_identity
 from carter.identity.schema import Identity, IdentityConfig, Signing
 from carter.identity.writer import dumps, write_config
 from carter.install.paths import backups_dir, guard_state_path
-
-STAYS = (
-    "the guards, hooks and policies (`carter guard remove`) and the `git ai-commit` alias",
-    "the read-only GitHub token (`~/.carter/secrets/`)",
-    "workspace pins (`[workspaces]`) and the footer in config.toml",
-    "the account and the registered signing key on GitHub (remove them there)",
-    "the private key file (it is yours)",
-)
 
 
 @dataclass

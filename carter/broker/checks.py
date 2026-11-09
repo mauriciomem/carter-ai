@@ -1,6 +1,7 @@
-"""B's context and the checks it runs before any credential is used (RFC-0007 App C.5).
+"""The broker's context and the checks it runs before any credential is used.
 
-B reuses the A+ checks in **refuse** mode (A+ shows the same findings and asks):
+The broker reuses the `carter push` checks in **refuse** mode (`carter push` shows the same
+findings and asks):
 
 1. the repo-config check (``carter.aplus.repocfg``): ``git config --list --show-scope
    --show-origin --includes`` judged by scope, Carter's own ``include.path`` and hooks allowed;

@@ -1,5 +1,5 @@
-"""Helpers for the 2a compatibility contract: the REAL plugin, the REAL Python gate and the real
-identity entry, loaded by a real OpenCode in an isolated HOME (plan 004 step 32).
+"""Helpers for the compatibility contract: the REAL plugin, the REAL Python gate and the real
+identity entry, loaded by a real OpenCode in an isolated HOME.
 
 ``install_files`` renders what ``carter guard install`` renders (the same functions), so a
 contract test does not pay for a full install. ``test_g2_install.py`` runs the install itself.
@@ -25,7 +25,7 @@ NAMES = (
     "|GIT_CONFIG_COUNT|GIT_SSH_COMMAND|GH_CONFIG_DIR)$' | sort | tr '\\n' ' '"
 )
 # The rig's loopback-only network namespace is a user namespace: files owned by the real root show
-# up as `nobody` inside it, so the root-ownership check for `false` (C.2.1, unit-tested in
+# up as `nobody` inside it, so the root-ownership check for `false` (unit-tested in
 # tests/identity) cannot pass there. This launcher stands in for that one check; everything else
 # is the production CLI, unchanged.
 LAUNCHER = (
@@ -112,7 +112,7 @@ def wait_status(rig: Rig, state: str, timeout: float = 12.0) -> dict:
 
 def run_shell(rig: Rig, command: str, *, timeout: float = 40.0, agent: str | None = None) -> str:
     """An agent shell call through the mock model; returns the raw tool result. The session's
-    agent is the rig's Carter agent unless ``agent`` names another one (D71)."""
+    agent is the rig's Carter agent unless ``agent`` names another one ()."""
     sid = rig.new_session(agent)
     seen = len(rig.results())
     rig.prompt(sid, f"RUN {command}")

@@ -1,4 +1,4 @@
-"""The D55 schema-only TOML writer (RFC-0007 §4.1 "TOML writer"; plan 002 step 8)."""
+"""The schema-only TOML writer."""
 
 from __future__ import annotations
 

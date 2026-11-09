@@ -1,4 +1,4 @@
-"""``scrub_git_env``: strip everything that can change who a git commit is by (step 11)."""
+"""``scrub_git_env``: strip everything that can change who a git commit is by."""
 
 from __future__ import annotations
 

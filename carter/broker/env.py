@@ -1,4 +1,4 @@
-"""B's tools and per-verb child environment (RFC-0007 App C.5, freeze B1, B11, B12).
+"""the broker's tools and per-verb child environment.
 
 The git/gh child gets an environment **built from scratch**: nothing is copied from the server
 environment except the few names below, and nothing is scrubbed. The server environment can hold
@@ -92,7 +92,7 @@ def check_tools(tools: Tools, *, need_gh: bool = False) -> None:
 def account_home() -> Path:
     """The home B uses for its child and for the ``~/.ssh/config`` scan: the system account entry.
 
-    OpenSSH reads ``<passwd home>/.ssh/config`` and ignores ``$HOME`` (spike C3). There is no
+    OpenSSH reads ``<passwd home>/.ssh/config`` and ignores ``$HOME``. There is no
     config key, argument or environment variable that changes this: user config is one more
     place to plant a hostile ssh config. Tests replace this function itself (monkeypatch)."""
     return Path(pwd.getpwuid(os.geteuid()).pw_dir)

@@ -1,6 +1,6 @@
 """Read ``~/.carter/config.toml`` with ``tomllib``. Reads never write.
 
-Two entry points with separate failure modes (RFC-0007 §4.1, rv1-eng B5):
+Two entry points with separate failure modes:
 
 * ``load_identity()`` is strict. Anything wrong in a file that exists raises
   ``ConfigError`` (``E-CONFIG``) so callers disable agent commits; it never falls back
@@ -9,7 +9,7 @@ Two entry points with separate failure modes (RFC-0007 §4.1, rv1-eng B5):
   default footer plus a warning.
 
 A missing ``schema`` key is read as 2. Keys the model does not know are listed in
-``unknown_keys`` (D70: ``carter check --host`` reports them); they never fail the read.
+``unknown_keys`` (``carter check --host`` reports them); they never fail the read.
 """
 
 from __future__ import annotations

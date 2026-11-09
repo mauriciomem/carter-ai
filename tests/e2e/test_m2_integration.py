@@ -1,6 +1,6 @@
-"""M2 rehearsal in a real OpenCode (plan 005 steps 8-12, before the step-25 contract suite).
+"""The plugin, the identity entry, the shim and the agent together in a real OpenCode.
 
-The real pieces, end to end: the 2b plugin core in Bun, the **real** ``identity env`` entry (the
+The real pieces, end to end: the plugin core in Bun, the **real** ``identity env`` entry (the
 interpreter in ``isolation.json`` is a wrapper that runs the repo's Python for the entry and allows
 every command for the gate), the generated shim, the dedicated agent started and stopped by
 ``carter.identity.agent``, a throwaway key, and git. Opt-in (``CARTER_E2E=1``); nothing touches the
@@ -92,7 +92,7 @@ class Full:
 def full(rig_factory, opencode_bin) -> Iterator[Full]:  # type: ignore[no-untyped-def]
     keydir = Path(
         tempfile.mkdtemp(
-            prefix="k", dir="/tmp/opencode/2b" if Path("/tmp/opencode/2b").exists() else None
+            prefix="k", dir="/tmp/opencode/e2e" if Path("/tmp/opencode/2b").exists() else None
         )
     )
     key = keydir / "id"

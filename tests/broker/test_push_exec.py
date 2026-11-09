@@ -1,5 +1,5 @@
 # ruff: noqa: E501
-"""``broker push --exec`` (plan 007 step 11): pinned push, lock, audit. Fake ssh + a bare remote."""
+"""``broker push --exec``: pinned push, lock, audit. Fake ssh + a bare remote."""
 
 from __future__ import annotations
 
@@ -185,7 +185,7 @@ class TestRefusalsChangeNothing:
     def test_a_config_written_after_the_plan_checks_is_caught_by_the_last_look_before_the_push(
         self, world: World, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """Security review S1: the window between the checks and `git push` is the lock, not more."""
+        """the window between the checks and `git push` is the lock, not more."""
         world.commit("a.txt")
         real = execute.repo_lock
 

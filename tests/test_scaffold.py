@@ -1115,7 +1115,7 @@ class TestLanguageAndCoAuthorRules:
         assert "`en` (`docs_language`)" not in pm
 
 
-# ─── Scaffolded plan/checkpoint files validate cleanly (plan 002, step 5) ────
+# ─── Scaffolded plan/checkpoint files validate cleanly ────
 
 
 class TestScaffoldedStateValidates:
@@ -1168,7 +1168,7 @@ class TestScaffoldedStateValidates:
 
 
 class TestWorkspacePushRule:
-    """Plan 003 step 23: the workspace AGENTS.md carries one human-only push rule built from
+    """the workspace AGENTS.md carries one human-only push rule built from
     ``push.OWN_TERMINAL`` (rendered through the ``own_terminal`` template global)."""
 
     def test_the_rendered_rule_uses_the_constant(self, default_config, env):
@@ -1177,7 +1177,7 @@ class TestWorkspacePushRule:
         text = render_instructions(default_config, env)["AGENTS.md"]
         (rule,) = [ln for ln in text.splitlines() if ln.startswith("- **Pushing**")]
         assert OWN_TERMINAL in rule and "human-only" in rule and "gh pr create" in rule
-        assert "`!carter push`" in rule  # D68 g: the human may run it in OpenCode's `!` shell
+        assert "`!carter push`" in rule  # the human may run it in OpenCode's `!` shell
 
     def test_the_global_rule_carries_the_same_sentence_once(self):
         from carter.aplus.push import OWN_TERMINAL

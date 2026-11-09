@@ -1,4 +1,4 @@
-"""``check --host`` for a key without a passphrase (D68 d): no agent to probe, no unlock."""
+"""``check --host`` for a key without a passphrase (): no agent to probe, no unlock."""
 
 from __future__ import annotations
 

@@ -1,4 +1,4 @@
-"""Plain helpers for the A+ tests (fixtures live in ``conftest.py``)."""
+"""Plain helpers for the `carter push` tests (fixtures live in ``conftest.py``)."""
 
 from __future__ import annotations
 

@@ -1,8 +1,8 @@
-"""``carter identity show``: a read-only picture of the LLM identity (App B; plan 005 step 16).
+"""``carter identity show``: a read-only picture of the LLM identity.
 
 Everything is looked at, nothing is written, started or prompted: the config (a defect is
 ``E-CONFIG``, never defaults), the resolved role and tier with the workspace cap, the commit shape
-that follows, the signing key's custody (the agent probe of step 10 and the shim), whether the tier
+that follows, the signing key's custody (the agent probe and the shim), whether the tier
 mirror the guard reads agrees with ``config.toml``, and the guard and policy coverage for the
 current directory (the ``check --host`` helpers, not a second implementation). Output names
 only: logins, ids, fingerprints, states and file names.

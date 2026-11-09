@@ -1,4 +1,4 @@
-"""``carter commit``, the core (RFC-0007 §4.3; D26, D36, D57, D64; H14; plan 005 step 21).
+"""``carter commit``, the core.
 Click-free and process-free until ``run_git``: ``plan_commit`` turns the user's ``git commit``
 arguments and the config into one git invocation. It builds the same signing block as the plugin
 (``payload``) and signs through the same shim and agent; it never reads or uses the human's key.
@@ -7,7 +7,7 @@ arguments and the config into one git invocation. It builds the same signing blo
   entries), author is the human's git identity (``GIT_AUTHOR_*`` is stripped, so a polluted shell
   cannot pick it), ``--trailer`` always.
 * **T2, key not loaded:** in an agent shell it refuses (``E-SIGN-AGENT-REFUSE``, nothing is run);
-  at a human terminal ``offer_unlock`` is asked once, and on no or failure the commit is made
+  at a human terminal nothing is asked: the plan is marked ``key_locked`` and the commit is made
   **unsigned** with the trailer and ``E-SIGN-HUMAN-FALLBACK`` (never with the human's own key).
 * **T1, T0, a cap, the fallback:** unsigned, human as author and committer. ``commit.gpgsign=false``
   and the four ``gpg.*program=<false>`` go in as ``-c``, so even a bare ``-S`` cannot reach the
@@ -15,13 +15,13 @@ arguments and the config into one git invocation. It builds the same signing blo
 
 Refused (``REFUSED_FLAGS``): flags that skip a hook, change the signature or pick an identity. A
 bare ``-S``/``--gpg-sign`` is dropped with a note; ``-a`` and ``--reset-author`` pass. The role is
-ignored (D26, K9); a broken config or unmet ``require_tier`` refuses. Stdlib-only.
+ignored; a broken config or unmet ``require_tier`` refuses. Stdlib-only.
 """
 
 from __future__ import annotations
 
 import subprocess
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -73,16 +73,11 @@ class Plan:
     env: dict[str, str]
     warnings: list[str] = field(default_factory=list)
     notes: list[str] = field(default_factory=list)
-
-
-def screen_args(args: Sequence[str]) -> tuple[list[str], list[str]]:
-    """``(kept arguments, notes)``; ``CommitRefused`` naming every refused flag."""
-    kept, notes, _ = _screen(args)
-    return kept, notes
+    key_locked: bool = False  # T2 with the key not loaded: the commit falls back to unsigned
 
 
 def _screen(args: Sequence[str]) -> tuple[list[str], list[str], int]:
-    """Like ``screen_args`` plus where the real ``--`` is (``len(kept)`` when there is none): an
+    """``(kept arguments, notes, where the real ``--`` is)``; ``len(kept)`` when there is none. An
     option such as ``--trailer`` must go before it, or git reads it as a path."""
     kept: list[str] = []
     notes: list[str] = []
@@ -154,7 +149,7 @@ def _short_cluster(tok: str, bad: list[str], notes: list[str]) -> tuple[str, boo
 def key_state(cfg: IdentityConfig, home: Path, env: Mapping[str, str] | None = None) -> str:
     """``ok`` or the probe state (``none``, ``empty``, ``wrong-key``, ``stale``, ``bad``)."""
     if cfg.signing.program or cfg.signing.mode == "file":
-        return "ok"  # own agent (the shim reports a locked key) or D68 d: signs from the key file
+        return "ok"  # own agent (the shim reports a locked key) or: signs from the key file
     setup = setup_from_config(cfg, home, env)
     sock = Path(cfg.signing.agent_socket) if cfg.signing.agent_socket else setup.sock
     return probe(sock, setup.ssh_bin_dir, setup.fingerprint, home=home).state
@@ -174,14 +169,12 @@ def plan_commit(
     cwd: str,
     home: Path,
     agent: bool,
-    human_tty: bool,
-    offer_unlock: Callable[[], bool] | None = None,
 ) -> Plan:
     kept, notes, sep = _screen(args)
     where = workspace_for(cfg, cwd)
     if resolve(cfg, workspace=where, env=env).role == "author":
         notes.append("role not applied (own terminal)")
-    res = resolve(cfg, workspace=where, env=env, force_role="co-author")  # D26
+    res = resolve(cfg, workspace=where, env=env, force_role="co-author")
     res.ensure_commits_allowed()
     if res.require_tier and TIERS.index(res.tier) < TIERS.index(res.require_tier):
         raise IdentityError(
@@ -192,6 +185,7 @@ def plan_commit(
     tail = ["--trailer", trailer]
     clean = _clean_env(env)
     warnings: list[str] = []
+    locked = False
     if res.tier == "t2":
         built = build_payload(cfg, res, shim_state(home))
         if built.block is None:
@@ -199,20 +193,19 @@ def plan_commit(
         state = key_state(cfg, home, env)
         if state != "ok" and agent:
             raise IdentityError(E_SIGN_AGENT_REFUSE, registry()[E_SIGN_AGENT_REFUSE].message)
-        if state != "ok" and human_tty and offer_unlock is not None and offer_unlock():
-            state = key_state(cfg, home, env)
         if state == "ok":
             return Plan(
                 "k1", ["commit", *kept, *tail], to_git_env(clean, built.block).env, notes=notes
             )
         warnings.append(f"{E_SIGN_HUMAN_FALLBACK}: {registry()[E_SIGN_HUMAN_FALLBACK].remediation}")
+        locked = True
     elif res.tier == "t1":
         warnings.append(f"{E_COMMIT_T1}: {registry()[E_COMMIT_T1].message}")
     else:
         notes.append("T0: no LLM identity; the commit credits `Assisted-by: Carter`")
     off = ["-c", "commit.gpgsign=false"]
     off += [x for p in GPG_PROGRAMS for x in ("-c", f"{p}={resolve_false()}")]
-    return Plan("unsigned", [*off, "commit", *opts, *tail, *paths], clean, warnings, notes)
+    return Plan("unsigned", [*off, "commit", *opts, *tail, *paths], clean, warnings, notes, locked)
 
 
 def run_git(plan: Plan, cwd: str | None = None) -> int:

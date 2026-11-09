@@ -1,4 +1,4 @@
-"""``carter guard install | status | remove`` (plan 003 step 14; App C.6.2, freeze F7-F9).
+"""``carter guard install | status | remove``.
 
 Everything runs under the sandbox home with ``fake_opencode``; the real OpenCode config and
 ``~/.carter`` are never reachable (the session-end host guard would fail the run)."""
@@ -93,7 +93,7 @@ class TestWhoMayRun:
         assert not backups_dir(None).exists()
 
     def test_remove_needs_no_terminal_and_asks_nothing(self, stack, human_tty) -> None:
-        human_tty(False)  # D68 h: we have backups, so there is nothing to confirm
+        human_tty(False)  # we have backups, so there is nothing to confirm
         install_all(stack)
         stack.fake(before=debug_config(stack.live), after=debug_config())
         res = guard("remove")
@@ -122,7 +122,7 @@ class TestDryRun:
             assert f"{group:<18} would ask" in out
         assert f"{'alias':<18} optional, not part of --yes" in out
         assert f"{'repo_hooks':<18} not on this machine: not needed" in out  # git >= 2.54 here
-        assert "Carter agents would carry" in out and "G2 rule(s)" in out  # D71
+        assert "Carter agents would carry" in out and "G2 rule(s)" in out
         assert "+ deny-git-push" not in out  # no global policies any more
         assert "per-agent denies for built-in agents: build, plan, general, explore" in out
         assert "carter-engineer" not in out
@@ -175,7 +175,7 @@ class TestInstall:
     def test_with_consent_everything_is_written_and_recorded(self, stack) -> None:
         res = install_all(stack)
         cfg = config_data()
-        assert "policies" not in cfg  # D71: the deny set lives in the Carter agents
+        assert "policies" not in cfg  # the deny set lives in the Carter agents
         assert sorted(cfg["agents"]) == sorted(BUILTINS)  # not carter-engineer
         for name in BUILTINS:
             actions = [r["action"] for r in cfg["agents"][name]["permissions"]]
@@ -231,11 +231,11 @@ class TestInstall:
         stack.fake()
         res = CliRunner().invoke(main, ["guard", "install"], input="y\n")  # no -v
         assert res.exit_code == 0, res.output
-        assert res.output.count("Install?") == 1 and "[Y/n]" in res.output  # D68 h
+        assert res.output.count("Install?") == 1 and "[Y/n]" in res.output
         assert "Install this group?" not in res.output
         head = res.output.split("Install?")[0]
         assert len([ln for ln in head.splitlines() if ln.strip()]) <= 6  # a short summary
-        assert "Carter will set up: g2 r3, hooks r2, sudo-docker" in head
+        assert "Carter will set up: g2, hooks, sudo-docker" in head
         state = load(guard_state_path(None))
         assert {"g2", "hooks", "sudo-docker", "read-edit-denies", "config-edit"} <= set(
             state.consents
@@ -276,7 +276,7 @@ class TestInstall:
         assert res.exit_code == 0, res.output
         state = load(guard_state_path(None))
         assert list(state.consents) == ["sudo-docker"] and state.agent_permissions == []
-        assert not config_target(None).exists()  # D71: nothing global to write for this group
+        assert not config_target(None).exists()  # nothing global to write for this group
 
     def test_an_unknown_group_is_a_usage_error_naming_the_valid_ones(self, stack) -> None:
         res = guard("install", "--yes", "--only", "g2,nope")
@@ -340,7 +340,7 @@ class TestInstall:
         target.parent.mkdir(parents=True)
         target.write_text(json.dumps({"policies": [mine]}))
         install_all(stack)
-        assert config_data()["policies"] == [mine]  # D71: Carter adds and removes no policies
+        assert config_data()["policies"] == [mine]  # Carter adds and removes no policies
         assert load(guard_state_path(None)).opencode_policies == []
 
 
@@ -380,7 +380,7 @@ class TestStateGuards:
 
 
 class TestGitStepAtomicity:
-    """In 1G Carter has no git key, so these inject one to exercise the machinery."""
+    """Carter has no git key by default, so these inject one to exercise the machinery."""
 
     @pytest.fixture
     def with_entry(self, monkeypatch: pytest.MonkeyPatch):
@@ -458,7 +458,7 @@ class TestD52:
             and r["effect"] == "allow"
             and r["resource"].startswith(str(ws.resolve()))
         ]
-        assert len(allows) == 3  # D52: the opt-out is part of the Carter agents' permissions
+        assert len(allows) == 3  # the opt-out is part of the Carter agents' permissions
 
     def test_opt_outs_come_with_the_one_question_not_a_second_one(
         self, stack, home: Path, tmp_path: Path, human_tty
@@ -475,7 +475,7 @@ class TestD52:
         res = guard("install", input="y\n")
         assert res.exit_code == 0, res.output
         assert res.output.count("Install?") == 1 and "Apply these opt-outs" not in res.output
-        assert "Active D52 opt-outs" in res.output and str(ws.resolve()) in res.output
+        assert "Active opt-outs" in res.output and str(ws.resolve()) in res.output
 
 
 class TestStatus:
@@ -681,4 +681,4 @@ class TestRemove:
 def test_guard_help_lists_the_three_commands() -> None:
     out = CliRunner().invoke(main, ["guard", "--help"]).output
     assert all(cmd in out for cmd in ("install", "status", "remove"))
-    assert "--reset-b" in CliRunner().invoke(main, ["guard", "status", "--help"]).output  # slice B
+    assert "--reset-b" in CliRunner().invoke(main, ["guard", "status", "--help"]).output
