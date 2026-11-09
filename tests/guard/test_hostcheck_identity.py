@@ -119,7 +119,7 @@ class TestMirror:
             replace(load_identity(), workspaces={str(ws.resolve()): Workspace(max_tier="t1")}),
             home / ".carter" / "config.toml",
         )
-        item = find(run(ws), "hook tier", "config.toml allows t1")
+        item = find(run(ws), "hook tier", "config.toml allows: LLM identity, unsigned")
         assert item and item.level == "red" and "agent commits fail" in item.text
 
     def test_a_cap_removed_without_update_is_red_too_and_t1_vs_t0_is_only_a_warning(
@@ -140,11 +140,11 @@ class TestMirror:
         write_config(
             replace(capped, workspaces={}), home / ".carter" / "config.toml"
         )  # cap removed in config.toml only
-        assert find(run(ws), "hook tier", "config.toml allows t2").level == "red"  # type: ignore[union-attr]
-        # t0 cap vs t1 mirror: no T2 involved, the trailer differs only
+        assert find(run(ws), "hook tier", "config.toml allows: LLM signing on").level == "red"  # type: ignore[union-attr]
+        # t0 cap vs t1 mirror: no signing involved, the trailer differs only
         t0 = replace(capped, workspaces={str(ws.resolve()): Workspace(max_tier="t0")})
         write_config(t0, home / ".carter" / "config.toml")
-        item = find(run(ws), "hook tier", "config.toml allows t0")
+        item = find(run(ws), "hook tier", "config.toml allows: no LLM identity")
         assert item and item.level == "warn"
 
 
@@ -461,7 +461,7 @@ class TestTheCommand:
         assert before == after
         assert (
             code == 1
-            and "RED   guards: the LLM signing key (T2) is set up but the commit hooks are not installed"
+            and "RED   guards: signed agent commits are on but the commit hooks are not installed"
             in out
         )
         assert SENTINEL not in out and key.blob not in out and str(key.pub_path) not in out

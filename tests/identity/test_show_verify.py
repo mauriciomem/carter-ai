@@ -89,8 +89,8 @@ class TestShow:
     def test_nothing_configured_is_t0_and_exit_0(self, home: Path) -> None:
         done = run("show")
         assert done.exit_code == 0, done.output
-        assert "none configured: tier t0" in done.output
-        assert "configured t0, cap none, effective t0" in done.output
+        assert "none configured: no LLM identity" in done.output
+        assert "configured: no LLM identity; cap: none; effective: no LLM identity" in done.output
         assert "Assisted-by: Carter" in done.output
 
     def test_a_config_defect_is_e_config_never_defaults(self, home: Path) -> None:
@@ -106,9 +106,12 @@ class TestShow:
         out = run("show").output
         assert f"{LOGIN} (id {UID}, {EMAIL})" in out
         assert "co-author: the human is the author" in out and "(source: default)" in out
-        assert "configured t1, cap none, effective t1" in out
+        assert (
+            "configured: LLM identity, unsigned; cap: none; effective: LLM identity, unsigned"
+            in out
+        )
         assert "trailer `Co-authored-by`; unsigned" in out
-        assert "signing key" not in out  # no key custody lines below T2
+        assert "signing key" not in out  # no key custody lines without LLM signing
 
     def test_the_role_source_follows_the_priority_order(self, home: Path, tmp_path: Path) -> None:
         make_t1(home)
@@ -131,9 +134,12 @@ class TestShow:
         write_config(cfg, home / ".carter" / "config.toml")
         monkeypatch.chdir(ws)
         out = run("show").output
-        assert "configured t1, cap t0, effective t0" in out
         assert (
-            "OK    hook tier: the commit hooks use t0" in out
+            "configured: LLM identity, unsigned; cap: no LLM identity; effective: no LLM identity"
+            in out
+        )
+        assert (
+            "OK    hook tier: the commit hooks expect: no LLM identity" in out
         )  # no mirror file = t0 = the capped tier
 
     def test_it_is_read_only_and_works_in_an_agent_shell(
@@ -206,11 +212,11 @@ class TestShow:
         self, home: Path, fake: FakeGitHub, key: KeyPair, real_ssh_agent
     ) -> None:  # type: ignore[no-untyped-def]
         add_t2(fake, key, str(real_ssh_agent.sock))
-        assert "OK    hook tier: the commit hooks use t2" in run("show").output
+        assert "OK    hook tier: the commit hooks expect: LLM signing on" in run("show").output
         (home / ".carter" / "gitconfig").unlink()
         out = run("show").output
         assert (
-            "WARN  hook tier: the commit hooks use t0, below config.toml" in out
+            "WARN  hook tier: the commit hooks expect: no LLM identity, below config.toml" in out
             and "carter update" in out
         )
 
@@ -317,7 +323,10 @@ class TestVerifyLocal:
     def test_below_t2_there_is_nothing_to_verify(self, home: Path) -> None:
         make_t1(home)
         done = run("verify")
-        assert done.exit_code == 1 and "no signing key is configured (tier below T2)" in done.output
+        assert (
+            done.exit_code == 1
+            and "no signing key is configured (LLM signing is off)" in done.output
+        )
 
     def test_the_previous_keys_are_in_allowed_signers(
         self, key: KeyPair, throwaway_key: Callable[..., KeyPair]

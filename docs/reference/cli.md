@@ -20,7 +20,7 @@ the output is not a terminal, with `NO_COLOR` set, or with `--no-color`.
 | [`check`](#carter-check) | Validate a workspace, or this machine with `--host` |
 | [`guard`](#carter-guard) | Install, inspect and remove the guards |
 | [`identity`](#carter-identity) | Set up, check, unlock and lock the LLM identity and its signing key |
-| [`commit`](#carter-commit) | `git commit` as the LLM identity: signed at T2, with the trailer |
+| [`commit`](#carter-commit) | `git commit` as the LLM identity: signed when LLM signing is on, with the trailer |
 | [`github-token`](#carter-github-token) | Store and check the read-only GitHub token |
 | [`push`](#carter-push) | Push the current branch to `origin` |
 | [`ci`](#carter-ci) | Install and check the review-only CI workflow |
@@ -137,7 +137,7 @@ Carter plugin (`~/.config/opencode/plugins/carter/`, found by OpenCode without a
 It asks **one** question: a summary of three or four lines and `Install? [Y/n]` (Enter is yes). That
 yes is the consent for every group it lists; a no installs nothing. `--yes` skips the question.
 Groups you declined earlier stay declined and are not asked again, with one exception: while the
-LLM signing key (T2) is configured and no commit-hook group is installed, a declined `hooks` (or
+LLM signing is on and no commit-hook group is installed, a declined `hooks` (or
 `repo_hooks` on git older than 2.54) is offered again in the same question, with a line saying why.
 `--only hooks` asks about a declined group on purpose. The optional `alias` group only comes with
 `--only alias`. A run ends with `✓ guards installed  g2 · hooks · ...`; `-v` shows the explanation
@@ -212,7 +212,7 @@ carter identity add --login LOGIN [--ssh-public-key PATH|key::...] [--private-ke
 
 Sets up the LLM identity from a GitHub account **you** created and a signing key **you** registered:
 Carter never creates an account, never registers a key and never reads a private key. With only
-`--login` you get tier T1 (a `Co-authored-by` trailer, unsigned); with `--ssh-public-key` you get T2
+`--login` you get an LLM identity, unsigned (a `Co-authored-by` trailer); with `--ssh-public-key` you get LLM signing on
 (signed commits). Give it the key's `.pub` file **or** the private key: the other path is the same
 name with `.pub` added or removed (`--private-key` is only for a key stored elsewhere, and a
 `key::` literal needs it, or `--agent-socket` / `--signing-program`). A key without a passphrase is
@@ -229,7 +229,7 @@ refused without echoing a byte of it. Any failed check writes **nothing**
 (`E-IDENTITY-CHECK` with the actual cause, or `E-GITHUB-UNREACHABLE` for a network, rate-limit or
 server problem).
 
-It asks nothing. On success it prints `✓ <login> · T2 · SHA256:2hx1K1j22SYE…` (plus `· author`
+It asks nothing. On success it prints `✓ <login> · LLM signing on · SHA256:2hx1K1j22SYE…` (plus `· author`
 or `· no passphrase`, and `→ next: carter identity unlock` only when the key has a passphrase) and
 writes `config.toml` (the previous file is kept in
 `~/.carter/backups/`), the signing shim `~/.carter/bin/carter-ssh-sign`, `allowed_signers`, and the
@@ -237,8 +237,8 @@ hook tier in `~/.carter/gitconfig`; every file is recorded with its hash and a f
 all back. Running `add` again with another key is a **rotation**: the old public key moves to
 `previous_public_keys`, so old commits still verify. It never writes your global git config.
 `--role` writes `[identity] role` in `config.toml` (your preference; a pinned workspace role or
-`CARTER_IDENTITY_ROLE` still wins). `--role author` needs T2: without a key (given now or already
-configured) it is `E-ROLE-B-TIER` and nothing is written. On an existing T2 identity,
+`CARTER_IDENTITY_ROLE` still wins). `--role author` needs LLM signing on: without a key (given now or already
+configured) it is `E-ROLE-B-TIER` and nothing is written. With LLM signing already on,
 `add --login <name> --role author` changes only the role. With role `author` it also reports
 whether your git identity is usable and whether GitHub knows your address (asked of GitHub and `gh`
 only in your own terminal; a dry run caches nothing).
@@ -246,11 +246,11 @@ only in your own terminal; a dry run caches nothing).
 | Option | Meaning |
 |--------|---------|
 | `--login LOGIN` | The LLM's GitHub login (a User account). Required. |
-| `--ssh-public-key PATH\|key::...` | Its signing key: the `.pub` file or the private key (the other is derived), or a `key::` literal (T2). |
+| `--ssh-public-key PATH\|key::...` | Its signing key: the `.pub` file or the private key (the other is derived), or a `key::` literal (LLM signing on). |
 | `--private-key PATH` | The private key, if it is not next to the `.pub`; stored, never read. |
 | `--agent-socket PATH` | A password manager's agent socket, instead of Carter's agent. |
 | `--signing-program PATH` | A signing program such as `op-ssh-sign`, kept behind the shim. |
-| `--role co-author\|author` | `co-author` (default): you author, the LLM commits. `author`: the LLM authors and you are credited by a trailer (T2 only; not for DCO repositories). |
+| `--role co-author\|author` | `co-author` (default): you author, the LLM commits. `author`: the LLM authors and you are credited by a trailer (only with LLM signing on; not for DCO repositories). |
 | `--dry-run` | Run every check, show the plan, write nothing. Works anywhere, an agent shell too. |
 | `-v`, `--verbose` | Show the files and notes of the plan. |
 
@@ -263,7 +263,7 @@ carter identity show [-v]
 ```
 
 Read-only and allowed anywhere. Prints the identity, the role and where it came from, the
-configured and effective tier with the workspace cap, the commit shape that follows, and, at T2, the
+configured and effective tier with the workspace cap, the commit shape that follows, and, with LLM signing on, the
 key's fingerprint, the agent state (`ok`, locked, `wrong-key`, stale), whether the signing helper is Carter's
 and names the configured socket, whether the hook tier the guard reads agrees with `config.toml`,
 and the guard and policy coverage for the current directory. It prints names, ids and fingerprints,
@@ -373,13 +373,13 @@ environment, which does the same). It has no options of its own: every argument 
 `git commit` as typed (`-m`, `--`, quotes, empty strings), and `git ai-commit` is the same command
 as an alias. The exit code is git's.
 
-- **T2, key loaded:** you stay the author (your git identity), the committer and signer are the LLM
+- **LLM signing on, key loaded:** you stay the author (your git identity), the committer and signer are the LLM
   (`%G?` is `G`, `git verify-commit` is good), and `Co-authored-by: <login> <noreply address>` is
   added once. `--amend` keeps the author and date and signs again as the LLM.
-- **T2, key locked:** at your terminal nothing is asked. It prints `✗ key locked → carter identity unlock`
+- **LLM signing on, key locked:** at your terminal nothing is asked. It prints `✗ key locked → carter identity unlock`
   and the commit is made **unsigned** with the trailer; `E-SIGN-HUMAN-FALLBACK` says it shows Unverified. In an agent shell it is refused (`E-SIGN-AGENT-REFUSE`) and your changes stay
   staged.
-- **T1:** unsigned, you as author and committer, with the trailer (`E-COMMIT-T1`). **T0:**
+- **LLM identity, unsigned:** unsigned, you as author and committer, with the trailer (`E-COMMIT-NO-KEY`). **No LLM identity:**
   unsigned, with `Assisted-by: Carter`. A workspace `max_tier` lowers the tier for commits made
   there. An unmet `require_tier` is `E-TIER-REQUIRED`; a broken `config.toml` is `E-CONFIG`. **The
   role is ignored here**: you are always the author, a role `author` configuration changes nothing
@@ -550,7 +550,7 @@ its fix) and one summary line (`✓ host  2 warnings`); `-v` prints every row as
 - the git include line is present (or, for a dotfile-managed config, the line to add), and
   git lists the `pre-push` hook as `global`; on git older than 2.54 each repo in scope
   (current directory, workspaces) is `guarded` or `unguarded: <reason>`, a WARN that is a
-  FAIL while T2 is configured;
+  FAIL while LLM signing is on;
 - the plugin directory and `isolation.json` match their recorded hashes and each other (the
   hash baked into the plugin); each OpenCode server's plugin state from
   `~/.carter/run/plugin-status/<pid>.json` (working, waiting for the first agent command, or its own check failed), a server on
@@ -574,18 +574,18 @@ its fix) and one summary line (`✓ host  2 warnings`); `-v` prints every row as
 - declined groups, active `allow_project_opencode_edit` opt-outs, project config that can run
   code, and `carter.yaml` policy that `carter update` has not pinned yet;
 - **the LLM identity** (when one is configured): the hook tier in `~/.carter/gitconfig`
-  against `config.toml` (`RED` when they sit on opposite sides of T2, because agent commits then
+  against `config.toml` (`RED` when they sit on opposite sides of LLM signing on and off, because agent commits then
   fail; `WARN` otherwise, with "run `carter update`"), each workspace cap (`RED` when missing or
   malformed: a malformed one makes git fail inside that workspace), linked worktrees where the
-  cap does not follow the path (`WARN`, by path), and at T2 the signing helper (unchanged, and the
+  cap does not follow the path (`WARN`, by path), and, with LLM signing on, the signing helper (unchanged, and the
   socket it names), the agent state (a locked key is `INFO`: "agent commits will fail until you
   unlock"; the wrong key or a stale socket is `WARN`), `allowed_signers`, whether the key is
   absent from `https://github.com/<login>.keys` (`RED` if it is an authentication key; `INFO`
   "not checked" offline; no token is sent) and listed as a signing key (`WARN` if not), the four
-  hook events, an older git on the machine, and git 2.40 or newer (`E-GIT-OLD`). T2 with no commit
+  hook events, an older git on the machine, and git 2.40 or newer (`E-GIT-OLD`). LLM signing on with no commit
   hooks installed is `RED`, and the fix names the group (`carter guard install --only hooks` when
   you declined it);
-- **role `author`**: below T2 or under a cap it is `RED` (`E-ROLE-B-TIER`); at T2 your git identity in the
+- **role `author`**: without LLM signing or under a cap it is `RED` (`E-ROLE-B-TIER`); with it on, your git identity in the
   current directory (`RED` with `E-HUMAN-IDENTITY` and a short reason if unusable), whether GitHub
   knows your address (`WARN` if not; the lookup runs in your own terminal and is cached for 7
   days, in an agent shell only the cache is read), a DCO file in the repository (`WARN`), a
@@ -659,9 +659,9 @@ The values are resolved when you run it, from `~/.carter/config.toml` and the en
 |-----|---------|
 | `tier` | `t0` (nothing configured), `t1` (LLM account, no key) or `t2` (account and key) |
 | `role`, `role_source` | `co-author` or `author`, and where it came from (`workspace`, `env`, `config`, `default`) |
-| `author`, `committer` | `human` or `llm`: who git records. The author is `llm` only in role `author` at T2 |
-| `signer_fpr` | The LLM key's public fingerprint at T2, else empty |
-| `coauthor_trailer` | The trailer line for commit messages: `Assisted-by: Carter` at T0, `Co-authored-by: <login> <noreply address>` above; in role `author` it is **your** line, `Co-authored-by: <user.name> <user.email>` |
+| `author`, `committer` | `human` or `llm`: who git records. The author is `llm` only in role `author` with LLM signing on |
+| `signer_fpr` | The LLM key's public fingerprint when LLM signing is on, else empty |
+| `coauthor_trailer` | The trailer line for commit messages: `Assisted-by: Carter` with no LLM identity, `Co-authored-by: <login> <noreply address>` otherwise; in role `author` it is **your** line, `Co-authored-by: <user.name> <user.email>` |
 | `coauthor_linked` | Whether GitHub credits that trailer (from the cache; role `author` needs your address linked) |
 | `mode` | `interactive`, or `review` in a CI review run ([Review-only CI](../guides/ci-review.md)) |
 | `commits` | `allowed` or `refused` |

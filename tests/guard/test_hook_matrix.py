@@ -286,7 +286,10 @@ class TestRejectsOnEveryHookedPath:
         lab.extra_env = with_config(lab.extra_env, commit__gpgsign="true")
         got = lab.run(name, "default")
         assert got is not None
-        assert any(rc != 0 for rc in got["rc"]) and "Signing attempted below T2" in got["stderr"], (
+        assert (
+            any(rc != 0 for rc in got["rc"])
+            and "Signing attempted where LLM signing is off" in got["stderr"]
+        ), (
             name,
             got["stderr"],
         )

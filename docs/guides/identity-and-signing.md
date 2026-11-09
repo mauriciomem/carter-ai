@@ -32,23 +32,23 @@ GitHub can show as signed by the agent's own account.
 | `co-author` (default) | you | the LLM account, with its key | `Co-authored-by: <LLM login> <noreply address>` |
 | `author` | the LLM account | the LLM account | `Co-authored-by: <you>` ([see below](#role-author-the-llm-is-the-author)) |
 
-## Tiers
+## What you set up
 
-What you configured decides what an agent commit looks like.
+What you configured decides what an agent commit looks like. There are three setups:
 
-| Tier | What you configured | Agent commit | What GitHub shows |
-|------|---------------------|--------------|-------------------|
-| **T0** | nothing | you as author and committer, unsigned, `Assisted-by: Carter` | your commit; no badge |
-| **T1** | the LLM account only (`carter identity add --login <name>`) | you as author and committer, unsigned, `Co-authored-by: <LLM login> <noreply address>` | your commit, with the LLM as co-author |
-| **T2** | the account **and** its signing key | you as author, the LLM as committer, **signed** by the LLM key, `Co-authored-by: <LLM login> <noreply address>` | "you and the LLM"; Verified (see [the table](#the-vigilant-mode-table)) |
+| Setup | What you configured | Agent commit | What GitHub shows |
+|-------|---------------------|--------------|-------------------|
+| **No LLM identity** | nothing | you as author and committer, unsigned, `Assisted-by: Carter` | your commit; no badge |
+| **LLM identity, unsigned** | the LLM account only (`carter identity add --login <name>`) | you as author and committer, unsigned, `Co-authored-by: <LLM login> <noreply address>` | your commit, with the LLM as co-author |
+| **LLM signing on** | the account **and** its signing key | you as author, the LLM as committer, **signed** by the LLM key, `Co-authored-by: <LLM login> <noreply address>` | "you and the LLM"; Verified (see [the table](#the-vigilant-mode-table)) |
 
 Two rules protect you from surprises:
 
-- Below T2 an agent can **never** sign: a bare `-S`, `--gpg-sign` or `git tag -s` fails instead of
+- Without LLM signing an agent can **never** sign: a bare `-S`, `--gpg-sign` or `git tag -s` fails instead of
   reaching your own key.
-- At T2 an agent commit is signed by the LLM or **fails**. It is never silently made unsigned.
+- With LLM signing on an agent commit is signed by the LLM or **fails**. It is never silently made unsigned.
 
-`carter ops config --emit` prints the tier, the role and the other facts the agents read.
+`carter ops config --emit` prints the setup (`tier`), the role and the other facts the agents read.
 
 ## Before you start
 
@@ -92,7 +92,7 @@ It asks GitHub (no token, only public data) and checks that:
 
 If a check fails, **nothing is written** (`E-IDENTITY-CHECK` names the actual cause, or
 `E-GITHUB-UNREACHABLE` if GitHub could not be reached). When everything passes, drop `--dry-run`. It
-prints one line, `✓ my-llm-account · T2 · SHA256:2hx1K1j22SYE…` (with `→ next: carter identity unlock`
+prints one line, `✓ my-llm-account · LLM signing on · SHA256:2hx1K1j22SYE…` (with `→ next: carter identity unlock`
 only if the key has a passphrase), and writes:
 
 | What | Where |
@@ -103,7 +103,7 @@ only if the key has a passphrase), and writes:
 | the "hook tier" the git hooks read | `~/.carter/gitconfig` |
 
 Everything is recorded with a checksum so that Carter later removes only what is still unchanged. If
-something fails half-way, every file is put back. With only `--login` you get **T1**. Running `add`
+something fails half-way, every file is put back. With only `--login` you get **LLM identity, unsigned**. Running `add`
 again with a different key is a **rotation**: the old public key is remembered so old commits still
 verify.
 
@@ -174,7 +174,7 @@ committer:  the same, signed with the LLM key
 trailer:    Co-authored-by: <your user.name> <your user.email>
 ```
 
-**Turn it on.** It needs T2. Either:
+**Turn it on.** It needs LLM signing on. Either:
 
 - `carter identity add --login <name> --role author` (a role-only change when the identity already
   exists; `--role co-author` turns it back), or
@@ -191,7 +191,7 @@ cannot change the role: it cannot set variables, and the pinned file is not writ
 
 | Situation | What happens |
 |-----------|--------------|
-| Below T2, or a workspace cap (`max_tier`) | Agent commits are refused (`E-ROLE-B-TIER`). `carter update` also refuses to pin `author` next to a cap |
+| LLM signing is off, or a workspace cap (`max_tier`) lowers it | Agent commits are refused (`E-ROLE-B-TIER`). `carter update` also refuses to pin `author` next to a cap |
 | The key is locked | The commit fails and your changes stay staged |
 | Your `user.name` or `user.email` is empty, is the LLM's, or is one of Carter's own fallbacks | Refused (`E-HUMAN-IDENTITY`): there is nobody to credit |
 | The plugin didn't load, the shim changed, the config is broken | The commit fails (`E-SIGN-UNAVAILABLE`, `E-GUARD-NOIDENT`) |
@@ -234,8 +234,8 @@ them. The columns are the settings of the two accounts.
 
 | The commit | Neither account on | LLM account on | Your account on |
 |------------|--------------------|----------------|-----------------|
-| Agent commit signed by the LLM (T2) | Verified | Verified | **Partially verified** |
-| Unsigned commit crediting the LLM (T1, or `carter commit` after you said no to unlock) | no badge | **Unverified** | **Unverified** |
+| Agent commit signed by the LLM (LLM signing on) | Verified | Verified | **Partially verified** |
+| Unsigned commit crediting the LLM (LLM identity, unsigned, or `carter commit` after you said no to unlock) | no badge | **Unverified** | **Unverified** |
 | Role `author`, signed by the LLM | Verified | Verified | Verified, or Partially verified if GitHub counts co-authors |
 | The same commit after **you** amend and sign it with your key | Verified | Partially verified | Verified |
 | The same commit after **you** amend it without signing | no badge | Unverified | Unverified |
@@ -306,7 +306,7 @@ With the `hooks` group, three git hooks check agent commits in every repository 
 own commits and pushes run nothing extra):
 
 - `prepare-commit-msg` rejects a wrong committer, a missing identity block, a wrong signing setup, or a
-  signing attempt below T2, and adds the `Co-authored-by` or `Assisted-by` line exactly once.
+  signing attempt where LLM signing is off, and adds the `Co-authored-by` or `Assisted-by` line exactly once.
   `--no-verify` doesn't skip it.
 - `commit-msg` checks that the trailer is still there.
 - `post-commit` only **warns** when the commit is unsigned or signed by the wrong key. It never undoes

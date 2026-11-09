@@ -390,7 +390,7 @@ GUARD_CODE_WHERE_2B = {
     "E-GUARD-NOIDENT": "prepare-commit-msg",
     "E-GUARD-COMMITTER": "prepare-commit-msg",
     "E-GUARD-SIGNCFG": "prepare-commit-msg",
-    "E-GUARD-T01SIGN": "prepare-commit-msg",
+    "E-GUARD-NOSIGN": "prepare-commit-msg",
     "E-GUARD-TRAILER": "commit-msg",
     "E-GUARD-UNSIGNED": "post-commit",
 }

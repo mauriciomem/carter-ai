@@ -210,7 +210,7 @@ def commit_unsigned(env: Mapping[str, str], runner: Runner, home: Path | None = 
 def _signing_block(env: Mapping[str, str], value: Callable[[str], str]) -> Result:
     name = "commit_unsigned"
     if value("commit.gpgsign") != "true" or value("gpg.format") != "ssh":
-        return Result("FAIL", name, "T2 is configured but this shell has no signing block")
+        return Result("FAIL", name, "LLM signing is on but this shell has no signing block")
     if not value("user.signingkey").startswith("key::") or not env.get("CARTER_IDENTITY"):
         return Result("FAIL", name, "the signing block is incomplete")
     if os.path.basename(value("gpg.ssh.program")) != "carter-ssh-sign":
@@ -218,7 +218,7 @@ def _signing_block(env: Mapping[str, str], value: Callable[[str], str]) -> Resul
     bad = [k for k in GPG_PROGRAMS[:3] if not _root_owned_false(value(k))]
     if bad:
         return Result("FAIL", name, f"{', '.join(bad)} is not the root-owned false")
-    return Result("PASS", name, "signing block present (T2)")
+    return Result("PASS", name, "signing block present (LLM signing on)")
 
 
 def agent_tagged(env: Mapping[str, str]) -> Result:

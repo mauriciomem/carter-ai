@@ -218,7 +218,7 @@ class TestT1Warning:
         r = resolve(cfg(identity=identity), workspace=WS, env={})
         assert (r.tier, r.commits) == ("t0", "allowed")
         assert len(r.warnings) == 1
-        assert "T0" in r.warnings[0]
+        assert "no LLM identity" in r.warnings[0]
         assert "carter-bot" not in r.warnings[0] and LOGIN not in r.warnings[0]
 
     @pytest.mark.parametrize(

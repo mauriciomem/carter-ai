@@ -100,13 +100,13 @@ def test_ascii_fallback_when_the_stream_cannot_show_the_glyphs(
 
 
 def test_kv_is_aligned_and_skips_empty_values(capsys: pytest.CaptureFixture[str]) -> None:
-    ui.kv([("login", "mauri"), ("tier", "T2"), ("note", "")])
-    assert capsys.readouterr().out.splitlines() == ["  login  mauri", "  tier   T2"]
+    ui.kv([("login", "mauri"), ("tier", "LLM signing on"), ("note", "")])
+    assert capsys.readouterr().out.splitlines() == ["  login  mauri", "  tier   LLM signing on"]
 
 
 def test_summary_joins_with_middle_dots(capsys: pytest.CaptureFixture[str]) -> None:
-    ui.summary("mauri-droid", "T2", "SHA256:2hx1…")
-    assert capsys.readouterr().out == "✓ mauri-droid · T2 · SHA256:2hx1…\n"
+    ui.summary("mauri-droid", "LLM signing on", "SHA256:2hx1…")
+    assert capsys.readouterr().out == "✓ mauri-droid · LLM signing on · SHA256:2hx1…\n"
 
 
 def test_detail_only_with_verbose(capsys: pytest.CaptureFixture[str]) -> None:

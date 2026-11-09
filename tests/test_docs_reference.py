@@ -86,7 +86,7 @@ class TestCliReference:
     def test_carter_commit_asks_nothing_when_the_key_is_locked(self) -> None:
         block = " ".join(section(text("reference/cli.md"), "carter commit").split())
         assert "✗ key locked → carter identity unlock" in block
-        assert "asked" not in block.split("key locked")[0].split("T2, key locked")[-1]
+        assert "asked" not in block.split("key locked")[0].split("LLM signing on, key locked")[-1]
 
     def test_ops_help_does_not_talk_about_bots(self) -> None:
         assert "bot" not in (carter_ops.__doc__ or "")
@@ -213,7 +213,7 @@ class TestTroubleshooting:
             "E-SIGN-LOCKED", "E-SIGN-NOAGENT", "E-SIGN-UNAVAILABLE", "E-SHIM-REFUSED",
             "E-SIGN-HUMAN-FALLBACK", "E-UNLOCK-OPENCODE", "E-UNLOCK-TTY", "E-UNLOCK-PATH",
             "E-UNLOCK-BADPASS", "E-GUARD-NOIDENT", "E-GUARD-COMMITTER", "E-GUARD-SIGNCFG",
-            "E-GUARD-TRAILER", "E-GUARD-T01SIGN", "E-GUARD-UNSIGNED", "E-TIER-CAPPED",
+            "E-GUARD-TRAILER", "E-GUARD-NOSIGN", "E-GUARD-UNSIGNED", "E-TIER-CAPPED",
             "E-TIER-REQUIRED", "E-IDENTITY-CHECK", "E-GITHUB-UNREACHABLE", "E-SSH-OLD",
         ],
     )  # fmt: skip

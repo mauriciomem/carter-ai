@@ -134,8 +134,8 @@ spelling) does the real work. The command gate is a speed bump in front of it, n
 - **The read-only token is visible to the model.** It is in the environment of the agent's shell
   (`GH_TOKEN`), so it is only as safe as a fine-grained token without **Contents** write is: give it
   the fewest repositories you can.
-- **Agent commits are unsigned below T2.** Author and committer are you, and the trailer credits
-  Carter. At T2 the LLM identity signs; if it cannot, the commit fails and stays staged. Set
+- **Agent commits are unsigned unless LLM signing is on.** Author and committer are you, and the trailer credits
+  Carter. With LLM signing on the LLM identity signs; if it cannot, the commit fails and stays staged. Set
   `max_tier = "t1"` in a workspace's table of `~/.carter/config.toml` to allow unsigned agent
   commits there. A squash merge drops the signature from `main`. The limits of signing itself are in
   [Identity and signing](identity-and-signing.md#what-signing-does-not-protect).

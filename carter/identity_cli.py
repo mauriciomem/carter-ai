@@ -27,6 +27,7 @@ from carter.identity import agent
 from carter.identity.agent_setup import Setup
 from carter.identity.errors import E_UNLOCK_OPENCODE, E_UNLOCK_TTY, IdentityError
 from carter.identity.rules import is_agent, load_rules
+from carter.identity.schema import tier_words
 from carter.terminal import stdin_is_tty
 
 OPENCODE_TERMINAL = "OPENCODE_TERMINAL"
@@ -200,7 +201,7 @@ def add_cmd(
             )
         except ValueError as exc:
             raise click.BadParameter(str(exc), param_hint="--login") from exc
-        tier = "T2" if plan.fingerprint else "T1"
+        tier = tier_words("t2" if plan.fingerprint else "t1")
         parts = [plan.login, tier]
         if plan.fingerprint:
             parts.append(plan.fingerprint[:19] + "…")

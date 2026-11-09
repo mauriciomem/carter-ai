@@ -5,10 +5,12 @@ from __future__ import annotations
 import contextlib
 import os
 import subprocess
+from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
 
 from carter.config import write_config
+from carter.identity.rules import load_rules
 from carter.identity.scrub import scrub_git_env
 from carter.identity.trailer import ASSISTED_BY_CARTER
 from carter.ops.config import Config
@@ -133,6 +135,21 @@ class StateError(Exception):
     """
 
 
+def state_env(env: Mapping[str, str]) -> dict[str, str]:
+    """The environment of Carter's own state commit: scrubbed, and no longer an agent shell.
+
+    The commit guards judge a commit by the agent tag in its environment. A state commit has no
+    identity block (the scrub removes it: the commit is the human's and unsigned), so with the tag
+    still set the guard would reject it as an agent commit that lacks the block. Dropping the tag
+    for this one child process is enough: the call is made by Carter's code, never by the agent,
+    and it can only commit in the state repo; every other git command keeps its environment.
+    """
+    clean = scrub_git_env(env)
+    for name in load_rules().agent_signals:
+        clean.pop(name, None)
+    return clean
+
+
 def _run_git(args: list[str], cwd: Path) -> subprocess.CompletedProcess[str]:
     """Run a git command in ``cwd``, capturing output and never raising.
 
@@ -143,7 +160,7 @@ def _run_git(args: list[str], cwd: Path) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
         ["git", "-c", "commit.gpgsign=false", *args],
         cwd=cwd,
-        env=scrub_git_env(os.environ),
+        env=state_env(os.environ),
         capture_output=True,
         text=True,
         check=False,

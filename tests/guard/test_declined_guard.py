@@ -1,6 +1,6 @@
 """A declined commit-hook group is never silently lost, and `check --host` names the real fix.
 
-With the LLM signing key (T2) configured, the commit hooks are the guard that keeps agent commits
+With LLM signing on, the commit hooks are the guard that keeps agent commits
 honest. A user who declined them once is asked again in the one install question, with one line
 that says why; `--only hooks` asks again too; and a user who still says no keeps the decision.
 """
@@ -84,7 +84,7 @@ class TestTheInstallQuestion:
         head = res.output.split("Install?")[0]
         assert "hooks" in head
         why = [ln for ln in head.splitlines() if "declined" in ln]
-        assert len(why) == 1 and "T2" in why[0]
+        assert len(why) == 1 and "signed agent commits" in why[0]
         assert load(guard_state_path(None)).consents["hooks"]["decision"] == "accepted"
 
     def test_without_t2_a_declined_group_is_left_alone(self, stack, human_tty) -> None:

@@ -256,7 +256,7 @@ class TestCommitProbeIsTierAware:
         self, home: Path, empty_gh: Path
     ) -> None:
         got = probe.commit_unsigned(self.t2_env(home), subprocess.run, home)
-        assert got.status == "PASS" and "signing block present (T2)" in got.reason
+        assert got.status == "PASS" and "signing block present (LLM signing on)" in got.reason
 
     def test_a_t2_shell_without_the_block_fails(self, home: Path, empty_gh: Path) -> None:
         got = probe.commit_unsigned(self.t2_env(home, with_block=False), subprocess.run, home)

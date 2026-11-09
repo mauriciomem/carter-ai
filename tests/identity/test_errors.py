@@ -12,7 +12,7 @@ import pytest
 from carter.identity import ConfigError, IdentityError
 from carter.identity import errors as errors_mod
 from carter.identity.errors import (
-    E_COMMIT_T1,
+    E_COMMIT_NO_KEY,
     E_CONFIG,
     E_ROLE_B_TIER,
     E_TIER_REQUIRED,
@@ -50,11 +50,11 @@ class TestRegistry:
         )
         assert (
             r[E_TIER_REQUIRED].message
-            == "This workspace requires tier `<t>`; configure the LLM identity."
+            == "This workspace requires `require_tier = <t>`; configure the LLM identity."
         )
         assert (
-            r[E_COMMIT_T1].message
-            == "No LLM signing key (T1): committed unsigned with `Co-authored-by: LLM`."
+            r[E_COMMIT_NO_KEY].message
+            == "No LLM signing key: committed unsigned with `Co-authored-by: LLM`."
         )
 
 
@@ -156,7 +156,7 @@ class TestRenderErrorTable:
         agent_2b = {
             "E-SIGN-LOCKED", "E-SIGN-NOAGENT", "E-SIGN-UNAVAILABLE", "E-SIGN-AGENT-REFUSE",
             "E-SHIM-REFUSED", "E-GUARD-NOIDENT", "E-GUARD-COMMITTER", "E-GUARD-SIGNCFG",
-            "E-GUARD-TRAILER", "E-GUARD-T01SIGN", "E-GUARD-UNSIGNED", "E-TIER-CAPPED",
+            "E-GUARD-TRAILER", "E-GUARD-NOSIGN", "E-GUARD-UNSIGNED", "E-TIER-CAPPED",
             "E-TIER-REQUIRED", "E-ROLE-B-TIER",
         }  # fmt: skip
         assert agent_2b <= codes and "E-HUMAN-IDENTITY" in codes

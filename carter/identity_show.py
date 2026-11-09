@@ -29,12 +29,15 @@ from carter.identity.env import workspace_for
 from carter.identity.errors import E_CONFIG, IdentityError
 from carter.identity.payload import shim_path, shim_state
 from carter.identity.resolve import Resolution, resolve
-from carter.identity.schema import IdentityConfig
+from carter.identity.schema import IdentityConfig, tier_words
 from carter.install.paths import carter_gitconfig_path, guard_state_path
 
 ROLE_TEXT = {
     "co-author": "co-author: the human is the author, the LLM is credited with a trailer",
-    "author": "author: the LLM is author and committer, you are credited by a trailer (T2 only)",
+    "author": (
+        "author: the LLM is author and committer, you are credited by a trailer "
+        "(only with LLM signing on)"
+    ),
 }
 SHAPES = {
     ("co-author", "t0"): "author and committer are you; trailer `Assisted-by: Carter`; unsigned",
@@ -154,17 +157,14 @@ def mirror_items(cfg: IdentityConfig, home: Path, workspace: str | None, cwd: Pa
     seen = done.stdout.strip() if done.returncode == 0 else None
     state = mirror.mirror_state(cfg, {"tier": seen}, workspace)
     if state == "in-sync":
-        return [
-            Item(
-                "ok", "hook tier", f"the commit hooks use {seen or 't0'} here, as config.toml says"
-            )
-        ]
+        text = f"the commit hooks expect: {tier_words(seen or 't0')}, as config.toml says"
+        return [Item("ok", "hook tier", text)]
     why = "above" if state == "stale-added" else "below"
     return [
         Item(
             "warn",
             "hook tier",
-            f"the commit hooks use {seen or 't0'}, {why} config.toml",
+            f"the commit hooks expect: {tier_words(seen or 't0')}, {why} config.toml",
             "Run `carter update`.",
         )
     ]
@@ -217,12 +217,15 @@ def show_items(
     items = [
         Item("info", "identity", f"{ident.login} (id {ident.id}, {ident.email})")
         if ident.login
-        else Item("info", "identity", "none configured: tier t0", "Run `carter identity add`."),
+        else Item(
+            "info", "identity", "none configured: no LLM identity", "Run `carter identity add`."
+        ),
         Item("info", "role", f"{ROLE_TEXT[res.role]} (source: {res.role_source})"),
         Item(
             "info",
             "tier",
-            f"configured {res.configured_tier}, cap {res.cap or 'none'}, effective {res.tier}",
+            f"configured: {tier_words(res.configured_tier)}; "
+            f"cap: {tier_words(res.cap) if res.cap else 'none'}; effective: {tier_words(res.tier)}",
         ),
         Item(
             "info",

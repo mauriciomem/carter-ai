@@ -22,7 +22,7 @@ from carter.identity.agent_setup import setup_from_config
 from carter.identity.errors import E_GIT_OLD, E_ROLE_B_TIER, registry
 from carter.identity.payload import public_blob, shim_path, shim_state
 from carter.identity.resolve import Resolution, configured_tier, effective_tier, resolve
-from carter.identity.schema import IdentityConfig
+from carter.identity.schema import IdentityConfig, tier_words
 from carter.identity_show import PROBE_TEXT, expected_socket, probe_setup, shim_socket
 from carter.install.paths import carter_gitconfig_path
 
@@ -76,7 +76,7 @@ def mirror_items(
 ) -> list[Item]:
     path = carter_gitconfig_path(base_dir)
     if not path.exists():
-        text = "~/.carter/gitconfig is missing: the commit hooks assume tier t0"
+        text = "~/.carter/gitconfig is missing: the commit hooks assume no LLM identity"
         return [Item("red", "hook tier", text, UPDATE)]
     out = [
         Item("red", "hook tier", f"{key} differs from config.toml", UPDATE)
@@ -87,11 +87,13 @@ def mirror_items(
     ws = cfg.workspaces.get(workspace) if workspace else None
     want_tier = effective_tier(configured_tier(cfg), ws.max_tier if ws else "")
     if mirror.mirror_state(cfg, {"tier": seen}, workspace) == "in-sync":
-        out.append(
-            Item("ok", "hook tier", f"the commit hooks use tier {seen} here, as config.toml says")
-        )
+        text = f"the commit hooks expect: {tier_words(seen)}, as config.toml says"
+        out.append(Item("ok", "hook tier", text))
         return out
-    text = f"the commit hooks use tier {seen} but config.toml allows {want_tier}"
+    text = (
+        f"the commit hooks expect: {tier_words(seen)}, but config.toml allows: "
+        f"{tier_words(want_tier)}"
+    )
     if _crosses_t2(seen, want_tier):
         out.append(Item("red", "hook tier", text + ": agent commits fail", UPDATE))
     else:
@@ -207,7 +209,7 @@ def guard_items(state: GuardState, git: tuple[int, int] | None) -> list[Item]:
     if not set(consent.COMMIT_GUARDS) & set(consent.accepted_groups(state)):
         group = "repo_hooks" if git is not None and git < repohooks.MIN_CONFIG_HOOKS else "hooks"
         record = state.consents.get(group, {})
-        text = "the LLM signing key (T2) is set up but the commit hooks are not installed"
+        text = "signed agent commits are on but the commit hooks are not installed"
         fix = "Run `carter guard install` in your terminal."
         if record.get("decision") == "declined":
             when = record.get("date", "")
@@ -247,12 +249,17 @@ def role_items(
     if res.role != "author":
         return out
     if res.tier != "t2":
-        why = "a workspace cap" if res.cap else f"the configured tier is {res.configured_tier}"
+        why = (
+            "a workspace cap lowers it"
+            if res.cap
+            else f"this setup is: {tier_words(res.configured_tier)}"
+        )
         out.append(
             Item(
                 "red",
                 "role",
-                f"role author needs T2 and {why}: agent commits are refused ({E_ROLE_B_TIER}), "
+                f"role author needs LLM signing on, but {why}: agent commits are refused "
+                f"({E_ROLE_B_TIER}), "
                 "never made as role co-author",
                 "Remove the cap or add the signing key (`carter identity add`), or choose "
                 "`--role co-author`.",

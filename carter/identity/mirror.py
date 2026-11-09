@@ -77,7 +77,7 @@ def check_caps(cfg: IdentityConfig) -> None:
     if role_b:
         raise MirrorError(
             f"{E_ROLE_B_TIER}: role `author` is pinned together with a max_tier cap, and it "
-            "needs T2 (no downgrade): " + ", ".join(role_b)
+            "needs LLM signing on (no downgrade): " + ", ".join(role_b)
         )
     bad = [
         key

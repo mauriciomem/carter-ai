@@ -312,8 +312,8 @@ class TestT2Rejects:
         t1 = IdentityConfig(identity=Identity(login=LOGIN, id=UID, email=EMAIL), state="current")
         state = load_or_empty_readonly(guard_state_path(None)).state
         mirror_io.sync(None, state, t1)
-        err = self.reject(world, sh, env, "E-GUARD-T01SIGN")
-        assert registry()["E-GUARD-T01SIGN"].message in err and "carter update" in err
+        err = self.reject(world, sh, env, "E-GUARD-NOSIGN")
+        assert registry()["E-GUARD-NOSIGN"].message in err and "carter update" in err
 
     def test_a_committer_override_is_rejected_with_both_emails(
         self, world: World, sh: list[str]
@@ -362,7 +362,7 @@ class TestT2Rejects:
         )
         state = load_or_empty_readonly(guard_state_path(None)).state
         mirror_io.sync(None, state, capped)
-        err = self.reject(world, sh, env, "E-GUARD-T01SIGN")
+        err = self.reject(world, sh, env, "E-GUARD-NOSIGN")
         assert "carter update" in err
 
 
@@ -375,7 +375,7 @@ class TestT0T1:
         done = world.run_hook(
             sh, "prepare-commit-msg", "m\n", with_config(world.env(), commit__gpgsign="true")
         )
-        assert done.returncode == 1 and registry()["E-GUARD-T01SIGN"].message in done.stderr
+        assert done.returncode == 1 and registry()["E-GUARD-NOSIGN"].message in done.stderr
 
     def test_the_trailer_is_assisted_by_at_t0_and_co_authored_by_at_t1(
         self, world: World, sh: list[str]

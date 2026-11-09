@@ -188,8 +188,9 @@ _OPENCODE_COMMUNICATION = (
 _ATTRIBUTION_RULE = (
     "- Commits: the user is the author (their own git config) unless `carter ops config --emit`"
     " says `author` is `llm` (role author); the committer is the user, or"
-    " the LLM at T2. Never pass `--author`, `--no-verify`, `-s` or `-S`, never set `GIT_AUTHOR_*`"
-    " or `GIT_COMMITTER_*`, and never add `Signed-off-by` unless the user asks. Credit comes only"
+    " the LLM when signing is on. Never pass `--author`, `--no-verify`, `-s` or `-S`, never set"
+    " `GIT_AUTHOR_*` or `GIT_COMMITTER_*`, and never add `Signed-off-by` unless the user asks."
+    " Credit comes only"
     " from the `coauthor_trailer` it prints; if `commits` is `refused`, stop and report.\n"
     "- Pushing is human-only: tell the user: "
     + OWN_TERMINAL

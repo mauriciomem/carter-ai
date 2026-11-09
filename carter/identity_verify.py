@@ -173,7 +173,7 @@ def verify_local(
             Item(
                 "red",
                 "verify",
-                "no signing key is configured (tier below T2)",
+                "no signing key is configured (LLM signing is off)",
                 "Run `carter identity add --login ... --ssh-public-key ...`.",
             )
         ]
