@@ -3,12 +3,15 @@
 # kept as you left it, and reported by `carter guard status`.
 # carter-guard @@VERSION@@: git hook backstop for agent shells.
 # POSIX sh only. The human path runs no external command and makes no git call.
-# Events: pre-push (blocks an agent push) and, since revision 2 of the `hooks` group,
-# prepare-commit-msg (every reject check, then the idempotent trailer), commit-msg (the trailer is
-# still there) and post-commit (warn only). The script never calls `carter` or Python.
+# Events: pre-push (blocks an agent push), prepare-commit-msg (every reject check, then the
+# idempotent trailer), commit-msg (the trailer is still there) and post-commit (warn only). The
+# script never calls `carter` or Python.
 # Roles: the script never reads the role. The committer is always the LLM; when the commit's
 # author is the LLM (role author) the trailer is the human's `Co-authored-by: <user.name> <user.email>`
 # (read with `git config` in the repo), otherwise the LLM's.
+
+# The messages quote commands in backticks inside single quotes on purpose: nothing expands.
+# shellcheck disable=SC2016
 
 @@IS_AGENT@@
 
@@ -147,8 +150,8 @@ prepare_commit_msg() {
 
 commit_msg() {
   trailer_for "$(tier_of)"
-  parsed=$(git interpret-trailers --parse "$1" 2>/dev/null | tr 'A-Z' 'a-z')
-  wanted=$(printf '%s' "$TRAILER_LINE" | tr 'A-Z' 'a-z')
+  parsed=$(git interpret-trailers --parse "$1" 2>/dev/null | tr '[:upper:]' '[:lower:]')
+  wanted=$(printf '%s' "$TRAILER_LINE" | tr '[:upper:]' '[:lower:]')
   case "$nl$parsed$nl" in
     *"$nl$wanted$nl"*) ;;
     *) reject "$M_TRAILER_0$TRAILER_KEY$M_TRAILER_1" "$R_TRAILER" ;;

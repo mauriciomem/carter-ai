@@ -236,7 +236,9 @@ class TestRemovalAndMigration:
             exe.write_text(f'#!/bin/sh\necho "git version {version}"\n')
             exe.chmod(0o755)
         found = repohooks.other_old_gits({"PATH": f"{bins / 'new'}:{bins / 'old'}"})
-        assert found == [(str(bins / "old" / "git"), "2.39")]
+        # the usual system paths are searched too (Apple's /usr/bin/git is 2.50): look at ours
+        ours = [entry for entry in found if entry[0].startswith(str(bins))]
+        assert ours == [(str(bins / "old" / "git"), "2.39")]
 
 
 class TestInstallOnOldGit:

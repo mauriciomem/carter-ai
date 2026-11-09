@@ -312,6 +312,8 @@ class TestAnswer:
         self, tmp_path: Path
     ) -> None:
         text = json.dumps(run(tmp_path, IDENT + SIGNING + 'agent_socket = "/run/x/agent.sock"\n'))
+        # the shim path lives under tmp_path, which on macOS starts with /private/var
+        text = text.replace(str(tmp_path), "<tmp>")
         assert "laptop" not in text and "/secret/dir" not in text and "agent.sock" not in text
         assert "socket" not in text and "private" not in text
 

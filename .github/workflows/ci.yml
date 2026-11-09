@@ -166,7 +166,7 @@ jobs:
           /usr/bin/ssh -V
           /usr/bin/git --version
 
-      - name: Broker, A+ checks, consent revision 3 and check --host B items
+      - name: Broker, push checks, the push tool consent and check --host items
         run: uv run pytest tests/broker tests/aplus tests/guard/test_consent_rev3.py tests/guard/test_hostcheck_broker.py tests/guard/test_status_reset_b.py tests/guard/test_names.py -q
 
       - name: The real ssh -G of this OS is judged by the broker's key list
@@ -320,8 +320,8 @@ jobs:
     permissions:
       contents: read
     steps:
-      - name: Install git and curl (before checkout, so it can use real git)
-        run: apt-get update && apt-get install -y --no-install-recommends git ca-certificates curl
+      - name: Install git, curl and procps (before checkout, so it can use real git)
+        run: apt-get update && apt-get install -y --no-install-recommends git ca-certificates curl procps
 
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
@@ -455,7 +455,7 @@ jobs:
           py="$(uv tool dir)/carter-ai/bin/python"
           "$py" -I - <<'PY'
           import pathlib, carter
-          import carter.broker_cli, carter.broker.execute, carter.broker.pr
+          import carter.broker_cli, carter.broker.execute, carter.broker.plan
           root = pathlib.Path(carter.__file__).parent
           for name in ("index.ts", "core.ts", "broker.ts"):
               assert (root / "plugin" / name).is_file(), name

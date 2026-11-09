@@ -2,7 +2,7 @@
 // python interpreter (a shell script), so the gate protocol of is tested end to end.
 import { test } from "node:test"
 import assert from "node:assert/strict"
-import { copyFileSync, chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs"
+import { copyFileSync, chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { pathToFileURL } from "node:url"
@@ -165,7 +165,8 @@ test("the gate is called by absolute python_path with gate_args, the command on 
     delete process.env.SSH_AUTH_SOCK
     assert.equal(f.recorded("gate.stdin"), "git status -s")
     assert.deepEqual(f.recorded("gate.args").trim().split("\n"), ["-I", "-m", "carter.gate", "--json", "--cwd", "/work/repo", "--skip-groups", "sudo-docker"])
-    assert.equal(f.recorded("gate.cwd").trim(), f.home)
+    // the child reports its physical directory: /private/var/... for a /var/... temp dir on macOS
+    assert.equal(realpathSync(f.recorded("gate.cwd").trim()), realpathSync(f.home))
     assert.equal(f.recorded("gate.sshsock").trim(), "1")
     assert.match(e.input.command, /^: carter_agent_[0-9a-z]{12}_1\ngit status -s$/)
   })
@@ -290,7 +291,7 @@ test("a marked shell is stripped, round-trips, tagged and isolated; the tier ent
     assert.equal(env.GITHUB_TOKEN, undefined)
     assert.equal(env.GH_TOKEN, isoDoc.plugin.gh_token_dummy)
     assert.equal(env.GIT_CONFIG_COUNT, String(isoDoc.git_config.length))
-    assert.equal(f.recorded("env.cwd").trim(), f.home)
+    assert.equal(realpathSync(f.recorded("env.cwd").trim()), realpathSync(f.home))
     assert.deepEqual(f.recorded("env.args").trim().split("\n"), ["-I", "-m", "carter.identity.env", "--json"])
   })
 })

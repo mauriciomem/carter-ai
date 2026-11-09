@@ -101,9 +101,9 @@ class Lab:
         for name, body in (
             ("edit-append.sh", "printf '\\nedited by editor\\n' >> \"$1\""),
             ("editor-reword.sh", "printf 'reworded\\n' > \"$1\""),
-            ("seq-reword.sh", "sed -i '1s/^pick/reword/' \"$1\""),
-            ("seq-squash.sh", "sed -i '2s/^pick/squash/' \"$1\""),
-            ("seq-fixup.sh", "sed -i '2s/^pick/fixup/' \"$1\""),
+            ("seq-reword.sh", 'sed \'1s/^pick/reword/\' "$1" > "$1.new" && mv "$1.new" "$1"'),
+            ("seq-squash.sh", 'sed \'2s/^pick/squash/\' "$1" > "$1.new" && mv "$1.new" "$1"'),
+            ("seq-fixup.sh", 'sed \'2s/^pick/fixup/\' "$1" > "$1.new" && mv "$1.new" "$1"'),
             ("seq-pick.sh", ":"),
         ):
             script = root / name
@@ -1244,4 +1244,6 @@ class TestAlias:
             text=True,
             check=False,
         )
-        assert missing.returncode == 127 and "carter: command not found" in missing.stderr
+        # bash says "command not found", dash says "not found"
+        assert missing.returncode == 127
+        assert re.search(r"carter: (command )?not found", missing.stderr), missing.stderr

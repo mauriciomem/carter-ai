@@ -13,6 +13,7 @@ import os
 import re
 import shutil
 import subprocess
+import sys
 from pathlib import Path
 from typing import Any
 
@@ -28,6 +29,11 @@ SSH_G = DATA / "ssh_g"
 SSH_G_INDEX = json.loads((SSH_G / "index.json").read_text())
 
 GOOD_SCP = "git@github.com:o/r.git"
+APPLE_SHIM = (
+    {"__CF_USER_TEXT_ENCODING", "SDKROOT", "CPATH", "LIBRARY_PATH", "MANPATH"}
+    if sys.platform == "darwin"
+    else set()
+)
 SENTINEL_SERVER_PASSWORD = "sentinel-server-password-0001"  # noqa: S105 - a test value
 
 
@@ -117,7 +123,8 @@ class TestFakeSshSeam:
             n for n in call["env_names"] if n.startswith(("CARTER", "OPENCODE", "SSH_AUTH"))
         ]
         # git itself adds GIT_EXEC_PATH to the ssh child; nothing else beyond the allowlist
-        assert set(call["env_names"]) <= set(child_env(rig.home)) | {"GIT_EXEC_PATH"}
+        # (Apple's /usr/bin/git is an xcrun shim that sets the SDK variables for every child)
+        assert set(call["env_names"]) <= set(child_env(rig.home)) | {"GIT_EXEC_PATH"} | APPLE_SHIM
 
     def test_a_sentinel_in_the_parent_never_reaches_ssh_when_the_env_is_built_from_scratch(
         self, rig: Rig, monkeypatch: pytest.MonkeyPatch
@@ -219,8 +226,9 @@ class TestHostileOperandsAgainstRealGit:
         the refspec as an scp-style host (report 21 row 7, reproduced)."""
         res = rig.push([f"--receive-pack=touch {rig.mark}", f"{rig.sha}:refs/heads/feat/x"])
         assert res.returncode != 0
-        assert len(rig.fake.calls()) == 1
-        assert rig.fake.calls()[0]["argv"][0] == rig.sha
+        calls = rig.fake.calls()
+        # git reaches ssh with the refspec as the host; some builds (Apple's) stop even earlier
+        assert len(calls) <= 1 and all(c["argv"][0] == rig.sha for c in calls)
         assert (
             not rig.mark.exists()
         )  # the fake refuses the remote command; the remote host would not

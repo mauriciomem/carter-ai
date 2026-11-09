@@ -40,6 +40,7 @@ OWN_TERMINAL = (
     "Run `carter push` yourself, in your terminal or as `!carter push` in OpenCode, "
     "not through an agent."
 )
+NOISE = ("To ", "error: failed to push some refs")  # git lines that only repeat the URL
 MAX_COMMITS_SHOWN = 50
 MAX_CHANGES_SHOWN = 20
 REMOTE = "origin"
@@ -225,7 +226,10 @@ def _push(
     for line in lines:
         ui.detail(f"git: {line}")
     if proc.returncode != 0:
-        why = " | ".join(ln.strip() for ln in lines if ln.strip())[-300:]
+        # the "To <url>" and "error: failed to push some refs to <url>" lines only repeat the
+        # URL (long in a deep checkout); they must not push the remote's own message out
+        reasons = [ln.strip() for ln in lines if ln.strip() and not ln.startswith(NOISE)]
+        why = " | ".join(reasons)[-300:]
         ui.fail(f"git push failed (exit {proc.returncode}): {why}", "nothing was forced")
         return 1
     state = (

@@ -38,7 +38,7 @@ def test_node_tests_pass() -> None:
     if node_version(NODE) < MIN_NODE:
         pytest.skip(f"node >= {MIN_NODE[0]}.{MIN_NODE[1]} is needed (built-in type stripping)")
     done = subprocess.run(
-        [NODE, "--test", "tests/plugin/*.test.ts"],  # node expands the glob itself (>= 21)
+        [NODE, "--test", "--test-reporter=spec", "tests/plugin/*.test.ts"],  # node expands the glob
         cwd=REPO,
         capture_output=True,
         text=True,

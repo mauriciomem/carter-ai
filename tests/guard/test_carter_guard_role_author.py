@@ -430,7 +430,7 @@ class TestRealGit:
         )
         self.human_commit(rb, "one", "1\n")
         seq = tmp_path / "seq.sh"
-        seq.write_text("#!/bin/sh\nsed -i '1s/^pick/reword/' \"$1\"\n")
+        seq.write_text('#!/bin/sh\nsed \'1s/^pick/reword/\' "$1" > "$1.new" && mv "$1.new" "$1"\n')
         msg = tmp_path / "msg.sh"
         msg.write_text(
             '#!/bin/sh\n{ printf \'reworded\\n\\n\'; cat "$1"; } > "$1.new" && mv "$1.new" "$1"\n'

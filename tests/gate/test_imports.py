@@ -134,10 +134,7 @@ class TestRuntime:
             env=env,
             timeout=60,
         )
-        names = {
-            line.split("|")[-1].strip() for line in done.stderr.decode().splitlines() if "|" in line
-        }
-        names.discard("imported package")
+        names = imported_by_the_program(done.stderr.decode())
         extra = {
             n
             for n in names
@@ -147,6 +144,50 @@ class TestRuntime:
         }
         assert extra == set()
         assert "carter.identity" not in names and "importlib.metadata" not in names
+
+    def test_a_distro_sitecustomize_and_what_it_imports_are_not_the_programs_imports(self) -> None:
+        # Ubuntu's sitecustomize imports apport_python_hook; that is the host's, not ours.
+        report = "\n".join(
+            [
+                "import time: self [us] | cumulative | imported package",
+                "import time:       10 |         10 |   apport_python_hook",
+                "import time:       20 |         30 |  sitecustomize",
+                "import time:       15 |         15 |  _distutils_hack",
+                "import time:       40 |        100 | site",
+                "import time:        5 |          5 | json",
+                "import time:        5 |         30 |   carter.gate.data",
+                "import time:        5 |         35 |  carter.gate",
+            ]
+        )
+        assert imported_by_the_program(report) == {"json", "carter.gate.data", "carter.gate"}
+
+
+HOST_HOOKS = ("site", "sitecustomize", "usercustomize")
+
+
+def imported_by_the_program(importtime: str) -> set[str]:
+    """Module names in a ``-X importtime`` report, minus the host's own start-up hooks.
+
+    The report prints a module after the modules it imports, indented one level deeper. A
+    ``sitecustomize`` (Ubuntu's loads ``apport_python_hook``) or ``site`` and everything they pull
+    in belong to the machine, not to the program under test.
+    """
+    pending: list[tuple[int, str]] = []
+    for line in importtime.splitlines():
+        if not line.startswith("import time:") or line.count("|") < 2:
+            continue
+        label = line.rsplit("|", 1)[1]
+        name = label.strip()
+        if name == "imported package":
+            continue
+        depth = len(label) - len(label.lstrip())
+        children = [item for item in pending if item[0] > depth]
+        pending = [item for item in pending if item[0] <= depth]
+        if name in HOST_HOOKS:
+            children = []
+            continue
+        pending += children + [(depth, name)]
+    return {name for _, name in pending}
 
 
 class TestLazyPackages:

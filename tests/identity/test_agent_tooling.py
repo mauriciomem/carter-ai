@@ -20,6 +20,7 @@ from pathlib import Path
 
 import pytest
 
+from carter.identity import agent_proc
 from ssh_rig import Rig, _alive, classify_key, real_ssh
 
 
@@ -139,9 +140,7 @@ class TestAgentLifecycle:
     def test_agent_creates_a_private_socket_and_removes_it_on_term(self, rig: Rig) -> None:
         sock, pid = rig.start_agent()
         assert (sock.stat().st_mode & 0o777) == 0o600
-        command = subprocess.run(
-            ["ps", "-ww", "-p", str(pid), "-o", "command="], capture_output=True, text=True
-        ).stdout
+        command = agent_proc.command_of(pid)
         assert "ssh-agent" in command
         assert str(sock) in command  # the verified-pid test
         os.kill(pid, signal.SIGTERM)

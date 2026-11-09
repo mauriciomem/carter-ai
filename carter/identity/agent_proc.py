@@ -26,11 +26,73 @@ from carter.identity.errors import E_UNLOCK_PATH, IdentityError
 STOP_WAIT = 3.0
 
 
-def _ps(*args: str) -> str:
-    done = subprocess.run(
-        ["ps", "-ww", *args], capture_output=True, text=True, stdin=subprocess.DEVNULL, check=False
-    )
+PROC = Path("/proc")
+
+
+def _ps(*args: str) -> str | None:
+    """The output of ``ps -ww``; ``None`` when there is no ``ps`` (minimal containers, hosts)."""
+    try:
+        done = subprocess.run(
+            ["ps", "-ww", *args],
+            capture_output=True,
+            text=True,
+            stdin=subprocess.DEVNULL,
+            check=False,
+        )
+    except OSError:
+        return None
     return done.stdout
+
+
+def _proc_command(pid: int, proc: Path = PROC) -> str:
+    """The command line of ``pid`` from ``/proc`` (Linux), else empty."""
+    try:
+        raw = (proc / str(pid) / "cmdline").read_bytes()
+    except OSError:
+        return ""
+    return raw.replace(b"\0", b" ").decode("utf-8", "replace").strip()
+
+
+def _proc_zombie(pid: int, proc: Path = PROC) -> bool:
+    try:
+        stat = (proc / str(pid) / "stat").read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return False
+    fields = stat.rpartition(")")[2].split()  # the name in parentheses may hold spaces
+    return bool(fields) and fields[0] == "Z"
+
+
+def command_of(pid: int, proc: Path = PROC) -> str:
+    """The command line of ``pid`` (empty when unknown): ``ps``, or ``/proc`` without it."""
+    out = _ps("-p", str(pid), "-o", "command=")
+    return _proc_command(pid, proc) if out is None else out
+
+
+def user_processes(proc: Path = PROC) -> list[tuple[int, str]]:
+    """``(pid, command line)`` of every process of this user: ``ps``, or ``/proc`` without it.
+
+    Without either (a minimal host that is not Linux) the list is empty, so nothing is claimed
+    to be Carter's agent.
+    """
+    out = _ps("-u", str(os.getuid()), "-o", "pid=,command=")
+    if out is not None:
+        rows = (line.strip().partition(" ") for line in out.splitlines())
+        return [(int(pid), command.strip()) for pid, _, command in rows if pid.isdigit()]
+    found = []
+    try:
+        entries = [e for e in proc.iterdir() if e.name.isdigit()]
+    except OSError:
+        return []
+    for entry in entries:
+        try:
+            if entry.stat().st_uid != os.getuid():
+                continue
+        except OSError:
+            continue
+        command = _proc_command(int(entry.name), proc)
+        if command:
+            found.append((int(entry.name), command))
+    return found
 
 
 def alive(pid: int) -> bool:
@@ -41,7 +103,8 @@ def alive(pid: int) -> bool:
         return False
     except PermissionError:
         return True
-    return not _ps("-p", str(pid), "-o", "stat=").strip().startswith("Z")
+    out = _ps("-p", str(pid), "-o", "stat=")
+    return not (_proc_zombie(pid) if out is None else out.strip().startswith("Z"))
 
 
 def is_ssh_agent(command: str) -> bool:
@@ -60,17 +123,16 @@ def verified_agent(pidfile: Path, sock: Path) -> int | None:
         return None
     if not text.isdigit():
         return None
-    command = _ps("-p", text, "-o", "command=")
+    command = command_of(int(text))
     return int(text) if is_ssh_agent(command) and str(sock) in command else None
 
 
 def agents_under(directory: Path) -> list[int]:
     """Pids of ``ssh-agent`` processes of this user whose command line names ``directory``."""
     found = []
-    for line in _ps("-u", str(os.getuid()), "-o", "pid=,command=").splitlines():
-        pid, _, command = line.strip().partition(" ")
-        if pid.isdigit() and is_ssh_agent(command) and f"{directory}{os.sep}" in command:
-            found.append(int(pid))
+    for pid, command in user_processes():
+        if is_ssh_agent(command) and f"{directory}{os.sep}" in command:
+            found.append(pid)
     return found
 
 

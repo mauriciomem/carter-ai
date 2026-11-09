@@ -431,7 +431,9 @@ class TestUnlock:
         )
         with pytest.raises(IdentityError) as err:
             agent.unlock(long_setup, ctx.runner)
-        assert err.value.code == E_UNLOCK_PATH and "108" in err.value.detail
+        assert (
+            err.value.code == E_UNLOCK_PATH and str(agent_paths.socket_limit()) in err.value.detail
+        )
         assert not (ctx.rig.root / ("d" * 120)).exists()
 
     def test_two_concurrent_unlocks_make_one_agent_and_load_one_key(self, ctx: Ctx) -> None:
@@ -498,7 +500,7 @@ class TestPassphraseKey:
         assert secret not in repr(result) and secret not in ctx.last_output
         for path in (agent.pidfile_path(setup.home), agent.lock_path(setup.home)):
             assert secret not in path.read_text()
-        ps = subprocess.run(["ps", "-eww", "-o", "command="], capture_output=True, text=True).stdout
+        ps = " ".join(command for _, command in agent_proc.user_processes())
         assert secret not in ps
 
     def test_a_wrong_passphrase_that_ends_the_prompt_fails_and_leaves_no_agent(

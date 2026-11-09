@@ -37,6 +37,7 @@ from pathlib import Path
 import pytest
 
 import host_guard
+from carter.identity import agent_proc
 from sentinels import passphrase as new_passphrase
 
 SSH_BIN = Path("/usr/bin")
@@ -99,18 +100,11 @@ _alive = alive  # the M1 name
 def ssh_agents() -> list[tuple[int, str]]:
     """(pid, command line) of every ``ssh-agent`` of this user whose command line names a ``c2b-``
     base. Listing only: it never connects to anything."""
-    out = subprocess.run(
-        ["ps", "-u", str(os.getuid()), "-ww", "-o", "pid=,command="],
-        capture_output=True,
-        text=True,
-        check=False,
-    ).stdout
-    found = []
-    for line in out.splitlines():
-        pid, _, command = line.strip().partition(" ")
-        if "ssh-agent" in command and f"/{BASE_PREFIX}" in command and pid.isdigit():
-            found.append((int(pid), command.strip()))
-    return found
+    return [
+        (pid, command)
+        for pid, command in agent_proc.user_processes()
+        if "ssh-agent" in command and f"/{BASE_PREFIX}" in command
+    ]
 
 
 def stop(pid: int, *, wait: float = 3.0) -> str:

@@ -59,4 +59,5 @@ def test_match_user_git_only_applies_with_the_push_user(tmp_path: Path) -> None:
         [SSH, "-F", str(tmp_path / "config"), "-G", "github.com"],
         env={"PATH": "/usr/bin:/bin", "HOME": str(tmp_path)}, capture_output=True, text=True, check=False,
     )  # fmt: skip
-    assert "proxycommand" not in bare.stdout
+    # a key, not a substring: Apple's ssh also prints "authenticationforproxycommand"
+    assert "proxycommand" not in {line.split()[0] for line in bare.stdout.splitlines() if line}

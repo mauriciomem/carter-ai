@@ -355,7 +355,8 @@ class TestUnlockFlows:
             [],
             timeout=40,
         )
-        assert out.rc == 1 and E_UNLOCK_PATH in out.output and "108" in out.output
+        assert out.rc == 1 and E_UNLOCK_PATH in out.output
+        assert str(agent_paths.socket_limit()) in out.output
         assert not agent_proc.agents_under(long_home / ".carter")
 
 

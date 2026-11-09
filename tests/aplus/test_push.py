@@ -11,6 +11,7 @@ import os
 import stat
 from collections.abc import Callable
 from pathlib import Path
+from typing import Any
 
 import pytest
 from click.testing import CliRunner, Result
@@ -359,6 +360,31 @@ class TestPushFailures:
         res = push_cli()
         assert res.exit_code == 1 and "git push failed" in res.output
         assert "no thanks" in res.output and "feat/x" not in remote_refs(work)
+
+    def test_a_long_url_does_not_hide_the_remotes_message(
+        self, work: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A deep checkout (macOS temp dirs) makes git's "To <url>" lines long."""
+        hook = tmp_path / "origin.git" / "hooks" / "pre-receive"
+        hook.write_text("#!/bin/sh\necho 'no thanks' >&2\nexit 1\n")
+        hook.chmod(0o755)
+        real = run.network_git
+        long_url = "/private/var/folders/" + "x" * 250 + "/origin.git"
+
+        def padded(args: list[str], cwd: Path, **kw: Any) -> Any:
+            done = real(args, cwd, **kw)
+            if args[0] != "push":
+                return done
+            done.stderr = (
+                f"To {long_url}\nremote: no thanks\n ! [remote rejected] HEAD -> feat/x"
+                f" (pre-receive hook declined)\nerror: failed to push some refs to '{long_url}'\n"
+            )
+            return done
+
+        monkeypatch.setattr(run, "network_git", padded)
+        res = push_cli()
+        assert res.exit_code == 1 and "git push failed" in res.output
+        assert "no thanks" in res.output and "pre-receive hook declined" in res.output
 
     def test_an_unreachable_origin_is_a_clear_error(self, work: Path) -> None:
         git("remote", "set-url", "origin", f"file://{work}/nope.git", cwd=work)

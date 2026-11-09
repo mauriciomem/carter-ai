@@ -158,14 +158,18 @@ class TestRewrites:
             pytest.param(
                 ":", [f"{H[1]}|{H[1]}"] * 2, id="plain-pick-fast-forwards-nothing-rewritten"
             ),
-            pytest.param("sed -i '1s/^pick/reword/' \"$1\"", [f"{H[1]}|{L[1]}"] * 2, id="reword"),
             pytest.param(
-                "sed -i '2s/^pick/squash/' \"$1\"",
+                'sed \'1s/^pick/reword/\' "$1" > "$1.new" && mv "$1.new" "$1"',
+                [f"{H[1]}|{L[1]}"] * 2,
+                id="reword",
+            ),
+            pytest.param(
+                'sed \'2s/^pick/squash/\' "$1" > "$1.new" && mv "$1.new" "$1"',
                 [f"{H[1]}|{L[1]}"],
                 id="squash-keeps-the-first-author",
             ),
             pytest.param(
-                "sed -i '2s/^pick/fixup/' \"$1\"",
+                'sed \'2s/^pick/fixup/\' "$1" > "$1.new" && mv "$1.new" "$1"',
                 [f"{H[1]}|{L[1]}"],
                 id="fixup-keeps-the-first-author",
             ),
@@ -314,7 +318,7 @@ class TestHookInputs:
         repo.git("checkout", "-q", "-b", "side", env=H_ALL)
         repo.commit("one", "1\n", H_ALL)
         seq = tmp_path / "seq.sh"
-        seq.write_text("#!/bin/sh\nsed -i '1s/^pick/reword/' \"$1\"\n")
+        seq.write_text('#!/bin/sh\nsed \'1s/^pick/reword/\' "$1" > "$1.new" && mv "$1.new" "$1"\n')
         seq.chmod(0o755)
         msg = tmp_path / "msg.sh"
         msg.write_text("#!/bin/sh\nprintf 'edited\\n' > \"$1\"\n")

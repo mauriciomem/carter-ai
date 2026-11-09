@@ -172,6 +172,21 @@ class TestEveryWorkflow:
         assert missing == []
 
 
+def test_every_carter_module_a_run_command_imports_exists() -> None:
+    """A smoke step that imports a module nobody ships fails only on the runner."""
+    import importlib.util
+
+    names = set()
+    for path in WORKFLOWS:
+        for job in load(path)["jobs"].values():
+            for step in steps(job):
+                for line in step.get("run", "").splitlines():
+                    if re.match(r"\s*(import|from)\s", line):
+                        names |= set(re.findall(r"\bcarter(?:\.\w+)+", line))
+    assert names  # the install-smoke step imports the broker core
+    assert [n for n in sorted(names) if importlib.util.find_spec(n) is None] == []
+
+
 def test_actionlint_when_installed() -> None:
     tool = shutil.which("actionlint")
     if tool is None:
