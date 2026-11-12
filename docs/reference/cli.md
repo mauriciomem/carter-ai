@@ -58,9 +58,12 @@ See [Install](../guides/install.md#upgrade) and [MCP servers](../guides/mcp-serv
 
 Remove the Carter OpenCode install: agents, skills, global rules, unedited knowledge
 files, the MCP servers Carter ships (`carter-github`, `carter-terraform`, `carter-atlassian`) and
-the install manifest. Edited files, memories, `config.toml` and the audit log are kept. Without a
-manifest it removes only the agent and skill files this version ships, by name; your own
-`carter-*` skills, agents and MCP servers stay.
+the install manifest, `~/.carter/run/` and a `config.toml` that holds only defaults. An agent you
+edited is removed too, after a copy to `~/.carter/backups/<timestamp>/` (it carries guard rules that
+no longer apply), and reported. Edited skills, global rules and knowledge files, memories, secrets,
+backups and the audit log are kept. Directories Carter made and left empty go. Without a manifest it
+removes only the agent and skill files this version ships, by name; your own `carter-*` skills,
+agents and MCP servers stay.
 
 | Option | Description |
 |--------|-------------|

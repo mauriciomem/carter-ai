@@ -149,6 +149,24 @@ class TestUninstallRemovesGuards:
         assert not guard_state_path(base_dir).exists() and not agents_installed(base_dir)
         assert res.output.index("Removed guard state") < res.output.index("✓ uninstalled")
 
+    def test_an_agent_edited_before_the_guards_went_is_still_reported_and_copied(
+        self, stack, base_dir: Path
+    ) -> None:
+        """The guard step re-renders every agent and refreshes its hash; the edit is found first."""
+        self.installed(stack, base_dir)
+        agent = base_dir / "opencode" / "agents" / "carter-engineer.md"
+        agent.write_text("# my engineer\n")
+        self.finish(stack)
+        res = carter(base_dir, "uninstall", "--yes")
+        assert res.exit_code == 0, res.output
+        assert not agent.exists()
+        assert "carter-engineer.md although you edited it" in res.output
+        copies = [
+            c for c in paths.backups_dir(base_dir).rglob("carter-engineer.md")
+            if c.read_text() == "# my engineer\n"
+        ]  # fmt: skip
+        assert len(copies) >= 1  # the guard step may keep its own copy of the same edit
+
     def test_keep_guards_leaves_policies_permissions_and_state(self, stack, base_dir: Path) -> None:
         self.installed(stack, base_dir)
         before = (guard_state_path(base_dir).read_bytes(), config_target(base_dir).read_bytes())

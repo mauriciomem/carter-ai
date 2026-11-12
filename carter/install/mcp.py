@@ -117,6 +117,11 @@ def remove_carter_servers(file_path: Path) -> list[str]:
             del servers[k]
             removed.append(k)
     if removed:
+        # Drop the containers that Carter's removal emptied, so a file only Carter wrote ends as {}.
+        if not servers:
+            del mcp["servers"]
+        if not mcp:
+            del data["mcp"]
         _save_config(file_path, data)
     return removed
 

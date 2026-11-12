@@ -144,9 +144,9 @@ def uninstall(base_dir: Path | None, keep_guards: bool, assume_yes: bool) -> Non
     """Remove the Carter agents and skills, and the guards."""
     from carter.install.uninstall import uninstall as run_uninstall
 
-    code = run_uninstall(base_dir, keep_guards=keep_guards, assume_yes=assume_yes)
-    if code:
-        raise SystemExit(code)
+    report = run_uninstall(base_dir, keep_guards=keep_guards, assume_yes=assume_yes)
+    if report.code:
+        raise SystemExit(report.code)
 
 
 @main.command()

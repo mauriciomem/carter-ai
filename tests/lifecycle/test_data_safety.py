@@ -10,7 +10,9 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
+from click.testing import CliRunner
 
+from carter.cli import main
 from carter.install import orchestrator, paths
 from carter.install.console import set_verbosity
 from carter.install.uninstall import uninstall
@@ -63,7 +65,7 @@ def test_user_skill_named_carter_something_survives_uninstall_without_manifest(
     assert mine.read_text() == "my skill\n"
 
 
-@pytest.mark.xfail(strict=True, reason="pending: the default output says what was removed")
+@pytest.mark.xfail(strict=True, reason="pending: the default report says what was removed")
 def test_default_uninstall_output_lists_what_was_removed(installed: Path, capsys) -> None:
     set_verbosity(1)
     capsys.readouterr()
@@ -72,7 +74,6 @@ def test_default_uninstall_output_lists_what_was_removed(installed: Path, capsys
     assert "Removed" in got.out + got.err
 
 
-@pytest.mark.xfail(strict=True, reason="pending: run/ is removed whole")
 def test_old_guard_log_is_migrated_and_run_dir_removed(installed: Path) -> None:
     carter = paths._carter_base(installed)
     (carter / "run").mkdir()
@@ -80,3 +81,49 @@ def test_old_guard_log_is_migrated_and_run_dir_removed(installed: Path) -> None:
     uninstall(installed)
     assert not (carter / "run").exists()
     assert "E-GUARD-UNSIGNED" in (carter / "state" / "audit" / "guard.log").read_text()
+
+
+def test_dash_v_lists_every_file_removed_and_kept(installed: Path) -> None:
+    oc = paths._opencode_base(installed)
+    kept = next((oc / "skills").glob("carter-*/SKILL.md"))
+    kept.write_text(kept.read_text() + "\nmine\n")
+    args = ["uninstall", "--base-dir", str(installed)]
+    out = CliRunner().invoke(main, [*args, "-v"]).output
+    assert f"Removed {oc / 'agents' / 'carter-pm.md'}" in out
+    assert f"Kept {kept}: edited since install" in out
+
+
+def test_an_edited_global_agent_is_removed_with_a_copy_at_its_mirrored_path(
+    installed: Path,
+) -> None:
+    agent = paths._opencode_base(installed) / "agents" / "carter-pm.md"
+    agent.write_text("# my pm\n")
+    report = uninstall(installed)
+    assert not agent.exists()
+    [(removed, copy)] = report.edited_copies
+    assert removed == agent and copy.read_text() == "# my pm\n"
+    # backups/<stamp>/<the file's own path>
+    assert copy.relative_to(paths.backups_dir(installed)).parts[1:] == agent.relative_to("/").parts
+
+
+def test_uninstall_touches_nothing_it_did_not_install(installed: Path) -> None:
+    carter, oc = paths._carter_base(installed), paths._opencode_base(installed)
+    mine = [
+        carter / "memories" / "user" / "me.md",
+        carter / "secrets" / "gh-read.token",
+        carter / "state" / "audit" / "ops.log",
+        oc / "skills" / "carter-mine" / "SKILL.md",
+        oc / "agents" / "my-agent.md",
+        oc / "opencode.json",
+        installed / "elsewhere.txt",
+    ]
+    for f in mine:
+        f.parent.mkdir(parents=True, exist_ok=True)
+        f.write_text("mine " + f.name)
+    paths.manifest_path(installed).unlink()  # the hardest case: only names decide
+    before = tree_snapshot(installed)
+    uninstall(installed)
+    changes = tree_diff(before, tree_snapshot(installed)).splitlines()
+    assert changes and all(line.startswith("- ") for line in changes)  # only removals
+    for f in mine:
+        assert f.read_text() == "mine " + f.name
