@@ -540,7 +540,9 @@ On failure every `✗` line has its `→` fix and the run ends with `✗ workspa
 ### carter check --host
 
 Checks the guards on this machine. It never writes and never prints environment values,
-tokens or provider settings. A normal run prints the warnings (`!`) and problems (`✗`, each with
+tokens or provider settings. It first prints `checking GitHub...` on stderr (always, even when no
+token or identity is configured), because the GitHub checks (the token and the identity's keys) can
+take a few seconds; they run alongside the local checks. A normal run prints the warnings (`!`) and problems (`✗`, each with
 its fix) and one summary line (`✓ host  2 warnings`); `-v` prints every row as `✓` OK, `·` INFO,
 `!` WARN or `✗` RED. The exit code is 1 only if something is red:
 

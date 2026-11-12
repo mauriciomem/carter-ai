@@ -58,16 +58,18 @@ def _glyph(kind: str, stream: TextIO) -> str:
 
 def _plain(line: str, stream: TextIO) -> str:
     """``line`` as is on a UTF-8 stream. Otherwise the glyphs become ASCII stand-ins and any
-    other character the stream cannot encode becomes ``?``: printing never raises."""
+    other character the stream cannot encode becomes a ``\\xe9`` / ``\\u2260`` escape: printing
+    never raises, and a path or command in the text stays exact when copied (``?`` would be a
+    shell glob)."""
     if _glyph("ok", stream) == GLYPHS["ok"]:
         return line
     for glyph, stand_in in STAND_INS.items():
         line = line.replace(glyph, stand_in)
     encoding = getattr(stream, "encoding", None) or "ascii"
     try:
-        return line.encode(encoding, "replace").decode(encoding)
+        return line.encode(encoding, "backslashreplace").decode(encoding)
     except LookupError:  # a codec name Python does not know
-        return line.encode("ascii", "replace").decode("ascii")
+        return line.encode("ascii", "backslashreplace").decode("ascii")
 
 
 def _console(stream: TextIO) -> Any:

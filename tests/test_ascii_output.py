@@ -76,6 +76,6 @@ def test_every_printed_glyph_has_an_ascii_stand_in(glyph: str, stand_in: str) ->
     assert ui._plain(f"a {glyph} b", utf8_stream) == f"a {glyph} b"
 
 
-def test_a_character_without_a_stand_in_becomes_a_question_mark() -> None:
+def test_a_character_without_a_stand_in_becomes_an_escape_so_a_pasted_path_stays_exact() -> None:
     stream = io.TextIOWrapper(io.BytesIO(), encoding="ascii")
-    assert ui._plain("caf\u00e9 \u2260", stream) == "caf? ?"
+    assert ui._plain("rm caf\u00e9 \u2260", stream) == "rm caf\\xe9 \\u2260"

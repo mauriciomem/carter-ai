@@ -9,6 +9,7 @@ import pytest
 from click.testing import CliRunner, Result
 
 from carter.cli import main
+from carter.harness import UNAVAILABLE_FIX, HarnessResult
 
 ADVISORY = (
     "Pinned models: anthropic/claude-opus-5-5, anthropic/claude-sonnet-5-5. "
@@ -67,3 +68,30 @@ def test_a_warning_does_not_change_the_exit_code(ws: Path) -> None:
     assert result.exit_code == 0
     assert result.stdout.splitlines()[-1] == "✓ Workspace OK  8 agents"
     assert "git_account" in result.stderr
+
+
+def _with_harness(monkeypatch: pytest.MonkeyPatch, result: HarnessResult) -> None:
+    monkeypatch.setattr("carter.harness.validate_agents", lambda *_a, **_k: result)
+
+
+def test_an_opencode_that_does_not_answer_gets_its_own_fix_not_update(
+    ws: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    timed_out = "`opencode debug agents` timed out after 30s"
+    _with_harness(monkeypatch, HarnessResult("fail", [timed_out], fix=UNAVAILABLE_FIX))
+    result = CliRunner().invoke(main, ["check", str(ws)])
+    assert result.exit_code == 1
+    assert result.stderr.splitlines() == [
+        f"✗ {timed_out}",
+        f"→ {UNAVAILABLE_FIX}",
+        "✗ workspace: 1 problem",
+    ]
+
+
+def test_harness_lines_that_name_their_own_command_get_no_second_fix(
+    ws: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    lines = ["a: not loaded. Run `carter update` to re-render it.", "b: different model."]
+    _with_harness(monkeypatch, HarnessResult("fail", lines))
+    err = CliRunner().invoke(main, ["check", str(ws)]).stderr.splitlines()
+    assert err == [f"✗ {lines[0]}", f"✗ {lines[1]}", "✗ workspace: 2 problems"]

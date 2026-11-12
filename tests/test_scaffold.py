@@ -340,11 +340,12 @@ class TestScaffold:
         content = results["AGENTS.md"]
         assert "test-workspace" in content
 
-    def test_instructions_header_says_the_file_is_yours(self, default_config, env):
-        """update never rewrites AGENTS.md, so it must not say "do not edit"."""
+    def test_instructions_header_says_it_is_never_overwritten(self, default_config, env):
+        """update never rewrites AGENTS.md, so it must not say "do not edit" (and, because the
+        agents read this file, it must not invite them to edit their own rules either)."""
         header = render_instructions(default_config, env)["AGENTS.md"].splitlines()[0]
-        assert header.startswith("<!-- Created by Carter; yours to edit")
-        assert "Do not edit" not in header
+        assert header == "<!-- Carter writes this file once and does not overwrite it. -->"
+        assert "Do not edit" not in header and "edit" not in header.lower()
 
     def test_write_rendered_files(self, tmp_path, default_config, env):
         """Rendered files are written to disk."""

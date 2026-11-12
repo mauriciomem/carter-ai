@@ -561,8 +561,9 @@ def check(target_dir: str, no_harness: bool, host: bool, probe: bool) -> None:
         )
         if harness_result.warning:
             ui.warn(harness_result.warning)
-        # A message that already names a `carter` command needs no fix line of its own.
-        errors.extend((e, "" if "`carter " in e else _UPDATE) for e in harness_result.errors)
+        # Missing-agent and stale-config lines name their own `carter` command; only an
+        # OpenCode that did not answer carries a fix of its own (re-rendering would not help).
+        errors.extend((e, harness_result.fix) for e in harness_result.errors)
         loaded = harness_result.status == "ok"
 
     for warning in warnings:

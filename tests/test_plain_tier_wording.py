@@ -18,13 +18,13 @@ import json
 import re
 from pathlib import Path
 
-import click
 import pytest
 from click.testing import CliRunner
 
 from carter.cli import main
 from carter.identity.errors import registry
 from carter.identity.schema import TIER_WORDS, tier_words
+from test_help import commands
 
 REPO = Path(__file__).resolve().parent.parent
 CODE = re.compile(r"\bT[012]\b")
@@ -72,14 +72,9 @@ class TestNothingShowsACode:
         )
 
     def test_every_help_text(self) -> None:
-        def walk(cmd: click.Command, path: tuple[str, ...]) -> list[tuple[str, ...]]:
-            found = [path]
-            if isinstance(cmd, click.Group):
-                for name, sub in cmd.commands.items():
-                    found += walk(sub, (*path, name))
-            return found
-
-        for path in walk(main, ()):
+        paths = commands(main)  # through get_command: the lazy groups are part of the surface
+        assert len(paths) == 30  # the root, 14 commands and their subcommands (not fewer, ever)
+        for path in paths:
             out = CliRunner().invoke(main, [*path, "--help"]).output
             assert CODE.findall(out) == [], path
 

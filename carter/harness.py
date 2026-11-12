@@ -51,6 +51,12 @@ STALE_HINT = (
     "files asynchronously); re-run `carter check` to confirm."
 )
 
+# The fix when OpenCode itself did not answer (re-rendering the agent files cannot help then).
+UNAVAILABLE_FIX = (
+    "check that `opencode debug agents` runs in this directory (restart the OpenCode server "
+    "if it hangs), then run `carter check` again"
+)
+
 Rule = dict[str, Any]
 
 
@@ -59,6 +65,7 @@ class HarnessResult:
     status: Literal["ok", "fail", "skipped"]
     errors: list[str] = field(default_factory=list)
     warning: str | None = None
+    fix: str = ""  # what to do about ``errors`` as a whole; empty when each line says it itself
 
 
 @dataclass(frozen=True)
@@ -214,7 +221,11 @@ def validate_agents(
             agents = {str(a.get("id")): a for a in _call(opencode, workspace, runner, timeout)}
             last_error = None
         except subprocess.TimeoutExpired:
-            return HarnessResult("fail", [f"`opencode debug agents` timed out after {timeout:g}s"])
+            return HarnessResult(
+                "fail",
+                [f"`opencode debug agents` timed out after {timeout:g}s"],
+                fix=UNAVAILABLE_FIX,
+            )
         except _CallError as exc:
             last_error = str(exc)
             continue
@@ -223,10 +234,12 @@ def validate_agents(
             return HarnessResult("ok")
 
     if last_error:
-        return HarnessResult("fail", [last_error])
+        return HarnessResult("fail", [last_error], fix=UNAVAILABLE_FIX)
     if not agents:
         return HarnessResult(
-            "fail", [f"`opencode debug agents` listed no agents after {tries} attempts"]
+            "fail",
+            [f"`opencode debug agents` listed no agents after {tries} attempts"],
+            fix=UNAVAILABLE_FIX,
         )
     errors = list(missing)
     if mismatched:

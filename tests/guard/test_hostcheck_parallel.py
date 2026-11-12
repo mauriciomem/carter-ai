@@ -3,6 +3,7 @@ and the user is told before the wait. No real network: the checks are replaced b
 
 from __future__ import annotations
 
+import subprocess
 import sys
 import threading
 
@@ -44,7 +45,9 @@ def test_the_token_and_identity_checks_run_at_the_same_time(
     assert not [i for i in items if i.level == "red"]
 
 
-def test_the_output_order_is_the_serial_one(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_the_report_keeps_the_serial_order_when_the_token_check_finishes_last(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     release_token = threading.Event()
 
     def token(_base):  # slower than identity on purpose
@@ -92,3 +95,14 @@ def test_the_notice_is_on_stderr_before_the_checks_start(
     result = CliRunner().invoke(main, ["check", "--host"])
     assert printed_by_then == [b"checking GitHub...\n"]
     assert result.stdout == "\u2713 host\n"  # the report is unchanged and alone on stdout
+
+
+def test_a_check_stuck_on_the_network_does_not_keep_the_process_alive() -> None:
+    """Ctrl-C must not wait for a slow request: the background thread is a daemon."""
+    code = (
+        "import time\n"
+        "from carter import hostcheck\n"
+        "hostcheck._in_background(lambda: time.sleep(120))\n"
+    )
+    done = subprocess.run([sys.executable, "-c", code], capture_output=True, timeout=30)
+    assert done.returncode == 0, done.stderr

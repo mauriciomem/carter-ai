@@ -82,8 +82,11 @@ src = ["carter", "tests", "evals"]
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "UP", "B", "SIM", "C4", "PLW1514"]
-# PLW1514 (unspecified-encoding) is a preview rule: `explicit-preview-rules` turns on only the
-# preview rules named in `select`, nothing else. Files Carter writes for tools are UTF-8.
+# PLW1514 (unspecified-encoding) is a preview rule, so `preview` is on. `explicit-preview-rules`
+# keeps other preview *rules* off, but preview can still change how the stable rules behave in a
+# new ruff release; CI installs the ruff in uv.lock (`--locked`), so that only changes when the
+# lock is updated on purpose. Files Carter writes for tools are UTF-8. (Ruff only sees calls it can
+# type as Path/open, so it is a net, not proof: `var.read_text()` is not flagged.)
 preview = true
 explicit-preview-rules = true
 
