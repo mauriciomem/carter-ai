@@ -125,6 +125,8 @@ def install(
         raise click.ClickException(f"{exc} Nothing was installed.") from exc
     if guard_code:
         raise SystemExit(guard_code)
+    if verbosity:
+        ui.next("restart the OpenCode server from a clean terminal to load the agents and plugin")
 
 
 @main.command()

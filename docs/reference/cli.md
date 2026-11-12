@@ -46,7 +46,8 @@ Install Carter for OpenCode 2.1 or newer. Writes to `~/.config/opencode/` and
 | `--debug` | Debug output |
 
 A normal run prints warnings and one line (`✓ installed  8 agents · 27 skills`), then the guard
-step ([`carter guard install`](#carter-guard-install)), which asks one question. Safe to re-run. It also
+step ([`carter guard install`](#carter-guard-install)), which asks one question, and ends with the
+next step (`→ restart the OpenCode server from a clean terminal …`). Safe to re-run. It also
 creates `~/.carter/config.toml` on a first install; an existing file is never rewritten. A key in it
 that Carter doesn't read is named at the end, once, with its file
 (``⚠ unknown key `x.y` in <path> → delete it``). If your global `AGENTS.md` has your own edits, it is

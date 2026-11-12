@@ -161,3 +161,33 @@ def test_the_fix_is_never_dimmed_but_the_arrow_is_coloured(monkeypatch: pytest.M
     assert out.count("\x1b[36m->") == 2  # a StringIO has no encoding: the ASCII arrow
     assert "do this" in out and "or this" in out
 
+
+def test_next_prints_the_arrow_line_on_stdout(capsys: pytest.CaptureFixture[str]) -> None:
+    ui.next("restart OpenCode")
+    out = capsys.readouterr()
+    assert out.out == "→ restart OpenCode\n" and out.err == ""
+
+
+def test_next_arrow_is_ascii_on_a_stream_that_cannot_show_it(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    raw = io.BytesIO()
+    stream = io.TextIOWrapper(raw, encoding="ascii", errors="replace")
+    monkeypatch.setattr("sys.stdout", stream)
+    ui.next("restart OpenCode")
+    stream.flush()
+    assert raw.getvalue() == b"-> restart OpenCode\n"
+
+
+def test_next_has_no_escape_codes_without_colour(monkeypatch: pytest.MonkeyPatch) -> None:
+    stream = io.StringIO()
+    stream.isatty = lambda: True  # type: ignore[method-assign]
+    monkeypatch.setattr("sys.stdout", stream)
+    monkeypatch.setenv("FORCE_COLOR", "1")
+    ui.next("coloured")
+    assert "\x1b[36m" in stream.getvalue()
+    stream.truncate(0)
+    stream.seek(0)
+    monkeypatch.setenv("NO_COLOR", "1")
+    ui.next("plain")
+    assert "\x1b[" not in stream.getvalue()

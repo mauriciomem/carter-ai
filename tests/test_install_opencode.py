@@ -85,6 +85,13 @@ class TestInstallGate:
             "carter-atlassian",
         }
 
+    def test_install_ends_with_the_next_step_on_stdout(self, fake_opencode, tmp_path: Path) -> None:
+        fake_opencode()
+        result = _install(tmp_path / "home")
+        assert result.exit_code == 0, result.output
+        assert result.stdout.splitlines()[-1].startswith("→ restart the OpenCode server")
+        assert "→ restart" not in result.stderr
+
     def test_uninstall_flag_removed(self, fake_opencode, tmp_path: Path) -> None:
         fake_opencode()
         result = _install(tmp_path, "--uninstall")

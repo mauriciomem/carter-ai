@@ -128,6 +128,12 @@ def fail(cause: str, fix: str = "", code: str = "", *, inline: bool = False) -> 
         _emit(err, [*first, *tail])
 
 
+def next(text: str) -> None:
+    """``→ text``: what to do now, on stdout, with the arrow in the fix colour."""
+    out = sys.stdout
+    _emit(out, [(_glyph("fix", out), "cyan"), (f" {text}", "")])
+
+
 def kv(rows: Iterable[tuple[str, str]], *, indent: int = 2) -> None:
     """A compact key/value table: dim keys, aligned values, no borders."""
     items = [(k, v) for k, v in rows if v != ""]
