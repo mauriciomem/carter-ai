@@ -83,6 +83,7 @@ class TestJobs:
             "uv tool install ." in text and "CARTER_PERF" in text and "CARTER_GATE_PYTHON" in text
         )
         assert "tests/gate/test_budget.py" in text and "GITHUB_STEP_SUMMARY" in text
+        assert "tests/test_startup.py" in text  # the `carter --help` budget rides on this job
         assert not job.get("continue-on-error")
 
     def test_e2e_is_its_own_manual_workflow_and_latest_may_fail(self, ci: dict, e2e: dict) -> None:

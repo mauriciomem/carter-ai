@@ -8,6 +8,7 @@ import importlib
 import json
 from pathlib import Path
 
+import click
 import pytest
 
 from carter import ghtoken
@@ -22,7 +23,8 @@ OWNED = "carter-llm/zz-probe-repo"
 
 class TestRemoved:
     def test_carter_pr_is_not_a_command_but_push_is(self) -> None:
-        assert "pr" not in main.commands and "push" in main.commands
+        names = main.list_commands(click.Context(main))
+        assert "pr" not in names and "push" in names
 
     @pytest.mark.parametrize(
         "module",

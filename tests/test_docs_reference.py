@@ -12,6 +12,7 @@ import re
 import tomllib
 from pathlib import Path
 
+import click
 import pytest
 import yaml
 from click.testing import CliRunner
@@ -59,7 +60,10 @@ class TestCliReference:
 
     def test_every_command_has_a_heading(self) -> None:
         doc = text("reference/cli.md")
-        for name, command in main.commands.items():
+        ctx = click.Context(main)
+        for name in main.list_commands(ctx):
+            command = main.get_command(ctx, name)
+            assert command is not None
             if not command.hidden:
                 assert f"\n## carter {name}\n" in doc, name
 

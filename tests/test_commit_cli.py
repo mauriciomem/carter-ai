@@ -12,6 +12,7 @@ import os
 import subprocess
 from pathlib import Path
 
+import click
 import pytest
 from click.testing import CliRunner
 
@@ -67,7 +68,7 @@ def last(repo: Path, fmt: str = "%B") -> str:
 
 class TestRegistration:
     def test_the_command_is_registered_and_help_describes_it(self) -> None:
-        assert main.commands["commit"] is commit_cmd
+        assert main.get_command(click.Context(main), "commit") is commit_cmd
         done = CliRunner().invoke(main, ["commit", "--help"])
         assert done.exit_code == 0 and "Commit as the LLM identity" in done.output
         for flag in ("--no-verify", "--no-gpg-sign", "--signoff", "--author"):
