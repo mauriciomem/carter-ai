@@ -458,6 +458,7 @@ def check(target_dir: str, no_harness: bool, host: bool, probe: bool) -> None:
     if host:
         from carter.hostcheck import live_readers, run_host_checks
 
+        click.echo("checking GitHub...", err=True)  # the network calls below take a few seconds
         items = run_host_checks(cwd=Path(target_dir).resolve(), **live_readers())
         raise SystemExit(ui.items(items, "host"))
     target = Path(target_dir).resolve()

@@ -11,6 +11,7 @@ Nothing here writes. The same pieces back ``carter guard status``.
 from __future__ import annotations
 
 from collections.abc import Callable, Mapping
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Any
 
@@ -302,6 +303,11 @@ def run_host_checks(
     first, git_ok = g2.gitconfig_first(base_dir)  # before any plain git or OpenCode call
     items += first
     state = read.state if read.status == "ok" else GuardState()
+    # The two checks that talk to GitHub start now and overlap the local ones. Their items are
+    # added where they always were, so the report reads the same as when they ran in sequence.
+    pool = ThreadPoolExecutor(max_workers=2, thread_name_prefix="host-check")
+    identity_run = pool.submit(_identity, state, base_dir, where, git_version, fetch)
+    token_run = pool.submit(_token, base_dir)
     loaded: dict | None = None
     if read.status in ("corrupt", "newer"):
         text = f"{E_STATE_INVALID}: {state_path} is {read.status} ({read.detail})"
@@ -345,20 +351,21 @@ def run_host_checks(
         except gitconfig.GitError:
             mode = None
     guarded("git", lambda: g2.repo_items(state, base_dir, where, _workspace_paths(), tier, mode))
-    guarded("identity", lambda: _identity(state, base_dir, where, git_version, fetch))
+    guarded("identity", identity_run.result)
     guarded("versions", lambda: g2.version_items(opencode_version, git_version))
     guarded("plugin files", lambda: g2.foreign_plugin_items(base_dir, where))
     guarded("project", lambda: _project_scope(where))
     guarded("opt-outs", _optouts)
     guarded("workspace", lambda: _pending_pins(where))
     guarded("unknown key", lambda: unknownkeys.host_items(base_dir))
-    guarded("token", lambda: _token(base_dir))
+    guarded("token", token_run.result)
     if servers is not None:
         guarded("server environment", lambda: g2.pollution_items(servers, home or str(Path.home())))
     else:
         items.append(Item("info", "server environment", "OpenCode servers were not checked"))
     items += _env(server_env or {})
     items += g2.limits_items()
+    pool.shutdown()
     return items
 
 
