@@ -198,7 +198,8 @@ class TestMergeIntoUserConfig:
     def test_backup_before_modify(self, tmp_path: Path) -> None:
         path = self._cfg(tmp_path, json.dumps({"theme": "x"}))
         merge_mcp_servers(path, {"carter-github": {}}, tmp_path / "backup")
-        assert json.loads((tmp_path / "backup" / "opencode.json").read_text()) == {"theme": "x"}
+        copy = next((tmp_path / "backup").rglob("opencode.json"))
+        assert json.loads(copy.read_text()) == {"theme": "x"}
 
 
 class TestUninstallV2:

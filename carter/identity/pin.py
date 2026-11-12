@@ -11,8 +11,10 @@ schema-only writer, which refuses to drop unmodelled keys.
 from __future__ import annotations
 
 from dataclasses import dataclass, replace
+from datetime import UTC, datetime
 from pathlib import Path
 
+from carter.identity.config import default_path
 from carter.identity.errors import E_ROLE_B_TIER
 from carter.identity.schema import TIERS, IdentityConfig, Workspace
 from carter.identity.writer import write_config
@@ -73,4 +75,8 @@ def apply_pin(cfg: IdentityConfig, plan: PinPlan, path: Path | None = None) -> b
     workspaces = {k: v for k, v in cfg.workspaces.items() if k != plan.key}
     if entry != Workspace():
         workspaces[plan.key] = entry
-    return write_config(replace(cfg, workspaces=workspaces, state="current"), path)
+    path = path or default_path()
+    stamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%S")
+    backup = path.parent / "backups" / stamp / path.name  # a rewrite drops the user's comments
+    new = replace(cfg, workspaces=workspaces, state="current")
+    return write_config(new, path, backup_to=backup)

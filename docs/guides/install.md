@@ -173,9 +173,10 @@ If uv says there is nothing to upgrade, force a reinstall from the latest commit
 uv tool install --force git+https://github.com/mauriciomem/carter-ai.git
 ```
 
-Re-running `carter install` is safe. It updates the agents and skills, copies any file it replaces
-to `~/.carter/backups/<timestamp>/`, and never overwrites your knowledge files or an `AGENTS.md`
-you edited. Skills that Carter no longer ships are removed unless you changed them. If your global
+Re-running `carter install` is safe. It updates the agents and skills, copies a file you edited
+before replacing it (at its own path under `~/.carter/backups/<timestamp>/`; Carter's own previous
+output is not copied), deletes backup directories older than 15 days, and never overwrites your
+knowledge files or an `AGENTS.md` you edited. Skills that Carter no longer ships are removed unless you changed them. If your global
 `AGENTS.md` has your edits, `carter install` says it is user-modified and leaves it alone.
 
 `~/.carter/config.toml` is created on a first install and never rewritten by `install`. A key Carter

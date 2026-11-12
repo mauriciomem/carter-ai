@@ -102,6 +102,7 @@ def _checked(cfg: IdentityConfig) -> str:
 
 def _create_backup(source: Path, backup: Path) -> None:
     """Copy ``source`` to ``backup`` (0600) unless it exists: a backup is never overwritten."""
+    backup.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
     try:
         fd = os.open(backup, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
     except FileExistsError:

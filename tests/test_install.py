@@ -461,7 +461,7 @@ class TestInstallPrimitives:
 
         assert _install_file(src, dst, manifest, backup) == "updated"
         assert dst.read_text() == "new\n"
-        assert (backup / "dst.md").read_text() == "old\n"
+        assert next(backup.rglob("dst.md")).read_text() == "old\n"
         assert manifest["file_hashes"][str(dst)] == _sha256(src)
         assert _install_file(src, dst, manifest, backup) == "unchanged"
         assert manifest["files"] == [str(dst), str(dst)]
@@ -1157,7 +1157,7 @@ class TestRetiredSkills:
 
     def test_retired_unmodified_skill_is_removed(self, base_dir: Path) -> None:
         skill, previous = self._seed(base_dir, "carter-triage")
-        components.remove_retired_skills(base_dir, previous, base_dir / "backup")
+        components.remove_retired_skills(base_dir, previous)
         assert not skill.exists()
 
     def test_retired_edited_skill_is_kept_with_warning(
@@ -1165,7 +1165,7 @@ class TestRetiredSkills:
     ) -> None:
         skill, previous = self._seed(base_dir, "carter-triage")
         (skill / "SKILL.md").write_text("my edits\n")
-        components.remove_retired_skills(base_dir, previous, base_dir / "backup")
+        components.remove_retired_skills(base_dir, previous)
         assert (skill / "SKILL.md").read_text() == "my edits\n"
         out = seen(capsys)
         assert "carter-triage" in out and "rm -r" in out
@@ -1174,27 +1174,27 @@ class TestRetiredSkills:
         self, base_dir: Path, capsys: pytest.CaptureFixture[str]
     ) -> None:
         skill, previous = self._seed(base_dir, "carter-triage", record=False)
-        components.remove_retired_skills(base_dir, previous, base_dir / "backup")
+        components.remove_retired_skills(base_dir, previous)
         assert skill.exists()
         assert "carter-triage" in seen(capsys)
 
     def test_retired_skill_with_extra_user_file_is_kept(self, base_dir: Path) -> None:
         skill, previous = self._seed(base_dir, "carter-triage")
         (skill / "mine.md").write_text("user file\n")
-        components.remove_retired_skills(base_dir, previous, base_dir / "backup")
+        components.remove_retired_skills(base_dir, previous)
         assert (skill / "mine.md").exists()
 
     def test_no_previous_manifest_keeps_everything(self, base_dir: Path) -> None:
         skill, _ = self._seed(base_dir, "carter-triage")
-        components.remove_retired_skills(base_dir, None, base_dir / "backup")
+        components.remove_retired_skills(base_dir, None)
         assert skill.exists()
 
     def test_non_carter_skill_is_untouched(self, base_dir: Path) -> None:
         skill, previous = self._seed(base_dir, "my-skill")
-        components.remove_retired_skills(base_dir, previous, base_dir / "backup")
+        components.remove_retired_skills(base_dir, previous)
         assert (skill / "SKILL.md").exists()
 
     def test_current_skill_is_untouched(self, base_dir: Path) -> None:
         skill, previous = self._seed(base_dir, "carter-adr")
-        components.remove_retired_skills(base_dir, previous, base_dir / "backup")
+        components.remove_retired_skills(base_dir, previous)
         assert (skill / "SKILL.md").exists()

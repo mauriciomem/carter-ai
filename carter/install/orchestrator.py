@@ -11,6 +11,7 @@ from pathlib import Path
 
 from carter import __version__, ui, unknownkeys
 from carter.home import tilde
+from carter.install.backups import STAMP_FORMAT, prune
 from carter.install.components import (
     install_agents,
     install_knowledge,
@@ -71,7 +72,7 @@ def run(
         log_step("Skipping MCP credentials (no --mcp flag)")
 
     now = datetime.now(UTC)
-    backup_root = backups_dir(base_dir) / now.strftime("%Y%m%dT%H%M%S")
+    backup_root = backups_dir(base_dir) / now.strftime(STAMP_FORMAT)
 
     manifest: dict = {
         "version": __version__,
@@ -85,11 +86,13 @@ def run(
     existing = read_manifest(base_dir)
     if existing:
         manifest["installed_at"] = existing.get("installed_at", now.isoformat())
+        # The previous hashes tell an edit from Carter's own output (see files._install_content).
+        manifest["file_hashes"].update(existing["file_hashes"])
         log_debug("Existing installation found — updating")
 
     agent_stats = install_agents(base_dir, manifest, backup_root)
     skill_stats = install_skills(base_dir, manifest, backup_root)
-    remove_retired_skills(base_dir, existing, backup_root)
+    remove_retired_skills(base_dir, existing)
     install_opencode_rules(base_dir, manifest, existing)
     knowledge_count = install_knowledge(base_dir, manifest, backup_root)
     memory_count = install_memories(base_dir, manifest)
@@ -102,6 +105,9 @@ def run(
         mcp_count = 0
 
     manifest_path = write_manifest(manifest, base_dir)
+    pruned = prune(backups_dir(base_dir))
+    if pruned:
+        _log(f"pruned {pruned} old backups", level=2)
 
     total_agents = agent_stats["created"] + agent_stats["updated"] + agent_stats["unchanged"]
 

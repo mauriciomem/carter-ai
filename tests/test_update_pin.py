@@ -407,3 +407,18 @@ class TestWorkspaceLevelNoteOnly:
         agents = ws / "AGENTS.md"
         agents.write_text(f"# Mine\ncoauthor_trailer\n{OWN_TERMINAL}\n")
         assert "not rewritten" not in update(ws, "--yes").output
+
+
+class TestPinBackup:
+    def test_a_pin_keeps_a_copy_of_the_file_it_rewrites(self, ws, cfg_path, home):
+        """The writer drops comments; the file as the user had it goes to backups/<stamp>/."""
+        cfg_path.parent.mkdir(parents=True, exist_ok=True)
+        before = "# my notes\n" + T1
+        cfg_path.write_text(before, encoding="utf-8")
+        set_policy(ws, role="author", require_tier="t2")
+
+        assert update(ws, "--yes").exit_code == 0
+
+        (copy,) = (home / ".carter" / "backups").glob("*/config.toml")
+        assert copy.read_text(encoding="utf-8") == before
+        assert "my notes" not in cfg_path.read_text(encoding="utf-8")

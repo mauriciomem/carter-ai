@@ -43,7 +43,6 @@ def test_tree_snapshot_records_links_without_following(tmp_path: Path) -> None:
     assert tree_snapshot(root) == {"link": ("link", tree_snapshot(root)["link"][1], str(outside))}
 
 
-@pytest.mark.xfail(strict=True, reason="pending: backups mirror the original path")
 def test_two_edited_skills_both_get_a_backup(installed: Path) -> None:
     edited = sorted(_skills(installed).glob("*/SKILL.md"))[:2]
     for skill in edited:

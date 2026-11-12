@@ -18,6 +18,7 @@ from carter.identity import ConfigError
 from carter.identity.config import read_document
 from carter.identity.schema import IdentityConfig
 from carter.identity.writer import write_config
+from carter.install.backups import STAMP_FORMAT
 from carter.install.console import log_err, log_ok, log_skip, log_step, log_warn
 from carter.install.files import (
     _install_file,
@@ -29,6 +30,7 @@ from carter.install.paths import (
     REPO_ROOT,
     _carter_base,
     _opencode_base,
+    backups_dir,
     knowledge_dir,
     manifest_path,
 )
@@ -61,7 +63,7 @@ def rerender_agents(base_dir: Path | None) -> dict[str, int] | None:
     agents_dir = _opencode_base(base_dir) / "agents"
     ours = {str(agents_dir / name) for name in _render_opencode_agents(base_dir)}
     manifest["files"] = [f for f in manifest["files"] if f not in ours]
-    backup_root = _carter_base(base_dir) / "backups" / "agents"
+    backup_root = backups_dir(base_dir) / datetime.now(UTC).strftime(STAMP_FORMAT)
     stats = install_agents(base_dir, manifest, backup_root)
     manifest["updated_at"] = datetime.now(UTC).isoformat()
     write_manifest(manifest, base_dir)
@@ -115,17 +117,14 @@ def install_skills(
     return stats
 
 
-def remove_retired_skills(
-    base_dir: Path | None,
-    previous: dict | None,
-    backup_root: Path,
-) -> int:
+def remove_retired_skills(base_dir: Path | None, previous: dict | None) -> int:
     """Remove ``carter-*`` skills Carter no longer ships, if still Carter-owned.
 
     A retired skill directory is deleted only when every file in it is listed in
     the previous install manifest and still has its recorded hash. Otherwise it is
     kept and the user is told how to remove it. Non-``carter-*`` skills and skills
-    Carter still ships are never touched. Returns the number of skills removed.
+    Carter still ships are never touched. Nothing is copied first: what goes is Carter's own
+    unchanged output. Returns the number of skills removed.
     """
     skills_root = _opencode_base(base_dir) / "skills"
     if not skills_root.is_dir():
@@ -151,7 +150,6 @@ def remove_retired_skills(
                 hint=f"remove it manually if unused: rm -r {shown}",
             )
             continue
-        shutil.copytree(skill, backup_root / "retired-skills" / skill.name, dirs_exist_ok=True)
         shutil.rmtree(skill)
         log_ok(f"{shown} (removed: no longer shipped by Carter)")
         removed += 1
@@ -338,7 +336,11 @@ def install_ops(base_dir: Path | None, manifest: dict) -> bool:
 def write_manifest(manifest: dict, base_dir: Path | None) -> Path:
     path = manifest_path(base_dir)
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
+    # Hashes are kept only for the paths the manifest still lists.
+    listed = set(manifest.get("files", []))
+    hashes = {k: v for k, v in manifest.get("file_hashes", {}).items() if k in listed}
+    text = json.dumps({**manifest, "file_hashes": hashes}, indent=2)
+    path.write_text(text + "\n", encoding="utf-8")
     return path
 
 

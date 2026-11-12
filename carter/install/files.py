@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import shutil
 from collections.abc import Callable
 from pathlib import Path
@@ -15,11 +16,21 @@ def _sha256(path: Path) -> str:
     return sha256_bytes(path.read_bytes())
 
 
+def _mirror(path: Path) -> Path:
+    """Where a backup of ``path`` goes under ``backups/<stamp>/``: its own location, so two
+    ``SKILL.md`` never share a name. Relative to ``$HOME``; outside it, without the anchor.
+    The path is normalised first, so a ``..`` cannot climb out of the backup root."""
+    p = Path(os.path.abspath(path))
+    try:
+        return p.relative_to(Path.home())
+    except ValueError:
+        return p.relative_to(p.anchor)
+
+
 def _backup_file(path: Path, backup_root: Path) -> None:
     if not path.exists():
         return
-    rel = path.name
-    dest = backup_root / rel
+    dest = backup_root / _mirror(path)
     dest.parent.mkdir(parents=True, exist_ok=True)
     shutil.copy2(path, dest)
     log_debug(f"Backed up {path} → {dest}")
@@ -34,17 +45,21 @@ def _install_content(
 ) -> str:
     """Install ``dst`` via ``write`` unless it already has ``content_hash``.
 
-    A differing existing file is backed up first. ``dst`` is always recorded in
-    the manifest with ``content_hash``. Returns ``created``, ``updated`` or
-    ``unchanged``.
+    A differing existing file is backed up first, unless it is the output Carter recorded
+    last time (``manifest["file_hashes"]`` is seeded with the previous install's hashes):
+    that is reproducible, so only an edit or a file Carter never wrote is copied. ``dst`` is
+    always recorded in the manifest with ``content_hash``. Returns ``created``, ``updated``
+    or ``unchanged``.
     """
     dst.parent.mkdir(parents=True, exist_ok=True)
     if dst.exists():
-        if _sha256(dst) == content_hash:
+        current = _sha256(dst)
+        if current == content_hash:
             log_skip(tilde(dst))
             status = "unchanged"
         else:
-            _backup_file(dst, backup_root)
+            if current != manifest["file_hashes"].get(str(dst)):
+                _backup_file(dst, backup_root)
             write()
             log_ok(tilde(dst), "updated")
             status = "updated"
