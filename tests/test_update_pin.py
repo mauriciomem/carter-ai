@@ -69,11 +69,7 @@ class TestPinning:
         result = update(ws, "--yes")
 
         assert result.exit_code == 0, result.output
-        assert pinned(cfg_path, ws) == {
-            "allow_project_opencode_edit": False,
-            "role": "author",
-            "require_tier": "t2",
-        }
+        assert pinned(cfg_path, ws) == {"role": "author", "require_tier": "t2"}
 
     def test_shows_the_change_and_its_source(self, ws, cfg_path):
         set_policy(ws, role="author", require_tier="t2")
@@ -147,7 +143,7 @@ class TestPinning:
         )
         set_policy(ws)
         update(ws, "--yes")
-        assert pinned(cfg_path, ws) == {"allow_project_opencode_edit": False, "max_tier": "t0"}
+        assert pinned(cfg_path, ws) == {"max_tier": "t0"}
 
     def test_the_file_stays_0600(self, ws, cfg_path):
         set_policy(ws, role="author")

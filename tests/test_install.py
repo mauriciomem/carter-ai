@@ -518,8 +518,8 @@ class TestInstallOps:
 
         config = base_dir / "carter" / "config.toml"
         content = config.read_text()
-        assert "schema = 2" in content
-        assert "[attribution]" in content
+        assert content.splitlines()[1:] == ["schema = 2"]  # a comment line, then the schema
+        assert "[" not in content  # only what the user sets is stored
         assert "[git]" not in content and "signing_key" not in content
         assert "[jira]" not in content
         assert (config.stat().st_mode & 0o777) == 0o600

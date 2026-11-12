@@ -1,4 +1,4 @@
-"""Carter uninstall — manifest-driven removal with a by-convention fallback."""
+"""Carter uninstall — manifest-driven removal; without a manifest, the files this version ships."""
 
 from __future__ import annotations
 
@@ -6,6 +6,8 @@ from pathlib import Path
 
 from carter import ui
 from carter.home import tilde
+from carter.identity import ConfigError, load_identity
+from carter.identity.schema import IdentityConfig
 from carter.install.components import _render_opencode_agents, read_manifest
 from carter.install.console import log_ok, log_step, log_warn
 from carter.install.mcp import global_config_files, remove_carter_servers
@@ -55,6 +57,16 @@ def _remove_if_owned(
     while parent not in keep and _within(parent, roots) and not any(parent.iterdir()):
         parent.rmdir()
         parent = parent.parent
+
+
+def _is_default_config(path: Path) -> bool:
+    """True if ``config.toml`` holds nothing the user set: it parses to the all-defaults
+    config (compared as a value, so a fully written older file counts too). A missing,
+    unreadable or unknown-key file is not default."""
+    try:
+        return load_identity(path) == IdentityConfig(state="current")
+    except ConfigError:
+        return False
 
 
 def _shipped_paths(base_dir: Path | None) -> list[Path]:

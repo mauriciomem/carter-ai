@@ -198,6 +198,51 @@ class TestWithoutManifest:
         assert "rmtree" not in inspect.getsource(uninstall_mod)
 
 
+class TestIsDefaultConfig:
+    """Uninstall may delete ``config.toml`` only if nothing in it was set by the user."""
+
+    @pytest.mark.parametrize(
+        ("text", "expected"),
+        [
+            ("schema = 2\n", True),
+            ("", False),  # empty is "no file" to the reader; never claimed as default
+            (
+                'schema = 2\n[identity]\nrole = "co-author"\nlogin = ""\n[broker]\nmin_dwell_ms = 500\n',  # noqa: E501
+                True,
+            ),
+            ('schema = 2\n[identity]\nlogin = "bot"\n', False),
+            ('schema = 2\n[workspaces."/w"]\nrole = "author"\n', False),
+            ('schema = 2\n[attribution]\nfooter = "mine"\n', False),
+            ('schema = 2\n[identity]\nsurprise = "x"\n', False),
+            ("schema = 2\n[identity\n", False),
+            ("schema = 3\n", False),
+        ],
+        ids=[
+            "minimal",
+            "empty",
+            "fully-written",
+            "login",
+            "pin",
+            "footer",
+            "unknown",
+            "broken",
+            "future",
+        ],
+    )
+    def test_default_means_the_parsed_value_not_the_text(
+        self, tmp_path: Path, text: str, expected: bool
+    ) -> None:
+        path = tmp_path / "config.toml"
+        path.write_text(text)
+        assert uninstall_mod._is_default_config(path) is expected
+
+    def test_a_missing_file_is_not_default(self, tmp_path: Path) -> None:
+        assert uninstall_mod._is_default_config(tmp_path / "config.toml") is False
+
+    def test_what_install_writes_is_default(self, installed: Path) -> None:
+        assert uninstall_mod._is_default_config(paths.carter_config_path(installed)) is True
+
+
 class TestMcpRemoval:
     def _config(self, base_dir: Path, servers: dict) -> Path:
         cfg = paths._opencode_base(base_dir) / "opencode.json"
