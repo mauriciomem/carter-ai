@@ -9,6 +9,7 @@ from typing import Any
 
 import yaml
 
+from carter import _yaml
 from carter.identity.policyset import (
     agent_mcp_denies,
     agent_permission_denies,
@@ -255,7 +256,7 @@ def load_config(config_path: Path) -> dict[str, Any]:
         raise ConfigError(f"Config file not found: {config_path}")
 
     with open(config_path) as f:
-        config = yaml.safe_load(f)
+        config = _yaml.load(f)
 
     if not isinstance(config, dict):
         raise ConfigError(f"Invalid config format in {config_path}")

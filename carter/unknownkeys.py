@@ -29,6 +29,7 @@ from typing import Any
 
 import yaml
 
+from carter import _yaml
 from carter.checkitems import Item
 from carter.identity.config import unknown_keys
 from carter.install.jsonc import _load_jsonc
@@ -69,7 +70,7 @@ def config_toml(path: Path) -> list[Hit]:
 
 def _read_yaml(path: Path) -> Any:
     try:
-        return yaml.safe_load(path.read_text(encoding="utf-8"))
+        return _yaml.load(path.read_text(encoding="utf-8"))
     except (OSError, UnicodeDecodeError, yaml.YAMLError, ValueError):
         return None
 
