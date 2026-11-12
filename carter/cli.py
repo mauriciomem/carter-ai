@@ -187,6 +187,7 @@ def init(
         _validate_docs_language,
         generate_default_config,
     )
+    from carter.home import remember_workspace
     from carter.scaffold import create_env, policy_notice
     from carter.state import add_to_gitignore, init_workspace
 
@@ -220,6 +221,7 @@ def init(
         config=config,
         git_state=not no_git_state,
     )
+    remember_workspace(target)
     ui.detail(f"initialized .carter/ in {target}")
 
     # In single-repo mode, add .carter/ to .gitignore
@@ -398,6 +400,7 @@ def _note_stale_workspace_rules(target: Path, config: dict, env: Environment) ->
 def update(target_dir: str, dry_run: bool, assume_yes: bool) -> None:
     """Re-render the agents and apply carter.yaml."""
     from carter.config import ConfigError, load_config
+    from carter.home import remember_workspace
     from carter.scaffold import create_env, policy_notice, render_agents
 
     del assume_yes  # accepted and ignored: update asks nothing
@@ -426,6 +429,9 @@ def update(target_dir: str, dry_run: bool, assume_yes: bool) -> None:
         _report_unknown_keys(target)
         return
 
+    remember_workspace(
+        target
+    )  # a workspace made before this existed is listed from its first update
     _render_and_write(target, config, env)
     ui.detail(policy_notice(config))
     ui.ok("updated", f"{len(render_agents(config, env))} agents from carter.yaml")

@@ -9,6 +9,7 @@ from __future__ import annotations
 import contextlib
 import json
 import os
+import shlex
 import shutil
 import sys
 from dataclasses import dataclass, field
@@ -17,7 +18,7 @@ from pathlib import Path
 from typing import Literal
 
 from carter import ui
-from carter.home import tilde
+from carter.home import WORKSPACES_FILE, tilde
 from carter.identity import ConfigError, load_identity
 from carter.identity.schema import IdentityConfig
 from carter.install.backups import STAMP_FORMAT
@@ -64,6 +65,16 @@ class KeptRow:
     count: int
 
 
+@dataclass(frozen=True)
+class Workspace:
+    """A workspace Carter knows about. Carter deletes nothing in it: ``rm`` is for the user."""
+
+    path: Path
+    exists: bool  # False: its ``.carter/carter.yaml`` is gone, so there is nothing to say
+    rm: str = ""  # one ready-to-run line for the agent files; empty when none are left
+    also: tuple[str, ...] = ()  # the user's to delete, named and never turned into a command
+
+
 @dataclass
 class UninstallReport:
     """Everything ``uninstall`` did and left, as data."""
@@ -75,6 +86,7 @@ class UninstallReport:
     mcp_servers: int = 0
     config_removed: bool = False  # config.toml held only defaults
     kept: list[KeptRow] = field(default_factory=list)
+    workspaces: list[Workspace] = field(default_factory=list)  # empty: no section to print
     manager: str = ""  # the command that removes the program itself
     leftover: bool = False  # ~/.carter still exists
 
@@ -195,6 +207,39 @@ def _kind(path: Path, opencode_base: Path, base_dir: Path | None) -> tuple[str, 
     return ("AGENTS.md" if p.name == "AGENTS.md" else "other"), str(p)
 
 
+def _workspace(raw: str) -> Workspace:
+    path = Path(raw)
+    if not (path / ".carter" / "carter.yaml").is_file():
+        return Workspace(path, exists=False)
+    agents = path / ".opencode" / "agents"
+    # The glob stays outside the quotes; the path inside them cannot run anything.
+    rm = f"rm {shlex.quote(str(path))}/.opencode/agents/carter-*.md" if _any_agent(agents) else ""
+    named = (".carter/", "AGENTS.md", ".github/workflows/carter-review.yml")
+    also = tuple(n for n in named if n == ".carter/" or (path / n).is_file())
+    return Workspace(path, exists=True, rm=rm, also=also)
+
+
+def _any_agent(agents: Path) -> bool:
+    return agents.is_dir() and any(agents.glob("carter-*.md"))
+
+
+def _take_workspaces(base_dir: Path | None) -> list[Workspace]:
+    """The workspaces ``init``/``update`` recorded plus the ones pinned in ``config.toml``, then
+    delete the record (an app file). A path with a control character is never shown or quoted."""
+    file = _carter_base(base_dir) / WORKSPACES_FILE
+    recorded: list[str] = []
+    with contextlib.suppress(OSError, ValueError):
+        recorded = file.read_text(encoding="utf-8").splitlines()
+    try:
+        pinned = list(load_identity(carter_config_path(base_dir)).workspaces)
+    except ConfigError:
+        pinned = []
+    with contextlib.suppress(OSError):
+        file.unlink(missing_ok=True)
+    unique = dict.fromkeys(r for r in (*recorded, *pinned) if r.isprintable() and os.path.isabs(r))
+    return [_workspace(raw) for raw in unique]
+
+
 def _rmdir_if_empty(path: Path) -> None:
     with contextlib.suppress(OSError):  # not empty, not a directory, gone: the user's or nothing
         path.rmdir()
@@ -302,6 +347,7 @@ def uninstall(
         path.unlink()
         log_ok("Removed manifest")
 
+    report.workspaces = _take_workspaces(base_dir)
     _clean_carter_home(base_dir, report)
     ui.ok("uninstalled")
     return report

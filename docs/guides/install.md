@@ -217,8 +217,10 @@ uv tool uninstall carter-ai   # removes the carter command itself
   ⚠ Kept ~/.carter/knowledge/mistakes.md: edited since install
 ```
 
-Workspaces created with `carter init` are never touched; remove their `.carter/`,
-`.opencode/agents/carter-*` and `AGENTS.md` yourself.
+Workspaces created with `carter init` are never touched. `uninstall` lists the ones it knows
+(recorded by `carter init` and `carter update`) with the `rm` line for their
+`.opencode/agents/carter-*.md`; run it yourself, and remove `.carter/` and `AGENTS.md` too if you
+want them gone.
 
 ## Next
 

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import inspect
 import json
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -12,7 +13,7 @@ from carter.install import mcp, orchestrator, paths
 from carter.install import uninstall as uninstall_mod
 from carter.install.components import _OPENCODE_AGENTS_MD
 from carter.install.files import _sha256
-from carter.install.uninstall import KeptRow, uninstall
+from carter.install.uninstall import KeptRow, Workspace, uninstall
 from lifecycle.helpers import tree_diff, tree_snapshot
 
 SEED = "patterns.md"
@@ -460,3 +461,119 @@ class TestCleanup:
         cfg.write_text("{}")
         uninstall(base_dir)
         assert cfg.read_text() == "{}"
+
+
+class TestWorkspaces:
+    """The record of ``init``/``update`` becomes plain ``rm`` hints; nothing is deleted there."""
+
+    def _workspace(self, root: Path, name: str, *, agents: int = 2) -> Path:
+        ws = root / name
+        (ws / ".carter").mkdir(parents=True)
+        (ws / ".carter" / "carter.yaml").write_text("name: x\n")
+        (ws / ".opencode" / "agents").mkdir(parents=True)
+        for i in range(agents):
+            (ws / ".opencode" / "agents" / f"carter-r{i}-local.md").write_text("agent")
+        return ws
+
+    def _record(self, base_dir: Path, *lines: str) -> Path:
+        file = paths._carter_base(base_dir) / "workspaces"
+        file.write_text("".join(f"{line}\n" for line in lines))
+        return file
+
+    def test_no_file_means_no_section(self, installed: Path) -> None:
+        assert uninstall(installed).workspaces == []
+
+    def test_a_recorded_workspace_gets_one_rm_line_and_its_own_names(
+        self, installed: Path, tmp_path: Path
+    ) -> None:
+        ws = self._workspace(tmp_path / "src", "proj")
+        (ws / "AGENTS.md").write_text("mine")
+        (ws / ".github" / "workflows").mkdir(parents=True)
+        (ws / ".github" / "workflows" / "carter-review.yml").write_text("on: x")
+        self._record(installed, str(ws))
+        [found] = uninstall(installed).workspaces
+        assert found == Workspace(
+            ws,
+            exists=True,
+            rm=f"rm {ws}/.opencode/agents/carter-*.md",
+            also=(".carter/", "AGENTS.md", ".github/workflows/carter-review.yml"),
+        )
+
+    def test_carter_deletes_nothing_in_a_workspace_and_the_file_goes(
+        self, installed: Path, tmp_path: Path
+    ) -> None:
+        ws = self._workspace(tmp_path / "src", "proj")
+        file = self._record(installed, str(ws))
+        before = tree_snapshot(ws)
+        uninstall(installed)
+        assert tree_diff(before, tree_snapshot(ws)) == "" and not file.exists()
+
+    def test_a_workspace_without_agent_files_has_no_command(
+        self, installed: Path, tmp_path: Path
+    ) -> None:
+        ws = self._workspace(tmp_path / "src", "proj", agents=0)
+        self._record(installed, str(ws))
+        [found] = uninstall(installed).workspaces
+        assert found.exists and found.rm == "" and found.also == (".carter/",)
+
+    def test_a_path_that_is_gone_or_lost_its_config_is_reported_as_such(
+        self, installed: Path, tmp_path: Path
+    ) -> None:
+        gone = tmp_path / "gone"
+        bare = tmp_path / "bare"
+        bare.mkdir()
+        self._record(installed, str(gone), str(bare))
+        got = uninstall(installed).workspaces
+        assert got == [Workspace(gone, exists=False), Workspace(bare, exists=False)]
+
+    def test_pins_in_config_toml_join_the_record_without_repeats(
+        self, installed: Path, tmp_path: Path
+    ) -> None:
+        a = self._workspace(tmp_path, "a")
+        b = self._workspace(tmp_path, "b")
+        paths.carter_config_path(installed).write_text(
+            f'schema = 2\n[workspaces."{a}"]\nrole = "author"\n'
+            f'[workspaces."{b}"]\nrole = "author"\n'
+        )
+        self._record(installed, str(a))
+        assert [w.path for w in uninstall(installed).workspaces] == [a, b]
+
+    def test_pins_alone_are_enough_and_blank_or_relative_lines_are_dropped(
+        self, installed: Path, tmp_path: Path
+    ) -> None:
+        a = self._workspace(tmp_path, "a")
+        paths.carter_config_path(installed).write_text(
+            f'schema = 2\n[workspaces."{a}"]\nrole = "author"\n'
+        )
+        self._record(installed, "", "relative/path")
+        assert [w.path for w in uninstall(installed).workspaces] == [a]
+
+    @pytest.mark.parametrize("key", ["/tmp/x\\ny", "/tmp/x\\u001b[2Jy", "/tmp/x\\ty"])
+    def test_a_pinned_path_with_a_control_character_is_dropped(
+        self, installed: Path, key: str
+    ) -> None:
+        paths.carter_config_path(installed).write_text(
+            f'schema = 2\n[workspaces."{key}"]\nrole = "author"\n'
+        )
+        assert uninstall(installed).workspaces == []
+
+    @pytest.mark.parametrize(
+        "name",
+        ["my proj", "it's", "a$(touch pwned1)b", "back`touch pwned2`", "semi;touch pwned3",
+         "star*", "dash -rf", '"dq"', "a\\b", "ünï"],
+    )  # fmt: skip
+    def test_hostile_names_make_one_safe_command(
+        self, installed: Path, tmp_path: Path, name: str
+    ) -> None:
+        ws = self._workspace(tmp_path / "src", name)
+        (ws / ".opencode" / "agents" / "my-agent.md").write_text("mine")
+        self._record(installed, str(ws))
+        [found] = uninstall(installed).workspaces
+        assert "\n" not in found.rm and found.rm.startswith("rm ")
+        run = tmp_path / "cwd"
+        run.mkdir()
+        env = {"PATH": "/usr/bin:/bin"}  # the fixture's PATH has only the fake opencode
+        subprocess.run(["/bin/sh", "-c", found.rm], cwd=run, env=env, check=True)  # as pasted
+        left = sorted(p.name for p in (ws / ".opencode" / "agents").iterdir())
+        assert left == ["my-agent.md"] and list(run.iterdir()) == []
+        assert not list(tmp_path.rglob("pwned*"))

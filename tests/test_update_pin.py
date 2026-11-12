@@ -96,7 +96,10 @@ class TestPinning:
         assert again.exit_code == 0
         assert snap(cfg_path) == before
         assert "already pinned" in again.output.lower()
-        assert sorted(p.name for p in cfg_path.parent.iterdir()) == ["config.toml"]
+        assert sorted(p.name for p in cfg_path.parent.iterdir()) == [
+            "config.toml",
+            "workspaces",
+        ]  # no backup
 
     def test_no_policy_and_no_pin_touches_nothing(self, ws, cfg_path):
         result = update(ws, "--yes")
@@ -104,7 +107,7 @@ class TestPinning:
         assert not cfg_path.exists()
 
     def test_hand_edited_fields_survive_a_pin(self, ws, cfg_path):
-        cfg_path.parent.mkdir(parents=True)
+        cfg_path.parent.mkdir(parents=True, exist_ok=True)
         cfg_path.write_text(
             T1 + f'[workspaces."{ws.resolve()}"]\nmax_tier = "t1"\n'
             "allow_project_opencode_edit = true\n"
@@ -119,7 +122,7 @@ class TestPinning:
         assert tomllib.loads(cfg_path.read_text())["identity"]["login"] == "llm-bot"
 
     def test_other_workspaces_are_untouched(self, ws, cfg_path):
-        cfg_path.parent.mkdir(parents=True)
+        cfg_path.parent.mkdir(parents=True, exist_ok=True)
         cfg_path.write_text(T1 + '[workspaces."/somewhere/else"]\nrole = "author"\n')
         set_policy(ws, role="co-author")
         update(ws, "--yes")
@@ -137,7 +140,7 @@ class TestPinning:
         assert pinned(cfg_path, ws) == {}  # the empty entry is dropped
 
     def test_unpin_keeps_a_hand_edited_cap(self, ws, cfg_path):
-        cfg_path.parent.mkdir(parents=True)
+        cfg_path.parent.mkdir(parents=True, exist_ok=True)
         cfg_path.write_text(
             T1 + f'[workspaces."{ws.resolve()}"]\nmax_tier = "t0"\nrole = "author"\n'
         )
@@ -153,7 +156,7 @@ class TestPinning:
 
 class TestCarterYamlIsInertUntilUpdate:
     def test_yaml_policy_changes_nothing_at_runtime(self, ws, cfg_path):
-        cfg_path.parent.mkdir(parents=True)
+        cfg_path.parent.mkdir(parents=True, exist_ok=True)
         cfg_path.write_text(T1)
         set_policy(ws, role="author", require_tier="t2")  # no `carter update` yet
 
@@ -163,7 +166,7 @@ class TestCarterYamlIsInertUntilUpdate:
         assert res.commits == "allowed"
 
     def test_later_yaml_edits_are_inert_after_a_pin(self, ws, cfg_path):
-        cfg_path.parent.mkdir(parents=True)
+        cfg_path.parent.mkdir(parents=True, exist_ok=True)
         cfg_path.write_text(T1)
         set_policy(ws, role="co-author")
         update(ws, "--yes")
@@ -174,7 +177,7 @@ class TestCarterYamlIsInertUntilUpdate:
         assert (res.role, res.role_source) == ("co-author", "workspace")
 
     def test_a_pinned_role_author_at_t1_is_reported_as_refused(self, ws, cfg_path):
-        cfg_path.parent.mkdir(parents=True)
+        cfg_path.parent.mkdir(parents=True, exist_ok=True)
         cfg_path.write_text(T1)
         set_policy(ws, role="author")
         update(ws, "--yes")
@@ -226,7 +229,7 @@ class TestConfirmation:
 
 class TestRefusals:
     def test_cap_below_require_tier_refuses_everything(self, ws, cfg_path):
-        cfg_path.parent.mkdir(parents=True)
+        cfg_path.parent.mkdir(parents=True, exist_ok=True)
         cfg_path.write_text(T1 + f'[workspaces."{ws.resolve()}"]\nmax_tier = "t1"\n')
         before = snap(cfg_path)
         set_policy(ws, require_tier="t2")
@@ -239,7 +242,7 @@ class TestRefusals:
 
     def test_role_author_next_to_a_cap_is_refused_and_nothing_is_written(self, ws, cfg_path):
         """role author needs T2, a cap is always below it; never downgraded."""
-        cfg_path.parent.mkdir(parents=True)
+        cfg_path.parent.mkdir(parents=True, exist_ok=True)
         cfg_path.write_text(T1 + f'[workspaces."{ws.resolve()}"]\nmax_tier = "t1"\n')
         before = snap(cfg_path)
         set_policy(ws, role="author")
@@ -251,7 +254,7 @@ class TestRefusals:
         assert snap(cfg_path) == before
 
     def test_a_cap_added_by_hand_after_the_pin_is_refused_by_the_mirror_step(self, ws, cfg_path):
-        cfg_path.parent.mkdir(parents=True)
+        cfg_path.parent.mkdir(parents=True, exist_ok=True)
         cfg_path.write_text(T1)
         set_policy(ws, role="author")
         assert update(ws, "--yes").exit_code == 0
@@ -264,13 +267,13 @@ class TestRefusals:
         assert result.exit_code == 1 and "E-ROLE-B-TIER" in result.output
 
     def test_cap_equal_to_require_tier_is_fine(self, ws, cfg_path):
-        cfg_path.parent.mkdir(parents=True)
+        cfg_path.parent.mkdir(parents=True, exist_ok=True)
         cfg_path.write_text(T1 + f'[workspaces."{ws.resolve()}"]\nmax_tier = "t1"\n')
         set_policy(ws, require_tier="t1")
         assert update(ws, "--yes").exit_code == 0
 
     def test_unmodelled_keys_refuse_with_the_diff_and_never_overwrite(self, ws, cfg_path):
-        cfg_path.parent.mkdir(parents=True)
+        cfg_path.parent.mkdir(parents=True, exist_ok=True)
         text = T1 + "[extra]\nprecious = 1\n"
         cfg_path.write_text(text)
         set_policy(ws, role="author")
@@ -282,7 +285,7 @@ class TestRefusals:
         assert cfg_path.read_text() == text
 
     def test_broken_config_refuses_to_pin(self, ws, cfg_path):
-        cfg_path.parent.mkdir(parents=True)
+        cfg_path.parent.mkdir(parents=True, exist_ok=True)
         cfg_path.write_text("schema = 2\n[identity\n")
         set_policy(ws, role="author")
         result = update(ws, "--yes")
@@ -291,12 +294,12 @@ class TestRefusals:
         assert cfg_path.read_text() == "schema = 2\n[identity\n"
 
     def test_broken_config_does_not_block_update_when_nothing_is_to_pin(self, ws, cfg_path):
-        cfg_path.parent.mkdir(parents=True)
+        cfg_path.parent.mkdir(parents=True, exist_ok=True)
         cfg_path.write_text("schema = 2\n[identity\n")
         assert update(ws, "--yes").exit_code == 0
 
     def test_a_config_with_old_keys_is_not_rewritten_and_the_keys_are_named(self, ws, cfg_path):
-        cfg_path.parent.mkdir(parents=True)
+        cfg_path.parent.mkdir(parents=True, exist_ok=True)
         legacy = '[attribution]\nname = "x"\n'
         cfg_path.write_text(legacy)
         set_policy(ws, role="author")

@@ -73,7 +73,9 @@ agents and MCP servers stay.
 It asks nothing. Unless `--keep-guards` is given, uninstall first removes the policy guards it
 installed, only where it is unchanged since (anything you edited is kept and reported), then the
 LLM identity files. An agent shell keeps both. A guard problem is printed and makes the exit code 1
-but never stops the rest of the removal.
+but never stops the rest of the removal. Workspaces are never touched; the ones recorded by
+`carter init` and `carter update` in `~/.carter/workspaces` are listed with a ready-to-run `rm`
+line for their `carter-*` agent files.
 
 ## carter init
 
