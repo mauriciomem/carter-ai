@@ -81,7 +81,14 @@ line-length = 100
 src = ["carter", "tests", "evals"]
 
 [tool.ruff.lint]
-select = ["E", "F", "W", "I", "UP", "B", "SIM", "C4"]
+select = ["E", "F", "W", "I", "UP", "B", "SIM", "C4", "PLW1514"]
+# PLW1514 (unspecified-encoding) is a preview rule: `explicit-preview-rules` turns on only the
+# preview rules named in `select`, nothing else. Files Carter writes for tools are UTF-8.
+preview = true
+explicit-preview-rules = true
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["PLW1514"]  # fixtures written and read back by the same test
 
 [tool.ruff.lint.isort]
 known-first-party = ["carter"]

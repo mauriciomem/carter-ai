@@ -372,7 +372,7 @@ def _note_stale_workspace_rules(target: Path, config: dict, env: Environment) ->
     instructions = _instructions_path(target)
     if not instructions.exists():
         return
-    have = instructions.read_text()
+    have = instructions.read_text(encoding="utf-8")
     lines = render_instructions(config, env)["AGENTS.md"].splitlines()
     # What a workspace AGENTS.md must contain to be current: (marker text, rendered line prefix).
     required = (("coauthor_trailer", "- **Commits**"), (OWN_TERMINAL, "- **Pushing**"))
@@ -509,7 +509,7 @@ def check(target_dir: str, no_harness: bool, host: bool, probe: bool) -> None:
         if not agent_file.exists():
             errors.append((f"Missing agent file: {agent_file.relative_to(target)}", _UPDATE))
             continue
-        parsed = parse_frontmatter(agent_file.read_text())
+        parsed = parse_frontmatter(agent_file.read_text(encoding="utf-8"))
         if parsed is None:
             errors.append((f"Unparseable frontmatter: {agent_file.relative_to(target)}", _UPDATE))
         else:
@@ -640,7 +640,7 @@ def _write_if_absent(path: Path, content: str) -> bool:
     if path.exists():
         return False
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(content)
+    path.write_text(content, encoding="utf-8")
     return True
 
 

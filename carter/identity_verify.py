@@ -209,7 +209,7 @@ def verify_local(
     try:
         scratch.chmod(0o700)
         repo, signers = scratch / "repo", scratch / "allowed_signers"
-        signers.write_text(allowed_signers_text(cfg))
+        signers.write_text(allowed_signers_text(cfg), encoding="utf-8")
         repo.mkdir()
         block = answer(str(repo), {}, str(config_path), home)
         if block.get("reason") == "human-identity-invalid":

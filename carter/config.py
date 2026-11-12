@@ -255,7 +255,7 @@ def load_config(config_path: Path) -> dict[str, Any]:
     if not config_path.exists():
         raise ConfigError(f"Config file not found: {config_path}")
 
-    with open(config_path) as f:
+    with open(config_path, encoding="utf-8") as f:
         config = _yaml.load(f)
 
     if not isinstance(config, dict):
@@ -637,5 +637,5 @@ def generate_default_config(
 def write_config(config_path: Path, config: dict[str, Any]) -> None:
     """Write config dict to a YAML file."""
     config_path.parent.mkdir(parents=True, exist_ok=True)
-    with open(config_path, "w") as f:
+    with open(config_path, "w", encoding="utf-8") as f:
         yaml.dump(config, f, default_flow_style=False, sort_keys=False)

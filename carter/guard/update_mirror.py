@@ -50,7 +50,7 @@ def plan(base_dir: Path | None, cfg: IdentityConfig) -> Plan:
     out = Plan(add=[e for e in wanted if e not in have], drop=[e for e in have if e not in wanted])
     folder = carter / mirror.FRAGMENTS_DIR
     for path, text in frags.items():
-        if not path.exists() or path.read_text() != text:
+        if not path.exists() or path.read_text(encoding="utf-8") != text:
             out.fragments_add.append(path.name)
     out.fragments_drop = [p.name for p in sorted(folder.glob("*")) if p not in frags]
     return out

@@ -73,7 +73,7 @@ def _strip_comments(text: str) -> str:
 def _load_jsonc(path: Path) -> dict | None:
     """Load a JSONC file (JSON with Comments). Returns None on failure."""
     try:
-        raw = path.read_text()
+        raw = path.read_text(encoding="utf-8")
         stripped = _strip_jsonc(raw)
         return json.loads(stripped)
     except (json.JSONDecodeError, OSError) as e:
@@ -87,7 +87,7 @@ def _write_json(path: Path, data: dict) -> None:
     Comments and trailing commas of a JSONC original are not preserved.
     """
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(data, indent=2) + "\n")
+    path.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
 
 
 def _write_json_atomic(path: Path, data: dict) -> Path:

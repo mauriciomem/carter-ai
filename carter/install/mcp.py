@@ -47,7 +47,7 @@ def config_target(base_dir: Path | None) -> Path:
 
 def _save_config(file_path: Path, data: dict) -> None:
     """Write ``data``; first keep a sibling copy of an original with comments."""
-    if file_path.exists() and has_comments(file_path.read_text()):
+    if file_path.exists() and has_comments(file_path.read_text(encoding="utf-8")):
         backup = file_path.with_name(file_path.name + BACKUP_SUFFIX)
         shutil.copy2(file_path, backup)
         log_warn(
@@ -157,7 +157,7 @@ def configure_mcp_servers(
         if not src.is_file():
             log_warn(f"carter-{server}: not available for opencode")
             continue
-        entries.update(json.loads(src.read_text()))
+        entries.update(json.loads(src.read_text(encoding="utf-8")))
 
     json_path, jsonc_path = global_config_files(base_dir)
     target = config_target(base_dir)

@@ -95,7 +95,7 @@ def file_items(state: GuardState, base_dir: Path | None) -> list[Item]:
                 text = f"{path} {what}"
                 out.append(Item("red", "plugin", text, "Run `carter guard install`."))
     if index.exists() and iso.exists():
-        baked = BAKED.search(index.read_text(errors="replace"))
+        baked = BAKED.search(index.read_text(errors="replace", encoding="utf-8"))
         from carter.identity.isolation import sha256_hex
 
         actual = sha256_hex(iso.read_bytes())
@@ -131,7 +131,9 @@ def g2_items(state: GuardState, base_dir: Path | None) -> list[Item]:
     iso = isolation_path(base_dir)
     if iso.exists():
         try:
-            listed = sorted(json.loads(iso.read_text())["plugin"]["declined_groups"])
+            listed = sorted(
+                json.loads(iso.read_text(encoding="utf-8"))["plugin"]["declined_groups"]
+            )
         except (ValueError, KeyError, TypeError):
             return out
         if listed != sorted(consent.declined_groups(state)):
@@ -161,7 +163,7 @@ def status_items(
     live = []
     for path in files:
         try:
-            doc = json.loads(path.read_text())
+            doc = json.loads(path.read_text(encoding="utf-8"))
             pid = int(doc["pid"])
         except (ValueError, KeyError, TypeError, OSError):
             continue

@@ -29,7 +29,7 @@ def agents_dir(tmp_path: Path) -> Path:
     out = tmp_path / "agents"
     out.mkdir()
     for name, content in render_agents(cfg, create_env()).items():
-        (out / name).write_text(content)
+        (out / name).write_text(content, encoding="utf-8")
     assert any(out.glob("carter-*.md")), "no agents rendered"
     return out
 
@@ -51,7 +51,7 @@ def scenarios_dir() -> Path:
 @pytest.fixture
 def ops_scenarios_raw(scenarios_dir: Path) -> list[dict]:
     """carter-ops skill scenarios exactly as written in the YAML."""
-    return yaml.safe_load((scenarios_dir / "carter_ops.yaml").read_text())
+    return yaml.safe_load((scenarios_dir / "carter_ops.yaml").read_text(encoding="utf-8"))
 
 
 @pytest.fixture
@@ -76,7 +76,7 @@ def ops_scenarios(ops_scenarios_raw: list[dict]) -> list[dict]:
 @pytest.fixture
 def skill_scenarios(scenarios_dir: Path) -> list[dict]:
     """Skill-correctness scenarios."""
-    return yaml.safe_load((scenarios_dir / "skills.yaml").read_text())
+    return yaml.safe_load((scenarios_dir / "skills.yaml").read_text(encoding="utf-8"))
 
 
 def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> None:
@@ -97,4 +97,4 @@ def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> None:
 
     path = Path(out)
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(summary(), indent=2) + "\n")
+    path.write_text(json.dumps(summary(), indent=2) + "\n", encoding="utf-8")

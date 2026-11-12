@@ -59,7 +59,7 @@ def _audit(entry: dict[str, Any]) -> None:
     try:
         if AUDIT_LOG is not None:
             AUDIT_LOG.parent.mkdir(parents=True, exist_ok=True)
-            with open(AUDIT_LOG, "a") as f:
+            with open(AUDIT_LOG, "a", encoding="utf-8") as f:
                 f.write(json.dumps(entry) + "\n")
         else:
             audit_store.append_ops(entry)

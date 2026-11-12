@@ -251,6 +251,6 @@ def write_rendered_files(
     written = []
     for filename, content in files.items():
         path = output_dir / filename
-        path.write_text(content)
+        path.write_text(content, encoding="utf-8")
         written.append(path)
     return written

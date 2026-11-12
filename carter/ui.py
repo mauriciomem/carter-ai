@@ -38,16 +38,36 @@ def verbose() -> bool:
     return _state["verbose"]
 
 
+# Every non-ASCII character Carter prints, with its stand-in on a stream that cannot show it.
+# The one place that owns the fallback: ``_emit`` runs all text through ``_plain``.
+STAND_INS = {
+    GLYPHS["ok"]: ASCII["ok"],
+    GLYPHS["fail"]: ASCII["fail"],
+    GLYPHS["fix"]: ASCII["fix"],
+    GLYPHS["info"]: ASCII["info"],
+    "⚠": ASCII["warn"],
+    "…": "...",
+    "—": "-",
+}
+
+
 def _glyph(kind: str, stream: TextIO) -> str:
     encoding = (getattr(stream, "encoding", None) or "ascii").lower().replace("-", "")
     return (GLYPHS if encoding in ("utf8", "utf16", "utf32") else ASCII)[kind]
 
 
 def _plain(line: str, stream: TextIO) -> str:
-    """``line`` as is on a UTF-8 stream, with ASCII stand-ins for its two glyphs otherwise."""
+    """``line`` as is on a UTF-8 stream. Otherwise the glyphs become ASCII stand-ins and any
+    other character the stream cannot encode becomes ``?``: printing never raises."""
     if _glyph("ok", stream) == GLYPHS["ok"]:
         return line
-    return line.replace("⚠", ASCII["warn"]).replace("→", ASCII["fix"])
+    for glyph, stand_in in STAND_INS.items():
+        line = line.replace(glyph, stand_in)
+    encoding = getattr(stream, "encoding", None) or "ascii"
+    try:
+        return line.encode(encoding, "replace").decode(encoding)
+    except LookupError:  # a codec name Python does not know
+        return line.encode("ascii", "replace").decode("ascii")
 
 
 def _console(stream: TextIO) -> Any:
@@ -81,7 +101,7 @@ def _fix_line(stream: TextIO, fix: str) -> list[tuple[str, str]]:
 def _emit(stream: TextIO, *lines: Sequence[tuple[str, str]]) -> None:
     console = _console(stream)
     for parts in lines:
-        console.print(_text(*parts))
+        console.print(_text(*((_plain(content, stream), style) for content, style in parts)))
 
 
 def ok(text: str, detail: str = "") -> None:
@@ -163,7 +183,7 @@ def items(rows: Sequence[Any], noun: str, *, all_items: bool | None = None) -> i
         mark = {"ok": "ok", "info": "info", "warn": "warn", "red": "fail"}[row.level]
         stream = err if row.level in ("warn", "red") else out
         if row.raw:
-            _emit(stream, [(_plain(row.raw, stream), "yellow")])
+            _emit(stream, [(row.raw, "yellow")])
             continue
         style = {"ok": "green", "info": "dim", "warn": "yellow", "red": "red bold"}[row.level]
         lines = [[(_glyph(mark, stream), style), (f" {row.area}: ", "bold"), (row.text, "")]]

@@ -72,7 +72,7 @@ def _install_rendered_file(
     return _install_content(
         dst,
         sha256_bytes(content.encode()),
-        lambda: dst.write_text(content),
+        lambda: dst.write_text(content, encoding="utf-8"),
         manifest,
         backup_root,
     )

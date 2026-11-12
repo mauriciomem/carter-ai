@@ -66,7 +66,7 @@ def _validated(text: str) -> None:
     scratch = Path(tempfile.mkdtemp(prefix="carter-frag-"))
     try:
         probe = scratch / "f"
-        probe.write_text(text)
+        probe.write_text(text, encoding="utf-8")
         if not gitconfig.parses(probe):
             raise gitconfig.GitError("a rendered fragment is not valid git config; nothing written")
     finally:

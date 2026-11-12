@@ -49,7 +49,7 @@ INSTALL_HINT = "Run `carter guard install`."
 
 def _isolation_plugin(base_dir: Path | None) -> dict | None:
     try:
-        doc = json.loads(isolation_path(base_dir).read_text())
+        doc = json.loads(isolation_path(base_dir).read_text(encoding="utf-8"))
         plugin = doc["plugin"]
         return plugin if isinstance(plugin, dict) else None
     except (OSError, ValueError, KeyError, TypeError):
@@ -145,7 +145,7 @@ def autoaccept_items(base_dir: Path | None, auto_pids: Callable[[], list[int]]) 
     out: list[Item] = []
     config = (Path.home() if base_dir is None else base_dir) / OPENCODE_CLI_CONFIG
     try:
-        mode = json.loads(config.read_text()).get("session", {}).get("permissions")
+        mode = json.loads(config.read_text(encoding="utf-8")).get("session", {}).get("permissions")
     except (OSError, ValueError, AttributeError):
         mode = None
     hint = 'Set `session.permissions` back to "prompt" (names only: the file is not shown).'
