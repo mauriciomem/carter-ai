@@ -310,7 +310,7 @@ own commits and pushes run nothing extra):
   `--no-verify` doesn't skip it.
 - `commit-msg` checks that the trailer is still there.
 - `post-commit` only **warns** when the commit is unsigned or signed by the wrong key. It never undoes
-  anything and leaves a line in `~/.carter/run/guard.log`.
+  anything and leaves a line in `~/.carter/state/audit/guard.log`.
 
 Git doesn't run these hooks for `git stash`, `git commit-tree`, `git notes add` and `git am`;
 `post-commit` also doesn't run for a plain `--no-ff` merge commit. The backstops are the command gate

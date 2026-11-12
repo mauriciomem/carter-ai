@@ -209,6 +209,12 @@ class TestControlFiles:
         ):
             assert rule_of(cmd) is None, (entry, cmd)
 
+    def test_the_unsigned_commit_log_is_a_control_file_an_agent_may_read_not_write(self) -> None:
+        log = "~/.carter/state/audit/guard.log"
+        for cmd in (f"echo x >> {log}", f"rm {log}", f"truncate -s0 {log}", f"mv {log} /tmp/x"):
+            assert rule_of(cmd) == "control-files", cmd
+        assert rule_of(f"cat {log}") is None
+
     def test_a_relative_target_after_cd_into_a_control_directory(self) -> None:
         assert rule_of("cd ~/.carter/hooks && echo x > carter-guard") == "control-files"
         assert rule_of("cd ~/.carter && echo x > isolation.json") == "control-files"

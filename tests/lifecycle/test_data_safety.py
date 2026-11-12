@@ -72,7 +72,7 @@ def test_default_uninstall_output_lists_what_was_removed(installed: Path, capsys
     assert "Removed" in got.out + got.err
 
 
-@pytest.mark.xfail(strict=True, reason="pending: run/ goes whole, the old guard.log is migrated")
+@pytest.mark.xfail(strict=True, reason="pending: run/ is removed whole")
 def test_old_guard_log_is_migrated_and_run_dir_removed(installed: Path) -> None:
     carter = paths._carter_base(installed)
     (carter / "run").mkdir()

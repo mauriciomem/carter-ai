@@ -328,7 +328,7 @@ H2_PATHS = {
     "allowed_signers": ".carter/hooks/allowed_signers",
     "pidfile": ".carter/run/agent.pid",
     "lock": ".carter/run/unlock.lock",
-    "guard_log": ".carter/run/guard.log",
+    "guard_log": ".carter/state/audit/guard.log",
 }
 H2_SIGNING_DEFAULTS = {"ttl": "", "ssh_bin_dir": "/usr/bin"}
 H2_SOCKET_LIMITS = {"darwin": 104, "linux": 108}

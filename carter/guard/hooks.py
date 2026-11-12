@@ -19,6 +19,7 @@ file. Everything here is rendered with ``shlex.quote`` and is byte-deterministic
 
 from __future__ import annotations
 
+import os
 import re
 import shlex
 from collections.abc import Mapping, Sequence
@@ -39,7 +40,7 @@ from carter.identity.errors import (
     registry,
 )
 from carter.identity.rules import STRONG_AGENT_SIGNAL, human_identity_rules
-from carter.install.paths import guard_script_path
+from carter.install.paths import guard_log_path, guard_script_path, run_dir
 
 GUARD_VERSION = "2.2.0"
 EVENT = "pre-push"
@@ -262,10 +263,27 @@ def script_path(base_dir: Path | None) -> Path:
     return guard_script_path(base_dir)
 
 
+def migrate_guard_log(base_dir: Path | None) -> None:
+    """Move the ``run/guard.log`` an older script wrote to ``state/audit/guard.log`` (appended
+    if that exists). Best effort: a failure leaves the old file where it was."""
+    old, new = run_dir(base_dir) / "guard.log", guard_log_path(base_dir)
+    if old.is_symlink() or not old.is_file():
+        return
+    try:
+        new.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+        fd = os.open(new, os.O_WRONLY | os.O_APPEND | os.O_CREAT | os.O_NOFOLLOW, 0o600)
+        with os.fdopen(fd, "ab") as out:
+            out.write(old.read_bytes())
+        old.unlink()
+    except OSError:
+        pass
+
+
 def install_script(
     base_dir: Path | None, state: GuardState, *, overwrite_edited: bool = False
 ) -> str:
-    """Write the script (0755, atomically), record its hash and the rendered version."""
+    """Write the script (0755, atomically), record its hash and the rendered version. A new
+    script logs to ``state/audit/``, so a log the old one left in ``run/`` moves there."""
     status = gitconfig.install_file(
         script_path(base_dir),
         render_script(),
@@ -275,4 +293,5 @@ def install_script(
     )
     if status != "edited-kept":
         state.set_guard_version(GUARD_VERSION)
+        migrate_guard_log(base_dir)
     return status

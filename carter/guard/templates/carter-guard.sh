@@ -177,7 +177,8 @@ post_commit() {
   printf '%s\n%s\n' "$M_UNSIGNED_0$head$M_UNSIGNED_1" "$R_UNSIGNED" >&2
   (
     umask 077
-    printf '%s @@UNSIGNED_CODE@@ %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$head" >>"$chome/run/guard.log"
+    mkdir -p "$chome/state/audit" &&
+      printf '%s @@UNSIGNED_CODE@@ %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$head" >>"$chome/state/audit/guard.log"
   ) 2>/dev/null
   return 0
 }

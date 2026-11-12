@@ -90,6 +90,9 @@ def uninstall(base_dir: Path | None, *, keep_guards: bool = False, assume_yes: b
     The guards go first (policies before files). Returns 1 if removing the guards failed;
     everything else is still removed, as ``carter install`` never aborts on its guard step."""
     log_step("Uninstalling Carter...")
+    from carter.guard.hooks import migrate_guard_log
+
+    migrate_guard_log(base_dir)  # a log an older guard script left in run/ is kept, in state/audit/
     guard_code = 0
     if not keep_guards:
         from carter.guard.wiring import uninstall_guards, uninstall_identity

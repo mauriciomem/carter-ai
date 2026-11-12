@@ -268,6 +268,7 @@ class TestReadAndEditDenies:
             "/home/fixture/.carter/run/agent.pid",
             "/home/fixture/.carter/secrets/gh-read.token",
             "/home/fixture/.carter/state/audit/b.jsonl",
+            "/home/fixture/.carter/state/audit/guard.log",
             "/home/fixture/.carter/isolation.json",
             "/home/fixture/.carter/gitconfig",
             "/home/fixture/.carter/gitconfig.d/abc123",

@@ -38,7 +38,7 @@ uninstall.
 | `~/.carter/gitconfig` (hook tier) and `gitconfig.d/<hash>` | `carter.tier`, `carter.llmEmail`, `carter.llmFingerprint` and one `includeIf "gitdir:"` fragment per workspace with a `max_tier`: how the git hooks learn the tier. The user's own git config is never written for this | Rewritten by `identity add` and `carter update` | The mirror is removed by `identity remove`; the hook entries stay until `guard remove` |
 | `~/.carter/run/agent.sock`, `agent.pid`, `unlock.lock` (or `$XDG_RUNTIME_DIR/carter/agent.sock`; on macOS `$TMPDIR/carter-<uid>/`) | Carter's dedicated `ssh-agent` while a key is unlocked | Created by `identity unlock` | Removed by `identity lock --all` / `identity remove` |
 | `~/.carter/run/coauthor-link.json` (0600) | Role `author`: whether GitHub knows your `user.email`, one row per address as a **hash** (`noreply` or `verified`, with the time; never the address). Valid for 7 days | Written by `identity add` and `check --host` in your own terminal only | Kept |
-| `~/.carter/run/guard.log` (0600) | One line per `post-commit` warning (a commit that is unsigned or not signed by the LLM key). Never read by Carter | Appended by the hook | Kept |
+| `~/.carter/state/audit/guard.log` (0600) | One line per `post-commit` warning (a commit that is unsigned or not signed by the LLM key). Never read by Carter; agents can read it but not edit it. A hook installed by an older Carter keeps writing to `run/guard.log` until the next `carter guard install` | Appended by the hook | Kept |
 | `~/.carter/state/audit/` | Audit store | Kept | Kept |
 
 Uninstall uses the checksums in the manifest to decide whether you edited a file.
