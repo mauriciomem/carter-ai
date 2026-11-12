@@ -3,7 +3,8 @@
 ``ok`` / ``warn`` / ``info`` / ``fail`` print one line each; ``kv`` prints a compact two-column
 table; ``detail`` prints only with ``-v``. A normal run ends in one to three lines.
 
-- Errors say the actual cause and the fix: ``✗ <cause>`` then ``→ <fix>`` with the code dimmed.
+- Errors say the actual cause and the fix: ``✗ <cause>`` then ``→ <fix>`` (cyan arrow, fix never
+  dimmed); only the code is dimmed.
 - ``ok``, ``info``, ``kv`` and ``detail`` go to stdout; ``warn`` and ``fail`` go to stderr.
 - Colour follows the terminal: none when output is not a terminal, none with ``NO_COLOR``
   (rich reads it) or ``--no-color``. Plain text keeps the same glyphs; on a terminal that cannot
@@ -72,6 +73,11 @@ def _text(*parts: tuple[str, str]) -> Any:
     return text
 
 
+def _fix_line(stream: TextIO, fix: str) -> list[tuple[str, str]]:
+    """The indented ``  → fix`` line under a warning: the arrow coloured, the fix readable."""
+    return [("  ", ""), (_glyph("fix", stream), "cyan"), (f" {fix}", "")]
+
+
 def _emit(stream: TextIO, *lines: Sequence[tuple[str, str]]) -> None:
     console = _console(stream)
     for parts in lines:
@@ -103,7 +109,7 @@ def warn(text: str, fix: str = "") -> None:
     err = sys.stderr
     lines = [[(_glyph("warn", err), "yellow"), (f" {text}", "")]]
     if fix:
-        lines.append([(f"  {_glyph('fix', err)} {fix}", "dim")])
+        lines.append(_fix_line(err, fix))
     _emit(err, *lines)
 
 
@@ -156,7 +162,7 @@ def items(rows: Sequence[Any], noun: str, *, all_items: bool | None = None) -> i
         style = {"ok": "green", "info": "dim", "warn": "yellow", "red": "red bold"}[row.level]
         lines = [[(_glyph(mark, stream), style), (f" {row.area}: ", "bold"), (row.text, "")]]
         if row.fix:
-            lines.append([(f"  {_glyph('fix', stream)} {row.fix}", "dim")])
+            lines.append(_fix_line(stream, row.fix))
         _emit(stream, *lines)
     red = sum(1 for r in rows if r.level == "red")
     warns = sum(1 for r in rows if r.level == "warn")

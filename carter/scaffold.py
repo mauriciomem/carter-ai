@@ -119,16 +119,19 @@ def policy_notice(config: dict[str, Any]) -> str:
     )
 
 
-def model_advisory(config: dict[str, Any]) -> str:
-    """The model advisory `carter check` always prints (never empty).
+def model_pins(config: dict[str, Any]) -> list[tuple[str, str]]:
+    """``(role, pinned model)`` for every agent, in config order."""
+    return [(role, resolve_model(config, role)) for role in config.get("agents", [])]
 
-    OpenCode ignores a pinned model your provider lacks, so name each pin.
+
+def model_advisory(config: dict[str, Any]) -> str:
+    """The one line `carter check` always prints (never empty).
+
+    OpenCode ignores a pinned model your provider lacks, so the pins are named (each model
+    once; ``-v`` adds the role behind each) and the caveat stays: Carter cannot verify them.
     """
-    pins = ", ".join(f"{role} → {resolve_model(config, role)}" for role in config.get("agents", []))
-    return (
-        f"Model pins: {pins}. Carter cannot verify your OpenCode provider "
-        "subscription includes them."
-    )
+    models = ", ".join(dict.fromkeys(model for _, model in model_pins(config)))
+    return f"Pinned models: {models}. Carter cannot verify your provider has them."
 
 
 # ──────────────────────────────────────────────────────────────────────────────

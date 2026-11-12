@@ -532,8 +532,9 @@ at once, without retrying. It is
 skipped with a warning when `opencode` isn't on `PATH`; `--no-harness` skips it on
 purpose.
 
-On success, `carter check` prints `✓ Workspace OK` and also each agent's model, because Carter
-can't verify that your provider offers it.
+On success, `carter check` prints `✓ Workspace OK` and, above it, one line naming the pinned models,
+because Carter can't verify that your provider offers them (`-v` adds the role behind each model).
+On failure every `✗` line has its `→` fix and the run ends with `✗ workspace: N problems`.
 
 ### carter check --host
 

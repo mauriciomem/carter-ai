@@ -147,3 +147,17 @@ class TestItems:
     def test_all_good_is_a_single_line(self, capsys: pytest.CaptureFixture[str]) -> None:
         assert ui.items([Item("ok", "a", "b")], "host") == 0
         assert capsys.readouterr().out == "✓ host\n"
+
+
+def test_the_fix_is_never_dimmed_but_the_arrow_is_coloured(monkeypatch: pytest.MonkeyPatch) -> None:
+    stream = io.StringIO()
+    stream.isatty = lambda: True  # type: ignore[method-assign]
+    monkeypatch.setattr("sys.stderr", stream)
+    monkeypatch.setenv("FORCE_COLOR", "1")
+    ui.warn("careful", "do this")
+    ui.items([Item("warn", "a", "b", "or this")], "host")
+    out = stream.getvalue()
+    assert "\x1b[2m" not in out  # dim only appears on the code, never on a fix
+    assert out.count("\x1b[36m->") == 2  # a StringIO has no encoding: the ASCII arrow
+    assert "do this" in out and "or this" in out
+

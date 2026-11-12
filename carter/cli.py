@@ -27,6 +27,7 @@ from carter.scaffold import (
     create_env,
     lint_policy,
     model_advisory,
+    model_pins,
     policy_notice,
     render_agents,
     render_instructions,
@@ -415,6 +416,10 @@ def update(target_dir: str, dry_run: bool, assume_yes: bool) -> None:
     _report_unknown_keys(target)
 
 
+_UPDATE = "run `carter update`"
+_EDIT = "fix the file named above, then run `carter check` again"
+
+
 @main.command()
 @click.argument("target_dir", default=".", type=click.Path(exists=True, file_okay=False))
 @click.option(
@@ -455,7 +460,7 @@ def check(target_dir: str, no_harness: bool, host: bool, probe: bool) -> None:
         raise SystemExit(ui.items(items, "host"))
     target = Path(target_dir).resolve()
     config_path = target / ".carter" / "carter.yaml"
-    errors: list[str] = []
+    errors: list[tuple[str, str]] = []  # (problem, the command that fixes it)
     warnings: list[str] = []  # reported, never change the exit code
     loaded = False
 
@@ -477,36 +482,38 @@ def check(target_dir: str, no_harness: bool, host: bool, probe: bool) -> None:
     for agent_name in config["agents"]:
         agent_file = agents_dir / agent_filename(agent_name, config)
         if not agent_file.exists():
-            errors.append(f"Missing agent file: {agent_file.relative_to(target)}")
+            errors.append((f"Missing agent file: {agent_file.relative_to(target)}", _UPDATE))
             continue
         parsed = parse_frontmatter(agent_file.read_text())
         if parsed is None:
-            errors.append(f"Unparseable frontmatter: {agent_file.relative_to(target)}")
+            errors.append((f"Unparseable frontmatter: {agent_file.relative_to(target)}", _UPDATE))
         else:
             installed[agent_name] = parsed
 
     instructions_file = _instructions_path(target)
     if not instructions_file.exists():
-        errors.append(f"Missing instructions: {instructions_file.relative_to(target)}")
+        errors.append((f"Missing instructions: {instructions_file.relative_to(target)}", _UPDATE))
 
     # Check knowledge files
     knowledge_dir = target / ".carter" / "knowledge"
     for filename in KNOWLEDGE_FILES:
         if not (knowledge_dir / filename).exists():
-            errors.append(f"Missing knowledge file: .carter/knowledge/{filename}")
+            errors.append(
+                (f"Missing knowledge file: .carter/knowledge/{filename}", "run `carter init`")
+            )
 
     # Validate plan frontmatter contract; thresholds from config
     plans_root = target / ".carter" / "state" / "plans"
     plans_result = validate_plans_dir(plans_root, config.get("plans"))
-    errors.extend(plans_result.errors)
+    errors.extend((e, _EDIT) for e in plans_result.errors)
 
     # Validate the session checkpoint cursor (absent is fine); cross-check that
     # its active_plan resolves to a real plan under active/.
     checkpoint = target / ".carter" / "state" / "sessions" / "checkpoint.md"
-    errors.extend(validate_checkpoint(checkpoint, plans_root))
+    errors.extend((e, _EDIT) for e in validate_checkpoint(checkpoint, plans_root))
 
     # Lint emitted `permissions:`/`model` against what carter.yaml generates.
-    errors.extend(lint_policy(config, installed))
+    errors.extend((e, _UPDATE) for e in lint_policy(config, installed))
 
     # Harness validation: OpenCode must actually load every agent.
     if not no_harness:
@@ -529,7 +536,8 @@ def check(target_dir: str, no_harness: bool, host: bool, probe: bool) -> None:
         )
         if harness_result.warning:
             ui.warn(harness_result.warning)
-        errors.extend(harness_result.errors)
+        # A message that already names a `carter` command needs no fix line of its own.
+        errors.extend((e, "" if "`carter " in e else _UPDATE) for e in harness_result.errors)
         loaded = harness_result.status == "ok"
 
     for warning in warnings:
@@ -537,12 +545,15 @@ def check(target_dir: str, no_harness: bool, host: bool, probe: bool) -> None:
     unknownkeys.report(unknownkeys.workspace(target))
 
     if errors:
-        for error in errors:
-            ui.fail(error)
+        for error, fix in errors:
+            ui.fail(error, fix)
+        ui.fail(f"workspace: {len(errors)} problem{'s' if len(errors) != 1 else ''}")
         raise SystemExit(1)
 
-    # Required unverifiable-model advisory: always printed, dimmed.
+    # The model pins cannot be verified, so every passing check says so (one line; -v adds roles).
     ui.info(model_advisory(config))
+    for role, model in model_pins(config):
+        ui.detail(f"{role}: {model}")
 
     ui.ok(
         "Workspace OK",
