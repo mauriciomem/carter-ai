@@ -52,7 +52,6 @@ def test_two_edited_skills_both_get_a_backup(installed: Path) -> None:
     assert copies == {"my edit of " + s.parent.name for s in edited}
 
 
-@pytest.mark.xfail(strict=True, reason="pending: no manifest removes only shipped names")
 def test_user_skill_named_carter_something_survives_uninstall_without_manifest(
     installed: Path,
 ) -> None:

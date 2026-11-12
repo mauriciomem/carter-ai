@@ -295,7 +295,11 @@ class TestJsoncTarget:
         assert result.exit_code == 0, result.output
         from carter.install.jsonc import _load_jsonc
 
-        assert _load_jsonc(cfg) == {"theme": "x", "mcp": {"servers": {}}}
+        # Only the names Carter ships go; a stray ``carter-old`` entry is not Carter's to remove.
+        assert _load_jsonc(cfg) == {
+            "theme": "x",
+            "mcp": {"servers": {"carter-old": {"type": "local"}}},
+        }
         assert (oc / "opencode.jsonc.carter-backup").read_text().startswith("// keep")
         assert "comments" in result.output
 

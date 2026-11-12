@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+import inspect
 import json
 from pathlib import Path
 
 import pytest
 
-from carter.install import orchestrator, paths
+from carter.install import mcp, orchestrator, paths
+from carter.install import uninstall as uninstall_mod
 from carter.install.components import _OPENCODE_AGENTS_MD
 from carter.install.files import _sha256
 from carter.install.uninstall import uninstall
@@ -141,3 +143,71 @@ def test_install_summary_counts_skill_directories(
     orchestrator.run(base_dir=base_dir, verbosity=1)
     shipped = sum(1 for d in (paths.REPO_ROOT / "skills").iterdir() if (d / "SKILL.md").exists())
     assert f"{shipped} skills" in capsys.readouterr().out
+
+
+class TestWithoutManifest:
+    """No ``manifest.json``: remove the names this version ships, never a prefix or a tree."""
+
+    @pytest.fixture
+    def oc(self, installed: Path) -> Path:
+        paths.manifest_path(installed).unlink()
+        return paths._opencode_base(installed)
+
+    def test_shipped_agents_and_skills_go_and_their_empty_dirs_with_them(
+        self, installed: Path, oc: Path
+    ) -> None:
+        uninstall(installed)
+        assert not list((oc / "agents").glob("carter-*.md"))
+        assert not list((oc / "skills").glob("*/SKILL.md"))
+        assert not any((oc / "skills").iterdir())
+
+    def test_a_user_skill_and_a_retired_one_survive(self, installed: Path, oc: Path) -> None:
+        for name in ("carter-mine", "carter-retired"):
+            (oc / "skills" / name).mkdir()
+            (oc / "skills" / name / "SKILL.md").write_text(name)
+        (oc / "agents" / "carter-mine.md").write_text("mine")
+        uninstall(installed)
+        assert (oc / "skills" / "carter-mine" / "SKILL.md").read_text() == "carter-mine"
+        assert (oc / "skills" / "carter-retired" / "SKILL.md").exists()
+        assert (oc / "agents" / "carter-mine.md").read_text() == "mine"
+
+    def test_an_extra_file_inside_a_shipped_skill_survives_with_its_directory(
+        self, installed: Path, oc: Path
+    ) -> None:
+        extra = oc / "skills" / "carter-adr" / "my-notes.md"
+        extra.write_text("notes")
+        uninstall(installed)
+        assert extra.read_text() == "notes"
+        assert not (oc / "skills" / "carter-adr" / "SKILL.md").exists()
+
+    def test_a_shipped_name_that_leaves_the_managed_roots_is_not_followed(
+        self, installed: Path, oc: Path, tmp_path: Path
+    ) -> None:
+        outside = tmp_path / "outside"
+        outside.mkdir()
+        (outside / "SKILL.md").write_text("not carter's")
+        shipped = oc / "skills" / "carter-adr"
+        for f in shipped.iterdir():
+            f.unlink()
+        shipped.rmdir()
+        shipped.symlink_to(outside, target_is_directory=True)
+        uninstall(installed)
+        assert (outside / "SKILL.md").read_text() == "not carter's"
+
+    def test_the_branch_deletes_no_directory_tree(self) -> None:
+        assert "rmtree" not in inspect.getsource(uninstall_mod)
+
+
+class TestMcpRemoval:
+    def _config(self, base_dir: Path, servers: dict) -> Path:
+        cfg = paths._opencode_base(base_dir) / "opencode.json"
+        cfg.parent.mkdir(parents=True, exist_ok=True)
+        cfg.write_text(json.dumps({"mcp": {"servers": servers}}))
+        return cfg
+
+    def test_only_the_names_carter_ships_are_removed(self, base_dir: Path) -> None:
+        shipped = {f"carter-{n}": {"type": "remote"} for n in mcp.MCP_SERVERS}
+        mine = {"carter-custom": {"type": "remote"}, "github": {"type": "remote"}}
+        cfg = self._config(base_dir, {**shipped, **mine})
+        assert sorted(mcp.remove_carter_servers(cfg)) == sorted(shipped)
+        assert json.loads(cfg.read_text())["mcp"]["servers"] == mine

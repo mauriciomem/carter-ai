@@ -100,7 +100,8 @@ def merge_mcp_servers(
 
 
 def remove_carter_servers(file_path: Path) -> list[str]:
-    """Remove every ``carter-*`` server from ``mcp.servers``."""
+    """Remove the servers Carter ships (``carter-<name>`` for ``MCP_SERVERS``) from
+    ``mcp.servers``; any other entry, a user's ``carter-custom`` included, stays."""
     if not file_path.exists():
         return []
     data = _load_config(file_path)
@@ -112,7 +113,7 @@ def remove_carter_servers(file_path: Path) -> list[str]:
     removed: list[str] = []
     servers = mcp.get("servers")
     if isinstance(servers, dict):
-        for k in [k for k in list(servers) if k.startswith("carter-")]:
+        for k in [k for k in list(servers) if k in {f"carter-{n}" for n in MCP_SERVERS}]:
             del servers[k]
             removed.append(k)
     if removed:

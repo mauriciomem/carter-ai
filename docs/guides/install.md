@@ -205,7 +205,8 @@ uv tool uninstall carter-ai   # removes the carter command itself
 `carter uninstall` asks nothing and removes only what Carter installed and you haven't changed:
 
 - **Removed:** the `carter-*` agents and skills, the global `AGENTS.md` Carter wrote, untouched
-  knowledge files, the `carter-*` MCP servers in `opencode.json` and `opencode.jsonc`, the guards
+  knowledge files, the MCP servers Carter ships (`carter-github`, `carter-terraform`, `carter-atlassian`) in
+  `opencode.json` and `opencode.jsonc`, the guards
   (`carter guard remove`), the LLM identity files (the signing shim, `allowed_signers`, the tier
   mirror, the identity part of `config.toml`, with a backup) and `~/.carter/manifest.json`.
 - **Kept:** `~/.carter/memories/`, the rest of `config.toml`, the audit log, the GitHub token file,

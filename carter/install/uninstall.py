@@ -2,16 +2,16 @@
 
 from __future__ import annotations
 
-import shutil
 from pathlib import Path
 
 from carter import ui
 from carter.home import tilde
-from carter.install.components import read_manifest
+from carter.install.components import _render_opencode_agents, read_manifest
 from carter.install.console import log_ok, log_step, log_warn
 from carter.install.mcp import global_config_files, remove_carter_servers
 from carter.install.ownership import _hash_matches, _within
 from carter.install.paths import (
+    REPO_ROOT,
     _opencode_base,
     manifest_path,
 )
@@ -57,6 +57,20 @@ def _remove_if_owned(
         parent = parent.parent
 
 
+def _shipped_paths(base_dir: Path | None) -> list[Path]:
+    """The agent and skill files this version of Carter installs, by name."""
+    oc = _opencode_base(base_dir)
+    agents = [oc / "agents" / name for name in _render_opencode_agents(base_dir)]
+    skills = [
+        oc / "skills" / d.name / f.name
+        for d in sorted((REPO_ROOT / "skills").iterdir())
+        if d.is_dir()
+        for f in d.iterdir()
+        if f.is_file()
+    ]
+    return agents + skills
+
+
 def uninstall(base_dir: Path | None, *, keep_guards: bool = False, assume_yes: bool = False) -> int:
     """Remove the OpenCode install and, unless ``keep_guards``, the guards (policies,
     per-agent denies, git config, guard state) that ``carter guard install`` wrote.
@@ -79,17 +93,9 @@ def uninstall(base_dir: Path | None, *, keep_guards: bool = False, assume_yes: b
         for f in manifest.get("files", []):
             _remove_if_owned(Path(f), hashes.get(f), managed_roots, opencode_base)
     else:
-        # No manifest — remove by convention
-        for pattern_dir in ["agents", "skills"]:
-            d = opencode_base / pattern_dir
-            if d.exists():
-                for f in d.glob("carter-*"):
-                    if f.is_file():
-                        f.unlink()
-                        log_ok(f"Removed {tilde(f)}")
-                    elif f.is_dir():
-                        shutil.rmtree(f)
-                        log_ok(f"Removed {tilde(f)}/")
+        # No manifest: the files this version ships, by name; never by prefix, never a tree.
+        for p in _shipped_paths(base_dir):
+            _remove_if_owned(p, None, managed_roots, opencode_base)
 
     log_step("Removing MCP servers (OpenCode)...")
     for cfg in global_config_files(base_dir):
