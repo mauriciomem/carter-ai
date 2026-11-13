@@ -1,0 +1,42 @@
+Carter uninstall  v0.19.2
+
+✓ Removed
+    guards
+    agents            8
+    skills           25
+    plugin
+    AGENTS.md
+    MCP servers       2
+    knowledge files   4
+    config.toml          was all defaults
+
+! Removed although you edited them
+    ~/.config/opencode/agents/carter-pm.md
+      → copy: ~/.carter/backups/20261112T101500/.config/opencode/agents/carter-pm.md
+
+· Kept, because they are yours
+    ~/.config/opencode/skills/carter-adr/SKILL.md
+      you edited it
+    ~/.config/opencode/skills/carter-distill/SKILL.md
+      you edited it
+    ~/.carter/memories/
+      12 your notes
+    ~/.carter/knowledge/
+      2 files you edited or added
+    ~/.carter/state/audit/
+      3 push approvals, ops log, guard log
+    ~/.carter/secrets/
+      1 revoke the token on GitHub too
+    ~/.carter/backups/
+      4 copies of files Carter replaced
+
+· Workspaces, not touched  (Carter files you can remove)
+    ~/src/proj
+      rm /home/u/src/proj/.opencode/agents/carter-*.md
+    ~/src/infra  no longer exists
+    also yours to delete: .carter/, AGENTS.md, .github/workflows/carter-review.yml
+
+✓ Uninstalled
+→ last step, remove the command
+  uv tool uninstall carter-ai
+→ to delete everything Carter kept  rm -r /home/u/.carter

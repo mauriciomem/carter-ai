@@ -126,6 +126,7 @@ def install(
     if guard_code:
         raise SystemExit(guard_code)
     if verbosity:
+        ui.gap()
         ui.next("restart the OpenCode server from a clean terminal to load the agents and plugin")
 
 

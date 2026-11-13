@@ -43,7 +43,8 @@ uninstall.
 | `~/.carter/state/audit/` | Audit store | Kept | Kept |
 
 Uninstall uses the checksums in the manifest to decide whether you edited a file.
-Anything you changed is kept and reported as `⚠ Kept …`.
+Anything you changed is kept and listed under `Kept, because they are yours`
+(`carter uninstall -v` also prints a `Kept <path>: edited since install` line for each).
 
 ## Workspace (`carter init`)
 
@@ -59,7 +60,8 @@ Anything you changed is kept and reported as `⚠ Kept …`.
 | `.gitignore` | Gets a `.carter/` line with `--single` | Never touched |
 
 `carter uninstall` never touches workspaces. It lists the ones recorded in `~/.carter/workspaces`
-(plus any pinned in `config.toml`), and for each one prints the `rm` line for its
+(plus any pinned in `config.toml`) under `Workspaces, not touched`, and for each one prints the `rm`
+line, with absolute shell-quoted paths, for its
 `.opencode/agents/carter-*.md`; run it yourself. `AGENTS.md`, `.carter/` and
 `.github/workflows/carter-review.yml` are named as yours to delete, never as a command: they may hold
 your edits or be committed. A workspace where you have not run `init` or `update` since this record

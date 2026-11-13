@@ -1,15 +1,12 @@
 """Characterization of the data-loss behaviours the lean-CLI work fixes.
 
-Each test states the wanted behaviour and is ``xfail(strict=True)`` against today's
-code; the change named in the reason removes the marker. A test that starts passing early fails
-the suite (strict), so the marker cannot be forgotten.
+Each test states the wanted behaviour of the install -> uninstall lifecycle.
 """
 
 from __future__ import annotations
 
 from pathlib import Path
 
-import pytest
 from click.testing import CliRunner
 
 from carter.cli import main
@@ -65,13 +62,12 @@ def test_user_skill_named_carter_something_survives_uninstall_without_manifest(
     assert mine.read_text() == "my skill\n"
 
 
-@pytest.mark.xfail(strict=True, reason="pending: the default report says what was removed")
 def test_default_uninstall_output_lists_what_was_removed(installed: Path, capsys) -> None:
     set_verbosity(1)
     capsys.readouterr()
     uninstall(installed)
     got = capsys.readouterr()
-    assert "Removed" in got.out + got.err
+    assert "✓ Removed\n" in got.out and "    agents " in got.out
 
 
 def test_old_guard_log_is_migrated_and_run_dir_removed(installed: Path) -> None:

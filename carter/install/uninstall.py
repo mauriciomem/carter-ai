@@ -17,13 +17,13 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Literal
 
-from carter import ui
+from carter import __version__, ui
 from carter.home import WORKSPACES_FILE, tilde
 from carter.identity import ConfigError, load_identity
 from carter.identity.schema import IdentityConfig
 from carter.install.backups import STAMP_FORMAT
 from carter.install.components import _render_opencode_agents, read_manifest
-from carter.install.console import log_ok, log_step, log_warn, set_verbosity
+from carter.install.console import log_ok, log_skip, log_step, log_warn, set_verbosity
 from carter.install.files import _backup_file, _mirror
 from carter.install.mcp import global_config_files, remove_carter_servers
 from carter.install.ownership import _hash_matches, _within
@@ -33,13 +33,16 @@ from carter.install.paths import (
     _opencode_base,
     backups_dir,
     carter_config_path,
+    guard_state_path,
     knowledge_dir,
     manifest_path,
+    plugin_dir,
     run_dir,
 )
 from carter.install.paths import (
     managed_roots as _managed_roots,
 )
+from carter.install.reports import render_uninstall
 
 # What happened to one file: deleted, deleted although the user edited it (a copy exists),
 # left because it may hold the user's edits, or not Carter's business (absent / outside).
@@ -63,6 +66,7 @@ class KeptRow:
     path: Path
     reason: str
     count: int
+    dir: bool = True  # a folder (shown with a trailing slash); False for a single file
 
 
 @dataclass(frozen=True)
@@ -89,6 +93,8 @@ class UninstallReport:
     workspaces: list[Workspace] = field(default_factory=list)  # empty: no section to print
     manager: str = ""  # the command that removes the program itself
     leftover: bool = False  # ~/.carter still exists
+    rm_all: str = ""  # the ready ``rm -r`` line for it, absolute and shell-quoted
+    had_manifest: bool = True  # False: agents went by name, with no copy of an edited one
 
 
 def _remove_if_owned(
@@ -115,7 +121,7 @@ def _remove_if_owned(
     edited = path in (edited_copies or {})
     if recorded is not None:
         if not edited and not _hash_matches(path, recorded):
-            log_warn(f"Kept {tilde(path)}: edited since install")
+            log_skip(f"Kept {tilde(path)}: edited since install")  # -v; the report lists it
             return "kept"
     else:
         base = opencode_base.resolve()
@@ -123,7 +129,7 @@ def _remove_if_owned(
             part.startswith("carter-") for part in resolved.relative_to(base).parts
         )
         if not owned_by_name:
-            log_warn(f"Kept {tilde(path)}: no recorded hash to prove it is unmodified")
+            log_skip(f"Kept {tilde(path)}: no recorded hash to prove it is unmodified")
             return "kept"
     path.unlink()
     log_ok(f"Removed {tilde(path)}")
@@ -276,8 +282,9 @@ def _clean_carter_home(base_dir: Path | None, report: UninstallReport) -> None:
         if count:
             report.kept.append(KeptRow(carter / rel, reason, count))
     if config.exists():
-        report.kept.append(KeptRow(config, _KEPT_CONFIG, 1))
+        report.kept.append(KeptRow(config, _KEPT_CONFIG, 1, dir=False))
     report.leftover = carter.exists()
+    report.rm_all = f"rm -r {shlex.quote(str(carter))}" if report.leftover else ""
 
 
 def uninstall(
@@ -291,6 +298,7 @@ def uninstall(
     removing the guards failed; everything else is still removed, as ``carter install`` never
     aborts on its guard step."""
     set_verbosity(2 if ui.verbose() else 1)  # -v lists every file removed or kept
+    ui.header("Carter uninstall", f"v{__version__}")
     log_step("Uninstalling Carter...")
     from carter.guard.hooks import migrate_guard_log
 
@@ -299,12 +307,16 @@ def uninstall(
     opencode_base = _opencode_base(base_dir)
     managed_roots = _managed_roots(base_dir)
     first = read_manifest(base_dir)
+    report.had_manifest = first is not None
     copies = _copy_edited_agents(first, base_dir, managed_roots, opencode_base) if first else {}
+    guards_before = guard_state_path(base_dir).exists()
+    plugin_before = plugin_dir(base_dir).exists()
+    identity_removed = False
     if not keep_guards:
         from carter.guard.wiring import uninstall_guards, uninstall_identity
 
         report.code = uninstall_guards(base_dir, assume_yes=assume_yes)
-        uninstall_identity(base_dir, assume_yes=assume_yes)  # independent of the guards
+        identity_removed = uninstall_identity(base_dir, assume_yes=assume_yes)  # independent
     manifest = read_manifest(base_dir)  # the guard step re-wrote it
 
     if manifest:
@@ -322,12 +334,20 @@ def uninstall(
             kind, unit = _kind(path, opencode_base, base_dir)
             units.setdefault(kind, set()).add(unit)
         if status == "edited-removed":
-            log_warn(
-                f"Removed {tilde(path)} although you edited it",
-                f"copy: {tilde(copies[path])}",
-            )
             report.edited_copies.append((path, copies[path]))
     report.removed = {kind: len(found) for kind, found in units.items()}
+    # What the guard step removed, found by what is gone (it prints nothing of its own).
+    report.removed.update(
+        {
+            kind: 1
+            for kind, gone in (
+                ("guards", guards_before and not guard_state_path(base_dir).exists()),
+                ("plugin", plugin_before and not plugin_dir(base_dir).exists()),
+                ("identity", identity_removed),
+            )
+            if gone
+        }
+    )
 
     log_step("Removing MCP servers (OpenCode)...")
     servers: set[str] = set()
@@ -349,7 +369,7 @@ def uninstall(
 
     report.workspaces = _take_workspaces(base_dir)
     _clean_carter_home(base_dir, report)
-    ui.ok("uninstalled")
+    render_uninstall(report)
     return report
 
 

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import inspect
 import json
+import re
 import subprocess
 from pathlib import Path
 
@@ -100,8 +101,8 @@ def test_edited_skill_is_kept_and_edited_agent_is_removed_with_a_copy(
     assert not (oc / "agents" / "carter-pm.md").exists()
     assert not any(d.is_dir() and not any(d.iterdir()) for d in (oc / "skills").iterdir())
     got = capsys.readouterr()
-    out = got.out + got.err
-    assert "although you edited it" in out and "Kept" in out and edited_skill.name in out
+    assert "Removed although you edited them" in got.err and "→ copy: " in got.err
+    assert "Kept, because they are yours" in got.out and edited_skill.parent.name in got.out
     assert report.kept_files == [edited_skill]
     assert [a for a, _ in report.edited_copies] == [edited_agent]
 
@@ -143,11 +144,11 @@ def test_old_manifest_without_hashes(installed: Path) -> None:
 def test_install_summary_counts_skill_directories(
     base_dir: Path, fake_opencode, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    """The summary counts skills (directories), not the files inside them."""
+    """The report counts skills (directories), not the files inside them."""
     fake_opencode()
     orchestrator.run(base_dir=base_dir, verbosity=1)
     shipped = sum(1 for d in (paths.REPO_ROOT / "skills").iterdir() if (d / "SKILL.md").exists())
-    assert f"{shipped} skills" in capsys.readouterr().out
+    assert re.search(rf"^ +skills +{shipped}  new$", capsys.readouterr().out, re.MULTILINE)
 
 
 class TestWithoutManifest:
@@ -398,7 +399,7 @@ class TestCleanup:
         report = uninstall(installed)
         assert report.config_removed is False
         assert config.read_text().endswith('footer = "mine"\n')
-        assert KeptRow(config, "settings you changed", 1) in report.kept
+        assert KeptRow(config, "settings you changed", 1, dir=False) in report.kept
 
     def test_run_is_removed_whole(self, installed: Path) -> None:
         run = paths.run_dir(installed)

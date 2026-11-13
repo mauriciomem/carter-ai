@@ -6,6 +6,7 @@ unsupported or missing OpenCode fails the install hard with nothing on disk.
 
 from __future__ import annotations
 
+import os
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -32,6 +33,7 @@ from carter.install.prereqs import (
     detect_environment,
     require_opencode,
 )
+from carter.install.reports import InstallReport, render_install
 
 
 def run(
@@ -55,6 +57,8 @@ def run(
         PrerequisiteError: OpenCode is missing or older than 2.1.
     """
     set_verbosity(verbosity)
+    if verbosity >= 1:
+        ui.header("Carter install", f"v{__version__}")
 
     _mcp_label = "no (use --mcp to install)"
     if mcp:
@@ -109,10 +113,6 @@ def run(
     if pruned:
         _log(f"pruned {pruned} old backups", level=2)
 
-    total_agents = agent_stats["created"] + agent_stats["updated"] + agent_stats["unchanged"]
-
-    if verbosity >= 1:
-        ui.ok("installed", f"{total_agents} agents · {skill_stats['skills']} skills")
     _log(f"Ops config: {'created' if ops_created else 'kept'}", level=2)
     _log(f"MCP servers: {mcp_count}", level=2)
     _log(f"Knowledge files: {knowledge_count} new · memory dirs: {memory_count} new", level=2)
@@ -128,10 +128,26 @@ def run(
         )
 
     code = 0
+    accepted: list[str] = []
     if guards:
+        from carter.guard.report import accepted_groups
         from carter.guard.wiring import install_guards
 
         code = install_guards(base_dir, assume_yes=assume_yes)
+        accepted = accepted_groups(base_dir) if code == 0 else []
+    if verbosity >= 1:
+        render_install(
+            InstallReport(
+                agents=agent_stats,
+                skills=skill_stats,
+                knowledge=knowledge_count,
+                config_created=ops_created,
+                pruned=pruned,
+                guards=accepted,
+                replaced=sum(len(files) for _, _, files in os.walk(backup_root)),
+                backup_dir=backup_root,
+            )
+        )
     # leftover keys Carter no longer reads, once per key, after everything else
     unknownkeys.report(unknownkeys.once_per_key(unknownkeys.host(base_dir)))
     return code
