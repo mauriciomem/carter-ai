@@ -12,6 +12,7 @@ import pytest
 from click.testing import CliRunner
 
 from carter.cli import main
+from carter.install.backups import BackupRoot
 from carter.install.mcp import configure_mcp_servers, merge_mcp_servers
 from carter.install.prereqs import PrerequisiteError, parse_opencode_version, require_opencode
 
@@ -108,7 +109,7 @@ class TestInstallGate:
 class TestV2McpShape:
     def _wire(self, base: Path, servers: list[str] | None = None) -> dict:
         manifest: dict = {}
-        configure_mcp_servers(base, manifest, base / "backup", servers=servers)
+        configure_mcp_servers(base, manifest, BackupRoot(base / "backup"), servers=servers)
         return json.loads((base / "opencode" / "opencode.json").read_text())
 
     def test_servers_live_under_mcp_servers(self, tmp_path: Path) -> None:
@@ -137,7 +138,7 @@ class TestV2McpShape:
         """Omitting the selection wires all servers. Per-agent MCP scope lives in agent
         frontmatter, so the global wiring has exactly the server keys, no role keys."""
         manifest: dict = {}
-        configure_mcp_servers(tmp_path, manifest, tmp_path / "backup")
+        configure_mcp_servers(tmp_path, manifest, BackupRoot(tmp_path / "backup"))
         triple = ["carter-github", "carter-terraform", "carter-atlassian"]
         assert manifest["mcp_servers"] == triple
         servers = json.loads((tmp_path / "opencode" / "opencode.json").read_text())["mcp"]
@@ -197,7 +198,7 @@ class TestMergeIntoUserConfig:
 
     def test_backup_before_modify(self, tmp_path: Path) -> None:
         path = self._cfg(tmp_path, json.dumps({"theme": "x"}))
-        merge_mcp_servers(path, {"carter-github": {}}, tmp_path / "backup")
+        merge_mcp_servers(path, {"carter-github": {}}, BackupRoot(tmp_path / "backup"))
         copy = next((tmp_path / "backup").rglob("opencode.json"))
         assert json.loads(copy.read_text()) == {"theme": "x"}
 
@@ -224,7 +225,7 @@ class TestJsoncTarget:
     COMMENTED = '{\n  // my theme\n  "theme": "x",\n}\n'
 
     def _wire(self, base: Path) -> None:
-        configure_mcp_servers(base, {}, base / "backup", servers=["github"])
+        configure_mcp_servers(base, {}, BackupRoot(base / "backup"), servers=["github"])
 
     def _servers(self, path: Path) -> set[str]:
         from carter.install.jsonc import _load_jsonc

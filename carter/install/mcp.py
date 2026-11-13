@@ -21,6 +21,7 @@ from pathlib import Path
 from typing import Any
 
 from carter.home import tilde
+from carter.install.backups import BackupRoot
 from carter.install.console import log_err, log_ok, log_step, log_warn
 from carter.install.files import _backup_file
 from carter.install.jsonc import _load_jsonc, _write_json, has_comments
@@ -71,7 +72,7 @@ def _load_config(file_path: Path) -> dict | None:
 
 
 def merge_mcp_servers(
-    file_path: Path, entries: dict[str, dict[str, Any]], backup_root: Path | None = None
+    file_path: Path, entries: dict[str, dict[str, Any]], backup_root: BackupRoot | None = None
 ) -> bool:
     """Merge ``entries`` into ``mcp.servers`` of an OpenCode config file.
 
@@ -140,7 +141,7 @@ def _carter_server_names(file_path: Path) -> set[str]:
 def configure_mcp_servers(
     base_dir: Path | None,
     manifest: dict,
-    backup_root: Path | None = None,
+    backup_root: BackupRoot | None = None,
     servers: list[str] | None = None,
 ) -> int:
     """Wire the selected Carter MCP servers into the global OpenCode config.

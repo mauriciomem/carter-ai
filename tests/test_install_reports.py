@@ -100,6 +100,28 @@ def test_workspaces_with_different_leftovers_each_get_their_own_also_line(
     assert "/w/b  no Carter agents left" in out
 
 
+HOSTILE = "carter-\x1b]0;pwn\x07\x1b[31m\x9b31m\u202eevil"
+
+
+def test_a_file_name_with_terminal_escapes_is_shown_not_obeyed(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """ESC (title, colour), a C1 CSI and a bidi override in a name must come out as text, on
+    both streams: a name is whatever whoever can create a file chose."""
+    report = UninstallReport(
+        kept_files=[Path("/w/skills") / HOSTILE / "SKILL.md"],
+        edited_copies=[(Path("/w/agents") / HOSTILE, Path("/b") / HOSTILE)],
+        manager="pip uninstall carter-ai",
+    )
+    render_uninstall(report)
+    got = capsys.readouterr()
+    shown = r"carter-\x1b]0;pwn\x07\x1b[31m\x9b31m\u202eevil"
+    assert f"/w/skills/{shown}/SKILL.md" in got.out
+    assert f"→ copy: /b/{shown}" in got.err
+    for text in (got.out, got.err):
+        assert all(c.isprintable() or c == "\n" for c in text)
+
+
 def test_a_second_uninstall_says_there_was_nothing_to_remove(
     installed: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:

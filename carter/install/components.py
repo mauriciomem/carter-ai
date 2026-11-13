@@ -8,6 +8,7 @@ the knowledge base, manifest and backups live under ``~/.carter`` (see
 from __future__ import annotations
 
 import json
+import shlex
 import shutil
 from datetime import UTC, datetime
 from pathlib import Path
@@ -18,7 +19,7 @@ from carter.identity import ConfigError
 from carter.identity.config import read_document
 from carter.identity.schema import IdentityConfig
 from carter.identity.writer import write_config
-from carter.install.backups import STAMP_FORMAT
+from carter.install.backups import BackupRoot
 from carter.install.console import log_err, log_ok, log_skip, log_step, log_warn
 from carter.install.files import (
     _install_file,
@@ -39,7 +40,7 @@ from carter.install.paths import (
 def install_agents(
     base_dir: Path | None,
     manifest: dict,
-    backup_root: Path,
+    backup_root: BackupRoot,
 ) -> dict[str, int]:
     """Install the OpenCode agents rendered from the shipped guarded defaults."""
     log_step("Installing agents...")
@@ -63,8 +64,7 @@ def rerender_agents(base_dir: Path | None) -> dict[str, int] | None:
     agents_dir = _opencode_base(base_dir) / "agents"
     ours = {str(agents_dir / name) for name in _render_opencode_agents(base_dir)}
     manifest["files"] = [f for f in manifest["files"] if f not in ours]
-    backup_root = backups_dir(base_dir) / datetime.now(UTC).strftime(STAMP_FORMAT)
-    stats = install_agents(base_dir, manifest, backup_root)
+    stats = install_agents(base_dir, manifest, BackupRoot(backups_dir(base_dir)))
     manifest["updated_at"] = datetime.now(UTC).isoformat()
     write_manifest(manifest, base_dir)
     return stats
@@ -92,7 +92,7 @@ def _render_opencode_agents(base_dir: Path | None = None) -> dict[str, str]:
 def install_skills(
     base_dir: Path | None,
     manifest: dict,
-    backup_root: Path,
+    backup_root: BackupRoot,
 ) -> dict[str, int]:
     log_step("Installing skills...")
     src_dir = REPO_ROOT / "skills"
@@ -145,9 +145,12 @@ def remove_retired_skills(base_dir: Path | None, previous: dict | None) -> int:
                 for f in files
             )
         if not owned:
+            # A name is the user's (or an agent's) input: quoted, absolute, and no command at all
+            # for one with a control character in it.
+            rm = f": rm -r {shlex.quote(str(skill))}" if str(skill).isprintable() else ""
             log_warn(
                 f"{shown} (no longer shipped by Carter; edited or not recorded, kept)",
-                hint=f"remove it manually if unused: rm -r {shown}",
+                hint=f"remove it manually if unused{rm}",
             )
             continue
         shutil.rmtree(skill)
@@ -277,7 +280,7 @@ def install_memories(
 def install_knowledge(
     base_dir: Path | None,
     manifest: dict,
-    backup_root: Path,
+    backup_root: BackupRoot,
 ) -> int:
     log_step("Initializing knowledge base...")
     src_dir = REPO_ROOT / "knowledge"

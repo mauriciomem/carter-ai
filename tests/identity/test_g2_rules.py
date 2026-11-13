@@ -112,6 +112,9 @@ class TestValuesFollowTheRfc:
             "~/.carter/config.toml",
             "~/.carter/guard-state.json",
             "~/.carter/state/audit/",  # the audit store
+            "~/.carter/backups/",  # install and uninstall write copies there
+            "~/.carter/manifest.json",  # uninstall deletes what it lists
+            "~/.carter/workspaces",  # uninstall prints what it lists
             "~/.config/opencode/plugin/",  # both directories load plugins
             "~/.config/opencode/plugins/",
         )

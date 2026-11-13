@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import inspect
 import json
+import os
 import re
 import subprocess
 from pathlib import Path
@@ -121,6 +122,32 @@ def test_sibling_dir_prefix_is_not_matched(base_dir: Path) -> None:
     paths.manifest_path(base_dir).write_text(json.dumps(manifest))
     uninstall(base_dir)
     assert sibling.exists()
+
+
+def test_a_forged_manifest_entry_for_a_file_carter_does_not_ship_is_never_deleted(
+    installed: Path,
+) -> None:
+    """The manifest is a file anyone with the user's rights can write, hash included."""
+    oc = paths._opencode_base(installed)
+    guard = paths.guard_script_path(installed)
+    guard.parent.mkdir(parents=True, exist_ok=True)
+    mine = {
+        oc / "agents" / "my-agent.md": "my agent",
+        oc / "tui.json": "{}",
+        oc / "skills" / "my-skill" / "SKILL.md": "my skill",
+        guard: "#!/bin/sh\n",
+    }
+    mp = paths.manifest_path(installed)
+    data = json.loads(mp.read_text())
+    for path, text in mine.items():
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(text)
+        data["files"].append(str(path))
+        data["file_hashes"][str(path)] = _sha256(path)
+    mp.write_text(json.dumps(data))
+    uninstall(installed, keep_guards=True)
+    assert {p: p.read_text() for p in mine} == mine
+    assert not (oc / "agents" / "carter-pm.md").exists()  # what Carter ships still goes
 
 
 def test_old_manifest_without_hashes(installed: Path) -> None:
@@ -500,7 +527,7 @@ class TestWorkspaces:
         self, installed: Path, tmp_path: Path
     ) -> None:
         ws = self._workspace(tmp_path / "src", "proj")
-        (ws / "AGENTS.md").write_text("mine")
+        (ws / "AGENTS.md").write_text(f"{uninstall_mod.AGENTS_MD_HEADER}\n\n# proj\n")
         (ws / ".github" / "workflows").mkdir(parents=True)
         (ws / ".github" / "workflows" / "carter-review.yml").write_text("on: x")
         self._record(installed, str(ws))
@@ -511,6 +538,59 @@ class TestWorkspaces:
             rm=f"rm {ws}/.opencode/agents/carter-*.md",
             also=(".carter/", "AGENTS.md", ".github/workflows/carter-review.yml"),
         )
+
+    def test_a_hand_written_agents_md_is_not_offered_as_carters_to_delete(
+        self, installed: Path, tmp_path: Path
+    ) -> None:
+        ws = self._workspace(tmp_path / "src", "proj")
+        (ws / "AGENTS.md").write_text("# my own rules\n")
+        self._record(installed, str(ws))
+        [found] = uninstall(installed).workspaces
+        assert found.also == (".carter/",)
+
+    def test_the_agents_md_header_is_the_one_the_template_renders(self) -> None:
+        from carter.config import generate_default_config
+        from carter.scaffold import create_env, render_instructions
+
+        cfg = generate_default_config(workspace_name="x", mode="single")
+        first = render_instructions(cfg, create_env())["AGENTS.md"].splitlines()[0]
+        assert first == uninstall_mod.AGENTS_MD_HEADER
+
+    @pytest.mark.parametrize("kind", ["fifo", "link-to-a-device"])
+    def test_a_record_that_is_not_a_regular_file_is_ignored_not_waited_for(
+        self, installed: Path, kind: str
+    ) -> None:
+        file = paths._carter_base(installed) / "workspaces"
+        if kind == "fifo":
+            os.mkfifo(file)
+        else:
+            file.symlink_to("/dev/zero")
+        assert uninstall(installed).workspaces == []
+
+    def test_only_the_first_64_kib_of_the_record_are_read(
+        self, installed: Path, tmp_path: Path
+    ) -> None:
+        ws = self._workspace(tmp_path, "early")
+        late = self._workspace(tmp_path, "late")
+        self._record(installed, str(ws), "x" * 70_000, str(late))
+        assert [w.path for w in uninstall(installed).workspaces] == [ws]
+
+    def test_a_recorded_path_that_is_a_file_is_not_reported(
+        self, installed: Path, tmp_path: Path
+    ) -> None:
+        ws = self._workspace(tmp_path, "a")
+        plain = tmp_path / "plain"
+        plain.write_text("x")
+        self._record(installed, str(plain), str(ws))
+        assert [w.path for w in uninstall(installed).workspaces] == [ws]
+
+    def test_a_recorded_directory_somebody_else_owns_is_not_reported(
+        self, installed: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        ws = self._workspace(tmp_path, "a")
+        self._record(installed, str(ws))
+        monkeypatch.setattr(os, "getuid", lambda: os.stat(ws).st_uid + 1)
+        assert uninstall(installed).workspaces == []
 
     def test_carter_deletes_nothing_in_a_workspace_and_the_file_goes(
         self, installed: Path, tmp_path: Path

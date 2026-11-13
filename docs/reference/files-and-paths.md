@@ -18,9 +18,9 @@ uninstall.
 | `<repo>/.github/workflows/carter-review.yml` | The review-only workflow, written by `carter ci install review` in the repository you run it in (first line: a hash of the rest, so an edited file is never overwritten) | Refreshed if unedited | Never removed by Carter (it is your repository's file) |
 | `~/.carter/state/audit/audit.log` | Log of `ops:` operations and policy exceptions  | Kept | Kept |
 | `~/.carter/state/audit/b.jsonl` (dir 0700, file 0600) | One line per decision of [`carter_push`](../guides/write-operations.md#letting-devops-ask-you-to-push): time, agent, session, repo, branch, range, commit count, decision, code, dwell. Never an environment, a credentialed URL or a title. Rotates at 5 MiB (three older files kept) | Appended by `carter_push` | Kept |
-| `~/.carter/backups/<timestamp>/` (UTC) | Copies of files an install replaced that were not Carter's own last output (your edits, files Carter never wrote). Each sits at its own path under the directory (a file from `~/.config/opencode/skills/x/SKILL.md` is at `.config/opencode/skills/x/SKILL.md`), so same-named files never overwrite each other. `carter install` deletes `<timestamp>` directories older than 15 days; move a copy out if you want to keep it. Restore with `cp` | Added to; pruned by `install` | Kept |
-| `~/.carter/manifest.json` | What Carter installed, with checksums | Rewritten | Removed |
-| `~/.carter/workspaces` (0600) | One absolute path per line: the workspaces where you ran `carter init` or `carter update`. `uninstall` reads it to tell you where Carter files are left | Appended once per path by `init` and `update` | Removed (after being listed) |
+| `~/.carter/backups/<timestamp>/` (UTC) | Copies of files an install replaced that were not Carter's own last output (your edits, files Carter never wrote). Each sits at its own path under the directory (a file from `~/.config/opencode/skills/x/SKILL.md` is at `.config/opencode/skills/x/SKILL.md`), so same-named files never overwrite each other. Each run makes a new `<timestamp>` directory (0700; copies 0600), never one that already exists, and never copies through a symlink. `carter install` deletes `<timestamp>` directories older than 15 days; move a copy out if you want to keep it. Restore with `cp`. Agents cannot write here | Added to; pruned by `install` | Kept |
+| `~/.carter/manifest.json` | What Carter installed, with checksums. `uninstall` deletes only listed files that Carter ships by name. Agents cannot write it | Rewritten | Removed |
+| `~/.carter/workspaces` (0600) | One absolute path per line: the workspaces where you ran `carter init` or `carter update`. `uninstall` reads it (at most 64 KiB, a regular file only) to tell you where Carter files are left, and lists only directories you own. Agents cannot write it | Appended once per path by `init` and `update` | Removed (after being listed) |
 | `~/.carter/guard-state.json` (0600) | What `carter guard install` owns: consents, statements, per-agent denies, file hashes. Separate from `manifest.json` so an older installer can't drop it | Updated in place, never rebuilt; unchanged content is not rewritten | Removed by `guard remove` / `uninstall` (kept with `--keep-guards`) |
 | `~/.config/opencode/opencode.json` or `.jsonc` → `agents` | The per-agent `carter_push` denies for OpenCode's own agents (Carter writes no global `policies`) | Converged; your own entries are kept | Removed only where unchanged |
 | `~/.carter/backups/<timestamp>/opencode.json[c]` (0600) | Copy of your OpenCode config before a guard write | Added to | Kept |
@@ -64,7 +64,8 @@ Anything you changed is kept and listed under `Kept, because they are yours`
 line, with absolute shell-quoted paths, for its
 `.opencode/agents/carter-*.md`; run it yourself. `AGENTS.md`, `.carter/` and
 `.github/workflows/carter-review.yml` are named as yours to delete, never as a command: they may hold
-your edits or be committed. A workspace where you have not run `init` or `update` since this record
+your edits or be committed. `AGENTS.md` is named only if it starts with the line Carter writes
+(`<!-- Carter writes this file once and does not overwrite it. -->`). A workspace where you have not run `init` or `update` since this record
 existed is not listed; find it with
 `find ~ -path '*/.opencode/agents/carter-*-local.md' -not -path '*/node_modules/*'`.
 

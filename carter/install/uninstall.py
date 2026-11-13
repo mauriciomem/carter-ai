@@ -12,20 +12,20 @@ import json
 import os
 import shlex
 import shutil
+import stat
 import sys
 from dataclasses import dataclass, field
-from datetime import UTC, datetime
 from pathlib import Path
 from typing import Literal
 
 from carter import __version__, ui
-from carter.home import WORKSPACES_FILE, tilde
+from carter.home import MAX_WORKSPACES_BYTES, WORKSPACES_FILE, tilde
 from carter.identity import ConfigError, load_identity
 from carter.identity.schema import IdentityConfig
-from carter.install.backups import STAMP_FORMAT
+from carter.install.backups import BackupRoot
 from carter.install.components import _render_opencode_agents, read_manifest
 from carter.install.console import log_ok, log_skip, log_step, log_warn, set_verbosity
-from carter.install.files import _backup_file, _mirror, _sha256
+from carter.install.files import _backup_file, _sha256
 from carter.install.mcp import global_config_files, remove_carter_servers
 from carter.install.ownership import _hash_matches, _within, sha256_bytes
 from carter.install.paths import (
@@ -58,6 +58,9 @@ _KEPT = (
     ("backups", "copies of files Carter replaced"),
 )
 _KEPT_CONFIG = "settings you changed"
+AGENTS_MD_HEADER = (
+    "<!-- Carter writes this file once and does not overwrite it. -->"  # the template's
+)
 
 
 @dataclass(frozen=True)
@@ -153,15 +156,16 @@ def _copy_edited_agents(
     Nothing has been removed yet, so a failed copy aborts the uninstall with the files intact."""
     agents = (opencode_base / "agents").resolve()
     hashes: dict[str, str] = manifest.get("file_hashes") or {}
-    stamp_root = backups_dir(base_dir) / datetime.now(UTC).strftime(STAMP_FORMAT)
+    stamp_root = BackupRoot(backups_dir(base_dir))
     copies: dict[Path, Path] = {}
     for listed in manifest.get("files", []):
         path, recorded = Path(listed), hashes.get(listed)
         if recorded is None or not path.is_file() or path.resolve().parent != agents:
             continue
         if _within(path.resolve(), roots) and not _hash_matches(path, recorded):
-            _backup_file(path, stamp_root)
-            copies[path] = stamp_root / _mirror(path)
+            copy = _backup_file(path, stamp_root)
+            if copy is not None:
+                copies[path] = copy
     return copies
 
 
@@ -193,6 +197,13 @@ def _shipped_files(base_dir: Path | None) -> dict[Path, str]:
     return agents | skills
 
 
+def _shipped_names(base_dir: Path | None, shipped: dict[Path, str]) -> set[Path]:
+    """Every file ``install`` can list in the manifest: the agents and skill files, the global
+    ``AGENTS.md`` and the knowledge seeds."""
+    seeds = {knowledge_dir(base_dir) / f.name for f in (REPO_ROOT / "knowledge").glob("*.md")}
+    return {*shipped, *seeds, _opencode_base(base_dir) / "AGENTS.md"}
+
+
 def manager_command(executable: str | None = None) -> str:
     """The command that removes the program itself, read from where Python runs from."""
     where = (executable or sys.executable).replace("\\", "/")
@@ -217,15 +228,36 @@ def _kind(path: Path, opencode_base: Path, base_dir: Path | None) -> tuple[str, 
     return ("AGENTS.md" if p.name == "AGENTS.md" else "other"), str(p)
 
 
-def _workspace(raw: str) -> Workspace:
+def _carters_agents_md(path: Path) -> bool:
+    """True if ``path`` starts with the line Carter writes at the top of a workspace
+    ``AGENTS.md``. Without it the file is the user's, and the report must not call it Carter's."""
+    try:
+        with open(path, "rb") as fh:
+            return fh.readline(200).decode("utf-8", "replace").strip() == AGENTS_MD_HEADER
+    except OSError:
+        return False
+
+
+def _workspace(raw: str) -> Workspace | None:
+    """What Carter left in one recorded workspace; ``None`` for a path that is not ours to talk
+    about (it exists but is no directory, or someone else owns it: the record is not trusted)."""
     path = Path(raw)
+    try:
+        info = path.stat()
+    except OSError:
+        return Workspace(path, exists=False)
+    if not stat.S_ISDIR(info.st_mode) or info.st_uid != os.getuid():
+        return None
     if not (path / ".carter" / "carter.yaml").is_file():
         return Workspace(path, exists=False)
     agents = path / ".opencode" / "agents"
     # The glob stays outside the quotes; the path inside them cannot run anything.
     rm = f"rm {shlex.quote(str(path))}/.opencode/agents/carter-*.md" if _any_agent(agents) else ""
-    named = (".carter/", "AGENTS.md", ".github/workflows/carter-review.yml")
-    also = tuple(n for n in named if n == ".carter/" or (path / n).is_file())
+    also: tuple[str, ...] = (".carter/",)
+    if _carters_agents_md(path / "AGENTS.md"):
+        also += ("AGENTS.md",)
+    if (path / ".github/workflows/carter-review.yml").is_file():
+        also += (".github/workflows/carter-review.yml",)
     return Workspace(path, exists=True, rm=rm, also=also)
 
 
@@ -238,8 +270,15 @@ def _take_workspaces(base_dir: Path | None) -> list[Workspace]:
     delete the record (an app file). A path with a control character is never shown or quoted."""
     file = _carter_base(base_dir) / WORKSPACES_FILE
     recorded: list[str] = []
+    # A regular file only, read without following a link and never more than 64 KiB: a link to
+    # /dev/zero or a FIFO put there must not hang or fill memory.
     with contextlib.suppress(OSError, ValueError):
-        recorded = file.read_text(encoding="utf-8").splitlines()
+        fd = os.open(
+            file, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_NONBLOCK", 0)
+        )
+        with os.fdopen(fd, "rb") as fh:
+            if stat.S_ISREG(os.fstat(fh.fileno()).st_mode):
+                recorded = fh.read(MAX_WORKSPACES_BYTES).decode("utf-8").splitlines()
     try:
         pinned = list(load_identity(carter_config_path(base_dir)).workspaces)
     except ConfigError:
@@ -247,7 +286,7 @@ def _take_workspaces(base_dir: Path | None) -> list[Workspace]:
     with contextlib.suppress(OSError):
         file.unlink(missing_ok=True)
     unique = dict.fromkeys(r for r in (*recorded, *pinned) if r.isprintable() and os.path.isabs(r))
-    return [_workspace(raw) for raw in unique]
+    return [w for w in map(_workspace, unique) if w]
 
 
 def _rmdir_if_empty(path: Path) -> None:
@@ -312,7 +351,7 @@ def uninstall(
     managed_roots = _managed_roots(base_dir)
     first = read_manifest(base_dir)
     # Rendered before the guard step changes what the agents carry (G2's rules).
-    shipped = _shipped_files(base_dir) if first is None else {}
+    shipped = _shipped_files(base_dir)
     copies = _copy_edited_agents(first, base_dir, managed_roots, opencode_base) if first else {}
     guards_before = guard_state_path(base_dir).exists()
     plugin_before = plugin_dir(base_dir).exists()
@@ -325,8 +364,11 @@ def uninstall(
     manifest = read_manifest(base_dir)  # the guard step re-wrote it
 
     if manifest:
+        # The manifest is a file anyone with the user's rights can write: only a path Carter
+        # ships by name is ever deleted from it, whatever hash it carries.
         hashes: dict[str, str] = manifest.get("file_hashes") or {}
-        listed = [(Path(f), hashes.get(f)) for f in manifest.get("files", [])]
+        names = _shipped_names(base_dir, shipped)
+        listed = [(Path(f), hashes.get(f)) for f in manifest.get("files", []) if Path(f) in names]
     else:
         # No manifest: the files this version ships, by name and only while their content is
         # still what it ships; never by prefix, never a tree.

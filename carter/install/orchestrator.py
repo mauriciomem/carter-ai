@@ -12,7 +12,7 @@ from pathlib import Path
 
 from carter import __version__, ui, unknownkeys
 from carter.home import tilde
-from carter.install.backups import STAMP_FORMAT, prune
+from carter.install.backups import BackupRoot, prune
 from carter.install.components import (
     install_agents,
     install_knowledge,
@@ -76,7 +76,7 @@ def run(
         log_step("Skipping MCP credentials (no --mcp flag)")
 
     now = datetime.now(UTC)
-    backup_root = backups_dir(base_dir) / now.strftime(STAMP_FORMAT)
+    backup_root = BackupRoot(backups_dir(base_dir), now)
 
     manifest: dict = {
         "version": __version__,
@@ -91,7 +91,7 @@ def run(
     if existing:
         manifest["installed_at"] = existing.get("installed_at", now.isoformat())
         # The previous hashes tell an edit from Carter's own output (see files._install_content).
-        manifest["file_hashes"].update(existing["file_hashes"])
+        manifest["file_hashes"].update(existing.get("file_hashes") or {})
         log_debug("Existing installation found — updating")
 
     agent_stats = install_agents(base_dir, manifest, backup_root)
@@ -144,8 +144,8 @@ def run(
                 config_created=ops_created,
                 pruned=pruned,
                 guards=accepted,
-                replaced=sum(len(files) for _, _, files in os.walk(backup_root)),
-                backup_dir=backup_root,
+                replaced=sum(len(files) for _, _, files in os.walk(backup_root.path)),
+                backup_dir=backup_root.path,
             )
         )
     # leftover keys Carter no longer reads, once per key, after everything else

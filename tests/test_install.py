@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import shlex
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -12,6 +13,7 @@ from carter.aplus.push import OWN_TERMINAL
 from carter.config import generate_default_config
 from carter.install import components, files, mcp, paths
 from carter.install import uninstall as uninstall_mod
+from carter.install.backups import BackupRoot
 from carter.install.components import _ATTRIBUTION_RULE, _OPENCODE_AGENTS_MD
 from carter.install.files import (
     _install_file,
@@ -44,7 +46,7 @@ install = SimpleNamespace(
 class TestInstallAgents:
     def test_creates_agents(self, base_dir: Path) -> None:
         manifest = {"files": [], "file_hashes": {}}
-        backup = base_dir / "backup"
+        backup = BackupRoot(base_dir / "backup")
         install.install_agents(base_dir, manifest, backup)
 
         agents_dir = base_dir / "opencode" / "agents"
@@ -72,7 +74,7 @@ class TestInstallAgents:
         import yaml
 
         manifest = {"files": [], "file_hashes": {}}
-        backup = base_dir / "backup"
+        backup = BackupRoot(base_dir / "backup")
         install.install_agents(base_dir, manifest, backup)
 
         agents = sorted((base_dir / "opencode" / "agents").glob("carter-*.md"))
@@ -93,7 +95,7 @@ class TestInstallAgents:
 
     def test_manifest_tracks_files(self, base_dir: Path) -> None:
         manifest = {"files": [], "file_hashes": {}}
-        backup = base_dir / "backup"
+        backup = BackupRoot(base_dir / "backup")
         install.install_agents(base_dir, manifest, backup)
 
         assert len(manifest["files"]) == 8
@@ -105,7 +107,7 @@ class TestInstallAgents:
 class TestInstallSkills:
     def test_creates_skills(self, base_dir: Path) -> None:
         manifest = {"files": [], "file_hashes": {}}
-        backup = base_dir / "backup"
+        backup = BackupRoot(base_dir / "backup")
         install.install_skills(base_dir, manifest, backup)
 
         skills_dir = base_dir / "opencode" / "skills"
@@ -136,7 +138,7 @@ class TestInstallSkills:
 class TestInstallKnowledge:
     def test_creates_knowledge_files(self, base_dir: Path) -> None:
         manifest = {"files": [], "file_hashes": {}}
-        backup = base_dir / "backup"
+        backup = BackupRoot(base_dir / "backup")
         count = install.install_knowledge(base_dir, manifest, backup)
 
         knowledge_dir = base_dir / "carter" / "knowledge"
@@ -162,7 +164,7 @@ class TestInstallKnowledge:
         existing.write_text("# My custom mistakes\n\nKeep this content.\n")
 
         manifest = {"files": [], "file_hashes": {}}
-        backup = base_dir / "backup"
+        backup = BackupRoot(base_dir / "backup")
         install.install_knowledge(base_dir, manifest, backup)
 
         assert existing.read_text().startswith("# My custom mistakes")
@@ -177,7 +179,7 @@ class TestIdempotency:
     def test_second_run_unchanged(self, base_dir: Path) -> None:
         # First install
         manifest1 = {"files": [], "file_hashes": {}}
-        backup = base_dir / "backup"
+        backup = BackupRoot(base_dir / "backup")
         install.install_agents(base_dir, manifest1, backup)
 
         # Second install
@@ -191,7 +193,7 @@ class TestIdempotency:
     def test_modified_file_detected_as_updated(self, base_dir: Path) -> None:
         # First install
         manifest1 = {"files": [], "file_hashes": {}}
-        backup = base_dir / "backup"
+        backup = BackupRoot(base_dir / "backup")
         install.install_agents(base_dir, manifest1, backup)
 
         # Modify an installed file
@@ -401,7 +403,7 @@ class TestUninstall:
     def test_uninstall_removes_carter_files(self, base_dir: Path) -> None:
         # Install first
         manifest = {"files": [], "file_hashes": {}}
-        backup = base_dir / "backup"
+        backup = BackupRoot(base_dir / "backup")
         install.install_agents(base_dir, manifest, backup)
         install.install_skills(base_dir, manifest, backup)
         manifest["mcp_servers"] = []
@@ -420,7 +422,7 @@ class TestUninstall:
     def test_uninstall_preserves_non_carter_files(self, base_dir: Path) -> None:
         # Install Carter
         manifest = {"files": [], "file_hashes": {}}
-        backup = base_dir / "backup"
+        backup = BackupRoot(base_dir / "backup")
         install.install_agents(base_dir, manifest, backup)
         manifest["mcp_servers"] = []
         install.write_manifest(manifest, base_dir)
@@ -453,7 +455,7 @@ class TestUninstall:
 
 class TestInstallPrimitives:
     def test_install_file_updates_with_backup(self, tmp_path: Path) -> None:
-        src, dst, backup = tmp_path / "src.md", tmp_path / "out" / "dst.md", tmp_path / "bk"
+        src, dst, backup = tmp_path / "src.md", tmp_path / "out" / "dst.md", BackupRoot(tmp_path)
         src.write_text("new\n")
         dst.parent.mkdir()
         dst.write_text("old\n")
@@ -461,16 +463,17 @@ class TestInstallPrimitives:
 
         assert _install_file(src, dst, manifest, backup) == "updated"
         assert dst.read_text() == "new\n"
-        assert next(backup.rglob("dst.md")).read_text() == "old\n"
+        assert next(backup.path.rglob("dst.md")).read_text() == "old\n"
         assert manifest["file_hashes"][str(dst)] == _sha256(src)
         assert _install_file(src, dst, manifest, backup) == "unchanged"
         assert manifest["files"] == [str(dst), str(dst)]
 
     def test_rendered_file_created_then_unchanged(self, tmp_path: Path) -> None:
         dst, manifest = tmp_path / "a" / "x.md", {"files": [], "file_hashes": {}}
-        assert _install_rendered_file("hi\n", dst, manifest, tmp_path / "bk") == "created"
+        root = BackupRoot(tmp_path / "bk")
+        assert _install_rendered_file("hi\n", dst, manifest, root) == "created"
         assert manifest["file_hashes"][str(dst)] == _sha256(dst)
-        assert _install_rendered_file("hi\n", dst, manifest, tmp_path / "bk") == "unchanged"
+        assert _install_rendered_file("hi\n", dst, manifest, root) == "unchanged"
         assert not (tmp_path / "bk").exists()
 
 
@@ -652,7 +655,7 @@ class TestCarterOpsSkill:
     def test_carter_ops_skill_installed(self, base_dir: Path) -> None:
         """carter-ops skill should be installed alongside other skills."""
         manifest = {"files": [], "file_hashes": {}}
-        backup = base_dir / "backup"
+        backup = BackupRoot(base_dir / "backup")
         install.install_skills(base_dir, manifest, backup)
 
         skill_md = base_dir / "opencode" / "skills" / "carter-ops" / "SKILL.md"
@@ -666,7 +669,9 @@ class TestCarterOpsSkill:
 
     def test_carter_ops_skill_is_installed_verbatim(self, base_dir: Path) -> None:
         """No install-time substitution: runtime values come from `carter ops config --emit`."""
-        install.install_skills(base_dir, {"files": [], "file_hashes": {}}, base_dir / "backup")
+        install.install_skills(
+            base_dir, {"files": [], "file_hashes": {}}, BackupRoot(base_dir / "backup")
+        )
 
         installed = base_dir / "opencode" / "skills" / "carter-ops" / "SKILL.md"
         source = install.REPO_ROOT / "skills" / "carter-ops" / "SKILL.md"
@@ -681,7 +686,9 @@ class TestCarterOpsSkill:
             'email = "12345+llm-bot@users.noreply.github.com"\n'
             '[attribution]\nfooter = "BAKED-FOOTER-MARK"\n'
         )
-        install.install_skills(base_dir, {"files": [], "file_hashes": {}}, base_dir / "backup")
+        install.install_skills(
+            base_dir, {"files": [], "file_hashes": {}}, BackupRoot(base_dir / "backup")
+        )
 
         skill = (base_dir / "opencode" / "skills" / "carter-ops" / "SKILL.md").read_text()
         for value in ("llm-bot", "12345", "BAKED-FOOTER-MARK", "users.noreply.github.com"):
@@ -701,7 +708,9 @@ class TestCarterOpsSkill:
         ssh = Path(os.environ["HOME"]) / ".ssh"
         ssh.mkdir()
         (ssh / "id_ed25519").write_text("x")
-        install.install_skills(base_dir, {"files": [], "file_hashes": {}}, base_dir / "backup")
+        install.install_skills(
+            base_dir, {"files": [], "file_hashes": {}}, BackupRoot(base_dir / "backup")
+        )
 
         skill = (base_dir / "opencode" / "skills" / "carter-ops" / "SKILL.md").read_text()
         assert "SECRET-HUMAN-KEY-ID" not in skill
@@ -709,11 +718,11 @@ class TestCarterOpsSkill:
 
     def test_templated_skill_unchanged_on_reinstall(self, base_dir: Path) -> None:
         """A re-install must not rewrite (and back up) the unchanged templated skill."""
-        backup = base_dir / "backup"
+        backup = BackupRoot(base_dir / "backup")
         install.install_skills(base_dir, {"files": [], "file_hashes": {}}, backup)
         stats = install.install_skills(base_dir, {"files": [], "file_hashes": {}}, backup)
         assert stats["updated"] == 0
-        assert not backup.exists()
+        assert not backup.parent.exists()
 
 
 class TestOpenCodeRules:
@@ -933,7 +942,7 @@ class TestOpsOneLiner:
     def test_no_critical_section_in_agents(self, base_dir: Path) -> None:
         """Agent files should not have the old CRITICAL section."""
         manifest = {"files": [], "file_hashes": {}}
-        backup = base_dir / "backup"
+        backup = BackupRoot(base_dir / "backup")
         install.install_agents(base_dir, manifest, backup)
 
         agents = sorted((base_dir / "opencode" / "agents").glob("carter-*.md"))
@@ -947,7 +956,7 @@ class TestOpsOneLiner:
     def test_no_deterministic_ops_in_skills(self, base_dir: Path) -> None:
         """Pipeline and atlassian skills should not have deterministic-operations blocks."""
         manifest = {"files": [], "file_hashes": {}}
-        backup = base_dir / "backup"
+        backup = BackupRoot(base_dir / "backup")
         install.install_skills(base_dir, manifest, backup)
 
         skills_dir = base_dir / "opencode" / "skills"
@@ -964,7 +973,7 @@ class TestNarratorAgent:
 
     def test_narrator_installed(self, base_dir: Path) -> None:
         manifest = {"files": [], "file_hashes": {}}
-        backup = base_dir / "backup"
+        backup = BackupRoot(base_dir / "backup")
         install.install_agents(base_dir, manifest, backup)
 
         narrator = base_dir / "opencode" / "agents" / "carter-narrator.md"
@@ -973,7 +982,7 @@ class TestNarratorAgent:
     def test_narrator_has_all_redaction_categories(self, base_dir: Path) -> None:
         """Static source bakes in redaction ON with all 7 categories (no carter.yaml)."""
         manifest = {"files": [], "file_hashes": {}}
-        backup = base_dir / "backup"
+        backup = BackupRoot(base_dir / "backup")
         install.install_agents(base_dir, manifest, backup)
 
         content = (base_dir / "opencode" / "agents" / "carter-narrator.md").read_text()
@@ -992,7 +1001,7 @@ class TestNarratorAgent:
 
     def test_narrator_references_content_skills(self, base_dir: Path) -> None:
         manifest = {"files": [], "file_hashes": {}}
-        backup = base_dir / "backup"
+        backup = BackupRoot(base_dir / "backup")
         install.install_agents(base_dir, manifest, backup)
 
         content = (base_dir / "opencode" / "agents" / "carter-narrator.md").read_text()
@@ -1005,7 +1014,7 @@ class TestContentSkills:
 
     def test_content_skills_installed(self, base_dir: Path) -> None:
         manifest = {"files": [], "file_hashes": {}}
-        backup = base_dir / "backup"
+        backup = BackupRoot(base_dir / "backup")
         install.install_skills(base_dir, manifest, backup)
 
         skills_dir = base_dir / "opencode" / "skills"
@@ -1015,7 +1024,7 @@ class TestContentSkills:
     def test_docs_skill_delegates(self, base_dir: Path) -> None:
         """carter-docs must delegate ADRs/diagrams/decks, not duplicate them."""
         manifest = {"files": [], "file_hashes": {}}
-        backup = base_dir / "backup"
+        backup = BackupRoot(base_dir / "backup")
         install.install_skills(base_dir, manifest, backup)
 
         content = (base_dir / "opencode" / "skills" / "carter-docs" / "SKILL.md").read_text()
@@ -1029,7 +1038,7 @@ class TestContentSkills:
     def test_brief_register_single_source(self, base_dir: Path) -> None:
         """Brief register is defined in carter-docs and only referenced elsewhere."""
         manifest = {"files": [], "file_hashes": {}}
-        backup = base_dir / "backup"
+        backup = BackupRoot(base_dir / "backup")
         install.install_skills(base_dir, manifest, backup)
 
         skills_dir = base_dir / "opencode" / "skills"
@@ -1111,7 +1120,7 @@ class TestCarterReflectSkill:
     def test_reflect_skill_installed(self, base_dir: Path) -> None:
         """carter-reflect skill should be installed alongside other skills."""
         manifest = {"files": [], "file_hashes": {}}
-        backup = base_dir / "backup"
+        backup = BackupRoot(base_dir / "backup")
         install.install_skills(base_dir, manifest, backup)
 
         skill_md = base_dir / "opencode" / "skills" / "carter-reflect" / "SKILL.md"
@@ -1169,6 +1178,26 @@ class TestRetiredSkills:
         assert (skill / "SKILL.md").read_text() == "my edits\n"
         out = seen(capsys)
         assert "carter-triage" in out and "rm -r" in out
+
+    @pytest.mark.parametrize("name", ["carter-x $(touch pwned)", "carter-a;b", "carter-it's"])
+    def test_the_rm_hint_is_one_quoted_absolute_path_whatever_the_name(
+        self, base_dir: Path, capsys: pytest.CaptureFixture[str], name: str
+    ) -> None:
+        skill, previous = self._seed(base_dir, name)
+        (skill / "SKILL.md").write_text("my edits\n")
+        components.remove_retired_skills(base_dir, previous)
+        hint = next(line for line in seen(capsys).splitlines() if "rm -r" in line)
+        command = hint.split("rm -r ", 1)[1]
+        assert shlex.split(command) == [str(skill)]  # one word: nothing in the name can run
+
+    def test_a_name_with_an_escape_character_gets_no_command_at_all(
+        self, base_dir: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        skill, previous = self._seed(base_dir, "carter-\x1b[2J")
+        (skill / "SKILL.md").write_text("my edits\n")
+        components.remove_retired_skills(base_dir, previous)
+        out = seen(capsys)
+        assert "carter-" in out and "rm -r" not in out and "\x1b" not in out
 
     def test_retired_skill_without_recorded_hash_is_kept(
         self, base_dir: Path, capsys: pytest.CaptureFixture[str]

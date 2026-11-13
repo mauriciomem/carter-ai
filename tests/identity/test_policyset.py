@@ -273,6 +273,9 @@ class TestReadAndEditDenies:
             "/home/fixture/.carter/gitconfig",
             "/home/fixture/.carter/gitconfig.d/abc123",
             "/home/fixture/.carter/guard-state.json",
+            "/home/fixture/.carter/manifest.json",
+            "/home/fixture/.carter/workspaces",
+            "/home/fixture/.carter/backups/20261113T120000/.config/opencode/agents/carter-pm.md",
             "/home/fixture/.config/opencode/plugins/carter-guard.ts",
         ],
     )
@@ -285,7 +288,6 @@ class TestReadAndEditDenies:
             "src/app.py",
             "/ws/docs/README.md",
             ".carter/state/plans/active/x.md",
-            "/home/fixture/.carter/manifest.json",
         ):
             assert decide(statements, "edit", path) == "allow", path
 

@@ -10,7 +10,7 @@ import pytest
 from click.testing import CliRunner
 
 from carter.cli import main
-from carter.home import carter_home, remember_workspace
+from carter.home import carter_home, remember_workspace, tilde
 
 
 def _file() -> Path:
@@ -70,13 +70,30 @@ def test_a_file_that_is_not_utf8_is_swallowed_and_left_alone(tmp_path: Path) -> 
     assert _file().read_bytes() == b"\xff\xfe\x00"
 
 
-def test_a_symlink_in_its_place_is_not_followed(tmp_path: Path) -> None:
+def test_a_symlink_in_its_place_is_not_followed_nor_its_mode_changed(tmp_path: Path) -> None:
     victim = tmp_path / "victim"
     victim.write_text("keep")
+    victim.chmod(0o755)  # a guard script, say: a chmod through the link would strip this
     _file().parent.mkdir(parents=True)
     _file().symlink_to(victim)
     remember_workspace(tmp_path)
     assert victim.read_text() == "keep"
+    assert stat.S_IMODE(victim.stat().st_mode) == 0o755
+
+
+def test_a_fifo_in_its_place_is_left_alone_and_does_not_hang(tmp_path: Path) -> None:
+    _file().parent.mkdir(parents=True)
+    os.mkfifo(_file())
+    remember_workspace(tmp_path)
+    assert stat.S_ISFIFO(_file().lstat().st_mode)
+
+
+def test_tilde_shortens_only_a_leading_home() -> None:
+    home = str(Path.home())
+    assert tilde(Path(home) / ".carter") == "~/.carter"
+    assert tilde(home) == "~"
+    assert tilde(f"{home}2/x") == f"{home}2/x"  # another user's home that starts the same way
+    assert tilde(f"/srv{home}/x") == f"/srv{home}/x"  # a copy of it elsewhere
 
 
 class TestCommands:

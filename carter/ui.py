@@ -75,6 +75,16 @@ def _plain(line: str, stream: TextIO) -> str:
         return line.encode("ascii", "backslashreplace").decode("ascii")
 
 
+def _visible(text: str) -> str:
+    """``text`` with every character a terminal could act on written out: ESC, the C1 controls
+    (a single ``\\x9b`` is a CSI), a newline or a bidi override in a file name become
+    ``\\x1b``, ``\\x9b``, ``\\n``, ``\\u202e``. A name can come from anyone who can create a file,
+    and Rich passes these through; the report must show them, not obey them."""
+    if text.isprintable():
+        return text
+    return "".join(c if c.isprintable() else c.encode("unicode_escape").decode() for c in text)
+
+
 def _console(stream: TextIO) -> Any:
     from rich.console import Console
 
@@ -106,7 +116,9 @@ def _fix_line(stream: TextIO, fix: str, indent: int = 2) -> list[tuple[str, str]
 def _emit(stream: TextIO, *lines: Sequence[tuple[str, str]]) -> None:
     console = _console(stream)
     for parts in lines:
-        console.print(_text(*((_plain(content, stream), style) for content, style in parts)))
+        console.print(
+            _text(*((_plain(_visible(content), stream), style) for content, style in parts))
+        )
 
 
 def ok(text: str, detail: str = "", *, strong: bool = False) -> None:
