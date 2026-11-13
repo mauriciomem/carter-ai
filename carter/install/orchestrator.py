@@ -6,7 +6,6 @@ unsupported or missing OpenCode fails the install hard with nothing on disk.
 
 from __future__ import annotations
 
-import os
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -144,7 +143,7 @@ def run(
                 config_created=ops_created,
                 pruned=pruned,
                 guards=accepted,
-                replaced=sum(len(files) for _, _, files in os.walk(backup_root.path)),
+                replaced=backup_root.copied,
                 backup_dir=backup_root.path,
             )
         )

@@ -3,6 +3,11 @@
 Six scenarios, each as it reaches a colour terminal, a terminal with ``NO_COLOR``, a pipe and a
 strict ASCII stream, plus two 60-column terminals. A golden file is the combined stdout + stderr
 text; ``pytest tests/snapshots --update-golden`` rewrites them (read the diff before committing).
+
+The ``.ansi`` files pin Rich's exact escape codes, which is the point (a colour on the wrong word
+fails here) and the cost: a ``rich`` upgrade that joins style codes differently fails them all with
+no change in meaning. Then confirm the plain-text tests below still pass (they compare the text with
+the escapes stripped) and run ``--update-golden``.
 """
 
 from __future__ import annotations

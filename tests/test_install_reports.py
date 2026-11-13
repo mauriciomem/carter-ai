@@ -100,6 +100,18 @@ def test_workspaces_with_different_leftovers_each_get_their_own_also_line(
     assert "/w/b  no Carter agents left" in out
 
 
+def test_a_failed_guard_step_gives_a_red_verdict_and_the_guards_come_first(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    render_uninstall(UninstallReport(code=1, manager="pip uninstall carter-ai"))
+    got = capsys.readouterr()
+    assert got.err == "✗ Uninstalled, but removing the guards failed\n"
+    assert "✓" not in got.out
+    steps = got.out.splitlines()
+    assert re.fullmatch(r"→ remove the guards first +carter guard remove", steps[-2])
+    assert re.fullmatch(r"→ last step, remove the command +pip uninstall carter-ai", steps[-1])
+
+
 HOSTILE = "carter-\x1b]0;pwn\x07\x1b[31m\x9b31m\u202eevil"
 
 

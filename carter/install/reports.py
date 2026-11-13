@@ -145,8 +145,12 @@ def render_uninstall(report: UninstallReport) -> None:
         ui.rows(_workspace_rows(report), paths=True)
         _also(report)
     ui.gap()
-    ui.ok("Uninstalled", "" if removed else "nothing was left to remove", strong=True)
     todo = [("last step, remove the command", report.manager)]
+    if report.code:  # the exit code says it failed, so the verdict must too
+        ui.fail("Uninstalled, but removing the guards failed")
+        todo.insert(0, ("remove the guards first", "carter guard remove"))
+    else:
+        ui.ok("Uninstalled", "" if removed else "nothing was left to remove", strong=True)
     if report.leftover:
         todo.append(("to delete everything Carter kept", report.rm_all))
     ui.steps(todo)

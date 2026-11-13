@@ -203,6 +203,47 @@ class TestMergeIntoUserConfig:
         assert json.loads(copy.read_text()) == {"theme": "x"}
 
 
+class TestMergeIsIdempotent:
+    """``install --mcp`` run again changes nothing, so it copies and reports nothing."""
+
+    ENTRY = {"carter-github": {"type": "local", "command": ["d"]}}
+
+    def test_a_file_that_already_holds_the_entries_is_neither_copied_nor_rewritten(
+        self, tmp_path: Path
+    ) -> None:
+        path = tmp_path / "opencode.jsonc"
+        text = '{\n  // mine\n  "mcp": {"servers": {"carter-github": {"type": "local", "command": ["d"]}}},\n}\n'  # noqa: E501
+        path.write_text(text)
+        assert merge_mcp_servers(path, self.ENTRY, BackupRoot(tmp_path / "backup")) is True
+        assert path.read_text() == text  # comments included
+        assert not (tmp_path / "backup").exists()
+        assert not (tmp_path / "opencode.jsonc.carter-backup").exists()
+
+    def test_a_changed_entry_is_updated_with_a_copy(self, tmp_path: Path) -> None:
+        path = tmp_path / "opencode.json"
+        path.write_text(json.dumps({"mcp": {"servers": {"carter-github": {"type": "old"}}}}))
+        assert merge_mcp_servers(path, self.ENTRY, BackupRoot(tmp_path / "backup")) is True
+        assert json.loads(path.read_text())["mcp"]["servers"] == self.ENTRY
+        assert len(list((tmp_path / "backup").rglob("opencode.json"))) == 1
+
+    def test_a_second_install_with_mcp_makes_no_new_backup_and_reports_no_replacement(
+        self, fake_opencode, tmp_path: Path
+    ) -> None:
+        fake_opencode()
+        base = tmp_path / "home"
+        cfg = base / "opencode" / "opencode.json"
+        cfg.parent.mkdir(parents=True)
+        cfg.write_text(json.dumps({"theme": "x"}))
+        first = _install(base, "--mcp")
+        assert first.exit_code == 0, first.output
+        folders = sorted((base / "carter" / "backups").iterdir())
+        assert len(folders) == 1  # the copy of the file as the user left it
+        second = _install(base, "--mcp")
+        assert second.exit_code == 0, second.output
+        assert sorted((base / "carter" / "backups").iterdir()) == folders
+        assert "Replaced" not in second.stderr
+
+
 class TestUninstallV2:
     def test_removes_carter_entries_only(self, fake_opencode, tmp_path: Path) -> None:
         fake_opencode()

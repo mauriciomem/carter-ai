@@ -18,7 +18,7 @@ from carter.home import tilde
 from carter.identity import ConfigError
 from carter.identity.config import read_document
 from carter.identity.schema import IdentityConfig
-from carter.identity.writer import write_config
+from carter.identity.writer import dumps, write_config
 from carter.install.backups import BackupRoot
 from carter.install.console import log_err, log_ok, log_skip, log_step, log_warn
 from carter.install.files import (
@@ -303,6 +303,11 @@ def install_knowledge(
             count += 1
 
     return count
+
+
+def default_config_text() -> str:
+    """The exact text ``install`` writes to a missing ``config.toml``."""
+    return dumps(IdentityConfig(state="current"))
 
 
 def ensure_config(path: Path) -> bool:

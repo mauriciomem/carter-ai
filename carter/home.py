@@ -17,6 +17,9 @@ def carter_home() -> Path:
     return Path.home() / ".carter"
 
 
+STAMP_FORMAT = "%Y%m%dT%H%M%S"  # UTC; names the folders of ``~/.carter/backups/`` (and prunes them)
+
+
 def tilde(path: Path | str) -> str:
     """Render ``path`` for display with the home directory shortened to ``~``: only a leading
     ``<home>/`` (or ``<home>`` itself), so ``/home/u2/x`` is not ``~2/x`` under ``/home/u``."""

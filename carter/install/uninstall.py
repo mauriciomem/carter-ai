@@ -21,9 +21,13 @@ from typing import Literal
 from carter import __version__, ui
 from carter.home import MAX_WORKSPACES_BYTES, WORKSPACES_FILE, tilde
 from carter.identity import ConfigError, load_identity
-from carter.identity.schema import IdentityConfig
 from carter.install.backups import BackupRoot
-from carter.install.components import _render_opencode_agents, read_manifest
+from carter.install.components import (
+    _render_opencode_agents,
+    default_config_text,
+    read_manifest,
+    write_manifest,
+)
 from carter.install.console import log_ok, log_skip, log_step, log_warn, set_verbosity
 from carter.install.files import _backup_file, _sha256
 from carter.install.mcp import global_config_files, remove_carter_servers
@@ -147,35 +151,48 @@ def _remove_if_owned(
 
 
 def _copy_edited_agents(
-    manifest: dict, base_dir: Path | None, roots: tuple[Path, ...], opencode_base: Path
+    manifest: dict,
+    shipped: dict[Path, str],
+    base_dir: Path | None,
+    roots: tuple[Path, ...],
+    opencode_base: Path,
 ) -> dict[Path, Path]:
     """Copy the global agents the user edited into ``backups/<stamp>/``, before anything else
     runs: the guard step re-renders every agent and refreshes its recorded hash, so afterwards
-    an edit can no longer be told from Carter's own output. Returns ``{agent: copy}``.
+    an edit can no longer be told from Carter's own output. Returns ``{agent: copy}``. An agent
+    with no recorded hash (an old manifest) is compared with what this version ships.
 
+    Each agent looked at is recorded in the manifest as it stands now, and the manifest is
+    written back: the guard step then finds the edit already recorded and takes no second copy.
     Nothing has been removed yet, so a failed copy aborts the uninstall with the files intact."""
     agents = (opencode_base / "agents").resolve()
     hashes: dict[str, str] = manifest.get("file_hashes") or {}
+    before = dict(hashes)
     stamp_root = BackupRoot(backups_dir(base_dir))
     copies: dict[Path, Path] = {}
     for listed in manifest.get("files", []):
-        path, recorded = Path(listed), hashes.get(listed)
-        if recorded is None or not path.is_file() or path.resolve().parent != agents:
+        path = Path(listed)
+        if path not in shipped or not path.is_file() or path.resolve().parent != agents:
             continue
-        if _within(path.resolve(), roots) and not _hash_matches(path, recorded):
+        if not _within(path.resolve(), roots):
+            continue
+        if not _hash_matches(path, hashes.get(listed) or shipped[path]):
             copy = _backup_file(path, stamp_root)
             if copy is not None:
                 copies[path] = copy
+        hashes[listed] = _sha256(path)
+    if hashes != before:
+        write_manifest({**manifest, "file_hashes": hashes}, base_dir)
     return copies
 
 
 def _is_default_config(path: Path) -> bool:
-    """True if ``config.toml`` holds nothing the user set: it parses to the all-defaults
-    config (compared as a value, so a fully written older file counts too). A missing,
-    unreadable or unknown-key file is not default."""
+    """True if ``config.toml`` is exactly what ``install`` writes (the header and ``schema = 2``).
+    Compared as text: a comment the user added is theirs, and a fully written file from an older
+    Carter is kept too, which is the safe side. A missing or unreadable file is not default."""
     try:
-        return load_identity(path) == IdentityConfig(state="current")
-    except ConfigError:
+        return path.read_text(encoding="utf-8") == default_config_text()
+    except (OSError, ValueError):
         return False
 
 
@@ -318,7 +335,7 @@ def _clean_carter_home(base_dir: Path | None, report: UninstallReport) -> None:
         log_ok(f"Removed {tilde(config)} (defaults only)")
     for sub in ("memories/user", "memories/session", "memories/repo", "memories", "knowledge"):
         _rmdir_if_empty(carter / sub)
-    for sub in ("secrets", "state/audit", "state", "hooks", "bin", ""):
+    for sub in ("secrets", "state/audit", "state", "hooks", "bin", "backups", ""):
         _rmdir_if_empty(carter / sub)
     for rel, reason in _KEPT:
         count = _count_files(carter / rel) if (carter / rel).is_dir() else 0
@@ -352,7 +369,17 @@ def uninstall(
     first = read_manifest(base_dir)
     # Rendered before the guard step changes what the agents carry (G2's rules).
     shipped = _shipped_files(base_dir)
-    copies = _copy_edited_agents(first, base_dir, managed_roots, opencode_base) if first else {}
+    try:
+        copies = (
+            _copy_edited_agents(first, shipped, base_dir, managed_roots, opencode_base)
+            if first
+            else {}
+        )
+    except OSError as exc:  # nothing was removed yet
+        why = f"{exc.strerror}: {tilde(exc.filename)}" if exc.strerror and exc.filename else exc
+        ui.fail(f"could not copy your edited agents to backups ({why}); nothing was removed")
+        report.code = 1
+        return report
     guards_before = guard_state_path(base_dir).exists()
     plugin_before = plugin_dir(base_dir).exists()
     identity_removed = False
@@ -368,7 +395,11 @@ def uninstall(
         # ships by name is ever deleted from it, whatever hash it carries.
         hashes: dict[str, str] = manifest.get("file_hashes") or {}
         names = _shipped_names(base_dir, shipped)
-        listed = [(Path(f), hashes.get(f)) for f in manifest.get("files", []) if Path(f) in names]
+        listed = [
+            (Path(f), hashes.get(f) or shipped.get(Path(f)))  # an old manifest: what we ship
+            for f in manifest.get("files", [])
+            if Path(f) in names
+        ]
     else:
         # No manifest: the files this version ships, by name and only while their content is
         # still what it ships; never by prefix, never a tree.

@@ -1,6 +1,6 @@
-"""Characterization of the data-loss behaviours the lean-CLI work fixes.
-
-Each test states the wanted behaviour of the install -> uninstall lifecycle.
+"""Data safety of install -> uninstall: two same-named edits both survive in backups, a user's
+look-alike skill survives, the old guard log moves, an edited agent is removed with a copy at its
+mirrored path, and nothing Carter did not install is touched. Plus the tree helpers these tests use.
 """
 
 from __future__ import annotations

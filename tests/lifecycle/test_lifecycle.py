@@ -195,9 +195,9 @@ def test_an_edited_global_agent_goes_with_a_mirrored_copy_in_backups(life: Life)
     agent = life.opencode / "agents" / "carter-pm.md"
     mirrored = agent.relative_to(life.home).as_posix()  # backups/<ts>/<path below the home>
     assert not agent.exists()
-    # The guard step may leave a second copy of the same edit under the next second's stamp.
-    copies = list((life.carter / "backups").glob(f"*/{mirrored}"))
-    assert copies and {c.read_text(encoding="utf-8") for c in copies} == {"# my pm\n"}
+    # One edit, one copy: the guard step re-renders the agent but finds the edit already copied.
+    [copy] = (life.carter / "backups").glob(f"*/{mirrored}")
+    assert copy.read_text(encoding="utf-8") == "# my pm\n"
     assert f"~/{mirrored}" in report and "Removed although you edited them" in report
     assert _backups(life.home) >= {f"<ts>/{mirrored}", "<ts>/opencode.json", "agents/legacy.md"}
 

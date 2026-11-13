@@ -77,16 +77,18 @@ def merge_mcp_servers(
     """Merge ``entries`` into ``mcp.servers`` of an OpenCode config file.
 
     Unrelated keys and servers are preserved. Returns False (file untouched) when the file
-    can't be parsed.
+    can't be parsed. A file that already holds every entry is neither copied nor rewritten.
     """
     data = _load_config(file_path)
     if data is None:
         return False
+    mcp = data.setdefault("mcp", {})
+    servers = mcp.setdefault("servers", {})
+    if all(servers.get(name) == entry for name, entry in entries.items()):
+        return True
     if file_path.exists() and backup_root:
         _backup_file(file_path, backup_root)
 
-    mcp = data.setdefault("mcp", {})
-    servers = mcp.setdefault("servers", {})
     for name, entry in entries.items():
         base_name = name.removeprefix("carter-")
         if base_name in servers:
@@ -113,8 +115,9 @@ def remove_carter_servers(file_path: Path) -> list[str]:
         return []
     removed: list[str] = []
     servers = mcp.get("servers")
+    shipped = {f"carter-{n}" for n in MCP_SERVERS}
     if isinstance(servers, dict):
-        for k in [k for k in list(servers) if k in {f"carter-{n}" for n in MCP_SERVERS}]:
+        for k in [k for k in list(servers) if k in shipped]:
             del servers[k]
             removed.append(k)
     if removed:

@@ -8,8 +8,9 @@ import shutil
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
+from carter.home import STAMP_FORMAT
+
 RETENTION_DAYS = 15
-STAMP_FORMAT = "%Y%m%dT%H%M%S"
 
 
 class BackupRoot:
@@ -24,6 +25,7 @@ class BackupRoot:
         self.parent = parent
         self._when = now or datetime.now(UTC)
         self.path = parent / self._when.strftime(STAMP_FORMAT)
+        self.copied = 0  # files copied into it by this run
         self._made = False
 
     def make(self) -> Path:
@@ -51,10 +53,15 @@ def prune(root: Path, now: datetime | None = None) -> int:
     The age comes from the name, not the mtime: a copy keeps the original's mtime, so a fresh
     backup of an old file would look expired. Anything whose name is not exactly a stamp (the
     legacy ``agents/``, stray files) and every symlink is left alone, a symlinked ``root``
-    included. Returns how many directories went."""
+    included. Best effort: an unreadable ``root`` prunes nothing, it never fails an install.
+    Returns how many directories went."""
     cutoff = (now or datetime.now(UTC)) - timedelta(days=RETENTION_DAYS)
     gone = 0
-    for entry in sorted(root.iterdir()) if root.is_dir() and not root.is_symlink() else ():
+    try:
+        entries = sorted(root.iterdir()) if root.is_dir() and not root.is_symlink() else ()
+    except OSError:
+        return 0
+    for entry in entries:
         try:
             when = datetime.strptime(entry.name, STAMP_FORMAT).replace(tzinfo=UTC)
         except ValueError:

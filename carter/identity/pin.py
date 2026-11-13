@@ -14,6 +14,7 @@ from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 from pathlib import Path
 
+from carter.home import STAMP_FORMAT
 from carter.identity.config import default_path
 from carter.identity.errors import E_ROLE_B_TIER
 from carter.identity.schema import TIERS, IdentityConfig, Workspace
@@ -76,7 +77,7 @@ def apply_pin(cfg: IdentityConfig, plan: PinPlan, path: Path | None = None) -> b
     if entry != Workspace():
         workspaces[plan.key] = entry
     path = path or default_path()
-    stamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%S")
+    stamp = datetime.now(UTC).strftime(STAMP_FORMAT)
     backup = path.parent / "backups" / stamp / path.name  # a rewrite drops the user's comments
     new = replace(cfg, workspaces=workspaces, state="current")
     return write_config(new, path, backup_to=backup)

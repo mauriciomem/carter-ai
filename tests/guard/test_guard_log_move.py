@@ -40,7 +40,9 @@ class TestMigrate:
         hooks.migrate_guard_log(tmp_path)
         assert new_log(tmp_path).read_text() == LINE
         assert not old_log(tmp_path).exists()
-        assert (mode(new_log(tmp_path)), mode(new_log(tmp_path).parent)) == (0o600, 0o700)
+        audit = new_log(tmp_path).parent
+        # state/ and state/audit/ are both private, as when the hook makes them itself.
+        assert (mode(new_log(tmp_path)), mode(audit), mode(audit.parent)) == (0o600, 0o700, 0o700)
 
     def test_it_appends_to_a_log_that_is_already_there(self, tmp_path: Path) -> None:
         write_old(tmp_path, "older\n")

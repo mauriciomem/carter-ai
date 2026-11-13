@@ -270,7 +270,8 @@ def migrate_guard_log(base_dir: Path | None) -> None:
     if old.is_symlink() or not old.is_file():
         return
     try:
-        new.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+        new.parent.parent.mkdir(parents=True, exist_ok=True, mode=0o700)  # state/, as the hook does
+        new.parent.mkdir(exist_ok=True, mode=0o700)
         fd = os.open(new, os.O_WRONLY | os.O_APPEND | os.O_CREAT | os.O_NOFOLLOW, 0o600)
         with os.fdopen(fd, "ab") as out:
             out.write(old.read_bytes())

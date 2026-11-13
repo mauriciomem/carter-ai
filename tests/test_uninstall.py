@@ -13,12 +13,13 @@ import pytest
 
 from carter.install import mcp, orchestrator, paths
 from carter.install import uninstall as uninstall_mod
-from carter.install.components import _OPENCODE_AGENTS_MD
+from carter.install.components import _OPENCODE_AGENTS_MD, default_config_text
 from carter.install.files import _sha256
 from carter.install.uninstall import KeptRow, Workspace, uninstall
 from lifecycle.helpers import tree_diff, tree_snapshot
 
 SEED = "patterns.md"
+DEFAULT_CONFIG = default_config_text()  # what a fresh install writes
 
 
 @pytest.fixture
@@ -122,6 +123,68 @@ def test_sibling_dir_prefix_is_not_matched(base_dir: Path) -> None:
     paths.manifest_path(base_dir).write_text(json.dumps(manifest))
     uninstall(base_dir)
     assert sibling.exists()
+
+
+def _edit_agent(base_dir: Path, name: str = "carter-engineer.md") -> Path:
+    agent = paths._opencode_base(base_dir) / "agents" / name
+    agent.write_text(agent.read_text() + "\nmine\n")
+    return agent
+
+
+def _copies_of(base_dir: Path, agent: Path) -> list[Path]:
+    return list(paths.backups_dir(base_dir).glob(f"*/**/{agent.name}"))
+
+
+def test_the_guard_steps_rerender_does_not_copy_an_edit_a_second_time(installed: Path) -> None:
+    """The pre-pass records what it copied, so the re-render that follows finds nothing new, even
+    when it runs in the same second (it would otherwise take the next stamp and copy again)."""
+    from carter.install import components
+
+    agent = _edit_agent(installed)
+    manifest = components.read_manifest(installed)
+    assert manifest is not None
+    shipped = uninstall_mod._shipped_files(installed)
+    oc, roots = paths._opencode_base(installed), paths.managed_roots(installed)
+    assert list(uninstall_mod._copy_edited_agents(manifest, shipped, installed, roots, oc)) == [
+        agent
+    ]
+    components.rerender_agents(installed)
+    assert len(_copies_of(installed, agent)) == 1
+    assert "mine" not in agent.read_text()  # re-rendered over: the edit lives only in the copy
+
+
+def test_an_old_manifest_without_hashes_still_copies_an_edited_agent_and_keeps_an_edited_skill(
+    installed: Path,
+) -> None:
+    """No recorded hash: compare with what this version ships, as the no-manifest path does."""
+    oc = paths._opencode_base(installed)
+    agent = _edit_agent(installed)
+    skill = oc / "skills" / "carter-adr" / "SKILL.md"
+    skill.write_text("my skill")
+    mp = paths.manifest_path(installed)
+    data = json.loads(mp.read_text())
+    data.pop("file_hashes")
+    mp.write_text(json.dumps(data))
+    report = uninstall(installed)
+    assert [a for a, _ in report.edited_copies] == [agent] and len(
+        _copies_of(installed, agent)
+    ) == 1
+    assert skill.read_text() == "my skill" and skill in report.kept_files
+    assert not (oc / "skills" / "carter-code-review").exists()  # unedited ones still go
+
+
+def test_a_failed_copy_says_why_and_removes_nothing(
+    installed: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    agent = _edit_agent(installed)
+    paths.backups_dir(installed).write_text("a file where the folder should be")
+    before = tree_snapshot(installed)
+    report = uninstall(installed)
+    got = capsys.readouterr()
+    assert report.code == 1 and tree_diff(before, tree_snapshot(installed)) == ""
+    assert agent.exists() and paths.manifest_path(installed).exists()
+    assert "could not copy your edited agents to backups" in got.err
+    assert "nothing was removed" in got.err and "Traceback" not in got.err + got.out
 
 
 def test_a_forged_manifest_entry_for_a_file_carter_does_not_ship_is_never_deleted(
@@ -245,42 +308,43 @@ class TestWithoutManifest:
 
 
 class TestIsDefaultConfig:
-    """Uninstall may delete ``config.toml`` only if nothing in it was set by the user."""
+    """Uninstall deletes ``config.toml`` only if it is exactly what ``install`` wrote: not a
+    comment, not a value, not even a file that merely means the same."""
 
     @pytest.mark.parametrize(
         ("text", "expected"),
         [
-            ("schema = 2\n", True),
-            ("", False),  # empty is "no file" to the reader; never claimed as default
+            (DEFAULT_CONFIG, True),
+            (DEFAULT_CONFIG + "# a note of mine\n", False),
+            ("# a note of mine\n" + DEFAULT_CONFIG, False),
+            ("schema = 2\n# only a comment\n", False),  # the same meaning, not the same text
+            ("schema = 2\n", False),
+            ("", False),
             (
                 'schema = 2\n[identity]\nrole = "co-author"\nlogin = ""\n[broker]\nmin_dwell_ms = 500\n',  # noqa: E501
-                True,
+                False,  # a fully written file of an older Carter: kept (the safe side)
             ),
             ('schema = 2\n[identity]\nlogin = "bot"\n', False),
             ('schema = 2\n[workspaces."/w"]\nrole = "author"\n', False),
             ('schema = 2\n[attribution]\nfooter = "mine"\n', False),
-            ('schema = 2\n[identity]\nsurprise = "x"\n', False),
+            ("schema = 2\n[identity]\nsurprise = 'x'\n", False),
             ("schema = 2\n[identity\n", False),
             ("schema = 3\n", False),
         ],
-        ids=[
-            "minimal",
-            "empty",
-            "fully-written",
-            "login",
-            "pin",
-            "footer",
-            "unknown",
-            "broken",
-            "future",
-        ],
     )
-    def test_default_means_the_parsed_value_not_the_text(
+    def test_default_means_the_text_install_writes(
         self, tmp_path: Path, text: str, expected: bool
     ) -> None:
         path = tmp_path / "config.toml"
         path.write_text(text)
         assert uninstall_mod._is_default_config(path) is expected
+
+    def test_a_config_with_only_a_comment_added_is_kept_and_listed(self, installed: Path) -> None:
+        config = paths.carter_config_path(installed)
+        config.write_text(config.read_text() + "# why I left this alone\n")
+        report = uninstall(installed)
+        assert report.config_removed is False and "why I left" in config.read_text()
+        assert KeptRow(config, "settings you changed", 1, dir=False) in report.kept
 
     def test_a_missing_file_is_not_default(self, tmp_path: Path) -> None:
         assert uninstall_mod._is_default_config(tmp_path / "config.toml") is False
@@ -462,6 +526,14 @@ class TestCleanup:
         assert (carter / "memories" / "user" / "me.md").exists()
         assert not (carter / "memories" / "session").exists()
         assert not (carter / "knowledge").exists() and not (carter / "hooks").exists()
+
+    def test_an_emptied_backups_folder_goes_so_nothing_is_left_to_delete(
+        self, installed: Path
+    ) -> None:
+        carter = paths._carter_base(installed)
+        (carter / "backups").mkdir()
+        report = uninstall(installed)
+        assert not carter.exists() and report.leftover is False and report.rm_all == ""
 
     def test_the_audit_log_the_backups_and_the_token_stay(self, installed: Path) -> None:
         carter = paths._carter_base(installed)

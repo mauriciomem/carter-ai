@@ -1,5 +1,8 @@
 """The schema-2 names are frozen. Changing this file is deliberate:
-a rename or a new default needs an architect review and a writer/migration update."""
+a rename or a new default needs an architect review and a writer/migration update.
+
+The writer stores only values that differ from a default (a fresh ``config.toml`` is two lines), so
+a default here is load-bearing: changing one changes the behaviour of every existing file."""
 
 from __future__ import annotations
 

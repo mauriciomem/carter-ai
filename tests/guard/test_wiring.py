@@ -246,7 +246,11 @@ class TestUninstallRemovesGuards:
         fake_opencode(config_output="boom", config_exit=1)  # cannot verify: nothing is written
         res = carter(base_dir, "uninstall", "--yes")
         assert res.exit_code == 1 and "guards: removal failed" in res.output
-        assert not agents_installed(base_dir) and "✓ Uninstalled" in res.output
+        assert not agents_installed(base_dir)
+        # The verdict agrees with the exit code, and the guards come first in the steps.
+        assert "✗ Uninstalled, but removing the guards failed" in res.output
+        assert "✓ Uninstalled" not in res.output
+        assert re.search(r"→ remove the guards first +carter guard remove", res.output)
         assert guard_state_path(base_dir).exists()  # still owned, so a later remove can finish
 
     def test_without_guard_state_or_manifest_nothing_outside_carters_roots_is_removed(

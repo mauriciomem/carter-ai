@@ -79,7 +79,8 @@ See [Install](../guides/install.md#upgrade) and [MCP servers](../guides/mcp-serv
 
 Remove the Carter OpenCode install: agents, skills, global rules, unedited knowledge
 files, the MCP servers Carter ships (`carter-github`, `carter-terraform`, `carter-atlassian`) and
-the install manifest, `~/.carter/run/` and a `config.toml` that holds only defaults. An agent you
+the install manifest, `~/.carter/run/` and a `config.toml` that is exactly what `install` wrote (a
+comment or a value of yours keeps it). An agent you
 edited is removed too, after a copy to `~/.carter/backups/<timestamp>/` (it carries guard rules that
 no longer apply), and reported. Edited skills, global rules and knowledge files, memories, secrets,
 backups and the audit log are kept. Directories Carter made and left empty go. Without a manifest it
@@ -136,9 +137,10 @@ Empty sections are not printed; with nothing installed it is the header, `✓ Un
 was left to remove` and the last step. The `!` section goes to stderr (a `carter uninstall > file`
 leaves it on screen); everything else is stdout. The command that removes the program depends on
 where Carter runs from: `uv tool uninstall`, `pipx uninstall`, `brew uninstall` or
-`pip uninstall carter-ai`. The `rm` lines use absolute, shell-quoted paths. Without an install
-record, a section tells you that agents you had edited were removed without a copy. `-v` lists every
-file removed or kept.
+`pip uninstall carter-ai`. The `rm` lines use absolute, shell-quoted paths, and `AGENTS.md` is named
+as yours to delete only when it starts with the line Carter writes. Without an install record, an
+agent or skill you edited is kept and listed, not removed. If removing the guards fails, the verdict
+is a red `✗` and the first step is `carter guard remove`. `-v` lists every file removed or kept.
 
 ## carter init
 

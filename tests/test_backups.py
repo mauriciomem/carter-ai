@@ -290,6 +290,22 @@ class TestPrune:
         assert backups.prune(root, NOW) == 0
         assert (outside / "precious").read_text() == "x"
 
+    def test_an_unreadable_folder_prunes_nothing_and_does_not_raise(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        def denied(self: Path):
+            raise PermissionError("denied")
+
+        monkeypatch.setattr(Path, "iterdir", denied)
+        assert backups.prune(tmp_path, NOW) == 0
+
+    def test_the_stamp_format_is_written_once_so_every_folder_can_be_pruned(self) -> None:
+        import carter
+
+        literal = "%Y%m%dT%H%M%S"
+        files = [p for p in Path(carter.__file__).parent.rglob("*.py") if literal in p.read_text()]
+        assert [p.name for p in files] == ["home.py"]
+
     def test_a_symlinked_backups_folder_is_not_pruned_through(self, tmp_path: Path) -> None:
         elsewhere = tmp_path / "elsewhere"
         self._make(elsewhere, _stamp(99))

@@ -430,9 +430,8 @@ def update(target_dir: str, dry_run: bool, assume_yes: bool) -> None:
         _report_unknown_keys(target)
         return
 
-    remember_workspace(
-        target
-    )  # a workspace made before this existed is listed from its first update
+    # A workspace made before the record existed is listed from its first update.
+    remember_workspace(target)
     _render_and_write(target, config, env)
     ui.detail(policy_notice(config))
     ui.ok("updated", f"{len(render_agents(config, env))} agents from carter.yaml")

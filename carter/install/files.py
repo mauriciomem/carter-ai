@@ -57,6 +57,7 @@ def _backup_file(path: Path, backup_root: BackupRoot) -> Path | None:
     ):
         shutil.copyfileobj(src, out)
     os.utime(dest, ns=(st.st_atime_ns, st.st_mtime_ns))  # a copy keeps its age
+    backup_root.copied += 1
     log_debug(f"Backed up {path} → {dest}")
     return dest
 
