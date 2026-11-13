@@ -171,6 +171,34 @@ jobs:
       - name: Real ssh -G check
         run: uv run pytest tests/broker/test_ssh_g_live.py -q
 
+  lifecycle:
+    # install -> init -> edit -> uninstall in a throwaway HOME, then a tree diff: Carter leaves
+    # nothing behind except what its report says it keeps. The unit-test job runs these on Linux
+    # too; this one adds macOS (temp dirs behind /private, a case-insensitive disk, BSD tools).
+    name: lifecycle (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2
+        with:
+          python-version: "3.14"
+
+      - name: Install dependencies
+        run: uv sync --locked --extra dev
+
+      - name: Lifecycle tests
+        run: |
+          git --version
+          uv run pytest tests/lifecycle -q
+
   ci-template:
     # The review-only workflow template that `carter ci install review` writes to users'
     # repositories. Both variants are rendered and checked by Carter's structural checker (no
