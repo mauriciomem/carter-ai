@@ -11,6 +11,7 @@ import glob
 import re
 import shutil
 import subprocess
+import tomllib
 from pathlib import Path
 
 import pytest
@@ -20,6 +21,7 @@ ROOT = Path(__file__).resolve().parents[1]
 WORKFLOWS = sorted((ROOT / ".github" / "workflows").glob("*.yml"))
 CI = ROOT / ".github" / "workflows" / "ci.yml"
 E2E = ROOT / ".github" / "workflows" / "e2e.yml"
+RELEASE = ROOT / ".github" / "workflows" / "release.yml"
 SHA_PIN = re.compile(r"^[\w.-]+/[\w./-]+@[0-9a-f]{40}(\s+#.*)?$")
 PATH_WORDS = re.compile(r"(?<![\w$/{.-])((?:tests|evals|carter|scripts)/[\w./*-]+)")
 
@@ -150,6 +152,42 @@ class TestJobs:
         assert "carter guard install --dry-run" in yaml.dump(job)
 
 
+class TestRelease:
+    """The release workflow only tags: no commit, no push of a branch, notes on GitHub."""
+
+    @pytest.fixture(scope="class")
+    def release(self) -> dict:
+        return load(RELEASE)
+
+    def test_semantic_release_runs_tag_only(self, release: dict) -> None:
+        psr = [
+            s
+            for s in steps(release["jobs"]["release"])
+            if s.get("uses", "").startswith("python-semantic-release/python-semantic-release@")
+        ]
+        assert len(psr) == 1
+        assert psr[0]["with"]["commit"] == "false"
+        assert psr[0]["with"]["changelog"] == "false"
+        assert "push" not in psr[0]["with"] and psr[0]["with"].get("tag", "true") != "false"
+
+    def test_no_step_commits_or_pushes_by_hand(self, release: dict) -> None:
+        runs = " ".join(s.get("run", "") for s in steps(release["jobs"]["release"]))
+        assert not re.search(r"git\s+(push|commit|add)", runs)
+
+    def test_only_the_release_job_can_write(self, release: dict) -> None:
+        assert release["permissions"] == {"contents": "read"}
+        assert release["jobs"]["release"]["permissions"] == {"contents": "write"}
+        assert list(release["jobs"]) == ["release"]
+        for path in WORKFLOWS:
+            if path != RELEASE:
+                assert "write" not in yaml.dump(load(path).get("permissions", {})), path.name
+
+    def test_there_is_no_changelog_file_and_the_url_points_at_the_releases(self) -> None:
+        assert not (ROOT / "CHANGELOG.md").exists()
+        urls = tomllib.loads((ROOT / "pyproject.toml").read_text())["project"]["urls"]
+        assert urls["Changelog"] == "https://github.com/mauriciomem/carter-ai/releases"
+
+
 @pytest.mark.parametrize("path", WORKFLOWS, ids=lambda p: p.name)
 class TestEveryWorkflow:
     def test_actions_are_pinned_by_sha(self, path: Path) -> None:
@@ -169,7 +207,7 @@ class TestEveryWorkflow:
         top = doc.get("permissions")
         if path == CI:
             assert top == {"contents": "read"}
-        elif path.name != "release.yml":  # the release workflow publishes: it asks for more
+        else:  # release.yml too: its one job asks for `contents: write` itself
             assert top is None or set(top.values()) <= {"read", "none"}
 
     def test_every_repo_path_named_in_a_run_command_exists(self, path: Path) -> None:

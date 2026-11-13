@@ -69,8 +69,11 @@ Use [Conventional Commits](https://www.conventionalcommits.org/) in English
 
 Releases are automatic. On every push to `main`,
 [`release.yml`](../../.github/workflows/release.yml) reads the commits since the last
-tag, picks the next version, tags it, updates `CHANGELOG.md` and publishes a GitHub
-Release.
+tag, picks the next version, tags the merge commit and publishes a GitHub Release with
+generated notes. The workflow makes no commit and pushes nothing to `main` except the
+tag. There is no `CHANGELOG.md`: the
+[GitHub Releases](https://github.com/mauriciomem/carter-ai/releases) page is the
+changelog.
 
 | Commit type | Example | Version change |
 |-------------|---------|----------------|
