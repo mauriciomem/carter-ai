@@ -27,6 +27,7 @@ from carter.install.console import _log, log_debug, log_step, set_verbosity
 from carter.install.mcp import configure_mcp_servers
 from carter.install.paths import backups_dir
 from carter.install.prereqs import (
+    PrerequisiteError,
     check_credentials,
     check_optional_tools,
     detect_environment,
@@ -76,6 +77,12 @@ def run(
 
     now = datetime.now(UTC)
     backup_root = BackupRoot(backups_dir(base_dir), now)
+    try:  # made now, so a backups folder that cannot be used stops the install before any write
+        backup_root.make()
+    except OSError as exc:
+        raise PrerequisiteError(
+            f"Cannot use {tilde(backup_root.parent)} for backups ({exc})."
+        ) from exc
 
     manifest: dict = {
         "version": __version__,
@@ -108,6 +115,7 @@ def run(
         mcp_count = 0
 
     manifest_path = write_manifest(manifest, base_dir)
+    backup_root.close()
     pruned = prune(backups_dir(base_dir))
     if pruned:
         _log(f"pruned {pruned} old backups", level=2)

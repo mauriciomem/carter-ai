@@ -45,6 +45,23 @@ ROWS = [
 ]
 
 
+def test_a_command_with_an_unprintable_character_is_left_out_not_shown_as_a_path_that_is_not_there(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """A NBSP in a home folder is real; printed as ``\\xa0`` it would name a path that is not."""
+    ui.rows(
+        [
+            Row("/h/a\xa0b", None, "rm '/h/a\xa0b'/x", cmd=True),
+            Row("/h/ok", None, "rm /h/ok", cmd=True),
+        ]
+    )
+    ui.steps([("first", "rm -r '/h/a\xa0b'"), ("second", "pip uninstall carter-ai")])
+    out = capsys.readouterr().out
+    assert "\\xa0'/x" not in out and "rm -r" not in out
+    assert "rm /h/ok" in out and "pip uninstall carter-ai" in out
+    assert "/h/a\\xa0b" in out  # the label is still shown, escaped
+
+
 def test_rows_align_label_count_and_note(capsys: pytest.CaptureFixture[str]) -> None:
     ui.rows(ROWS)
     assert capsys.readouterr().out == (

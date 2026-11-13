@@ -797,6 +797,40 @@ class TestOpenCodeRulesUpgrade:
         assert "English" in section
         assert "docs_language" in section
 
+    @pytest.mark.parametrize("target", ["nothing", "carter-file"])
+    def test_a_link_to_nothing_or_into_carters_files_is_not_written(
+        self, base_dir: Path, capsys: pytest.CaptureFixture[str], target: str
+    ) -> None:
+        hooks = Path.home() / ".carter" / "hooks"
+        hooks.mkdir(parents=True)
+        aim = hooks / "new-file"
+        if target == "carter-file":
+            aim.write_text(_OPENCODE_AGENTS_MD)  # even the right text: it is not ours to rewrite
+        agents_md = base_dir / "opencode" / "AGENTS.md"
+        agents_md.parent.mkdir(parents=True)
+        agents_md.symlink_to(aim)
+        manifest: dict = {"files": [], "file_hashes": {}}
+        install.install_opencode_rules(base_dir, manifest)
+        assert agents_md.is_symlink() and manifest["files"] == []
+        assert aim.exists() == (target == "carter-file")  # nothing was created
+        assert "not written" in seen(capsys)
+
+    def test_a_dangling_link_is_skipped_and_one_into_dotfiles_is_followed(
+        self, base_dir: Path, tmp_path: Path
+    ) -> None:
+        dotfiles = tmp_path / "dotfiles" / "AGENTS.md"
+        dotfiles.parent.mkdir()
+        agents_md = base_dir / "opencode" / "AGENTS.md"
+        agents_md.parent.mkdir(parents=True)
+        agents_md.symlink_to(dotfiles)  # not there yet: a dangling link outside Carter's files
+        manifest: dict = {"files": [], "file_hashes": {}}
+        install.install_opencode_rules(base_dir, manifest)
+        assert not dotfiles.exists()  # a link to nothing is never made into a file
+
+        dotfiles.write_text(_OPENCODE_AGENTS_MD)
+        install.install_opencode_rules(base_dir, manifest)
+        assert agents_md.is_symlink() and str(agents_md) in manifest["files"]
+
     def test_user_modified_file_is_skipped_with_warning(
         self, base_dir: Path, capsys: pytest.CaptureFixture[str]
     ) -> None:

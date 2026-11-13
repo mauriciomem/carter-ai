@@ -238,7 +238,9 @@ def rows(items: Iterable[Row], *, paths: bool = False, err: bool = False) -> Non
     On a terminal, a row that does not fit becomes two lines (label, then count and note under
     it) while the others keep their columns; a pipe or file always gets the columns, one line per
     row. Nothing is cut."""
-    items = list(items)
+    # A command with an unprintable character would print as an escaped path that does not
+    # exist, so it is left out (the label stays).
+    items = [r._replace(note="") if r.cmd and not r.note.isprintable() else r for r in items]
     if not items:
         return
     stream = sys.stderr if err else sys.stdout
@@ -276,6 +278,9 @@ def steps(items: Sequence[tuple[str, str]]) -> None:
     """``→ label  command`` lines: cyan arrows, bold cyan commands, commands aligned."""
     out = sys.stdout
     arrow = _glyph("fix", out)
+    items = [(label, command) for label, command in items if command.isprintable()]
+    if not items:
+        return
     label_w = max(len(label) for label, _ in items)
     width = _width(out)
     lines: list[list[tuple[str, str]]] = []

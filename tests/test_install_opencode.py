@@ -13,7 +13,7 @@ from click.testing import CliRunner
 
 from carter.cli import main
 from carter.install.backups import BackupRoot
-from carter.install.mcp import configure_mcp_servers, merge_mcp_servers
+from carter.install.mcp import configure_mcp_servers, merge_mcp_servers, remove_carter_servers
 from carter.install.prereqs import PrerequisiteError, parse_opencode_version, require_opencode
 
 
@@ -242,6 +242,79 @@ class TestMergeIsIdempotent:
         assert second.exit_code == 0, second.output
         assert sorted((base / "carter" / "backups").iterdir()) == folders
         assert "Replaced" not in second.stderr
+
+
+class TestLinksInTheWay:
+    """``opencode.json`` and its ``.carter-backup`` sit where agents can plant links (security
+    review B, round 2): a link is never written through to a file of Carter's."""
+
+    COMMENTED = '{\n  // mine\n  "theme": "x",\n}\n'
+    ENTRY = {"carter-github": {"type": "local", "command": ["d"]}}
+
+    @staticmethod
+    def _guard() -> Path:
+        guard = Path.home() / ".carter" / "hooks" / "carter-guard"
+        guard.parent.mkdir(parents=True)
+        guard.write_text("the real guard\n")
+        guard.chmod(0o755)
+        return guard
+
+    def test_a_link_planted_at_the_comment_backup_is_not_written_through(
+        self, tmp_path: Path
+    ) -> None:
+        guard = self._guard()
+        cfg = tmp_path / "opencode.json"
+        cfg.write_text(self.COMMENTED)
+        cfg.chmod(0o755)
+        backup = tmp_path / "opencode.json.carter-backup"
+        backup.symlink_to(guard)
+        assert merge_mcp_servers(cfg, self.ENTRY) is True
+        assert guard.read_text() == "the real guard\n" and guard.stat().st_mode & 0o777 == 0o755
+        assert not backup.is_symlink() and backup.read_text() == self.COMMENTED
+        assert backup.stat().st_mode & 0o777 == 0o600  # not the source's 755
+
+    def test_a_backup_that_cannot_be_made_stops_the_rewrite(self, tmp_path: Path) -> None:
+        cfg = tmp_path / "opencode.json"
+        cfg.write_text(self.COMMENTED)
+        (tmp_path / "opencode.json.carter-backup").mkdir()  # in the way, not removable as a file
+        assert merge_mcp_servers(cfg, self.ENTRY) is False
+        assert cfg.read_text() == self.COMMENTED  # the comments are not lost without a copy
+
+    def test_a_config_linked_into_carters_own_files_is_not_rewritten(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        state = Path.home() / ".carter" / "guard-state.json"
+        state.parent.mkdir(parents=True)
+        state.write_text('{"consents": {}}\n')
+        cfg = tmp_path / "opencode.json"
+        cfg.symlink_to(state)
+        assert merge_mcp_servers(cfg, self.ENTRY) is False
+        assert state.read_text() == '{"consents": {}}\n' and cfg.is_symlink()
+        assert "points into Carter's own files" in capsys.readouterr().err
+
+    def test_removal_does_not_rewrite_a_config_linked_into_carters_files_either(
+        self, tmp_path: Path
+    ) -> None:
+        state = Path.home() / ".carter" / "isolation.json"
+        state.parent.mkdir(parents=True)
+        text = json.dumps({"mcp": {"servers": {"carter-github": {}}}})
+        state.write_text(text)
+        cfg = tmp_path / "opencode.json"
+        cfg.symlink_to(state)
+        assert remove_carter_servers(cfg) == []
+        assert state.read_text() == text
+
+    def test_a_link_into_dotfiles_is_still_followed(self, tmp_path: Path) -> None:
+        dotfiles = tmp_path / "dotfiles" / "opencode.json"
+        dotfiles.parent.mkdir()
+        dotfiles.write_text(json.dumps({"theme": "x"}))
+        cfg = tmp_path / "opencode.json"
+        cfg.symlink_to(dotfiles)
+        assert merge_mcp_servers(cfg, self.ENTRY) is True
+        assert (
+            cfg.is_symlink()
+            and "carter-github" in json.loads(dotfiles.read_text())["mcp"]["servers"]
+        )
 
 
 class TestUninstallV2:

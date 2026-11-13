@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import os
 import shutil
 import stat
@@ -62,6 +63,36 @@ def _backup_file(path: Path, backup_root: BackupRoot) -> Path | None:
     return dest
 
 
+def _replace_with(dst: Path, write: Callable[[Path], object]) -> None:
+    """Have ``write`` fill a new file next to ``dst`` and rename it over ``dst``. The rename
+    replaces a link, never what it points to. The mode is the old file's, else 0644."""
+    mode = 0o644
+    with contextlib.suppress(OSError):
+        old = os.lstat(dst)
+        if stat.S_ISREG(old.st_mode):
+            mode = stat.S_IMODE(old.st_mode)
+    fd, tmp = tempfile.mkstemp(dir=dst.parent, prefix=f".{dst.name}.")
+    os.close(fd)
+    try:
+        os.chmod(tmp, mode)
+        write(Path(tmp))
+        os.replace(tmp, dst)
+    finally:
+        Path(tmp).unlink(missing_ok=True)
+
+
+def _control_target(path: Path) -> Path | None:
+    """Where ``path`` really lives if that is inside ``~/.carter`` or on a control path (the
+    shell gate's list), else ``None``. A link to a file dotfiles manage is fine; one into
+    Carter's own state is not, and Carter must not rewrite what it points to."""
+    from carter.identity.rules import load_rules
+
+    home = Path(os.path.realpath(Path.home()))
+    roots = [home / ".carter", *(home / entry[2:] for entry in load_rules().control_paths)]
+    real = Path(os.path.realpath(path))
+    return real if any(real.is_relative_to(root) for root in roots) else None
+
+
 def _install_content(
     dst: Path,
     content_hash: str,
@@ -73,23 +104,15 @@ def _install_content(
 
     A differing existing file is backed up first, unless it is the output Carter recorded
     last time (``manifest["file_hashes"]`` is seeded with the previous install's hashes):
-    that is reproducible, so only an edit or a file Carter never wrote is copied. A symlink at
-    ``dst`` is replaced (the new file is written next to it and renamed over it), never written
-    through: whatever it pointed to is untouched. ``dst`` is always recorded in the manifest
-    with ``content_hash``. Returns ``created``, ``updated`` or ``unchanged``.
+    that is reproducible, so only an edit or a file Carter never wrote is copied. The file is
+    always written next to ``dst`` and renamed over it, so a symlink at ``dst`` (or swapped in
+    meanwhile) is replaced and never written through: whatever it pointed to is untouched.
+    ``dst`` is always recorded in the manifest with ``content_hash``. Returns ``created``,
+    ``updated`` or ``unchanged``.
     """
     dst.parent.mkdir(parents=True, exist_ok=True)
     if dst.is_symlink():
         log_warn(f"{tilde(dst)} is a symlink; replacing the link, not what it points to")
-        fd, tmp = tempfile.mkstemp(dir=dst.parent, prefix=f".{dst.name}.")
-        os.close(fd)
-        try:
-            write(Path(tmp))
-            os.chmod(tmp, 0o644)
-            os.replace(tmp, dst)
-        finally:
-            Path(tmp).unlink(missing_ok=True)
-        log_ok(tilde(dst), "updated")
         status = "updated"
     elif dst.exists():
         current = _sha256(dst)
@@ -99,13 +122,12 @@ def _install_content(
         else:
             if current != manifest["file_hashes"].get(str(dst)):
                 _backup_file(dst, backup_root)
-            write(dst)
-            log_ok(tilde(dst), "updated")
             status = "updated"
     else:
-        write(dst)
-        log_ok(tilde(dst))
         status = "created"
+    if status != "unchanged":
+        _replace_with(dst, write)
+        log_ok(tilde(dst), "updated" if status == "updated" else "")
     manifest["files"].append(str(dst))
     manifest["file_hashes"][str(dst)] = content_hash
     return status

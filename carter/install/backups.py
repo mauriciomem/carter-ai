@@ -3,6 +3,7 @@ pruning of old ones. The directory name is the clock."""
 
 from __future__ import annotations
 
+import contextlib
 import os
 import shutil
 from datetime import UTC, datetime, timedelta
@@ -45,6 +46,14 @@ class BackupRoot:
                 self._made = True
                 return self.path
         raise FileExistsError(f"no free backup folder name under {self.parent}")
+
+    def close(self) -> None:
+        """Remove the folder made up front if nothing went into it (and ``backups/`` if that
+        leaves it empty); ``rmdir`` never removes anything that holds a file."""
+        if self._made and not self.copied:
+            with contextlib.suppress(OSError):
+                self.path.rmdir()
+                self.parent.rmdir()
 
 
 def prune(root: Path, now: datetime | None = None) -> int:

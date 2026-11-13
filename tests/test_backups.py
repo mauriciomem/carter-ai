@@ -9,9 +9,16 @@ from pathlib import Path
 
 import pytest
 
-from carter.install import backups, components, orchestrator, paths
+from carter.install import backups, components, files, orchestrator, paths
 from carter.install.backups import BackupRoot
-from carter.install.files import _backup_file, _install_file, _mirror, _sha256
+from carter.install.files import (
+    _backup_file,
+    _install_file,
+    _install_rendered_file,
+    _mirror,
+    _sha256,
+)
+from carter.install.prereqs import PrerequisiteError
 
 NOW = datetime(2026, 11, 12, 12, 0, 0, tzinfo=UTC)
 
@@ -78,6 +85,43 @@ class TestWhatIsBackedUp:
         manifest: dict = {"files": [], "file_hashes": {}}
         assert _install_file(src, dst, manifest, root) == "updated"
         assert [p.read_text() for p in root.path.rglob("dst.md")] == ["a stranger\n"]
+
+    def test_a_link_swapped_in_after_the_check_is_replaced_not_written_through(
+        self, pair, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        src, dst, root = pair
+        dst.write_text("old\n")
+        victim = tmp_path / "victim"
+        victim.write_text("keep\n")
+        real = files._sha256
+
+        def racing(path: Path) -> str:
+            digest = real(path)
+            if path == dst:  # the window between the check and the write
+                dst.unlink()
+                dst.symlink_to(victim)
+            return digest
+
+        monkeypatch.setattr(files, "_sha256", racing)
+        manifest: dict = {"files": [], "file_hashes": {}}
+        assert _install_file(src, dst, manifest, root) == "updated"
+        assert victim.read_text() == "keep\n"
+        assert not dst.is_symlink() and dst.read_text() == "new\n"
+
+    def test_the_file_keeps_its_mode_and_a_new_one_is_0644(self, pair) -> None:
+        src, dst, root = pair
+        dst.write_text("old\n")
+        dst.chmod(0o600)
+        manifest: dict = {"files": [], "file_hashes": {str(dst): _sha256(dst)}}
+        _install_rendered_file("new\n", dst, manifest, root)  # rendered: the old mode stays
+        assert stat.S_IMODE(dst.stat().st_mode) == 0o600
+        src.chmod(0o755)
+        other = dst.with_name("other.md")
+        _install_file(src, other, manifest, root)  # copied: the source's mode, as copy2 gives
+        assert stat.S_IMODE(other.stat().st_mode) == 0o755
+        fresh = dst.with_name("fresh.md")
+        _install_rendered_file("x\n", fresh, manifest, root)
+        assert stat.S_IMODE(fresh.stat().st_mode) == 0o644
 
     @pytest.mark.parametrize("target", ["exists", "dangling"])
     def test_a_symlinked_destination_is_replaced_never_written_through(
@@ -250,6 +294,39 @@ class TestBackupRoot:
         assert guard.read_text() == "the real guard\n"
         copies = [p for p in paths.backups_dir(base_dir).rglob(agent.name) if not p.is_symlink()]
         assert [c.read_text() for c in copies] == ["my edit\n"]
+
+
+class TestInstallStopsEarly:
+    def test_a_backups_folder_that_cannot_be_used_stops_the_install_before_any_write(
+        self, base_dir: Path, fake_opencode, tmp_path: Path
+    ) -> None:
+        fake_opencode()
+        elsewhere = tmp_path / "elsewhere"
+        elsewhere.mkdir()
+        paths.backups_dir(base_dir).parent.mkdir(parents=True)
+        paths.backups_dir(base_dir).symlink_to(elsewhere, target_is_directory=True)
+        with pytest.raises(PrerequisiteError, match="symlink"):
+            orchestrator.run(base_dir=base_dir, verbosity=1)
+        assert not paths.manifest_path(base_dir).exists()
+        assert not (paths._opencode_base(base_dir) / "agents").exists()
+        assert list(elsewhere.iterdir()) == []
+
+    def test_a_run_that_copied_nothing_leaves_no_empty_stamp_folder(
+        self, base_dir: Path, fake_opencode
+    ) -> None:
+        fake_opencode()
+        orchestrator.run(base_dir=base_dir, verbosity=1)
+        assert not paths.backups_dir(base_dir).exists()
+
+    def test_the_stamp_folder_stays_when_something_was_copied(
+        self, base_dir: Path, fake_opencode
+    ) -> None:
+        fake_opencode()
+        orchestrator.run(base_dir=base_dir, verbosity=1)
+        (paths._opencode_base(base_dir) / "agents" / "carter-pm.md").write_text("mine\n")
+        orchestrator.run(base_dir=base_dir, verbosity=1)
+        (stamp,) = paths.backups_dir(base_dir).iterdir()
+        assert len(list(stamp.rglob("carter-pm.md"))) == 1
 
 
 class TestPrune:

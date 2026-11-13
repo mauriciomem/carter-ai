@@ -22,6 +22,7 @@ from carter.identity.writer import dumps, write_config
 from carter.install.backups import BackupRoot
 from carter.install.console import log_err, log_ok, log_skip, log_step, log_warn
 from carter.install.files import (
+    _control_target,
     _install_file,
     _install_rendered_file,
     _sha256,
@@ -231,6 +232,11 @@ def install_opencode_rules(
     shown = tilde(dst)
     owned = True
     recorded = ((previous or {}).get("file_hashes") or {}).get(str(dst))
+    # A link into dotfiles is followed (people keep this file there). One that points at nothing
+    # would make the write create its target, and one into Carter's own files must not be written.
+    if dst.is_symlink() and (not dst.exists() or _control_target(dst)):
+        log_warn(f"{shown} (a symlink to nothing, or into Carter's own files; not written)")
+        return
     if not dst.exists():
         dst.write_text(_OPENCODE_AGENTS_MD, encoding="utf-8")
         log_ok(shown)
