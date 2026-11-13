@@ -1,4 +1,5 @@
-"""Carter uninstall — manifest-driven removal; without a manifest, the files this version ships.
+"""Carter uninstall — manifest-driven removal; without a manifest, the files this version ships
+(only while they still hold what it ships).
 
 ``uninstall`` returns an :class:`UninstallReport`: the statuses and counts the CLI turns into
 the closing report. Nothing here decides how it looks.
@@ -24,9 +25,9 @@ from carter.identity.schema import IdentityConfig
 from carter.install.backups import STAMP_FORMAT
 from carter.install.components import _render_opencode_agents, read_manifest
 from carter.install.console import log_ok, log_skip, log_step, log_warn, set_verbosity
-from carter.install.files import _backup_file, _mirror
+from carter.install.files import _backup_file, _mirror, _sha256
 from carter.install.mcp import global_config_files, remove_carter_servers
-from carter.install.ownership import _hash_matches, _within
+from carter.install.ownership import _hash_matches, _within, sha256_bytes
 from carter.install.paths import (
     REPO_ROOT,
     _carter_base,
@@ -94,7 +95,6 @@ class UninstallReport:
     manager: str = ""  # the command that removes the program itself
     leftover: bool = False  # ~/.carter still exists
     rm_all: str = ""  # the ready ``rm -r`` line for it, absolute and shell-quoted
-    had_manifest: bool = True  # False: agents went by name, with no copy of an edited one
 
 
 def _remove_if_owned(
@@ -175,18 +175,22 @@ def _is_default_config(path: Path) -> bool:
         return False
 
 
-def _shipped_paths(base_dir: Path | None) -> list[Path]:
-    """The agent and skill files this version of Carter installs, by name."""
+def _shipped_files(base_dir: Path | None) -> dict[Path, str]:
+    """The agent and skill files this version of Carter installs, by name, each with the hash of
+    the content it would write: a file that differs was edited, or came from another version."""
     oc = _opencode_base(base_dir)
-    agents = [oc / "agents" / name for name in _render_opencode_agents(base_dir)]
-    skills = [
-        oc / "skills" / d.name / f.name
+    agents = {
+        oc / "agents" / name: sha256_bytes(text.encode())
+        for name, text in _render_opencode_agents(base_dir).items()
+    }
+    skills = {
+        oc / "skills" / d.name / f.name: _sha256(f)
         for d in sorted((REPO_ROOT / "skills").iterdir())
         if d.is_dir()
         for f in d.iterdir()
         if f.is_file()
-    ]
-    return agents + skills
+    }
+    return agents | skills
 
 
 def manager_command(executable: str | None = None) -> str:
@@ -307,7 +311,8 @@ def uninstall(
     opencode_base = _opencode_base(base_dir)
     managed_roots = _managed_roots(base_dir)
     first = read_manifest(base_dir)
-    report.had_manifest = first is not None
+    # Rendered before the guard step changes what the agents carry (G2's rules).
+    shipped = _shipped_files(base_dir) if first is None else {}
     copies = _copy_edited_agents(first, base_dir, managed_roots, opencode_base) if first else {}
     guards_before = guard_state_path(base_dir).exists()
     plugin_before = plugin_dir(base_dir).exists()
@@ -323,8 +328,9 @@ def uninstall(
         hashes: dict[str, str] = manifest.get("file_hashes") or {}
         listed = [(Path(f), hashes.get(f)) for f in manifest.get("files", [])]
     else:
-        # No manifest: the files this version ships, by name; never by prefix, never a tree.
-        listed = [(p, None) for p in _shipped_paths(base_dir)]
+        # No manifest: the files this version ships, by name and only while their content is
+        # still what it ships; never by prefix, never a tree.
+        listed = list(shipped.items())
     units: dict[str, set[str]] = {}
     for path, recorded in listed:
         status = _remove_if_owned(path, recorded, managed_roots, opencode_base, copies)

@@ -167,6 +167,18 @@ class TestWithoutManifest:
         assert not list((oc / "skills").glob("*/SKILL.md"))
         assert not any((oc / "skills").iterdir())
 
+    def test_an_edited_shipped_skill_or_agent_is_kept_and_listed(
+        self, installed: Path, oc: Path
+    ) -> None:
+        skill = oc / "skills" / "carter-adr" / "SKILL.md"
+        agent = oc / "agents" / "carter-pm.md"
+        skill.write_text("my skill")
+        agent.write_text("my agent")
+        report = uninstall(installed)
+        assert (skill.read_text(), agent.read_text()) == ("my skill", "my agent")
+        assert sorted(report.kept_files) == sorted([skill, agent])
+        assert not (oc / "agents" / "carter-architect.md").exists()  # unedited ones still go
+
     def test_a_user_skill_and_a_retired_one_survive(self, installed: Path, oc: Path) -> None:
         for name in ("carter-mine", "carter-retired"):
             (oc / "skills" / name).mkdir()
@@ -201,7 +213,7 @@ class TestWithoutManifest:
         assert (outside / "SKILL.md").read_text() == "not carter's"
 
     def test_the_branch_deletes_no_directory_tree(self) -> None:
-        for name in ("_remove_if_owned", "_shipped_paths", "uninstall"):
+        for name in ("_remove_if_owned", "_shipped_files", "uninstall"):
             assert "rmtree" not in inspect.getsource(getattr(uninstall_mod, name))
 
 

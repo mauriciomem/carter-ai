@@ -83,8 +83,9 @@ the install manifest, `~/.carter/run/` and a `config.toml` that holds only defau
 edited is removed too, after a copy to `~/.carter/backups/<timestamp>/` (it carries guard rules that
 no longer apply), and reported. Edited skills, global rules and knowledge files, memories, secrets,
 backups and the audit log are kept. Directories Carter made and left empty go. Without a manifest it
-removes only the agent and skill files this version ships, by name; your own `carter-*` skills,
-agents and MCP servers stay.
+removes only the agent and skill files this version ships, by name and only while their content is
+what this version ships (an edited one stays and is listed); your own `carter-*` skills, agents and
+MCP servers stay.
 
 | Option | Description |
 |--------|-------------|

@@ -62,15 +62,17 @@ def test_install_over_an_edited_file_names_the_backup_folder_on_stderr(
     assert line.endswith(f"/backups/{stamp}/)")  # one line, the folder; not each file
 
 
-def test_a_run_without_an_install_record_says_edited_agents_were_not_backed_up(
+def test_a_run_without_an_install_record_lists_an_edited_agent_as_kept(
     installed: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
+    agent = paths._opencode_base(installed) / "agents" / "carter-pm.md"
+    agent.write_text("my pm")
     paths.manifest_path(installed).unlink()
     capsys.readouterr()
     uninstall(installed)
-    assert "! Agents you edited were not backed up  (no install record was found)" in (
-        capsys.readouterr().err
-    )
+    got = capsys.readouterr()
+    assert agent.read_text() == "my pm" and "not backed up" not in got.err
+    assert "Kept, because they are yours" in got.out and "carter-pm.md" in got.out
 
 
 def test_the_rm_hint_for_a_folder_with_a_space_is_one_quoted_absolute_path(

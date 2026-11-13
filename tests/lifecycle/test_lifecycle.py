@@ -195,8 +195,9 @@ def test_an_edited_global_agent_goes_with_a_mirrored_copy_in_backups(life: Life)
     agent = life.opencode / "agents" / "carter-pm.md"
     mirrored = agent.relative_to(life.home).as_posix()  # backups/<ts>/<path below the home>
     assert not agent.exists()
-    [copy] = (life.carter / "backups").glob(f"*/{mirrored}")
-    assert copy.read_text(encoding="utf-8") == "# my pm\n"
+    # The guard step may leave a second copy of the same edit under the next second's stamp.
+    copies = list((life.carter / "backups").glob(f"*/{mirrored}"))
+    assert copies and {c.read_text(encoding="utf-8") for c in copies} == {"# my pm\n"}
     assert f"~/{mirrored}" in report and "Removed although you edited them" in report
     assert _backups(life.home) >= {f"<ts>/{mirrored}", "<ts>/opencode.json", "agents/legacy.md"}
 
@@ -234,16 +235,26 @@ def test_a_second_uninstall_does_nothing(life: Life) -> None:
     assert tree_diff(done, tree_snapshot(life.home)) == ""
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="the first uninstall deletes the manifest and keeps the edited skill; the second, "
-    "with no manifest, removes the shipped names and takes the edited skill with it",
-)
-def test_a_second_uninstall_keeps_an_edited_skill(life: Life) -> None:
+def test_a_second_uninstall_keeps_an_edited_skill_and_still_says_so(life: Life) -> None:
+    """The first run deletes the manifest; the second removes shipped names only while the
+    content is still what this version ships."""
     life.edit_skill()
     life.uninstall()
-    life.uninstall()
+    done = tree_snapshot(life.home)
+    report = life.uninstall()
     assert life.edited_skill.read_text(encoding="utf-8").endswith("my rule\n")
+    assert tree_diff(done, tree_snapshot(life.home)) == ""
+    assert "~/.config/opencode/skills/carter-code-review/SKILL.md" in report
+
+
+def test_without_a_manifest_the_unedited_guarded_agents_go_and_the_edited_one_stays(
+    life: Life,
+) -> None:
+    """The agents carry the guard rules; they are rendered before the guards are removed."""
+    (life.carter / "manifest.json").unlink()
+    life.uninstall()
+    assert [p.name for p in (life.opencode / "agents").glob("carter-*")] == ["carter-pm.md"]
+    assert (life.opencode / "agents" / "carter-pm.md").read_text(encoding="utf-8") == "# my pm\n"
 
 
 def test_nothing_outside_the_fake_home_was_touched(life: Life, real_home: Path) -> None:

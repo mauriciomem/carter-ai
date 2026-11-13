@@ -132,8 +132,6 @@ def render_uninstall(report: UninstallReport) -> None:
     if removed:
         ui.section("Removed", "ok")
         ui.rows(removed)
-    if not report.had_manifest and report.removed.get("agents"):
-        ui.section("Agents you edited were not backed up", "warn", "no install record was found")
     if report.edited_copies:
         ui.section("Removed although you edited them", "warn")
         edited = [Row(tilde(p), fix=f"copy: {tilde(copy)}") for p, copy in report.edited_copies]
