@@ -53,8 +53,29 @@ dev = [
 ]
 
 [build-system]
-requires = ["hatchling>=1.27", "hatch-vcs"]
+# Floors only, because this table is copied into the sdist and packagers (Debian, Fedora, nixpkgs)
+# build it with their own backend: hatchling >= 1.27 is the one that reads the PEP 639 license
+# fields. Our own builds (release and `dist-check`) are pinned below, in `[tool.uv]`.
+requires = ["hatchling>=1.27", "hatch-vcs>=0.4"]
 build-backend = "hatchling.build"
+
+[tool.uv]
+# Exact versions of the backend and everything it pulls in at build time, so a release is built
+# from the same tools every time and a new upload of one of them cannot change the artifact. uv
+# applies this to `uv build` only; it is not part of the published metadata. To bump: resolve
+# the floors above (`uv pip compile`), update this list, and let `dist-check` prove it.
+build-constraint-dependencies = [
+    "hatchling==1.33.0",
+    "hatch-vcs==0.5.0",
+    "setuptools-scm==10.3.4",
+    "vcs-versioning==2.6.0",
+    "setuptools==84.2.1",
+    "packaging==26.3",
+    "pathspec==1.1.1",
+    "pluggy==1.7.0",
+    "tomlkit==0.15.2",
+    "trove-classifiers==2026.9.21.13",
+]
 
 # Tag-driven version: the latest vX.Y.Z git tag is the ONLY version
 # source. No literal in source, no version-file written back. With no tag yet, the
@@ -126,10 +147,9 @@ extra_checks = true
 [tool.semantic_release]
 tag_format = "v{version}"
 commit_parser = "conventional"
-# No build in the release job: the PSR Action runs in its OWN Docker container (uv is
-# not on its PATH → `uv build` exited 127), and we publish nothing from here — install
-# is `git+https@vX.Y.Z`, and the wheel build is already verified by the `install-smoke`
-# CI job. PSR only needs to tag and cut the GitHub Release.
+# No build inside PSR: the Action runs in its OWN Docker container (uv is not on its PATH,
+# `uv build` exited 127). The `build` job of release.yml builds the tag once afterwards and
+# the publish jobs upload that artifact; PSR only needs to tag and cut the GitHub Release.
 build_command = ""
 # Stay pre-1.0: PSR's `allow_zero_version` defaults to FALSE,
 # which would force-graduate the v0.1.0 baseline straight to 1.0.0. Keep 0.y.z, and

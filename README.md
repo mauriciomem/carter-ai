@@ -49,10 +49,10 @@ modeling, Jira, and more) that an agent loads only when the task needs one.
 
 ## Install
 
-You need Python 3.11+, [uv](https://docs.astral.sh/uv/) and OpenCode 2.1 or newer.
+You need [uv](https://docs.astral.sh/uv/), git and OpenCode 2.1 or newer on your `PATH`.
 
 ```bash
-uv tool install git+https://github.com/mauriciomem/carter-ai.git
+uv tool install carter-ai    # from PyPI; or: pipx install carter-ai (needs Python 3.11 or newer)
 carter install
 ```
 
@@ -60,8 +60,11 @@ carter install
 > `carter: command not found`? Run `uv tool update-shell` and open a new terminal.
 
 `carter install` writes the agents and skills to `~/.config/opencode/`, so they
-work in every project. Details, upgrades and removal are in the
-[install guide](docs/guides/install.md).
+work in every project. Upgrade with `uv tool upgrade carter-ai` and remove with
+`carter uninstall` first, then `uv tool uninstall carter-ai`. Pinning a version, a
+one-off run with `uvx`, moving from an earlier git install and verifying a release
+are in the [install guide](docs/guides/install.md). To report a vulnerability, see
+[SECURITY.md](SECURITY.md).
 
 ## First run
 

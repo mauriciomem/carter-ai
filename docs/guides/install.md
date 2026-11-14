@@ -6,8 +6,7 @@ This page covers installing Carter, the guards, keeping Carter up to date and re
 
 | Requirement | Check with |
 |-------------|-----------|
-| Python 3.11 or newer | `python3 --version` |
-| [uv](https://docs.astral.sh/uv/) | `uv --version` |
+| [uv](https://docs.astral.sh/uv/) (it fetches Python 3.11 or newer itself if needed) | `uv --version` |
 | [OpenCode](https://opencode.ai/v2/docs/) 2.1 or newer, on your `PATH` | `opencode --version` |
 | Git (2.54 or newer for the global hooks; see [Guards](#guards)) | `git --version` |
 
@@ -19,9 +18,30 @@ Optional:
 ## 1. Install the `carter` command
 
 ```bash
-uv tool install git+https://github.com/mauriciomem/carter-ai.git
+uv tool install carter-ai
 carter --version
 ```
+
+Carter is published on [PyPI](https://pypi.org/project/carter-ai/). Other ways to get it:
+
+| You want | Run |
+|----------|-----|
+| A fixed version (recommended for teams) | `uv tool install carter-ai==X.Y.Z` |
+| pipx instead of uv | `pipx install carter-ai` |
+| A one-off run, or CI, with nothing left installed | `uvx --from carter-ai carter --version` |
+
+`uvx` runs the `carter` command from a temporary environment. Use `uv tool install` for the
+agents and guards, because the guards record where `carter` lives and need it to stay put.
+
+Coming from an earlier install that used the git URL? Run this once:
+
+```bash
+uv tool install --force carter-ai
+```
+
+The record uv keeps for the tool still points at the git source, so `uv tool upgrade` would
+keep looking there instead of PyPI. `--force` replaces the record. Then run `carter install`
+again as usual.
 
 uv puts the `carter` executable in `~/.local/bin`. If your shell can't find it,
 add that directory to your `PATH` once:
@@ -182,11 +202,10 @@ uv tool upgrade carter-ai
 carter install
 ```
 
-If uv says there is nothing to upgrade, force a reinstall from the latest commit:
-
-```bash
-uv tool install --force git+https://github.com/mauriciomem/carter-ai.git
-```
+Carter never updates itself and never checks for a new version: you upgrade when you choose to.
+If you installed a fixed version (`carter-ai==X.Y.Z`), `uv tool upgrade` keeps it; install the
+new one with `uv tool install --force carter-ai==X.Y.Z`. If uv says there is nothing to upgrade
+after an install from the git URL, see the migration note in [step 1](#1-install-the-carter-command).
 
 Re-running `carter install` is safe. It updates the agents and skills (the report says `up to date`
 or `2 updated`), copies a file you edited before replacing it (at its own path under
@@ -207,17 +226,36 @@ In each workspace, run `carter update` to pick up the new templates.
 ### Install a specific version
 
 ```bash
-uv tool install git+https://github.com/mauriciomem/carter-ai.git@v0.18.0
+uv tool install --force carter-ai==X.Y.Z
 ```
 
-Tags are listed on the [releases page](https://github.com/mauriciomem/carter-ai/releases).
+Replace `X.Y.Z` with a version from the [releases page](https://github.com/mauriciomem/carter-ai/releases)
+(drop the leading `v` of the tag). The review-only CI workflow pins its Carter version the same way.
+
+### Verify a release (optional)
+
+Releases are published from GitHub Actions with PEP 740 attestations. Neither uv nor pip checks
+them when installing, so to check a release yourself:
+
+```bash
+uvx pypi-attestations verify pypi \
+  --repository https://github.com/mauriciomem/carter-ai \
+  pypi:carter_ai-X.Y.Z-py3-none-any.whl     # or pypi:carter_ai-X.Y.Z.tar.gz for the sdist
+```
+
+It passes only if PyPI holds an attestation for that file that names the Carter repository
+(`mauriciomem/carter-ai`). The workflow and the environment are not checked by the command: the
+**Provenance** section of the file on pypi.org shows them. The expected values are in
+[SECURITY.md](../../SECURITY.md#verifying-a-release).
 
 ## Uninstall
 
 ```bash
 carter uninstall
-uv tool uninstall carter-ai   # removes the carter command itself
+uv tool uninstall carter-ai   # removes the carter command itself (pipx: pipx uninstall carter-ai)
 ```
+
+Run them in this order: once the command is gone, nothing is left to remove what it installed.
 
 `carter uninstall` asks nothing and removes only what Carter installed and you haven't changed:
 

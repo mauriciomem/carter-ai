@@ -34,11 +34,10 @@ jobs:
       EVAL_MODEL: claude-haiku-5-5
       EVAL_MAX_TOKENS: "1024"
       EVAL_METRICS_OUT: ${{ github.workspace }}/eval-metrics.json
-      # Dedicated key from secrets — NEVER commit a key. Empty when unset → tests skip.
-      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Install uv
         uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2
@@ -49,6 +48,11 @@ jobs:
         run: uv sync --locked --extra dev
 
       - name: Live evals
+        # The keys are visible to this step only (not to checkout, uv or the artifact upload).
+        # Dedicated keys from secrets — NEVER commit a key. Empty when unset → tests skip.
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
         # All `live`-marked evals: the prompt-quality canary (test_live.py) AND the
         # adherence run (test_adherence_live.py — EVAL_MODEL vs a thinker
         # plan, graded against the >=90% / 0-critical bar). Both hit the

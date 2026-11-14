@@ -1,0 +1,31 @@
+# Weekly, grouped, small: one PR per ecosystem. Actions are pinned by SHA with a `# vX.Y.Z`
+# comment and Dependabot rewrites both. `cooldown` skips a version for a week after it is
+# published, so a hijacked or yanked release is usually gone before it reaches a PR. The PRs run
+# the normal CI (no secrets: none of ci.yml uses any).
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 3
+    cooldown:
+      default-days: 7
+    groups:
+      actions:
+        patterns: ["*"]
+    commit-message:
+      prefix: "ci"
+
+  - package-ecosystem: uv # uv.lock and pyproject.toml
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 3
+    cooldown:
+      default-days: 7
+    groups:
+      python:
+        patterns: ["*"]
+    commit-message:
+      prefix: "build"
