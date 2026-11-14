@@ -150,7 +150,7 @@ def ssh_fingerprint(blob: str, bin_dir: str) -> str:
     """``ssh-keygen -l -f`` on a private temp copy of the blob, cross-checked with the pure code."""
     with tempfile.TemporaryDirectory(prefix="carter-fp-") as scratch:
         pub = Path(scratch) / "key.pub"
-        pub.write_text(blob + "\n")
+        pub.write_text(blob + "\n", encoding="utf-8")
         done = subprocess.run(
             [os.path.join(bin_dir, "ssh-keygen"), "-l", "-f", str(pub)],
             capture_output=True,

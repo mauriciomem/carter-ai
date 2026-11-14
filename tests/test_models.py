@@ -174,13 +174,13 @@ class TestModelEmission:
 
 
 class TestModelAdvisory:
-    def test_advisory_is_always_present(self):
-        from carter.scaffold import model_advisory
+    def test_advisory_is_one_line_naming_each_pinned_model_once(self):
+        from carter.scaffold import model_advisory, model_pins
 
         advisory = model_advisory(_config())
-        assert "maestro" in advisory
-        assert OPUS in advisory
-        assert "subscription" in advisory.lower()
+        assert "\n" not in advisory
+        assert advisory.count(OPUS) == 1 and "cannot verify" in advisory.lower()
+        assert ("maestro", OPUS) in model_pins(_config())
 
     def test_check_prints_advisory(self, tmp_path):
         from click.testing import CliRunner

@@ -94,7 +94,7 @@ def _init_knowledge_files(knowledge_dir: Path) -> None:
     for filename, content in KNOWLEDGE_FILES.items():
         path = knowledge_dir / filename
         if not path.exists():
-            path.write_text(content)
+            path.write_text(content, encoding="utf-8")
 
 
 def _git_init(directory: Path) -> None:
@@ -222,12 +222,12 @@ def add_to_gitignore(target_dir: Path, entry: str = ".carter/") -> None:
     """Add an entry to .gitignore if not already present."""
     gitignore = target_dir / ".gitignore"
     if gitignore.exists():
-        content = gitignore.read_text()
+        content = gitignore.read_text(encoding="utf-8")
         if entry in content:
             return
         if not content.endswith("\n"):
             content += "\n"
         content += f"{entry}\n"
-        gitignore.write_text(content)
+        gitignore.write_text(content, encoding="utf-8")
     else:
-        gitignore.write_text(f"{entry}\n")
+        gitignore.write_text(f"{entry}\n", encoding="utf-8")

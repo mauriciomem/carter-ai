@@ -24,7 +24,9 @@ def guide() -> str:
 def help_of(*path: str) -> set[str]:
     group: click.Command = main
     for name in path:
-        group = group.commands[name]  # type: ignore[attr-defined]
+        found = group.get_command(click.Context(group), name)  # type: ignore[attr-defined]
+        assert found is not None, name
+        group = found
     return {o for p in group.params for o in getattr(p, "opts", ()) if o.startswith("--")} - {
         "--help"
     }

@@ -43,7 +43,7 @@ class AdherenceResult:
 
 def load_scenario(path: Path, name: str) -> dict:
     """Load one named scenario from a scenarios YAML file."""
-    scenarios = yaml.safe_load(Path(path).read_text())
+    scenarios = yaml.safe_load(Path(path).read_text(encoding="utf-8"))
     for scenario in scenarios:
         if scenario.get("name") == name:
             return scenario

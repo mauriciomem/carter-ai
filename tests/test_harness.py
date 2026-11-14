@@ -105,6 +105,7 @@ class TestValidateAgents:
         assert runner.calls == harness.DEFAULT_ATTEMPTS
         assert sum(sleeps) <= 10
         assert any("no agents" in e for e in result.errors)
+        assert result.fix == harness.UNAVAILABLE_FIX
 
     def test_attempts_configurable(self):
         runner = _Runner(_proc("[]"))
@@ -124,12 +125,14 @@ class TestValidateAgents:
         result = _validate(_Runner(_proc("", code=3)))
         assert result.status == "fail"
         assert any("exited 3" in e and "boom" in e for e in result.errors)
+        assert result.fix == harness.UNAVAILABLE_FIX
 
     def test_timeout_fails_without_retry(self):
         runner = _Runner(subprocess.TimeoutExpired("opencode", 30))
         result = _validate(runner)
         assert result.status == "fail" and runner.calls == 1
         assert any("timed out" in e for e in result.errors)
+        assert result.fix == harness.UNAVAILABLE_FIX
 
     def test_runner_gets_timeout_and_cwd(self):
         seen: dict = {}

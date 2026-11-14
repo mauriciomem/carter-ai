@@ -6,7 +6,8 @@ tests, skills, templates and public docs describe what the software does now. A 
 section pointer into a design document or a letter-number id (``K2``, ``H7``, ``B9``) tells the
 reader to look something up they cannot see. Say it in words, or delete it.
 
-``CHANGELOG.md`` is generated from commit messages and is the one exception.
+There is no changelog file: release notes are generated from commit messages and live on the
+GitHub Releases page.
 """
 
 from __future__ import annotations
@@ -20,7 +21,6 @@ import pytest
 REPO = Path(__file__).resolve().parent.parent
 SKIP_PREFIXES = ("docs/adr/", "docs/rfcs/", "evals/fixtures/")  # fixtures: recorded model output
 SKIP_FILES = {
-    "CHANGELOG.md",  # written by the release tool from commit messages
     "uv.lock",
     "tests/test_no_internal_ids.py",  # defines the patterns
     "tests/test_help.py",  # defines its own, broader pattern for `--help` texts

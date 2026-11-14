@@ -21,6 +21,8 @@ from typing import Any
 
 import yaml
 
+from carter import _yaml
+
 # Plan id: NNN-kebab (three digits, then lowercase alphanumeric kebab segments),
 # and it MUST equal the plan's directory name.
 PLAN_ID_RE = re.compile(r"^\d{3}-[a-z0-9]+(?:-[a-z0-9]+)*$")
@@ -108,7 +110,7 @@ def parse_frontmatter(text: str) -> dict[str, Any] | None:
         if lines[i].strip() == "---":
             block = "\n".join(lines[1:i])
             try:
-                data = yaml.safe_load(block)
+                data = _yaml.load(block)
             except (yaml.YAMLError, ValueError):
                 # ValueError: YAML constructs an impossible date (e.g. 2026-02-30)
                 return None

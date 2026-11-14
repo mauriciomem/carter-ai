@@ -231,12 +231,12 @@ def install_opencode_rules(
     owned = True
     recorded = ((previous or {}).get("file_hashes") or {}).get(str(dst))
     if not dst.exists():
-        dst.write_text(_OPENCODE_AGENTS_MD)
+        dst.write_text(_OPENCODE_AGENTS_MD, encoding="utf-8")
         log_ok(shown)
-    elif dst.read_text() == _OPENCODE_AGENTS_MD:
+    elif dst.read_text(encoding="utf-8") == _OPENCODE_AGENTS_MD:
         log_skip(f"{shown} (already current)")
     elif recorded and _hash_matches(dst, str(recorded)):
-        dst.write_text(_OPENCODE_AGENTS_MD)
+        dst.write_text(_OPENCODE_AGENTS_MD, encoding="utf-8")
         log_ok(shown, "updated (was an unmodified earlier Carter version)")
     else:
         # User-modified — NEVER clobber.
@@ -338,7 +338,7 @@ def install_ops(base_dir: Path | None, manifest: dict) -> bool:
 def write_manifest(manifest: dict, base_dir: Path | None) -> Path:
     path = manifest_path(base_dir)
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(manifest, indent=2) + "\n")
+    path.write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
     return path
 
 
@@ -346,7 +346,7 @@ def read_manifest(base_dir: Path | None) -> dict | None:
     """Read ``~/.carter/manifest.json``, or ``None`` if absent."""
     path = manifest_path(base_dir)
     if path.exists():
-        data: dict = json.loads(path.read_text())
+        data: dict = json.loads(path.read_text(encoding="utf-8"))
         data.setdefault("files", [])
         data.setdefault("file_hashes", {})
         data.setdefault("mcp_servers", [])

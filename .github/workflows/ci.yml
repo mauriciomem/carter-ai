@@ -252,6 +252,13 @@ jobs:
           uv run pytest tests/gate/test_budget.py -s -q -k p95 | tee budget.txt
           { echo '### Gate p95 (${{ matrix.os }})'; echo '```'; grep -E '^gate (warm|cold)' budget.txt || true; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
 
+      - name: CLI start-up (carter --help)
+        env:
+          CARTER_PERF: "1"
+        run: |
+          uv run pytest tests/test_startup.py -s -q -k perf | tee startup.txt
+          { echo '### carter --help (${{ matrix.os }})'; echo '```'; grep -E '^carter --help' startup.txt || true; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+
   git-old:
     # The < 2.54 axis without Docker on any developer machine: Debian bookworm ships git 2.39.
     name: git-old (git 2.39)

@@ -16,6 +16,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+import click
 import pytest
 from click.testing import CliRunner
 
@@ -129,7 +130,7 @@ class TestRegistration:
         unlock = {o.opts[0] for o in group.commands["unlock"].params} - {"--help"}
         assert unlock == {"--ttl", "--extend"}
         assert {o.opts[0] for o in group.commands["lock"].params} == {"--all"}
-        assert "identity" in main.commands
+        assert "identity" in main.list_commands(click.Context(main))
 
     def test_help_mentions_the_terminal_and_does_not_start_anything(self) -> None:
         out = invoke("unlock", "--help").output

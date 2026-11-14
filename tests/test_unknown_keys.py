@@ -13,6 +13,7 @@ import os
 import re
 from pathlib import Path
 
+import click
 import pytest
 import yaml
 from click.testing import CliRunner
@@ -59,7 +60,9 @@ class TestGone:
         assert "form" not in state.PERMISSION_FIELDS and not hasattr(permissions, "_form")
 
     def test_install_has_no_bot_name_option(self) -> None:
-        params = {p.name for p in main.commands["install"].params}
+        install = main.get_command(click.Context(main), "install")
+        assert install is not None
+        params = {p.name for p in install.params}
         assert "bot_name" not in params
 
     def test_the_old_hash_sets_are_gone(self) -> None:

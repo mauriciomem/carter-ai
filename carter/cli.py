@@ -5,43 +5,44 @@ from __future__ import annotations
 import os
 from datetime import UTC
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import click
-from jinja2 import Environment
 
-from carter import ui, unknownkeys
-from carter.aplus.push import OWN_TERMINAL
-from carter.cliguard import CarterGroup, verbose_option
-from carter.config import (
-    PROFILES,
-    ConfigError,
-    _validate_agent_suffix,
-    _validate_docs_language,
-    generate_default_config,
-    load_config,
-)
-from carter.harness import Expected, validate_agents
-from carter.plans import parse_frontmatter, validate_checkpoint, validate_plans_dir
-from carter.scaffold import (
-    agent_filename,
-    create_env,
-    lint_policy,
-    model_advisory,
-    policy_notice,
-    render_agents,
-    render_instructions,
-    write_rendered_files,
-)
-from carter.state import (
-    KNOWLEDGE_FILES,
-    StateError,
-    add_to_gitignore,
-    commit_state,
-    init_workspace,
-)
+from carter import ui
+from carter.cliguard import LazyGroup, verbose_option
+
+if TYPE_CHECKING:
+    from jinja2 import Environment
+
+# Imports stay inside the command bodies: `carter --help` and Tab completion must not load
+# jinja2, yaml or the network stack (tests/test_startup.py holds the line).
+
+# The subcommands that live in their own modules: name -> ("module:attr", one-line summary).
+# The summary is what `carter --help` lists without importing the module: the first line of
+# the command's docstring, kept equal by tests/test_help.py.
+_LAZY = {
+    "ci": ("carter.ci_cli:ci", "Review-only CI workflow: no commits, read-only."),
+    "commit": (
+        "carter.commit_cli:commit_cmd",
+        "Commit as the LLM identity (git commit arguments).",
+    ),
+    "gate": ("carter.gate_cli:gate", "Inspect the command gate."),
+    "github-token": (
+        "carter.ghtoken_cli:github_token",
+        "Store and check the read-only GitHub token.",
+    ),
+    "guard": ("carter.guard.cli:guard", "Install, inspect and remove Carter's guards."),
+    "identity": (
+        "carter.identity_cli:identity",
+        "The LLM identity: set it up, check it, unlock its key.",
+    ),
+    "push": ("carter.aplus_cli:push", "Push the current branch to origin (never forced)."),
+}
+_PROFILE_NAMES = ("budget", "quality")  # config.PROFILES; a test keeps them equal
 
 
-@click.group(cls=CarterGroup)
+@click.group(cls=LazyGroup, lazy=_LAZY)
 @click.version_option(package_name="carter-ai")
 @click.option(
     "--no-color",
@@ -124,6 +125,8 @@ def install(
         raise click.ClickException(f"{exc} Nothing was installed.") from exc
     if guard_code:
         raise SystemExit(guard_code)
+    if verbosity:
+        ui.next("restart the OpenCode server from a clean terminal to load the agents and plugin")
 
 
 @main.command()
@@ -159,7 +162,7 @@ def uninstall(base_dir: Path | None, keep_guards: bool, assume_yes: bool) -> Non
 @click.option(
     "--profile",
     "profile",
-    type=click.Choice(sorted(PROFILES)),
+    type=click.Choice(_PROFILE_NAMES),
     default=None,
     help="quality (all Opus) or budget (Sonnet where safe).",
 )
@@ -178,6 +181,15 @@ def init(
     docs_language: str | None,
 ) -> None:
     """Initialize a Carter workspace."""
+    from carter.config import (
+        ConfigError,
+        _validate_agent_suffix,
+        _validate_docs_language,
+        generate_default_config,
+    )
+    from carter.scaffold import create_env, policy_notice
+    from carter.state import add_to_gitignore, init_workspace
+
     target = Path(target_dir).resolve()
     workspace_name = name or target.name
     mode = "single" if single else "umbrella"
@@ -319,6 +331,8 @@ def _sync_mirror(*, dry_run: bool) -> None:
 
 def _report_unknown_keys(target: Path) -> None:
     """at the end of ``update``: each leftover key once, workspace files then host files."""
+    from carter import unknownkeys
+
     hits = [*unknownkeys.workspace(target), *unknownkeys.host()]
     unknownkeys.report(unknownkeys.once_per_key(hits))
 
@@ -348,22 +362,23 @@ def _refresh_agents(*, dry_run: bool) -> None:
         ui.ok("global Carter agents refreshed", f"{stats['updated'] + stats['created']} file(s)")
 
 
-# What a workspace AGENTS.md must contain to be current: (marker text, rendered line prefix).
-_WORKSPACE_RULES = (("coauthor_trailer", "- **Commits**"), (OWN_TERMINAL, "- **Pushing**"))
-
-
 def _note_stale_workspace_rules(target: Path, config: dict, env: Environment) -> None:
     """Workspace-level upgrade note: ``AGENTS.md`` is never rewritten, so say so when it lacks
     the tier-based commit rule or the human-only push rule. (The global note belongs to
     ``carter install``.)"""
+    from carter.aplus.push import OWN_TERMINAL
+    from carter.scaffold import render_instructions
+
     instructions = _instructions_path(target)
     if not instructions.exists():
         return
-    have = instructions.read_text()
+    have = instructions.read_text(encoding="utf-8")
     lines = render_instructions(config, env)["AGENTS.md"].splitlines()
+    # What a workspace AGENTS.md must contain to be current: (marker text, rendered line prefix).
+    required = (("coauthor_trailer", "- **Commits**"), (OWN_TERMINAL, "- **Pushing**"))
     missing = [
         next((line for line in lines if line.startswith(prefix)), "")
-        for marker, prefix in _WORKSPACE_RULES
+        for marker, prefix in required
         if marker not in have
     ]
     if missing:
@@ -382,6 +397,9 @@ def _note_stale_workspace_rules(target: Path, config: dict, env: Environment) ->
 @verbose_option
 def update(target_dir: str, dry_run: bool, assume_yes: bool) -> None:
     """Re-render the agents and apply carter.yaml."""
+    from carter.config import ConfigError, load_config
+    from carter.scaffold import create_env, policy_notice, render_agents
+
     del assume_yes  # accepted and ignored: update asks nothing
     target = Path(target_dir).resolve()
     config_path = target / ".carter" / "carter.yaml"
@@ -413,6 +431,10 @@ def update(target_dir: str, dry_run: bool, assume_yes: bool) -> None:
     ui.ok("updated", f"{len(render_agents(config, env))} agents from carter.yaml")
     _note_stale_workspace_rules(target, config, env)
     _report_unknown_keys(target)
+
+
+_UPDATE = "run `carter update`"
+_EDIT = "fix the file named above, then run `carter check` again"
 
 
 @main.command()
@@ -451,11 +473,19 @@ def check(target_dir: str, no_harness: bool, host: bool, probe: bool) -> None:
     if host:
         from carter.hostcheck import live_readers, run_host_checks
 
+        click.echo("checking GitHub...", err=True)  # the network calls below take a few seconds
         items = run_host_checks(cwd=Path(target_dir).resolve(), **live_readers())
         raise SystemExit(ui.items(items, "host"))
+    from carter import unknownkeys
+    from carter.config import ConfigError, load_config
+    from carter.harness import Expected, validate_agents
+    from carter.plans import parse_frontmatter, validate_checkpoint, validate_plans_dir
+    from carter.scaffold import agent_filename, lint_policy, model_advisory, model_pins
+    from carter.state import KNOWLEDGE_FILES
+
     target = Path(target_dir).resolve()
     config_path = target / ".carter" / "carter.yaml"
-    errors: list[str] = []
+    errors: list[tuple[str, str]] = []  # (problem, the command that fixes it)
     warnings: list[str] = []  # reported, never change the exit code
     loaded = False
 
@@ -477,36 +507,38 @@ def check(target_dir: str, no_harness: bool, host: bool, probe: bool) -> None:
     for agent_name in config["agents"]:
         agent_file = agents_dir / agent_filename(agent_name, config)
         if not agent_file.exists():
-            errors.append(f"Missing agent file: {agent_file.relative_to(target)}")
+            errors.append((f"Missing agent file: {agent_file.relative_to(target)}", _UPDATE))
             continue
-        parsed = parse_frontmatter(agent_file.read_text())
+        parsed = parse_frontmatter(agent_file.read_text(encoding="utf-8"))
         if parsed is None:
-            errors.append(f"Unparseable frontmatter: {agent_file.relative_to(target)}")
+            errors.append((f"Unparseable frontmatter: {agent_file.relative_to(target)}", _UPDATE))
         else:
             installed[agent_name] = parsed
 
     instructions_file = _instructions_path(target)
     if not instructions_file.exists():
-        errors.append(f"Missing instructions: {instructions_file.relative_to(target)}")
+        errors.append((f"Missing instructions: {instructions_file.relative_to(target)}", _UPDATE))
 
     # Check knowledge files
     knowledge_dir = target / ".carter" / "knowledge"
     for filename in KNOWLEDGE_FILES:
         if not (knowledge_dir / filename).exists():
-            errors.append(f"Missing knowledge file: .carter/knowledge/{filename}")
+            errors.append(
+                (f"Missing knowledge file: .carter/knowledge/{filename}", "run `carter init`")
+            )
 
     # Validate plan frontmatter contract; thresholds from config
     plans_root = target / ".carter" / "state" / "plans"
     plans_result = validate_plans_dir(plans_root, config.get("plans"))
-    errors.extend(plans_result.errors)
+    errors.extend((e, _EDIT) for e in plans_result.errors)
 
     # Validate the session checkpoint cursor (absent is fine); cross-check that
     # its active_plan resolves to a real plan under active/.
     checkpoint = target / ".carter" / "state" / "sessions" / "checkpoint.md"
-    errors.extend(validate_checkpoint(checkpoint, plans_root))
+    errors.extend((e, _EDIT) for e in validate_checkpoint(checkpoint, plans_root))
 
     # Lint emitted `permissions:`/`model` against what carter.yaml generates.
-    errors.extend(lint_policy(config, installed))
+    errors.extend((e, _UPDATE) for e in lint_policy(config, installed))
 
     # Harness validation: OpenCode must actually load every agent.
     if not no_harness:
@@ -529,7 +561,9 @@ def check(target_dir: str, no_harness: bool, host: bool, probe: bool) -> None:
         )
         if harness_result.warning:
             ui.warn(harness_result.warning)
-        errors.extend(harness_result.errors)
+        # Missing-agent and stale-config lines name their own `carter` command; only an
+        # OpenCode that did not answer carries a fix of its own (re-rendering would not help).
+        errors.extend((e, harness_result.fix) for e in harness_result.errors)
         loaded = harness_result.status == "ok"
 
     for warning in warnings:
@@ -537,12 +571,15 @@ def check(target_dir: str, no_harness: bool, host: bool, probe: bool) -> None:
     unknownkeys.report(unknownkeys.workspace(target))
 
     if errors:
-        for error in errors:
-            ui.fail(error)
+        for error, fix in errors:
+            ui.fail(error, fix)
+        ui.fail(f"workspace: {len(errors)} problem{'s' if len(errors) != 1 else ''}")
         raise SystemExit(1)
 
-    # Required unverifiable-model advisory: always printed, dimmed.
+    # The model pins cannot be verified, so every passing check says so (one line; -v adds roles).
     ui.info(model_advisory(config))
+    for role, model in model_pins(config):
+        ui.detail(f"{role}: {model}")
 
     ui.ok(
         "Workspace OK",
@@ -558,6 +595,8 @@ def check(target_dir: str, no_harness: bool, host: bool, probe: bool) -> None:
 def save(target_dir: str, message: str | None) -> None:
     """Commit the .carter/ workspace state (a recovery checkpoint)."""
     from datetime import datetime
+
+    from carter.state import StateError, commit_state
 
     target = Path(target_dir).resolve()
     carter_dir = target / ".carter"
@@ -602,7 +641,7 @@ def _write_if_absent(path: Path, content: str) -> bool:
     if path.exists():
         return False
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(content)
+    path.write_text(content, encoding="utf-8")
     return True
 
 
@@ -613,6 +652,8 @@ def _render_and_write(target: Path, config: dict, env: Environment) -> None:
     ``carter update`` refreshes them. ``AGENTS.md`` is written only when absent
     (skip-if-exists), so user edits are preserved.
     """
+    from carter.scaffold import render_agents, render_instructions, write_rendered_files
+
     agents = render_agents(config, env)
     instructions_content = render_instructions(config, env)["AGENTS.md"]
     write_rendered_files(agents, _agents_dir(target))
@@ -639,57 +680,6 @@ def ops(args: tuple[str, ...]) -> None:
     from carter.ops.carter_ops import main as ops_main
 
     raise SystemExit(ops_main(list(args)))
-
-
-def _register_guard() -> None:
-    from carter.guard.cli import guard
-
-    main.add_command(guard)
-
-
-def _register_github_token() -> None:
-    from carter.ghtoken_cli import github_token
-
-    main.add_command(github_token)
-
-
-def _register_aplus() -> None:
-    from carter.aplus_cli import push
-
-    main.add_command(push)
-
-
-def _register_gate() -> None:
-    from carter.gate_cli import gate
-
-    main.add_command(gate)
-
-
-def _register_commit() -> None:
-    from carter.commit_cli import commit_cmd
-
-    main.add_command(commit_cmd)
-
-
-def _register_ci() -> None:
-    from carter.ci_cli import ci
-
-    main.add_command(ci)
-
-
-def _register_identity() -> None:
-    from carter.identity_cli import identity
-
-    main.add_command(identity)
-
-
-_register_guard()
-_register_identity()
-_register_commit()
-_register_github_token()
-_register_aplus()
-_register_gate()
-_register_ci()
 
 
 if __name__ == "__main__":

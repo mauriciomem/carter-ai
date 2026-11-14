@@ -46,7 +46,8 @@ Install Carter for OpenCode 2.1 or newer. Writes to `~/.config/opencode/` and
 | `--debug` | Debug output |
 
 A normal run prints warnings and one line (`✓ installed  8 agents · 27 skills`), then the guard
-step ([`carter guard install`](#carter-guard-install)), which asks one question. Safe to re-run. It also
+step ([`carter guard install`](#carter-guard-install)), which asks one question, and ends with the
+next step (`→ restart the OpenCode server from a clean terminal …`). Safe to re-run. It also
 creates `~/.carter/config.toml` on a first install; an existing file is never rewritten. A key in it
 that Carter doesn't read is named at the end, once, with its file
 (``⚠ unknown key `x.y` in <path> → delete it``). If your global `AGENTS.md` has your own edits, it is
@@ -532,13 +533,16 @@ at once, without retrying. It is
 skipped with a warning when `opencode` isn't on `PATH`; `--no-harness` skips it on
 purpose.
 
-On success, `carter check` prints `✓ Workspace OK` and also each agent's model, because Carter
-can't verify that your provider offers it.
+On success, `carter check` prints `✓ Workspace OK` and, above it, one line naming the pinned models,
+because Carter can't verify that your provider offers them (`-v` adds the role behind each model).
+On failure every `✗` line has its `→` fix and the run ends with `✗ workspace: N problems`.
 
 ### carter check --host
 
 Checks the guards on this machine. It never writes and never prints environment values,
-tokens or provider settings. A normal run prints the warnings (`!`) and problems (`✗`, each with
+tokens or provider settings. It first prints `checking GitHub...` on stderr (always, even when no
+token or identity is configured), because the GitHub checks (the token and the identity's keys) can
+take a few seconds; they run alongside the local checks. A normal run prints the warnings (`!`) and problems (`✗`, each with
 its fix) and one summary line (`✓ host  2 warnings`); `-v` prints every row as `✓` OK, `·` INFO,
 `!` WARN or `✗` RED. The exit code is 1 only if something is red:
 

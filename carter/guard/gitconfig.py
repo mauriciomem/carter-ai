@@ -133,12 +133,12 @@ def probe_scope(*, runner: Runner | None = None) -> Mode:
         if run(["init", "-q", str(repo)], env=env, cwd=scratch).returncode != 0:
             raise GitError("could not create the scratch repository for the hook probe")
         hook = f'[hook "{PROBE_HOOK}"]\n\tevent = commit-msg\n\tcommand = true\n'
-        probe.write_text(hook)
-        glob.write_text(f"[include]\n\tpath = {probe}\n")
+        probe.write_text(hook, encoding="utf-8")
+        glob.write_text(f"[include]\n\tpath = {probe}\n", encoding="utf-8")
         listed = run(["hook", "list", "--show-scope", "commit-msg"], env=env, cwd=repo)
         if _parse_scopes(listed.stdout).get(PROBE_HOOK) == "global":
             return "include"
-        glob.write_text(hook)
+        glob.write_text(hook, encoding="utf-8")
         listed = run(["hook", "list", "--show-scope", "commit-msg"], env=env, cwd=repo)
         return "direct" if PROBE_HOOK in _parse_scopes(listed.stdout) else "no-config-hooks"
     finally:
@@ -266,10 +266,10 @@ def render_gitconfig(entries: Sequence[Entry]) -> str:
     scratch = Path(tempfile.mkdtemp(prefix="carter-render-"))
     try:
         target = scratch / "gitconfig"
-        target.write_text(HEADER)
+        target.write_text(HEADER, encoding="utf-8")
         for key, val in entries:
             _checked(str(target), "--add", key, val)
-        return target.read_text()
+        return target.read_text(encoding="utf-8")
     finally:
         shutil.rmtree(scratch, ignore_errors=True)
 
@@ -280,7 +280,7 @@ def validate_content(content: str) -> None:
     scratch = Path(tempfile.mkdtemp(prefix="carter-validate-"))
     try:
         probe = scratch / "gitconfig"
-        probe.write_text(content)
+        probe.write_text(content, encoding="utf-8")
         if not parses(probe):
             raise GitError("the rendered Carter gitconfig is not valid git config; nothing written")
     finally:

@@ -89,7 +89,7 @@ def _fingerprints(identity: SigIdentity, scratch: Path) -> set[str]:
     found = set(identity.fingerprints)
     for i, key in enumerate(_key_lines(identity.public_keys)):
         pub = scratch / f"stored-{i}.pub"
-        pub.write_text(key + "\n")
+        pub.write_text(key + "\n", encoding="utf-8")
         try:
             proc = run.run([str(keygen), "-l", "-f", str(pub)])
         except run.RunError as exc:
@@ -116,7 +116,7 @@ def check_signatures(
         scratch.chmod(0o700)
         signers = scratch / "allowed_signers"
         signers.touch(mode=0o600)
-        signers.write_text(build_allowed_signers(identity))
+        signers.write_text(build_allowed_signers(identity), encoding="utf-8")
         stored = _fingerprints(identity, scratch)
         config = [
             "gpg.format=ssh",

@@ -3,7 +3,8 @@
 ``ok`` / ``warn`` / ``info`` / ``fail`` print one line each; ``kv`` prints a compact two-column
 table; ``detail`` prints only with ``-v``. A normal run ends in one to three lines.
 
-- Errors say the actual cause and the fix: ``✗ <cause>`` then ``→ <fix>`` with the code dimmed.
+- Errors say the actual cause and the fix: ``✗ <cause>`` then ``→ <fix>`` (cyan arrow, fix never
+  dimmed); only the code is dimmed.
 - ``ok``, ``info``, ``kv`` and ``detail`` go to stdout; ``warn`` and ``fail`` go to stderr.
 - Colour follows the terminal: none when output is not a terminal, none with ``NO_COLOR``
   (rich reads it) or ``--no-color``. Plain text keeps the same glyphs; on a terminal that cannot
@@ -37,16 +38,38 @@ def verbose() -> bool:
     return _state["verbose"]
 
 
+# Every non-ASCII character Carter prints, with its stand-in on a stream that cannot show it.
+# The one place that owns the fallback: ``_emit`` runs all text through ``_plain``.
+STAND_INS = {
+    GLYPHS["ok"]: ASCII["ok"],
+    GLYPHS["fail"]: ASCII["fail"],
+    GLYPHS["fix"]: ASCII["fix"],
+    GLYPHS["info"]: ASCII["info"],
+    "⚠": ASCII["warn"],
+    "…": "...",
+    "—": "-",
+}
+
+
 def _glyph(kind: str, stream: TextIO) -> str:
     encoding = (getattr(stream, "encoding", None) or "ascii").lower().replace("-", "")
     return (GLYPHS if encoding in ("utf8", "utf16", "utf32") else ASCII)[kind]
 
 
 def _plain(line: str, stream: TextIO) -> str:
-    """``line`` as is on a UTF-8 stream, with ASCII stand-ins for its two glyphs otherwise."""
+    """``line`` as is on a UTF-8 stream. Otherwise the glyphs become ASCII stand-ins and any
+    other character the stream cannot encode becomes a ``\\xe9`` / ``\\u2260`` escape: printing
+    never raises, and a path or command in the text stays exact when copied (``?`` would be a
+    shell glob)."""
     if _glyph("ok", stream) == GLYPHS["ok"]:
         return line
-    return line.replace("⚠", ASCII["warn"]).replace("→", ASCII["fix"])
+    for glyph, stand_in in STAND_INS.items():
+        line = line.replace(glyph, stand_in)
+    encoding = getattr(stream, "encoding", None) or "ascii"
+    try:
+        return line.encode(encoding, "backslashreplace").decode(encoding)
+    except LookupError:  # a codec name Python does not know
+        return line.encode("ascii", "backslashreplace").decode("ascii")
 
 
 def _console(stream: TextIO) -> Any:
@@ -72,10 +95,15 @@ def _text(*parts: tuple[str, str]) -> Any:
     return text
 
 
+def _fix_line(stream: TextIO, fix: str) -> list[tuple[str, str]]:
+    """The indented ``  → fix`` line under a warning: the arrow coloured, the fix readable."""
+    return [("  ", ""), (_glyph("fix", stream), "cyan"), (f" {fix}", "")]
+
+
 def _emit(stream: TextIO, *lines: Sequence[tuple[str, str]]) -> None:
     console = _console(stream)
     for parts in lines:
-        console.print(_text(*parts))
+        console.print(_text(*((_plain(content, stream), style) for content, style in parts)))
 
 
 def ok(text: str, detail: str = "") -> None:
@@ -103,7 +131,7 @@ def warn(text: str, fix: str = "") -> None:
     err = sys.stderr
     lines = [[(_glyph("warn", err), "yellow"), (f" {text}", "")]]
     if fix:
-        lines.append([(f"  {_glyph('fix', err)} {fix}", "dim")])
+        lines.append(_fix_line(err, fix))
     _emit(err, *lines)
 
 
@@ -120,6 +148,12 @@ def fail(cause: str, fix: str = "", code: str = "", *, inline: bool = False) -> 
         _emit(err, [*first], [(_glyph("fix", err), "cyan"), (f" {fix}", ""), *tail])
     else:
         _emit(err, [*first, *tail])
+
+
+def next(text: str) -> None:
+    """``→ text``: what to do now, on stdout, with the arrow in the fix colour."""
+    out = sys.stdout
+    _emit(out, [(_glyph("fix", out), "cyan"), (f" {text}", "")])
 
 
 def kv(rows: Iterable[tuple[str, str]], *, indent: int = 2) -> None:
@@ -151,12 +185,12 @@ def items(rows: Sequence[Any], noun: str, *, all_items: bool | None = None) -> i
         mark = {"ok": "ok", "info": "info", "warn": "warn", "red": "fail"}[row.level]
         stream = err if row.level in ("warn", "red") else out
         if row.raw:
-            _emit(stream, [(_plain(row.raw, stream), "yellow")])
+            _emit(stream, [(row.raw, "yellow")])
             continue
         style = {"ok": "green", "info": "dim", "warn": "yellow", "red": "red bold"}[row.level]
         lines = [[(_glyph(mark, stream), style), (f" {row.area}: ", "bold"), (row.text, "")]]
         if row.fix:
-            lines.append([(f"  {_glyph('fix', stream)} {row.fix}", "dim")])
+            lines.append(_fix_line(stream, row.fix))
         _emit(stream, *lines)
     red = sum(1 for r in rows if r.level == "red")
     warns = sum(1 for r in rows if r.level == "warn")

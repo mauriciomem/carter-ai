@@ -104,7 +104,7 @@ carter check ~/my-project
 ```
 
 ```text
-· Model pins: maestro → anthropic/claude-opus-5-5, architect → anthropic/claude-opus-5-5, … Carter cannot verify your OpenCode provider subscription includes them.
+Pinned models: anthropic/claude-opus-5-5, anthropic/claude-sonnet-5-5. Carter cannot verify your provider has them.
 ✓ Workspace OK  8 agents · loaded by OpenCode
 ```
 

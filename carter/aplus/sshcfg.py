@@ -77,7 +77,7 @@ def scan_match_exec(home: Path) -> list[Finding]:
             )
             return
         try:
-            text = path.read_text(errors="replace")
+            text = path.read_text(errors="replace", encoding="utf-8")
         except OSError:
             found.append(
                 _finding("Include", str(path), "cannot read the file, so it cannot be checked")
