@@ -1,0 +1,13 @@
+[1mCarter uninstall[0m[2m  v0.19.2[0m
+
+✓[1m Removed[0m
+    guards
+    agents           [1m 8[0m
+    skills           [1m27[0m
+    plugin
+    AGENTS.md
+    knowledge files  [1m 4[0m
+    config.toml          [2mwas all defaults[0m
+
+✓[1m Uninstalled[0m
+→ last step, remove the command  [1muv tool uninstall carter-ai[0m

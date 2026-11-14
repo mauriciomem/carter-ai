@@ -34,13 +34,14 @@ def _run(fn, what: str) -> int:  # type: ignore[no-untyped-def]
 
 
 def install_guards(base_dir: Path | None, *, assume_yes: bool) -> int:
-    """The guard step of ``carter install``. Returns 0, or 1 if the guard step failed."""
+    """The guard step of ``carter install``. Returns 0, or 1 if the guard step failed. It prints
+    no summary: the install report lists the accepted groups (``report.accepted_groups``)."""
     if terminal.is_agent_shell():
         ui.warn("guards skipped: this looks like an agent shell", "run `carter guard install`")
         return 0
 
     def run() -> int:
-        code = engine.install(
+        return engine.install(
             base_dir=base_dir,
             only=None,
             assume_yes=assume_yes,
@@ -49,9 +50,6 @@ def install_guards(base_dir: Path | None, *, assume_yes: bool) -> int:
             echo=report.say,
             confirm=click.confirm,
         )
-        if code == 0:
-            report.installed(base_dir)
-        return code
 
     return _run(run, "install")
 
@@ -66,28 +64,23 @@ def uninstall_guards(base_dir: Path | None, *, assume_yes: bool) -> int:
         return 0
 
     def run() -> int:
-        code = engine.remove(base_dir=base_dir, only=None, dry_run=False, echo=report.say)
-        if code == 0:
-            ui.ok("guards removed")
-        return code
+        return engine.remove(base_dir=base_dir, only=None, dry_run=False, echo=report.say)
 
     return _run(run, "removal")
 
 
-def uninstall_identity(base_dir: Path | None, *, assume_yes: bool) -> int:
+def uninstall_identity(base_dir: Path | None, *, assume_yes: bool) -> bool:
     """The identity step of ``carter uninstall``: ``carter identity remove``; an agent shell
-    keeps everything. Nothing is asked."""
+    keeps everything. Nothing is asked. True if something was removed (the report says so)."""
     del assume_yes
     from carter import identity_remove
 
     if terminal.is_agent_shell():
         ui.warn("LLM identity kept: agent shell", "run `carter identity remove` yourself")
-        return 0
+        return False
     report_ = identity_remove.remove_identity(base_dir)
     for line in report_.removed:
         ui.detail(f"removed {line}")
     for line in report_.kept:
         ui.warn(f"kept {line}")
-    if report_.removed:
-        ui.ok("LLM identity removed")
-    return 0
+    return bool(report_.removed)

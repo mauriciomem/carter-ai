@@ -2,7 +2,8 @@
 ``carter update``); read paths never import it.
 
 Serialises exactly the schema-2 model (basic strings, ints, bools, string lists, tables)
-and omits unset optional enums instead of writing ``""``. It refuses to lose data
+and stores only the values that differ from the dataclass defaults, so a fresh file is two
+lines and the reader fills in the rest. It refuses to lose data
 (unmodelled keys, a file that does not parse) and
 re-reads its own output through the reader, so it cannot write what the reader rejects.
 Writes are atomic: temp file in the same directory, fsync, ``os.replace``, mode 0600.
@@ -24,7 +25,10 @@ from carter.identity.schema import SCHEMA_VERSION, SECTIONS, TABLE_WORKSPACES, I
 
 _BARE = re.compile(r"[A-Za-z0-9_-]+")
 _ESC = {"\\": "\\\\", '"': '\\"', "\b": "\\b", "\t": "\\t", "\n": "\\n", "\f": "\\f", "\r": "\\r"}
-_HEADER = "# Carter configuration (schema 2). Rewritten by carter commands; comments are not kept."
+_HEADER = (
+    "# Carter settings (schema 2). Only what you set is stored; "
+    "Carter commands rewrite this file and drop comments."
+)
 
 
 class WriterError(Exception):
@@ -62,21 +66,21 @@ def _value(value: Any) -> str:
 
 
 def _body(obj: Any) -> list[str]:
-    """``key = value`` lines; an unset optional enum (default ``""``) is left out."""
+    """``key = value`` for the fields that differ from their default."""
     return [
         f"{f.name} = {_value(getattr(obj, f.name))}"
         for f in fields(obj)
-        if not (getattr(obj, f.name) == "" and f.default == "" and "choices" in f.metadata)
+        if getattr(obj, f.name) != f.default
     ]
 
 
 def dumps(cfg: IdentityConfig) -> str:
-    """Serialise ``cfg`` as schema-2 TOML."""
+    """Serialise ``cfg`` as schema-2 TOML: only what differs from the defaults is stored."""
     out = [_HEADER, f"schema = {SCHEMA_VERSION}"]
-    for attr, path, cls in SECTIONS:
-        if attr == "broker" and getattr(cfg, attr) == cls():
-            continue  # an optional table: written only when the user set something
-        out += ["", "[" + ".".join(path) + "]", *_body(getattr(cfg, attr))]
+    for attr, path, _cls in SECTIONS:
+        body = _body(getattr(cfg, attr))
+        if body:  # a table with nothing set is not written
+            out += ["", "[" + ".".join(path) + "]", *body]
     for ws_path, ws in cfg.workspaces.items():
         out += ["", f"[{TABLE_WORKSPACES}.{_str(ws_path)}]", *_body(ws)]
     return "\n".join(out) + "\n"
@@ -102,6 +106,7 @@ def _checked(cfg: IdentityConfig) -> str:
 
 def _create_backup(source: Path, backup: Path) -> None:
     """Copy ``source`` to ``backup`` (0600) unless it exists: a backup is never overwritten."""
+    backup.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
     try:
         fd = os.open(backup, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
     except FileExistsError:

@@ -16,13 +16,14 @@ copied to ``<name>.carter-backup`` next to it first, and a warning is printed.
 from __future__ import annotations
 
 import json
-import shutil
+import os
 from pathlib import Path
 from typing import Any
 
 from carter.home import tilde
+from carter.install.backups import BackupRoot
 from carter.install.console import log_err, log_ok, log_step, log_warn
-from carter.install.files import _backup_file
+from carter.install.files import _backup_file, _control_target
 from carter.install.jsonc import _load_jsonc, _write_json, has_comments
 from carter.install.paths import REPO_ROOT, _opencode_base
 
@@ -31,6 +32,7 @@ from carter.install.paths import REPO_ROOT, _opencode_base
 MCP_SERVERS = ("github", "terraform", "atlassian")
 
 BACKUP_SUFFIX = ".carter-backup"
+_NOFOLLOW = getattr(os, "O_NOFOLLOW", 0)
 
 
 def global_config_files(base_dir: Path | None) -> tuple[Path, Path]:
@@ -45,16 +47,29 @@ def config_target(base_dir: Path | None) -> Path:
     return jsonc_path if jsonc_path.exists() else json_path
 
 
-def _save_config(file_path: Path, data: dict) -> None:
-    """Write ``data``; first keep a sibling copy of an original with comments."""
+def _save_config(file_path: Path, data: dict) -> bool:
+    """Write ``data``; first keep a sibling copy of an original with comments. Returns False,
+    having written nothing, if the file is a link into Carter's own files or the copy could not
+    be made. A link into dotfiles is followed, as before."""
+    if _control_target(file_path):
+        log_warn(f"{tilde(file_path)} points into Carter's own files; not written")
+        return False
     if file_path.exists() and has_comments(file_path.read_text(encoding="utf-8")):
         backup = file_path.with_name(file_path.name + BACKUP_SUFFIX)
-        shutil.copy2(file_path, backup)
+        try:
+            backup.unlink(missing_ok=True)  # a link is removed, never followed
+            fd = os.open(backup, os.O_WRONLY | os.O_CREAT | os.O_EXCL | _NOFOLLOW, 0o600)
+            with os.fdopen(fd, "wb") as out:
+                out.write(file_path.read_bytes())
+        except OSError as exc:
+            log_warn(f"{file_path.name} has comments and its copy failed ({exc}); not rewritten")
+            return False
         log_warn(
             f"{file_path.name} had comments; rewriting it does not keep them",
             f"Original saved as {tilde(backup)}",
         )
     _write_json(file_path, data)
+    return True
 
 
 def _load_config(file_path: Path) -> dict | None:
@@ -71,21 +86,23 @@ def _load_config(file_path: Path) -> dict | None:
 
 
 def merge_mcp_servers(
-    file_path: Path, entries: dict[str, dict[str, Any]], backup_root: Path | None = None
+    file_path: Path, entries: dict[str, dict[str, Any]], backup_root: BackupRoot | None = None
 ) -> bool:
     """Merge ``entries`` into ``mcp.servers`` of an OpenCode config file.
 
     Unrelated keys and servers are preserved. Returns False (file untouched) when the file
-    can't be parsed.
+    can't be parsed. A file that already holds every entry is neither copied nor rewritten.
     """
     data = _load_config(file_path)
     if data is None:
         return False
+    mcp = data.setdefault("mcp", {})
+    servers = mcp.setdefault("servers", {})
+    if all(servers.get(name) == entry for name, entry in entries.items()):
+        return True
     if file_path.exists() and backup_root:
         _backup_file(file_path, backup_root)
 
-    mcp = data.setdefault("mcp", {})
-    servers = mcp.setdefault("servers", {})
     for name, entry in entries.items():
         base_name = name.removeprefix("carter-")
         if base_name in servers:
@@ -95,12 +112,12 @@ def merge_mcp_servers(
                 f'You may want to remove "{base_name}" to avoid duplicate tools.',
             )
         servers[name] = dict(entry)
-    _save_config(file_path, data)
-    return True
+    return _save_config(file_path, data)
 
 
 def remove_carter_servers(file_path: Path) -> list[str]:
-    """Remove every ``carter-*`` server from ``mcp.servers``."""
+    """Remove the servers Carter ships (``carter-<name>`` for ``MCP_SERVERS``) from
+    ``mcp.servers``; any other entry, a user's ``carter-custom`` included, stays."""
     if not file_path.exists():
         return []
     data = _load_config(file_path)
@@ -111,12 +128,19 @@ def remove_carter_servers(file_path: Path) -> list[str]:
         return []
     removed: list[str] = []
     servers = mcp.get("servers")
+    shipped = {f"carter-{n}" for n in MCP_SERVERS}
     if isinstance(servers, dict):
-        for k in [k for k in list(servers) if k.startswith("carter-")]:
+        for k in [k for k in list(servers) if k in shipped]:
             del servers[k]
             removed.append(k)
     if removed:
-        _save_config(file_path, data)
+        # Drop the containers that Carter's removal emptied, so a file only Carter wrote ends as {}.
+        if not servers:
+            del mcp["servers"]
+        if not mcp:
+            del data["mcp"]
+        if not _save_config(file_path, data):
+            return []
     return removed
 
 
@@ -134,7 +158,7 @@ def _carter_server_names(file_path: Path) -> set[str]:
 def configure_mcp_servers(
     base_dir: Path | None,
     manifest: dict,
-    backup_root: Path | None = None,
+    backup_root: BackupRoot | None = None,
     servers: list[str] | None = None,
 ) -> int:
     """Wire the selected Carter MCP servers into the global OpenCode config.

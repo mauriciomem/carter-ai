@@ -1,0 +1,9 @@
+Carter install  v0.19.2
+! gh CLI not found (optional)
+
+✓ Installed
+    agents   8  up to date
+    skills  27  up to date
+    guards      g2 · hooks · sudo-docker · read-edit-denies · config-edit
+
+→ restart the OpenCode server from a clean terminal to load the agents and plugin

@@ -28,10 +28,13 @@ def say(line: str) -> None:
         ui.detail(text)
 
 
-def installed(base_dir: Path | None) -> None:
-    """The one line an install ends with: what is accepted now."""
+def accepted_groups(base_dir: Path | None) -> list[str]:
+    """The guard groups the state records as accepted now."""
+    return consent.accepted_groups(load_or_empty_readonly(guard_state_path(base_dir)).state)
 
-    state = load_or_empty_readonly(guard_state_path(base_dir)).state
-    done = consent.accepted_groups(state)
+
+def installed(base_dir: Path | None) -> None:
+    """The one line ``carter guard install`` ends with: what is accepted now."""
+    done = accepted_groups(base_dir)
     if done:
         ui.ok("guards installed", " · ".join(done))

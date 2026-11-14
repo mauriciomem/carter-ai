@@ -46,6 +46,21 @@ This checks that OpenCode 2.1+ is on your `PATH`, then writes:
 | Global rules for every session | `~/.config/opencode/AGENTS.md` |
 | Knowledge files, memory folders, settings | `~/.carter/` |
 
+It ends with a short report of what was installed, then the next step:
+
+```text
+Carter install  v0.19.2
+
+✓ Installed
+    agents            8  new
+    skills           27  new
+    knowledge files   4  new
+    config.toml          created
+    guards               g2 · hooks · sudo-docker · read-edit-denies · config-edit
+
+→ restart the OpenCode server from a clean terminal to load the agents and plugin
+```
+
 If OpenCode is missing or too old, nothing is written:
 
 ```text
@@ -173,9 +188,12 @@ If uv says there is nothing to upgrade, force a reinstall from the latest commit
 uv tool install --force git+https://github.com/mauriciomem/carter-ai.git
 ```
 
-Re-running `carter install` is safe. It updates the agents and skills, copies any file it replaces
-to `~/.carter/backups/<timestamp>/`, and never overwrites your knowledge files or an `AGENTS.md`
-you edited. Skills that Carter no longer ships are removed unless you changed them. If your global
+Re-running `carter install` is safe. It updates the agents and skills (the report says `up to date`
+or `2 updated`), copies a file you edited before replacing it (at its own path under
+`~/.carter/backups/<timestamp>/`; Carter's own previous output is not copied) and says so in one line
+(`! Replaced 3 files you had edited  (copies in ~/.carter/backups/<timestamp>/)`), deletes backup
+directories older than 15 days (an `old backups` row), and never overwrites your
+knowledge files or an `AGENTS.md` you edited. Skills that Carter no longer ships are removed unless you changed them. If your global
 `AGENTS.md` has your edits, `carter install` says it is user-modified and leaves it alone.
 
 `~/.carter/config.toml` is created on a first install and never rewritten by `install`. A key Carter
@@ -203,19 +221,47 @@ uv tool uninstall carter-ai   # removes the carter command itself
 
 `carter uninstall` asks nothing and removes only what Carter installed and you haven't changed:
 
-- **Removed:** the `carter-*` agents and skills, the global `AGENTS.md` Carter wrote, untouched
-  knowledge files, the `carter-*` MCP servers in `opencode.json` and `opencode.jsonc`, the guards
+- **Removed:** the `carter-*` agents (one you edited too, after a copy to
+  `~/.carter/backups/<timestamp>/`) and skills, the global `AGENTS.md` Carter wrote, untouched
+  knowledge files, the MCP servers Carter ships (`carter-github`, `carter-terraform`, `carter-atlassian`) in
+  `opencode.json` and `opencode.jsonc`, the guards
   (`carter guard remove`), the LLM identity files (the signing shim, `allowed_signers`, the tier
   mirror, the identity part of `config.toml`, with a backup) and `~/.carter/manifest.json`.
-- **Kept:** `~/.carter/memories/`, the rest of `config.toml`, the audit log, the GitHub token file,
-  backups, and any file you edited. Files edited since the last install are reported:
+- **Kept:** `~/.carter/memories/`, a `config.toml` where you set anything, the audit log, the GitHub
+  token file, backups, and any skill, rule or knowledge file you edited.
+
+It prints what it did, in sections (empty ones are left out):
 
 ```text
-  ⚠ Kept ~/.carter/knowledge/mistakes.md: edited since install
+Carter uninstall  v0.19.2
+
+✓ Removed
+    guards
+    agents            8
+    skills           25
+    ...
+
+! Removed although you edited them
+    ~/.config/opencode/agents/carter-pm.md
+      → copy: ~/.carter/backups/20261112T101500/.config/opencode/agents/carter-pm.md
+
+· Kept, because they are yours
+    ~/.config/opencode/skills/carter-adr/SKILL.md          you edited it
+    ~/.carter/memories/                                12  your notes
+
+✓ Uninstalled
+→ last step, remove the command     uv tool uninstall carter-ai
+→ to delete everything Carter kept  rm -r /home/you/.carter
 ```
 
-Workspaces created with `carter init` are never touched; remove their `.carter/`,
-`.opencode/agents/carter-*` and `AGENTS.md` yourself.
+The last two lines are the order of removal: first `carter uninstall`, then the program itself
+(the command depends on how you installed it), then `rm -r ~/.carter` if you want what Carter kept
+gone too. `carter uninstall -v` lists every file removed or kept.
+
+Workspaces created with `carter init` are never touched. `uninstall` lists the ones it knows
+(recorded by `carter init` and `carter update`) with the `rm` line for their
+`.opencode/agents/carter-*.md`; run it yourself, and remove `.carter/` and `AGENTS.md` too if you
+want them gone.
 
 ## Next
 
