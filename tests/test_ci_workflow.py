@@ -185,9 +185,10 @@ class TestRelease:
         assert not re.search(r"git\s+(push|commit|add)", runs)
 
     def test_only_the_release_job_can_write(self, release: dict) -> None:
-        assert release["permissions"] == {"contents": "read"}
-        assert release["jobs"]["release"]["permissions"] == {"contents": "write"}
-        assert list(release["jobs"]) == ["release"]
+        jobs = release["jobs"]
+        assert jobs["release"]["permissions"] == {"contents": "write"}
+        others = {name: job["permissions"] for name, job in jobs.items() if name != "release"}
+        assert all("contents" not in p or p["contents"] == "read" for p in others.values())
         for path in WORKFLOWS:
             if path != RELEASE:
                 assert "write" not in yaml.dump(load(path).get("permissions", {})), path.name
@@ -196,6 +197,164 @@ class TestRelease:
         assert not (ROOT / "CHANGELOG.md").exists()
         urls = tomllib.loads((ROOT / "pyproject.toml").read_text())["project"]["urls"]
         assert urls["Changelog"] == "https://github.com/mauriciomem/carter-ai/releases"
+
+
+class TestPublish:
+    """release.yml is one workflow: tag, build once, check, TestPyPI, then PyPI."""
+
+    JOBS = ["release", "build", "publish-testpypi", "publish-pypi"]
+
+    @pytest.fixture(scope="class")
+    def release(self) -> dict:
+        return load(RELEASE)
+
+    @staticmethod
+    def _environment(job: dict) -> str:
+        env = job["environment"]
+        return env if isinstance(env, str) else env["name"]
+
+    def test_the_job_graph_is_a_chain_and_the_build_only_runs_for_a_release(
+        self, release: dict
+    ) -> None:
+        jobs = release["jobs"]
+        assert list(jobs) == self.JOBS
+        assert "needs" not in jobs["release"]
+        assert jobs["build"]["needs"] == "release"
+        assert jobs["publish-testpypi"]["needs"] == "build"
+        assert jobs["publish-pypi"]["needs"] == "publish-testpypi"  # TestPyPI first, then PyPI
+        assert jobs["build"]["if"] == "needs.release.outputs.released == 'true'"
+        assert "if" not in jobs["publish-testpypi"] and "if" not in jobs["publish-pypi"]
+
+    def test_the_release_job_exposes_what_the_build_needs(self, release: dict) -> None:
+        job = release["jobs"]["release"]
+        psr = next(s for s in steps(job) if "python-semantic-release" in s.get("uses", ""))
+        assert psr["id"] == "psr"
+        assert job["outputs"] == {
+            name: "${{ steps.psr.outputs." + name + " }}" for name in ("released", "tag", "version")
+        }
+        assert "uses" in psr and psr["with"]["github_token"] == "${{ secrets.GITHUB_TOKEN }}"
+
+    def test_permissions_are_empty_at_the_top_and_minimal_per_job(self, release: dict) -> None:
+        assert release["permissions"] == {}
+        jobs = release["jobs"]
+        assert {n: j["permissions"] for n, j in jobs.items()} == {
+            "release": {"contents": "write"},
+            "build": {"contents": "read"},
+            "publish-testpypi": {"id-token": "write"},
+            "publish-pypi": {"id-token": "write"},
+        }
+        assert release["concurrency"]["cancel-in-progress"] is False
+
+    def test_the_publish_jobs_use_the_trusted_publisher_environments(self, release: dict) -> None:
+        jobs = release["jobs"]
+        assert self._environment(jobs["publish-testpypi"]) == "testpypi"
+        assert self._environment(jobs["publish-pypi"]) == "pypi"
+        assert "environment" not in jobs["release"] and "environment" not in jobs["build"]
+        assert RELEASE.name == "release.yml"  # the file name the publisher entries expect
+
+    def test_the_publish_jobs_run_no_repository_code_and_hold_no_secret(
+        self, release: dict
+    ) -> None:
+        for name in ("publish-testpypi", "publish-pypi"):
+            job = release["jobs"][name]
+            uses = [s["uses"].split("@")[0] for s in steps(job)]
+            assert uses == ["actions/download-artifact", "pypa/gh-action-pypi-publish"], name
+            assert not [s for s in steps(job) if "run" in s], name  # no checkout, no scripts
+            publish = job["steps"][-1].get("with", {})
+            assert not {"password", "user", "attestations"} & set(publish), name
+        assert "secrets." not in RELEASE.read_text().replace("secrets.GITHUB_TOKEN", "")
+
+    def test_each_index_gets_its_own_url_and_only_testpypi_skips_existing_files(
+        self, release: dict
+    ) -> None:
+        test = release["jobs"]["publish-testpypi"]["steps"][-1]["with"]
+        prod = release["jobs"]["publish-pypi"]["steps"][-1].get("with", {})
+        assert test["repository-url"] == "https://test.pypi.org/legacy/"
+        assert test["skip-existing"] is True
+        assert "repository-url" not in prod and "skip-existing" not in prod  # PyPI is the default
+
+    def test_the_publish_action_is_pinned_by_sha(self, release: dict) -> None:
+        text = RELEASE.read_text()
+        pins = re.findall(
+            r"uses: pypa/gh-action-pypi-publish@([0-9a-f]{40}) # v\d+\.\d+\.\d+", text
+        )
+        assert len(pins) == 2 and pins[0] == pins[1]
+
+    def test_the_build_runs_the_checks_before_it_uploads(self, release: dict) -> None:
+        job = release["jobs"]["build"]
+        runs = [s.get("run", "") for s in steps(job)]
+        index = {
+            key: next(i for i, r in enumerate(runs) if key in r)
+            for key in ("uv build", "scripts/check-dist.sh")
+        }
+        upload = next(i for i, s in enumerate(steps(job)) if "upload-artifact" in s.get("uses", ""))
+        assert index["uv build"] < index["scripts/check-dist.sh"] < upload
+        check = next(s for s in steps(job) if "check-dist.sh" in s.get("run", ""))
+        assert check["env"]["VERSION"] == "${{ needs.release.outputs.version }}"
+        assert check["run"] == 'bash scripts/check-dist.sh "$VERSION"'
+
+    def test_the_dist_check_script_does_what_the_release_promises(self) -> None:
+        script = ROOT / "scripts" / "check-dist.sh"
+        text = script.read_text()
+        assert text.startswith("#!/usr/bin/env bash") and "set -euo pipefail" in text
+        assert re.search(r"twine==\d+(\.\d+)* twine check --strict", text)
+        assert re.search(r"check-wheel-contents==\d+(\.\d+)* check-wheel-contents", text)
+        assert "dist/*.whl" in text and "dist/*.tar.gz" in text  # both files are installed
+        assert 'cd "$work"' in text  # away from the checkout
+        assert '"$venv/bin/carter" --version' in text and '"$expected"' in text  # the tag
+        assert "carter.resources" in text and "_data" in text  # data from the package
+        assert "$HOME" not in text and "carter install" not in text  # nothing touches the home
+        assert subprocess.run(["bash", "-n", str(script)]).returncode == 0
+
+    def test_the_build_checks_out_the_tag_with_full_history_and_uploads_one_artifact(
+        self, release: dict
+    ) -> None:
+        jobs = release["jobs"]
+        build = jobs["build"]
+        checkout = next(s for s in steps(build) if "actions/checkout" in s.get("uses", ""))
+        assert checkout["with"]["ref"] == "${{ needs.release.outputs.tag }}"
+        assert checkout["with"]["fetch-depth"] == 0  # hatch-vcs derives the version from the tag
+        up = next(s for s in steps(build) if "upload-artifact" in s.get("uses", ""))
+        assert up["with"]["name"] == "dist" and up["with"]["if-no-files-found"] == "error"
+        for name in ("publish-testpypi", "publish-pypi"):
+            down = jobs[name]["steps"][0]
+            assert "download-artifact" in down["uses"] and down["with"]["name"] == "dist"
+        assert sum("upload-artifact" in s.get("uses", "") for s in steps(build)) == 1
+
+    def test_every_checkout_drops_its_credentials(self, release: dict) -> None:
+        found = [
+            s
+            for job in release["jobs"].values()
+            for s in steps(job)
+            if "actions/checkout" in s.get("uses", "")
+        ]
+        assert len(found) == 2
+        assert all(s["with"]["persist-credentials"] is False for s in found)
+
+    def test_nothing_is_cached_in_a_release_job(self, release: dict) -> None:
+        text = RELEASE.read_text()
+        assert "actions/cache" not in text and "cache:" not in text.replace("enable-cache", "")
+        uv = [
+            s
+            for job in release["jobs"].values()
+            for s in steps(job)
+            if "setup-uv" in s.get("uses", "")
+        ]
+        assert uv and all(s["with"]["enable-cache"] is False for s in uv)
+        assert release["jobs"]["build"]["env"]["UV_NO_CACHE"] == "1"
+
+    def test_no_run_script_interpolates_an_expression(self, release: dict) -> None:
+        for name, job in release["jobs"].items():
+            for step in steps(job):
+                assert "${{" not in step.get("run", ""), (name, step.get("name"))
+
+    def test_every_action_has_a_version_comment(self) -> None:
+        lines = [ln for ln in RELEASE.read_text().splitlines() if "uses:" in ln]
+        assert lines and all(re.search(r"@[0-9a-f]{40} # v\d+\.\d+\.\d+$", ln) for ln in lines)
+
+    def test_the_build_backend_is_pinned_exactly(self) -> None:
+        requires = tomllib.loads((ROOT / "pyproject.toml").read_text())["build-system"]["requires"]
+        assert requires and all(re.fullmatch(r"[\w.-]+==\d+(\.\d+)*", r) for r in requires)
 
 
 @pytest.mark.parametrize("path", WORKFLOWS, ids=lambda p: p.name)
