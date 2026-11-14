@@ -243,6 +243,36 @@ jobs:
       - name: Checker and template tests
         run: uv run pytest tests/ci tests/identity/test_mode.py -q
 
+  dist-check:
+    # The release's own checks, on every change: build the sdist and the wheel once, `twine check
+    # --strict`, `check-wheel-contents`, then install both files in clean environments and run
+    # `carter --version` and the bundled-data check (scripts/check-dist.sh, the same script the
+    # `build` job of release.yml runs). The first real run of these is never the release. Nothing
+    # is uploaded and no secret is used.
+    name: dist-check
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    env:
+      UV_NO_CACHE: "1"
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0 # hatch-vcs needs full history + tags to derive the version
+          persist-credentials: false
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2
+        with:
+          python-version: "3.14"
+          enable-cache: false
+
+      - name: Build the sdist and the wheel
+        run: uv build
+
+      - name: Check the metadata, the contents and a clean install
+        run: bash scripts/check-dist.sh
+
   gate-budget:
     # p95 < 100 ms per gate call, interpreter start-up included, measured on the
     # installed tool (`uv tool install .`) the plugin will really call. Required check. If it

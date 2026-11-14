@@ -1,0 +1,22 @@
+# Gitleaks findings that were checked by hand and are not secrets (9 in total, from the scan of
+# the full history). One commit-bound fingerprint per finding (<commit>:<file>:<rule>:<line>), not
+# a path allowlist: a real secret added to the same files, or the same text in another commit,
+# is still reported. A new entry needs the same check and a line saying what it is.
+
+# tests/e2e/test_ci_review_e2e.py:24 - `KEY` is a made-up sentinel for the review-driver e2e test.
+e4c1e6525bea0e90f28d2a19f993481a376e152c:tests/e2e/test_ci_review_e2e.py:generic-api-key:24
+210a7f53790c9b0b63fe383be78326eeb8ea0a27:tests/e2e/test_ci_review_e2e.py:generic-api-key:24
+
+# tests/identity/test_identity_add.py - a private-key header literal with no key body, as test input.
+e4c1e6525bea0e90f28d2a19f993481a376e152c:tests/identity/test_identity_add.py:private-key:290
+c60fd0a2a9ca84701f6c55e737b4eca63248bb29:tests/identity/test_identity_add.py:private-key:279
+
+# tests/aplus/test_secretscan.py - PEM headers and one high-entropy sample used as input to
+# Carter's own secret scanner test (lines 68 and 71: headers; line 88: the sample).
+00f23af0986db86848c69b1b0dae5cbc10de8663:tests/aplus/test_secretscan.py:private-key:68
+00f23af0986db86848c69b1b0dae5cbc10de8663:tests/aplus/test_secretscan.py:private-key:71
+00f23af0986db86848c69b1b0dae5cbc10de8663:tests/aplus/test_secretscan.py:generic-api-key:88
+
+# evals/scenarios/narrator_adherence.yaml:32 - a fake `ghp_` token the narrator scenario must redact.
+00f23af0986db86848c69b1b0dae5cbc10de8663:evals/scenarios/narrator_adherence.yaml:generic-api-key:32
+a21289c3b8f8591896ea4a212cad12c2f24204b5:evals/scenarios/narrator_adherence.yaml:generic-api-key:32

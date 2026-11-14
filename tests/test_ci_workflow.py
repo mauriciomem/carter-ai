@@ -58,10 +58,27 @@ class TestJobs:
             "identity-ssh",
             "lifecycle",
             "ci-template",
+            "dist-check",
         ],
     )
     def test_the_job_exists(self, ci: dict, name: str) -> None:
         assert name in ci["jobs"]
+
+    def test_dist_check_runs_the_release_checks_on_every_change_without_uploading(
+        self, ci: dict
+    ) -> None:
+        job = ci["jobs"]["dist-check"]
+        assert job["permissions"] == {"contents": "read"} and "if" not in job
+        text = yaml.dump(job)
+        assert "uv build" in text and "bash scripts/check-dist.sh" in text
+        assert "upload-artifact" not in text and "id-token" not in text and "secrets." not in text
+        checkout = next(s for s in steps(job) if "actions/checkout" in s.get("uses", ""))
+        assert checkout["with"]["fetch-depth"] == 0  # hatch-vcs needs the history
+        assert job["env"]["UV_NO_CACHE"] == "1"
+        assert "dist-check" not in yaml.dump(
+            load(RELEASE)["jobs"]["release"]
+        )  # one script, two jobs
+        assert "scripts/check-dist.sh" in yaml.dump(load(RELEASE)["jobs"]["build"])
 
     def test_lifecycle_runs_its_directory_on_both_systems_without_skips(self, ci: dict) -> None:
         job = ci["jobs"]["lifecycle"]
@@ -378,6 +395,13 @@ class TestEveryWorkflow:
             assert top == {"contents": "read"}
         else:  # release.yml too: its one job asks for `contents: write` itself
             assert top is None or set(top.values()) <= {"read", "none"}
+
+    def test_secrets_are_only_given_to_the_step_that_needs_them(self, path: Path) -> None:
+        doc = load(path)
+        assert "secrets." not in yaml.dump(doc.get("env", {})), "workflow-level env"
+        for name, job in doc["jobs"].items():
+            assert "secrets." not in yaml.dump(job.get("env", {})), f"job-level env of {name}"
+            assert "secrets." not in yaml.dump(job.get("container", {})), name
 
     def test_every_repo_path_named_in_a_run_command_exists(self, path: Path) -> None:
         missing = []
