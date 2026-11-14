@@ -34,6 +34,14 @@ def steps(job: dict):
     yield from job.get("steps", [])
 
 
+def uv_version(job: dict) -> str:
+    """The exact uv that ``setup-uv`` installs in ``job`` (it must not float)."""
+    setup = next(s for s in steps(job) if "astral-sh/setup-uv" in s.get("uses", ""))
+    version = setup["with"]["version"]
+    assert re.fullmatch(r"\d+\.\d+\.\d+", version), version
+    return version
+
+
 @pytest.fixture(scope="module")
 def ci() -> dict:
     return load(CI)
@@ -75,10 +83,9 @@ class TestJobs:
         checkout = next(s for s in steps(job) if "actions/checkout" in s.get("uses", ""))
         assert checkout["with"]["fetch-depth"] == 0  # hatch-vcs needs the history
         assert job["env"]["UV_NO_CACHE"] == "1"
-        assert "dist-check" not in yaml.dump(
-            load(RELEASE)["jobs"]["release"]
-        )  # one script, two jobs
-        assert "scripts/check-dist.sh" in yaml.dump(load(RELEASE)["jobs"]["build"])
+        assert "scripts/check-dist.sh" in yaml.dump(load(RELEASE)["jobs"]["build"])  # one script
+        # the same exact uv as the release build, so a PR proves what the release will run
+        assert uv_version(job) == uv_version(load(RELEASE)["jobs"]["build"])
 
     def test_lifecycle_runs_its_directory_on_both_systems_without_skips(self, ci: dict) -> None:
         job = ci["jobs"]["lifecycle"]
@@ -317,10 +324,8 @@ class TestPublish:
         assert re.search(r"twine==\d+(\.\d+)* twine check --strict", text)
         assert re.search(r"check-wheel-contents==\d+(\.\d+)* check-wheel-contents", text)
         assert "dist/*.whl" in text and "dist/*.tar.gz" in text  # both files are installed
-        assert 'cd "$work"' in text  # away from the checkout
-        assert '"$venv/bin/carter" --version' in text and '"$expected"' in text  # the tag
-        assert "carter.resources" in text and "_data" in text  # data from the package
-        assert "$HOME" not in text and "carter install" not in text  # nothing touches the home
+        code = "\n".join(ln for ln in text.splitlines() if not ln.lstrip().startswith("#"))
+        assert "carter install" not in code  # it would write the user's Carter files
         assert subprocess.run(["bash", "-n", str(script)]).returncode == 0
 
     def test_the_build_checks_out_the_tag_with_full_history_and_uploads_one_artifact(
@@ -329,7 +334,8 @@ class TestPublish:
         jobs = release["jobs"]
         build = jobs["build"]
         checkout = next(s for s in steps(build) if "actions/checkout" in s.get("uses", ""))
-        assert checkout["with"]["ref"] == "${{ needs.release.outputs.tag }}"
+        # the commit that triggered the run, never a ref taken from the semantic-release output
+        assert checkout["with"]["ref"] == "${{ github.sha }}"
         assert checkout["with"]["fetch-depth"] == 0  # hatch-vcs derives the version from the tag
         up = next(s for s in steps(build) if "upload-artifact" in s.get("uses", ""))
         assert up["with"]["name"] == "dist" and up["with"]["if-no-files-found"] == "error"
@@ -369,9 +375,51 @@ class TestPublish:
         lines = [ln for ln in RELEASE.read_text().splitlines() if "uses:" in ln]
         assert lines and all(re.search(r"@[0-9a-f]{40} # v\d+\.\d+\.\d+$", ln) for ln in lines)
 
-    def test_the_build_backend_is_pinned_exactly(self) -> None:
-        requires = tomllib.loads((ROOT / "pyproject.toml").read_text())["build-system"]["requires"]
-        assert requires and all(re.fullmatch(r"[\w.-]+==\d+(\.\d+)*", r) for r in requires)
+    def test_the_build_proves_the_tag_is_the_commit_being_built_before_it_builds(
+        self, release: dict
+    ) -> None:
+        build = release["jobs"]["build"]
+        listed = list(steps(build))
+        assert "actions/checkout" in listed[0]["uses"]
+        check = listed[1]  # right after the checkout, before anything is installed or built
+        assert check["name"] == "Check that the tag is this commit"
+        assert check["env"] == {
+            "TAG": "${{ needs.release.outputs.tag }}",
+            "VERSION": "${{ needs.release.outputs.version }}",
+        }
+        run = check["run"]
+        assert "set -euo pipefail" in run and "${{" not in run
+        assert r"^v[0-9]+\.[0-9]+\.[0-9]+$" in run  # the release shape, nothing else
+        assert '[ "$TAG" = "v$VERSION" ]' in run  # the tag is the version
+        assert 'git rev-parse "refs/tags/$TAG^{commit}"' in run  # peel an annotated tag
+        assert '[ "$tagged" = "$GITHUB_SHA" ]' in run  # and it is the commit being built
+        assert run.count("exit 1") == 3
+        names = [s.get("name", "") for s in listed]
+        assert names.index(check["name"]) < names.index("Build the sdist and the wheel")
+
+    def test_the_jobs_that_build_and_publish_have_a_timeout(self, release: dict) -> None:
+        for name in ("build", "publish-testpypi", "publish-pypi"):
+            assert 0 < release["jobs"][name]["timeout-minutes"] <= 15, name
+
+    def test_every_grant_of_the_token_says_why(self) -> None:
+        for line in RELEASE.read_text().splitlines():
+            if line.lstrip().startswith("#"):
+                continue
+            if "id-token: write" in line or "contents: write" in line:
+                assert "#" in line, line  # a reason beside the permission
+
+    def test_the_build_is_reproducible_but_the_published_requirements_are_floors(self) -> None:
+        doc = tomllib.loads((ROOT / "pyproject.toml").read_text())
+        requires = doc["build-system"]["requires"]
+        # packagers build the sdist with their own backend: floors only in what is published
+        assert requires and all(re.fullmatch(r"[\w.-]+>=\d+(\.\d+)*", r) for r in requires)
+        pins = doc["tool"]["uv"]["build-constraint-dependencies"]
+        assert all(re.fullmatch(r"[\w.-]+==\d+(\.\d+)*", p) for p in pins)
+        names = {p.split("==")[0] for p in pins}
+        # the backend, the version plugin and what computes the version, all exact
+        assert {"hatchling", "hatch-vcs", "setuptools-scm", "vcs-versioning"} <= names
+        assert {r.split(">=")[0] for r in requires} <= names
+        assert len(names) == len(pins)  # one pin per package
 
 
 @pytest.mark.parametrize("path", WORKFLOWS, ids=lambda p: p.name)

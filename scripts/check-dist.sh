@@ -12,7 +12,12 @@
 #      `carter --version` must report EXPECTED_VERSION (hatch-vcs read the tag), `carter --help`
 #      must run, and the bundled data (skills, knowledge, mcp, templates) must come from the
 #      installed package, not from a repository checkout.
-# Nothing here touches HOME or the network beyond the package indexes uv installs from.
+# `carter` itself never reads or writes the user's Carter files here (no `carter install`).
+# uv does use its own directories: it may download a Python into its data directory if none is
+# found (CI has one), and reads its settings. Without an argument the version check only proves
+# that the wheel's file name and `carter --version` agree; the tag check is the argument form.
+# The sdist is built with the pins of `[tool.uv] build-constraint-dependencies` because uv reads
+# them from pyproject.toml in the current directory, which is the repository root here.
 set -euo pipefail
 
 export UV_NO_CACHE=1 # nothing is restored from or saved to a cache

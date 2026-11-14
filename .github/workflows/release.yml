@@ -19,17 +19,30 @@ name: release
 # publish-*: Trusted Publishing (OIDC), no token or secret anywhere. TestPyPI first, then PyPI
 #   behind the `pypi` environment (required reviewer). The publish jobs run no repository code.
 #
-# Rules kept on purpose: `permissions: {}` at
-# the top and per job; `id-token: write` only in the two publish jobs, `contents: write` only
+# Rules kept on purpose: `permissions: {}` at the top and per job; `id-token: write` only in the two publish jobs, `contents: write` only
 # in `release`; every action pinned by SHA; no caches; `persist-credentials: false` on every
 # checkout; no `${{ }}` inside `run:` scripts (values go through `env:`).
 #
+# What is pinned and what is not. "Every action pinned by SHA" does not mean every layer is:
+# - uv (setup-uv `version:`), twine and check-wheel-contents are exact; the build backend and
+#   its build-time dependencies are exact in `[tool.uv] build-constraint-dependencies`
+#   (pyproject.toml), without hashes.
 # Residual risks, known and accepted:
 # - The semantic-release action runs a Docker image built from `python:3.14-slim-trixie` (a tag,
 #   no digest, apt/pip unpinned at build) from a Dockerfile inside the action's repository, so
-#   a digest cannot be pinned from here. Its job holds `contents: write` only.
-# - `uv` itself is installed at the version setup-uv resolves; `twine` and
-#   `check-wheel-contents` are pinned below.
+#   a digest cannot be pinned from here. Its job holds `contents: write` only, and `build`
+#   refuses a tag that is not on the commit that triggered the run.
+# - The PyPA publish action, pinned by SHA, still runs a container image from
+#   ghcr.io/pypa/gh-action-pypi-publish tagged with that SHA (a registry tag its maintainers
+#   can move), built `FROM python:3.13-slim` (no digest). It runs in the jobs that hold
+#   `id-token: write`; this is PyPA's supported path.
+# - Approving `pypi` is a second look by the person who merged, not two-person control.
+#
+# Operating it (more in docs/contributing/development.md): a run that waits for the `pypi`
+# approval holds the concurrency group below, so later pushes to main queue behind it. To retry
+# after a failure use "Re-run failed jobs", never "Re-run all jobs" (PSR would find the tag
+# already made, `released` would be "false" and nothing would publish). The `dist` artifact is
+# kept 14 days; a failure before `build` is fixed forward with a new commit.
 
 on:
   push:
@@ -77,18 +90,36 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
+    timeout-minutes: 15
     env:
       UV_NO_CACHE: "1" # nothing restored from or saved to a cache in a release job
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ needs.release.outputs.tag }}
-          fetch-depth: 0 # hatch-vcs needs the full history and the tags
+          # The commit that triggered this run, not whatever the semantic-release output names:
+          # the next step proves the tag is on it. Detached at the tagged commit with every tag
+          # fetched, hatch-vcs reads exactly the tag's version.
+          ref: ${{ github.sha }}
+          fetch-depth: 0
           persist-credentials: false
+
+      - name: Check that the tag is this commit
+        # The tag and version come from the semantic-release container: trust them only if the
+        # tag has the release shape, matches the version and is on the commit being built.
+        env:
+          TAG: ${{ needs.release.outputs.tag }}
+          VERSION: ${{ needs.release.outputs.version }}
+        run: |
+          set -euo pipefail
+          [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "::error::the release tag is not vX.Y.Z"; exit 1; }
+          [ "$TAG" = "v$VERSION" ] || { echo "::error::tag $TAG does not match version $VERSION"; exit 1; }
+          tagged="$(git rev-parse "refs/tags/$TAG^{commit}")"
+          [ "$tagged" = "$GITHUB_SHA" ] || { echo "::error::tag $TAG is on $tagged, not on $GITHUB_SHA"; exit 1; }
 
       - name: Install uv
         uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2
         with:
+          version: "0.13.8" # exact; keep equal to the dist-check job in ci.yml
           python-version: "3.14"
           enable-cache: false
 
@@ -119,6 +150,7 @@ jobs:
     name: publish-testpypi
     needs: build
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     environment:
       name: testpypi
       url: https://test.pypi.org/p/carter-ai
@@ -141,11 +173,12 @@ jobs:
     name: publish-pypi
     needs: publish-testpypi
     runs-on: ubuntu-latest
+    timeout-minutes: 15 # the work after the approval; the wait for the reviewer is not counted
     environment:
       name: pypi # required reviewer: the human approves each publication
       url: https://pypi.org/p/carter-ai
     permissions:
-      id-token: write
+      id-token: write # Trusted Publishing: the OIDC token is the only credential
     steps:
       - name: Download dist
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2

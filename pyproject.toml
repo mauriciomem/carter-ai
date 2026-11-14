@@ -53,10 +53,29 @@ dev = [
 ]
 
 [build-system]
-# Exact pins: a release is built from the same backend every time (needs hatchling >= 1.27 for
-# the PEP 639 license fields). Bump them on purpose, with the release check green.
-requires = ["hatchling==1.33.0", "hatch-vcs==0.5.0"]
+# Floors only, because this table is copied into the sdist and packagers (Debian, Fedora, nixpkgs)
+# build it with their own backend: hatchling >= 1.27 is the one that reads the PEP 639 license
+# fields. Our own builds (release and `dist-check`) are pinned below, in `[tool.uv]`.
+requires = ["hatchling>=1.27", "hatch-vcs>=0.4"]
 build-backend = "hatchling.build"
+
+[tool.uv]
+# Exact versions of the backend and everything it pulls in at build time, so a release is built
+# from the same tools every time and a new upload of one of them cannot change the artifact. uv
+# applies this to `uv build` only; it is not part of the published metadata. To bump: resolve
+# the floors above (`uv pip compile`), update this list, and let `dist-check` prove it.
+build-constraint-dependencies = [
+    "hatchling==1.33.0",
+    "hatch-vcs==0.5.0",
+    "setuptools-scm==10.3.4",
+    "vcs-versioning==2.6.0",
+    "setuptools==84.2.1",
+    "packaging==26.3",
+    "pathspec==1.1.1",
+    "pluggy==1.7.0",
+    "tomlkit==0.15.2",
+    "trove-classifiers==2026.9.21.13",
+]
 
 # Tag-driven version: the latest vX.Y.Z git tag is the ONLY version
 # source. No literal in source, no version-file written back. With no tag yet, the
