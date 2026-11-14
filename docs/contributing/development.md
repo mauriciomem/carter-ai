@@ -67,11 +67,33 @@ Use [Conventional Commits](https://www.conventionalcommits.org/) in English
 
 ## Releases
 
-Releases are automatic. On every push to `main`,
-[`release.yml`](../../.github/workflows/release.yml) reads the commits since the last
-tag, picks the next version, tags the merge commit and publishes a GitHub Release with
-generated notes. The workflow makes no commit and pushes nothing to `main` except the
-tag. There is no `CHANGELOG.md`: the
+Releases are automatic, with one human approval before PyPI. On every push to `main`,
+[`release.yml`](../../.github/workflows/release.yml) runs this chain:
+
+| Job | What it does |
+|-----|--------------|
+| `release` | Reads the commits since the last tag, picks the next version, tags the merge commit and publishes a GitHub Release with generated notes. It makes no commit and pushes nothing to `main` except the tag. No release-worthy commit: the later jobs are skipped |
+| `build` | Checks out the tag and builds the sdist and wheel **once**. `twine check --strict`, `check-wheel-contents` and a clean install of both files must pass. The same files go to both indexes |
+| `publish-testpypi` | Uploads them to TestPyPI (environment `testpypi`, no approval) |
+| `publish-pypi` | Waits for approval (environment `pypi`), then uploads the same files to PyPI |
+
+Both uploads use Trusted Publishing (OIDC): there is no PyPI token in the repository, and PyPI
+attestations are on. The same build checks run on every pull request (`dist-check` in
+[`ci.yml`](../../.github/workflows/ci.yml), through `scripts/check-dist.sh`).
+
+**What a maintainer approves.** When `publish-pypi` waits, open the run and:
+
+1. Look at the checksums in the `build` job summary and at the
+   [project page on TestPyPI](https://test.pypi.org/project/carter-ai/): the version, the
+   description rendering and the two files (sdist and wheel).
+2. Approve to publish, or reject to stop. A rejected publication is not retried by itself; fix
+   forward with a new `fix:` commit. A PyPI version number can never be reused.
+
+**What publishes.** Squash merges use the pull request title, so the title decides: a `feat:` or
+`fix:` title (or `!`/`BREAKING CHANGE:`) makes a release and starts this chain; `docs:`, `chore:`,
+`ci:` and the other types publish nothing. Choose the title with that in mind.
+
+There is no `CHANGELOG.md`: the
 [GitHub Releases](https://github.com/mauriciomem/carter-ai/releases) page is the
 changelog.
 

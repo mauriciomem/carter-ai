@@ -10,7 +10,8 @@ Find your symptom, then apply the fix. If nothing here helps, open an
 | `carter: command not found` | `~/.local/bin` isn't on your `PATH`. Run `uv tool update-shell` and open a new terminal, or `export PATH="$HOME/.local/bin:$PATH"` |
 | `opencode not found on PATH … Nothing was installed.` | Install OpenCode 2.1+ and check that `opencode --version` works in the same shell |
 | `OpenCode 2.0.x is too old` | Upgrade OpenCode to 2.1 or newer |
-| `uv tool upgrade` says there is nothing to upgrade | `uv tool install --force git+https://github.com/mauriciomem/carter-ai.git` |
+| `uv tool upgrade` says there is nothing to upgrade, or you installed from the git URL | `uv tool install --force carter-ai`. uv's record of the tool still points at the git source until you do. See [Install](guides/install.md#1-install-the-carter-command) |
+| `uv tool install carter-ai` says no matching distribution | The release is not on PyPI yet, or uv is using another index. Check <https://pypi.org/project/carter-ai/> and `uv tool install --default-index https://pypi.org/simple carter-ai` |
 | `⚠ … (user-modified, skipping)` for `AGENTS.md` | You (or another tool) changed `~/.config/opencode/AGENTS.md`, so Carter leaves it alone. Delete or rename it and run `carter install` to get Carter's version |
 
 ## Agents
