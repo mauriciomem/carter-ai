@@ -68,6 +68,8 @@ def build(raw: dict[str, Any]) -> dict[str, Any]:
         "group_of": {i: c["group"] for i, c in cls.items()},
         "item_groups": dict(other.get("item_groups", {})),
         "env_names": list(cls["env-overrides"]["items"]) + list(raw["isolation_vars"]),
+        "env_launchers": set(cls["env-overrides"]["launcher_vars"]),
+        "env_launcher_values": set(cls["env-overrides"]["launcher_values"]),
         "config_keys": [
             k.lower() for k in cls["config-flags"]["items"] + cls["config-flags"]["gate_keys"]
         ],

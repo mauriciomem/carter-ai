@@ -75,10 +75,17 @@ def build(tokens: list[tuple]) -> list[Cmd]:
                 else:
                     cur.words.append(word)
             else:
+                if len(cur.words) == 1 and cur.words[0].text in ("for", "select"):
+                    cur.assigns.append(loop_variable(word))
                 cur.words.append(word)
         i += 1
     flush()
     return cmds
+
+
+def loop_variable(word: Word) -> Word:
+    """``for NAME in ...`` assigns NAME each round: an assignment of a value nobody can judge."""
+    return Word(text=f"{word.text}=?", dynamic=True, assign=word.text, value_at=len(word.text) + 1)
 
 
 def nxt_is_brace(tokens: list[tuple], i: int) -> bool:
