@@ -19,6 +19,7 @@ from pathlib import Path
 
 from carter.guard import mirror_io
 from carter.guard.state import GuardState, load_or_empty_readonly, save
+from carter.home import STAMP_FORMAT
 from carter.identity import agent, agent_paths
 from carter.identity.agent_setup import setup_from_config
 from carter.identity.config import ConfigError, load_identity
@@ -112,7 +113,7 @@ def _config(
     nothing_left = dumps(new) == dumps(IdentityConfig(state="current"))
     if nothing_left:  # the file held only the identity: the file goes too (the backup stays)
         if not dry:
-            stamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%S")
+            stamp = datetime.now(UTC).strftime(STAMP_FORMAT)
             backup = backups_dir(base_dir) / stamp / "config.toml"
             backup.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
             backup.write_bytes(path.read_bytes())
@@ -121,7 +122,7 @@ def _config(
         report.removed.append(f"{path} (it held only the identity; a copy is in backups/)")
         return
     if not dry:
-        stamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%S")
+        stamp = datetime.now(UTC).strftime(STAMP_FORMAT)
         backup = backups_dir(base_dir) / stamp / "config.toml"
         if path.exists() and path.read_text(encoding="utf-8") != dumps(new):
             backup.parent.mkdir(parents=True, exist_ok=True, mode=0o700)

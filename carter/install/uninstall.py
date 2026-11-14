@@ -1,51 +1,143 @@
-"""Carter uninstall — manifest-driven removal with a by-convention fallback."""
+"""Carter uninstall — manifest-driven removal; without a manifest, the files this version ships
+(only while they still hold what it ships).
+
+``uninstall`` returns an :class:`UninstallReport`: the statuses and counts the CLI turns into
+the closing report. Nothing here decides how it looks.
+"""
 
 from __future__ import annotations
 
+import contextlib
+import json
+import os
+import shlex
 import shutil
+import stat
+import sys
+from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Literal
 
-from carter import ui
-from carter.home import tilde
-from carter.install.components import read_manifest
-from carter.install.console import log_ok, log_step, log_warn
+from carter import __version__, ui
+from carter.home import MAX_WORKSPACES_BYTES, WORKSPACES_FILE, tilde
+from carter.identity import ConfigError, load_identity
+from carter.install.backups import BackupRoot
+from carter.install.components import (
+    _render_opencode_agents,
+    default_config_text,
+    read_manifest,
+    write_manifest,
+)
+from carter.install.console import log_ok, log_skip, log_step, log_warn, set_verbosity
+from carter.install.files import _backup_file, _sha256
 from carter.install.mcp import global_config_files, remove_carter_servers
-from carter.install.ownership import _hash_matches, _within
+from carter.install.ownership import _hash_matches, _within, sha256_bytes
 from carter.install.paths import (
+    REPO_ROOT,
+    _carter_base,
     _opencode_base,
+    backups_dir,
+    carter_config_path,
+    guard_state_path,
+    knowledge_dir,
     manifest_path,
+    plugin_dir,
+    run_dir,
 )
 from carter.install.paths import (
     managed_roots as _managed_roots,
 )
+from carter.install.reports import render_uninstall
+
+# What happened to one file: deleted, deleted although the user edited it (a copy exists),
+# left because it may hold the user's edits, or not Carter's business (absent / outside).
+Status = Literal["removed", "edited-removed", "kept", "skipped"]
+
+# Kept on purpose: (path under ~/.carter, why). A row appears only if the path holds files.
+_KEPT = (
+    ("memories", "your notes"),
+    ("knowledge", "files you edited or added"),
+    ("state/audit", "push approvals, ops log, guard log"),
+    ("secrets", "revoke the token on GitHub too"),
+    ("backups", "copies of files Carter replaced"),
+)
+_KEPT_CONFIG = "settings you changed"
+AGENTS_MD_HEADER = (
+    "<!-- Carter writes this file once and does not overwrite it. -->"  # the template's
+)
+
+
+@dataclass(frozen=True)
+class KeptRow:
+    """Something left in ``~/.carter`` because it is the user's: where, why, how many files."""
+
+    path: Path
+    reason: str
+    count: int
+    dir: bool = True  # a folder (shown with a trailing slash); False for a single file
+
+
+@dataclass(frozen=True)
+class Workspace:
+    """A workspace Carter knows about. Carter deletes nothing in it: ``rm`` is for the user."""
+
+    path: Path
+    exists: bool  # False: its ``.carter/carter.yaml`` is gone, so there is nothing to say
+    rm: str = ""  # one ready-to-run line for the agent files; empty when none are left
+    also: tuple[str, ...] = ()  # the user's to delete, named and never turned into a command
+
+
+@dataclass
+class UninstallReport:
+    """Everything ``uninstall`` did and left, as data."""
+
+    code: int = 0  # 1 only when the guard step failed
+    removed: dict[str, int] = field(default_factory=dict)  # kind -> count; see _kind
+    edited_copies: list[tuple[Path, Path]] = field(default_factory=list)  # (agent, its copy)
+    kept_files: list[Path] = field(default_factory=list)  # may hold edits: skills, AGENTS.md...
+    mcp_servers: int = 0
+    config_removed: bool = False  # config.toml held only defaults
+    kept: list[KeptRow] = field(default_factory=list)
+    workspaces: list[Workspace] = field(default_factory=list)  # empty: no section to print
+    manager: str = ""  # the command that removes the program itself
+    leftover: bool = False  # ~/.carter still exists
+    rm_all: str = ""  # the ready ``rm -r`` line for it, absolute and shell-quoted
 
 
 def _remove_if_owned(
-    path: Path, recorded: str | None, roots: tuple[Path, ...], opencode_base: Path
-) -> None:
-    """Delete a manifest file only if Carter still owns it.
+    path: Path,
+    recorded: str | None,
+    roots: tuple[Path, ...],
+    opencode_base: Path,
+    edited_copies: dict[Path, Path] | None = None,
+) -> Status:
+    """Delete a manifest file only if Carter still owns it, and say what happened.
 
-    * Outside the managed roots (path-component check, not string prefix) → ignored.
-    * Recorded hash → delete only if the content still matches; else keep + warn.
+    * Outside the managed roots (path-component check, not string prefix), or not a file →
+      ``skipped``.
+    * Recorded hash → delete only if the content still matches; else ``kept`` + warn.
     * No recorded hash → delete only ``carter-*``
       agent/skill files, which are Carter-owned by name. Knowledge files and
-      ``AGENTS.md`` are user data and are kept.
+      ``AGENTS.md`` are user data and are ``kept``.
+    * A global agent in ``edited_copies`` (edited since install, copied to ``backups/`` before
+      the guards re-rendered it) is deleted whatever its hash says: ``edited-removed``.
     """
     resolved = path.resolve()
     if not path.is_file() or not _within(resolved, roots):
-        return
+        return "skipped"
+    edited = path in (edited_copies or {})
     if recorded is not None:
-        if not _hash_matches(path, recorded):
-            log_warn(f"Kept {tilde(path)}: edited since install")
-            return
+        if not edited and not _hash_matches(path, recorded):
+            log_skip(f"Kept {tilde(path)}: edited since install")  # -v; the report lists it
+            return "kept"
     else:
         base = opencode_base.resolve()
         owned_by_name = _within(resolved, (base / "agents", base / "skills")) and any(
             part.startswith("carter-") for part in resolved.relative_to(base).parts
         )
         if not owned_by_name:
-            log_warn(f"Kept {tilde(path)}: no recorded hash to prove it is unmodified")
-            return
+            log_skip(f"Kept {tilde(path)}: no recorded hash to prove it is unmodified")
+            return "kept"
     path.unlink()
     log_ok(f"Removed {tilde(path)}")
     # Drop now-empty carter-* skill directories (never agents/, skills/ or the roots).
@@ -55,46 +147,298 @@ def _remove_if_owned(
     while parent not in keep and _within(parent, roots) and not any(parent.iterdir()):
         parent.rmdir()
         parent = parent.parent
+    return "edited-removed" if edited else "removed"
 
 
-def uninstall(base_dir: Path | None, *, keep_guards: bool = False, assume_yes: bool = False) -> int:
+def _copy_edited_agents(
+    manifest: dict,
+    shipped: dict[Path, str],
+    base_dir: Path | None,
+    roots: tuple[Path, ...],
+    opencode_base: Path,
+) -> dict[Path, Path]:
+    """Copy the global agents the user edited into ``backups/<stamp>/``, before anything else
+    runs: the guard step re-renders every agent and refreshes its recorded hash, so afterwards
+    an edit can no longer be told from Carter's own output. Returns ``{agent: copy}``. An agent
+    with no recorded hash (an old manifest) is compared with what this version ships.
+
+    Each agent looked at is recorded in the manifest as it stands now, and the manifest is
+    written back: the guard step then finds the edit already recorded and takes no second copy.
+    Nothing has been removed yet, so a failed copy aborts the uninstall with the files intact."""
+    agents = (opencode_base / "agents").resolve()
+    hashes: dict[str, str] = manifest.get("file_hashes") or {}
+    before = dict(hashes)
+    stamp_root = BackupRoot(backups_dir(base_dir))
+    copies: dict[Path, Path] = {}
+    for listed in manifest.get("files", []):
+        path = Path(listed)
+        if path not in shipped or not path.is_file() or path.resolve().parent != agents:
+            continue
+        if not _within(path.resolve(), roots):
+            continue
+        if not _hash_matches(path, hashes.get(listed) or shipped[path]):
+            copy = _backup_file(path, stamp_root)
+            if copy is not None:
+                copies[path] = copy
+        hashes[listed] = _sha256(path)
+    if hashes != before:
+        write_manifest({**manifest, "file_hashes": hashes}, base_dir)
+    return copies
+
+
+def _is_default_config(path: Path) -> bool:
+    """True if ``config.toml`` is exactly what ``install`` writes (the header and ``schema = 2``).
+    Compared as text: a comment the user added is theirs, and a fully written file from an older
+    Carter is kept too, which is the safe side. A missing or unreadable file is not default."""
+    try:
+        return path.read_text(encoding="utf-8") == default_config_text()
+    except (OSError, ValueError):
+        return False
+
+
+def _shipped_files(base_dir: Path | None) -> dict[Path, str]:
+    """The agent and skill files this version of Carter installs, by name, each with the hash of
+    the content it would write: a file that differs was edited, or came from another version."""
+    oc = _opencode_base(base_dir)
+    agents = {
+        oc / "agents" / name: sha256_bytes(text.encode())
+        for name, text in _render_opencode_agents(base_dir).items()
+    }
+    skills = {
+        oc / "skills" / d.name / f.name: _sha256(f)
+        for d in sorted((REPO_ROOT / "skills").iterdir())
+        if d.is_dir()
+        for f in d.iterdir()
+        if f.is_file()
+    }
+    return agents | skills
+
+
+def _shipped_names(base_dir: Path | None, shipped: dict[Path, str]) -> set[Path]:
+    """Every file ``install`` can list in the manifest: the agents and skill files, the global
+    ``AGENTS.md`` and the knowledge seeds."""
+    seeds = {knowledge_dir(base_dir) / f.name for f in (REPO_ROOT / "knowledge").glob("*.md")}
+    return {*shipped, *seeds, _opencode_base(base_dir) / "AGENTS.md"}
+
+
+def manager_command(executable: str | None = None) -> str:
+    """The command that removes the program itself, read from where Python runs from."""
+    where = (executable or sys.executable).replace("\\", "/")
+    if "/uv/tools/" in where:
+        return "uv tool uninstall carter-ai"
+    if "/pipx/venvs/" in where:
+        return "pipx uninstall carter-ai"
+    if "/Cellar/" in where or "/homebrew/" in where:
+        return "brew uninstall carter-ai"
+    return "pip uninstall carter-ai"
+
+
+def _kind(path: Path, opencode_base: Path, base_dir: Path | None) -> tuple[str, str]:
+    """The report group of a removed file and the unit it counts as (a skill is a directory)."""
+    p, oc = path.resolve(), opencode_base.resolve()
+    if p.parent == oc / "agents":
+        return "agents", p.name
+    if p.is_relative_to(oc / "skills"):
+        return "skills", p.relative_to(oc / "skills").parts[0]
+    if p.is_relative_to(knowledge_dir(base_dir).resolve()):
+        return "knowledge", p.name
+    return ("AGENTS.md" if p.name == "AGENTS.md" else "other"), str(p)
+
+
+def _carters_agents_md(path: Path) -> bool:
+    """True if ``path`` starts with the line Carter writes at the top of a workspace
+    ``AGENTS.md``. Without it the file is the user's, and the report must not call it Carter's."""
+    try:
+        with open(path, "rb") as fh:
+            return fh.readline(200).decode("utf-8", "replace").strip() == AGENTS_MD_HEADER
+    except OSError:
+        return False
+
+
+def _workspace(raw: str) -> Workspace | None:
+    """What Carter left in one recorded workspace; ``None`` for a path that is not ours to talk
+    about (it exists but is no directory, or someone else owns it: the record is not trusted)."""
+    path = Path(raw)
+    try:
+        info = path.stat()
+    except OSError:
+        return Workspace(path, exists=False)
+    if not stat.S_ISDIR(info.st_mode) or info.st_uid != os.getuid():
+        return None
+    if not (path / ".carter" / "carter.yaml").is_file():
+        return Workspace(path, exists=False)
+    agents = path / ".opencode" / "agents"
+    # The glob stays outside the quotes; the path inside them cannot run anything.
+    rm = f"rm {shlex.quote(str(path))}/.opencode/agents/carter-*.md" if _any_agent(agents) else ""
+    also: tuple[str, ...] = (".carter/",)
+    if _carters_agents_md(path / "AGENTS.md"):
+        also += ("AGENTS.md",)
+    if (path / ".github/workflows/carter-review.yml").is_file():
+        also += (".github/workflows/carter-review.yml",)
+    return Workspace(path, exists=True, rm=rm, also=also)
+
+
+def _any_agent(agents: Path) -> bool:
+    return agents.is_dir() and any(agents.glob("carter-*.md"))
+
+
+def _take_workspaces(base_dir: Path | None) -> list[Workspace]:
+    """The workspaces ``init``/``update`` recorded plus the ones pinned in ``config.toml``, then
+    delete the record (an app file). A path with a control character is never shown or quoted."""
+    file = _carter_base(base_dir) / WORKSPACES_FILE
+    recorded: list[str] = []
+    # A regular file only, read without following a link and never more than 64 KiB: a link to
+    # /dev/zero or a FIFO put there must not hang or fill memory.
+    with contextlib.suppress(OSError, ValueError):
+        fd = os.open(
+            file, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_NONBLOCK", 0)
+        )
+        with os.fdopen(fd, "rb") as fh:
+            if stat.S_ISREG(os.fstat(fh.fileno()).st_mode):
+                recorded = fh.read(MAX_WORKSPACES_BYTES).decode("utf-8").splitlines()
+    try:
+        pinned = list(load_identity(carter_config_path(base_dir)).workspaces)
+    except ConfigError:
+        pinned = []
+    with contextlib.suppress(OSError):
+        file.unlink(missing_ok=True)
+    unique = dict.fromkeys(r for r in (*recorded, *pinned) if r.isprintable() and os.path.isabs(r))
+    return [w for w in map(_workspace, unique) if w]
+
+
+def _rmdir_if_empty(path: Path) -> None:
+    with contextlib.suppress(OSError):  # not empty, not a directory, gone: the user's or nothing
+        path.rmdir()
+
+
+def _count_files(root: Path) -> int:
+    return sum(len(files) for _, _, files in os.walk(root))
+
+
+def _clean_carter_home(base_dir: Path | None, report: UninstallReport) -> None:
+    """Remove what Carter left in ``~/.carter`` that holds nothing of the user's: ``run/``
+    (a cache), a ``config.toml`` that holds only defaults, and the empty directories Carter
+    made. ``rmdir`` only ever removes an empty directory, so memories, edited knowledge,
+    secrets, the audit log and backups stay by construction. Then list what stayed."""
+    carter = _carter_base(base_dir)
+    run = run_dir(base_dir)
+    if os.path.lexists(run / "guard.log"):  # the move to state/audit/ failed: it is a log
+        log_warn(f"Kept {tilde(run)}: guard.log could not be moved to state/audit/")
+    elif run.is_symlink():
+        run.unlink()
+    elif run.is_dir():
+        shutil.rmtree(run, ignore_errors=True)
+    config = carter_config_path(base_dir)
+    if config.is_file() and _is_default_config(config):
+        config.unlink()
+        report.config_removed = True
+        log_ok(f"Removed {tilde(config)} (defaults only)")
+    for sub in ("memories/user", "memories/session", "memories/repo", "memories", "knowledge"):
+        _rmdir_if_empty(carter / sub)
+    for sub in ("secrets", "state/audit", "state", "hooks", "bin", "backups", ""):
+        _rmdir_if_empty(carter / sub)
+    for rel, reason in _KEPT:
+        count = _count_files(carter / rel) if (carter / rel).is_dir() else 0
+        if count:
+            report.kept.append(KeptRow(carter / rel, reason, count))
+    if config.exists():
+        report.kept.append(KeptRow(config, _KEPT_CONFIG, 1, dir=False))
+    report.leftover = carter.exists()
+    report.rm_all = f"rm -r {shlex.quote(str(carter))}" if report.leftover else ""
+
+
+def uninstall(
+    base_dir: Path | None, *, keep_guards: bool = False, assume_yes: bool = False
+) -> UninstallReport:
     """Remove the OpenCode install and, unless ``keep_guards``, the guards (policies,
     per-agent denies, git config, guard state) that ``carter guard install`` wrote.
 
-    The guards go first (policies before files). Returns 1 if removing the guards failed;
-    everything else is still removed, as ``carter install`` never aborts on its guard step."""
+    The guards go first (policies before files), but a global agent the user edited is copied
+    before that, while it can still be told from Carter's output. ``report.code`` is 1 if
+    removing the guards failed; everything else is still removed, as ``carter install`` never
+    aborts on its guard step."""
+    set_verbosity(2 if ui.verbose() else 1)  # -v lists every file removed or kept
+    ui.header("Carter uninstall", f"v{__version__}")
     log_step("Uninstalling Carter...")
-    guard_code = 0
+    from carter.guard.hooks import migrate_guard_log
+
+    report = UninstallReport(manager=manager_command())
+    migrate_guard_log(base_dir)  # a log an older guard script left in run/ is kept, in state/audit/
+    opencode_base = _opencode_base(base_dir)
+    managed_roots = _managed_roots(base_dir)
+    first = read_manifest(base_dir)
+    # Rendered before the guard step changes what the agents carry (G2's rules).
+    shipped = _shipped_files(base_dir)
+    try:
+        copies = (
+            _copy_edited_agents(first, shipped, base_dir, managed_roots, opencode_base)
+            if first
+            else {}
+        )
+    except OSError as exc:  # nothing was removed yet
+        why = f"{exc.strerror}: {tilde(exc.filename)}" if exc.strerror and exc.filename else exc
+        ui.fail(f"could not copy your edited agents to backups ({why}); nothing was removed")
+        report.code = 1
+        return report
+    guards_before = guard_state_path(base_dir).exists()
+    plugin_before = plugin_dir(base_dir).exists()
+    identity_removed = False
     if not keep_guards:
         from carter.guard.wiring import uninstall_guards, uninstall_identity
 
-        guard_code = uninstall_guards(base_dir, assume_yes=assume_yes)
-        uninstall_identity(base_dir, assume_yes=assume_yes)  # independent of the guards
-    manifest = read_manifest(base_dir)
-    opencode_base = _opencode_base(base_dir)
-    managed_roots = _managed_roots(base_dir)
+        report.code = uninstall_guards(base_dir, assume_yes=assume_yes)
+        identity_removed = uninstall_identity(base_dir, assume_yes=assume_yes)  # independent
+    manifest = read_manifest(base_dir)  # the guard step re-wrote it
 
     if manifest:
+        # The manifest is a file anyone with the user's rights can write: only a path Carter
+        # ships by name is ever deleted from it, whatever hash it carries.
         hashes: dict[str, str] = manifest.get("file_hashes") or {}
-        for f in manifest.get("files", []):
-            _remove_if_owned(Path(f), hashes.get(f), managed_roots, opencode_base)
+        names = _shipped_names(base_dir, shipped)
+        listed = [
+            (Path(f), hashes.get(f) or shipped.get(Path(f)))  # an old manifest: what we ship
+            for f in manifest.get("files", [])
+            if Path(f) in names
+        ]
     else:
-        # No manifest — remove by convention
-        for pattern_dir in ["agents", "skills"]:
-            d = opencode_base / pattern_dir
-            if d.exists():
-                for f in d.glob("carter-*"):
-                    if f.is_file():
-                        f.unlink()
-                        log_ok(f"Removed {tilde(f)}")
-                    elif f.is_dir():
-                        shutil.rmtree(f)
-                        log_ok(f"Removed {tilde(f)}/")
+        # No manifest: the files this version ships, by name and only while their content is
+        # still what it ships; never by prefix, never a tree.
+        listed = list(shipped.items())
+    units: dict[str, set[str]] = {}
+    for path, recorded in listed:
+        status = _remove_if_owned(path, recorded, managed_roots, opencode_base, copies)
+        if status == "kept":
+            report.kept_files.append(path)
+        elif status != "skipped":
+            kind, unit = _kind(path, opencode_base, base_dir)
+            units.setdefault(kind, set()).add(unit)
+        if status == "edited-removed":
+            report.edited_copies.append((path, copies[path]))
+    report.removed = {kind: len(found) for kind, found in units.items()}
+    # What the guard step removed, found by what is gone (it prints nothing of its own).
+    report.removed.update(
+        {
+            kind: 1
+            for kind, gone in (
+                ("guards", guards_before and not guard_state_path(base_dir).exists()),
+                ("plugin", plugin_before and not plugin_dir(base_dir).exists()),
+                ("identity", identity_removed),
+            )
+            if gone
+        }
+    )
 
     log_step("Removing MCP servers (OpenCode)...")
+    servers: set[str] = set()
     for cfg in global_config_files(base_dir):
-        for name in remove_carter_servers(cfg):
+        removed = remove_carter_servers(cfg)
+        for name in removed:
+            servers.add(name)
             log_ok(f"Removed {name} from {cfg.name}")
+        if removed and _is_empty_json(cfg):
+            cfg.unlink()  # a file only Carter's servers were in
+            log_ok(f"Removed {cfg.name} (empty)")
+    report.mcp_servers = len(servers)
 
     # Remove manifest
     path = manifest_path(base_dir)
@@ -102,5 +446,14 @@ def uninstall(base_dir: Path | None, *, keep_guards: bool = False, assume_yes: b
         path.unlink()
         log_ok("Removed manifest")
 
-    ui.ok("uninstalled")
-    return guard_code
+    report.workspaces = _take_workspaces(base_dir)
+    _clean_carter_home(base_dir, report)
+    render_uninstall(report)
+    return report
+
+
+def _is_empty_json(path: Path) -> bool:
+    try:
+        return json.loads(path.read_text(encoding="utf-8")) == {}
+    except (OSError, ValueError):
+        return False

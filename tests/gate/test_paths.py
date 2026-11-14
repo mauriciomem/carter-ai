@@ -209,6 +209,12 @@ class TestControlFiles:
         ):
             assert rule_of(cmd) is None, (entry, cmd)
 
+    def test_the_unsigned_commit_log_is_a_control_file_an_agent_may_read_not_write(self) -> None:
+        log = "~/.carter/state/audit/guard.log"
+        for cmd in (f"echo x >> {log}", f"rm {log}", f"truncate -s0 {log}", f"mv {log} /tmp/x"):
+            assert rule_of(cmd) == "control-files", cmd
+        assert rule_of(f"cat {log}") is None
+
     def test_a_relative_target_after_cd_into_a_control_directory(self) -> None:
         assert rule_of("cd ~/.carter/hooks && echo x > carter-guard") == "control-files"
         assert rule_of("cd ~/.carter && echo x > isolation.json") == "control-files"
@@ -239,12 +245,29 @@ class TestControlFiles:
         )  # not recursive: cannot replace a directory's contents
 
     def test_state_and_memories_stay_editable(self) -> None:
-        for p in (
-            "~/.carter/memories/user/x.md",
-            "~/.carter/state/plans/active/x.md",
-            "~/.carter/state/audit/x"[:0] or "~/.carter/manifest.json",
-        ):
+        for p in ("~/.carter/memories/user/x.md", "~/.carter/state/plans/active/x.md"):
             assert rule_of(f"echo x > {p}") is None, p
+
+    def test_what_install_and_uninstall_trust_cannot_be_written_from_the_shell(self) -> None:
+        """Backups, the manifest and the workspace list steer what a human's command writes or
+        deletes (a planted link in ``backups/``, a forged manifest entry): read-only for agents."""
+        stamp = "~/.carter/backups/20261113T120000/.config/opencode/agents"
+        for cmd in (
+            f"mkdir -p {stamp}",
+            f"ln -s ~/.carter/hooks/carter-guard {stamp}/carter-engineer.md",
+            f"echo x > {stamp}/carter-engineer.md",
+            "rm -r ~/.carter/backups",
+            "echo '{}' > ~/.carter/manifest.json",
+            "printf x >> ~/.carter/workspaces",
+            "ln -sf /tmp/x ~/.carter/workspaces",
+        ):
+            assert rule_of(cmd) == "control-files", cmd
+        for cmd in (
+            "ls ~/.carter/backups",
+            "cat ~/.carter/manifest.json",
+            "cat ~/.carter/workspaces",
+        ):
+            assert rule_of(cmd) is None, cmd
 
     def test_interpreter_arguments_and_program_text_naming_them(self) -> None:
         assert rule_of("python3 ~/.carter/hooks/carter-guard") == "control-files"

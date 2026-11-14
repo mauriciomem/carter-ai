@@ -7,9 +7,12 @@ Every `carter` command and option. For a walkthrough, start with
 carter [--version] [-v] [--no-color] [--help] COMMAND [ARGS]
 ```
 
-Every command ends in one to three lines: `✓ result`, or `✗ cause` followed by `→ fix` with
-the error code dimmed at the end. `-v` shows the lines a normal run leaves out. Colour is off when
-the output is not a terminal, with `NO_COLOR` set, or with `--no-color`.
+Most commands end in one to three lines: `✓ result`, or `✗ cause` followed by `→ fix` with
+the error code dimmed at the end. `install` and `uninstall` print a short report instead (below).
+`-v` shows the lines a normal run leaves out. Colour is off when the output is not a terminal, with
+`NO_COLOR` set, or with `--no-color`; bold and dim stay, and the text is the same as when piped. On a
+terminal that cannot show Unicode, `✓ ! ✗ → ·` become `ok ! x -> -`. Warnings and errors go to
+stderr, the rest to stdout.
 
 | Command | Purpose |
 |---------|---------|
@@ -45,9 +48,27 @@ Install Carter for OpenCode 2.1 or newer. Writes to `~/.config/opencode/` and
 | `-v`, `--verbose` | Show every step |
 | `--debug` | Debug output |
 
-A normal run prints warnings and one line (`✓ installed  8 agents · 27 skills`), then the guard
-step ([`carter guard install`](#carter-guard-install)), which asks one question, and ends with the
-next step (`→ restart the OpenCode server from a clean terminal …`). Safe to re-run. It also
+A normal run prints a header (`Carter install  v0.19.2`), warnings, the guard step
+([`carter guard install`](#carter-guard-install)), which asks one question, and then a report:
+
+```text
+Carter install  v0.19.2
+
+✓ Installed
+    agents            8  new
+    skills           27  new
+    knowledge files   4  new
+    config.toml          created
+    guards               g2 · hooks · sudo-docker · read-edit-denies · config-edit
+
+→ restart the OpenCode server from a clean terminal to load the agents and plugin
+```
+
+On a re-run the notes read `up to date` or `1 updated`. `old backups` appears when copies older than
+15 days were removed. If the install replaced files you had edited, one line on stderr names the
+folder with their copies (`! Replaced 3 files you had edited  (copies in ~/.carter/backups/<timestamp>/)`).
+A row that does not fit the terminal width is split over two lines; nothing is cut. `-v` also lists
+every file. Safe to re-run. It also
 creates `~/.carter/config.toml` on a first install; an existing file is never rewritten. A key in it
 that Carter doesn't read is named at the end, once, with its file
 (``⚠ unknown key `x.y` in <path> → delete it``). If your global `AGENTS.md` has your own edits, it is
@@ -57,8 +78,15 @@ See [Install](../guides/install.md#upgrade) and [MCP servers](../guides/mcp-serv
 ## carter uninstall
 
 Remove the Carter OpenCode install: agents, skills, global rules, unedited knowledge
-files, `carter-*` MCP servers and the install manifest. Edited files, memories,
-`config.toml` and the audit log are kept.
+files, the MCP servers Carter ships (`carter-github`, `carter-terraform`, `carter-atlassian`) and
+the install manifest, `~/.carter/run/` and a `config.toml` that is exactly what `install` wrote (a
+comment or a value of yours keeps it). An agent you
+edited is removed too, after a copy to `~/.carter/backups/<timestamp>/` (it carries guard rules that
+no longer apply), and reported. Edited skills, global rules and knowledge files, memories, secrets,
+backups and the audit log are kept. Directories Carter made and left empty go. Without a manifest it
+removes only the agent and skill files this version ships, by name and only while their content is
+what this version ships (an edited one stays and is listed); your own `carter-*` skills, agents and
+MCP servers stay.
 
 | Option | Description |
 |--------|-------------|
@@ -68,7 +96,51 @@ files, `carter-*` MCP servers and the install manifest. Edited files, memories,
 It asks nothing. Unless `--keep-guards` is given, uninstall first removes the policy guards it
 installed, only where it is unchanged since (anything you edited is kept and reported), then the
 LLM identity files. An agent shell keeps both. A guard problem is printed and makes the exit code 1
-but never stops the rest of the removal.
+but never stops the rest of the removal. Workspaces are never touched; the ones recorded by
+`carter init` and `carter update` in `~/.carter/workspaces` are listed with a ready-to-run `rm`
+line for their `carter-*` agent files.
+
+It ends with a report (skills are counted as directories):
+
+```text
+Carter uninstall  v0.19.2
+
+✓ Removed
+    guards
+    agents            8
+    skills           25
+    plugin
+    AGENTS.md
+    MCP servers       2
+    knowledge files   4
+    config.toml          was all defaults
+
+! Removed although you edited them
+    ~/.config/opencode/agents/carter-pm.md
+      → copy: ~/.carter/backups/20261112T101500/.config/opencode/agents/carter-pm.md
+
+· Kept, because they are yours
+    ~/.config/opencode/skills/carter-adr/SKILL.md          you edited it
+    ~/.carter/memories/                                12  your notes
+    ~/.carter/backups/                                  4  copies of files Carter replaced
+
+· Workspaces, not touched  (Carter files you can remove)
+    ~/src/proj   rm /home/u/src/proj/.opencode/agents/carter-*.md
+    also yours to delete: .carter/, AGENTS.md, .github/workflows/carter-review.yml
+
+✓ Uninstalled
+→ last step, remove the command     uv tool uninstall carter-ai
+→ to delete everything Carter kept  rm -r /home/u/.carter
+```
+
+Empty sections are not printed; with nothing installed it is the header, `✓ Uninstalled  nothing
+was left to remove` and the last step. The `!` section goes to stderr (a `carter uninstall > file`
+leaves it on screen); everything else is stdout. The command that removes the program depends on
+where Carter runs from: `uv tool uninstall`, `pipx uninstall`, `brew uninstall` or
+`pip uninstall carter-ai`. The `rm` lines use absolute, shell-quoted paths, and `AGENTS.md` is named
+as yours to delete only when it starts with the line Carter writes. Without an install record, an
+agent or skill you edited is kept and listed, not removed. If removing the guards fails, the verdict
+is a red `✗` and the first step is `carter guard remove`. `-v` lists every file removed or kept.
 
 ## carter init
 

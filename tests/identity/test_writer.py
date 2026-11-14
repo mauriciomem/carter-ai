@@ -108,11 +108,64 @@ class TestRoundTrip:
         assert dumps(FULL) == dumps(FULL)
 
 
-class TestUnsetOptionalEnumsAreOmitted:
+class TestOnlyNonDefaultsAreStored:
+    PARTIAL = replace(
+        EMPTY,
+        identity=Identity(login="llm-bot", id=12345),
+        signing=Signing(public_key_path="~/.ssh/llm-bot.pub"),
+        workspaces={"/w": Workspace(max_tier="t0")},
+    )
+
+    def test_a_default_config_is_the_header_and_the_schema(self):
+        assert dumps(EMPTY).splitlines() == [writer_mod._HEADER, "schema = 2"]
+
+    def test_the_header_says_what_is_stored_and_that_comments_go(self):
+        assert "Only what you set is stored" in writer_mod._HEADER
+        assert "drop comments" in writer_mod._HEADER
+
+    def test_only_what_differs_is_written_and_empty_tables_are_left_out(self):
+        text = dumps(self.PARTIAL)
+        assert tomllib.loads(text) == {
+            "schema": 2,
+            "identity": {
+                "login": "llm-bot",
+                "id": 12345,
+                "signing": {"public_key_path": "~/.ssh/llm-bot.pub"},
+            },
+            "workspaces": {"/w": {"max_tier": "t0"}},
+        }
+        for left_out in ("[attribution]", "[broker]", "disclosure", 'role = ""'):
+            assert left_out not in text
+
+    def test_a_value_equal_to_its_default_is_not_written(self):
+        explicit = replace(
+            EMPTY, identity=Identity(role="co-author"), signing=Signing(format="ssh")
+        )
+        assert dumps(explicit) == dumps(EMPTY)
+
+    @pytest.mark.parametrize("cfg", [EMPTY, PARTIAL, FULL], ids=["empty", "partial", "full"])
+    def test_what_is_stored_reads_back_equal(self, tmp_path, cfg):
+        path = tmp_path / "config.toml"
+        write_config(cfg, path)
+        assert same(load_identity(path), cfg)
+        assert dumps(load_identity(path)) == dumps(cfg)
+
+    def test_a_fully_written_older_file_shrinks_on_its_first_rewrite(self, tmp_path):
+        path = tmp_path / "config.toml"
+        path.write_text(
+            'schema = 2\n[identity]\nrole = "co-author"\nlogin = "bot"\nid = 0\n'
+            '[attribution]\nfooter = "_This comment was generated with Carter._"\n'
+            "[broker]\nmin_dwell_ms = 500\n"
+        )
+        cfg = load_identity(path)
+        assert write_config(cfg, path) is True
+        assert tomllib.loads(path.read_text()) == {"schema": 2, "identity": {"login": "bot"}}
+        assert same(load_identity(path), cfg)
+
     def test_unset_workspace_enums_are_never_written_as_empty(self):
         text = dumps(replace(EMPTY, workspaces={"/w": Workspace(max_tier="t0")}))
         table = tomllib.loads(text)["workspaces"]["/w"]
-        assert table == {"allow_project_opencode_edit": False, "max_tier": "t0"}
+        assert table == {"max_tier": "t0"}
         assert 'role = ""' not in text and 'require_tier = ""' not in text
 
     def test_whole_file_has_no_empty_enum(self):
@@ -382,7 +435,7 @@ class TestRefusesUnmodelledKeys:
 
     def test_unknown_key_inside_a_known_table(self, tmp_path):
         path = tmp_path / "config.toml"
-        path.write_text(dumps(EMPTY).replace('name = ""', 'name = ""\nsurprise = "x"'))
+        path.write_text('schema = 2\n[identity]\nlogin = "bot"\nsurprise = "x"\n')
         with pytest.raises(UnmodelledKeysError) as exc:
             write_config(FULL, path)
         assert exc.value.keys == ("identity.surprise",)

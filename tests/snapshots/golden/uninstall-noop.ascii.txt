@@ -1,0 +1,4 @@
+Carter uninstall  v0.19.2
+
+ok Uninstalled  nothing was left to remove
+-> last step, remove the command  uv tool uninstall carter-ai

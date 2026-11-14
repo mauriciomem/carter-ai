@@ -77,6 +77,12 @@ def run_dir(base_dir: Path | None) -> Path:
     return _carter_base(base_dir) / "run"
 
 
+def guard_log_path(base_dir: Path | None) -> Path:
+    """``~/.carter/state/audit/guard.log`` (0600): one line per unsigned-commit warning of the
+    guard script. Agents may read it, not edit it (``state/audit/`` is a control path)."""
+    return _carter_base(base_dir) / "state" / "audit" / "guard.log"
+
+
 def guard_script_path(base_dir: Path | None) -> Path:
     """``~/.carter/hooks/carter-guard``: the one POSIX guard script every hook calls."""
     return _carter_base(base_dir) / "hooks" / "carter-guard"

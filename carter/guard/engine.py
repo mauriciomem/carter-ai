@@ -38,6 +38,7 @@ from carter.guard import (
     repohooks,
 )
 from carter.guard.state import GuardState, load_or_empty_readonly, quarantine_corrupt, save
+from carter.home import STAMP_FORMAT
 from carter.identity import ConfigError, load_identity
 from carter.identity.errors import E_GIT_OLD, E_STATE_INVALID, IdentityError, registry
 from carter.identity.policyset import Statement, consent_groups
@@ -96,7 +97,7 @@ def format_error(exc: BaseException) -> str | None:
 
 
 def _stamp(now: datetime | None = None) -> str:
-    return (now or datetime.now(UTC)).strftime("%Y%m%dT%H%M%S")
+    return (now or datetime.now(UTC)).strftime(STAMP_FORMAT)
 
 
 def builtin_agents() -> list[str]:

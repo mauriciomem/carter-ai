@@ -490,8 +490,13 @@ class TestTrailerIdempotence:
         assert world.message().startswith("subject\n\nbody line one\nbody line two\n\n" + COAUTHOR)
 
 
+def guard_log(world: World) -> Path:
+    """Where the hook records an unsigned commit: with the other audit files."""
+    return world.chome / "state" / "audit" / "guard.log"
+
+
 class TestPostCommit:
-    """Warn only: never fails the commit, never undoes it, leaves a line in run/guard.log."""
+    """Warn only: never fails the commit, never undoes it, leaves a line in state/audit/guard.log."""
 
     def warn(
         self, world: World, sh: list[str], env: dict[str, str]
@@ -505,27 +510,45 @@ class TestPostCommit:
         world.configure("t1")
         done = self.warn(world, sh, world.env())
         assert (done.returncode, done.stderr) == (0, "")
-        assert not (world.chome / "run" / "guard.log").exists()
+        assert not guard_log(world).exists()
 
     def test_t2_commit_without_the_llm_signature_warns_and_logs(
         self, world: World, sh: list[str]
     ) -> None:
         world.configure("t2")
-        (world.chome / "run").mkdir(exist_ok=True, mode=0o700)
         done = self.warn(world, sh, world.env())
         head = world.git("rev-parse", "--short", "HEAD").stdout.strip()
         assert done.returncode == 0
         assert f"HEAD {head} is unsigned or not signed by the LLM key" in done.stderr
         assert registry()["E-GUARD-UNSIGNED"].remediation in done.stderr
-        log = (world.chome / "run" / "guard.log").read_text()
+        log = guard_log(world).read_text()
         assert "E-GUARD-UNSIGNED" in log and head in log and log[-1] == "\n"
-        assert oct((world.chome / "run" / "guard.log").stat().st_mode & 0o777) == "0o600"
+        assert oct(guard_log(world).stat().st_mode & 0o777) == "0o600"
 
-    def test_a_missing_run_directory_is_not_an_error(self, world: World, sh: list[str]) -> None:
+    def test_the_log_directory_is_created_private_and_the_old_location_is_not_used(
+        self, world: World, sh: list[str]
+    ) -> None:
         world.configure("t2")
-        shutil.rmtree(world.chome / "run", ignore_errors=True)
+        assert not (world.chome / "state").exists()
+        self.warn(world, sh, world.env())
+        for directory in (world.chome / "state", guard_log(world).parent):
+            assert oct(directory.stat().st_mode & 0o777) == "0o700"
+        assert not (world.chome / "run" / "guard.log").exists()
+
+    def test_a_second_warning_appends(self, world: World, sh: list[str]) -> None:
+        world.configure("t2")
+        for _ in range(2):
+            self.warn(world, sh, world.env())
+        assert len(guard_log(world).read_text().splitlines()) == 2
+
+    def test_an_unwritable_log_directory_still_warns_and_never_fails(
+        self, world: World, sh: list[str]
+    ) -> None:
+        world.configure("t2")
+        (world.chome / "state").write_text("a file where the directory should be")
         done = self.warn(world, sh, world.env())
         assert done.returncode == 0 and "unsigned" in done.stderr
+        assert not guard_log(world).exists()
 
     def test_a_human_commit_is_silent(self, world: World, sh: list[str]) -> None:
         world.configure("t2")
@@ -564,7 +587,7 @@ class TestRealSigning:
         assert done.stderr == ""
         assert count(w.message()) == 1
         assert self.signature(w) == f"G|{w.key.fingerprint}"  # type: ignore[union-attr]
-        assert not (w.chome / "run" / "guard.log").exists()
+        assert not guard_log(w).exists()
 
     def test_every_commit_shape_still_ends_signed_with_one_trailer(
         self, signing_world: World
@@ -581,7 +604,7 @@ class TestRealSigning:
         # and post-commit (not --no-verify-able) warns and logs. It never undoes the commit.
         assert done.returncode == 0
         assert "unsigned or not signed by the LLM key" in done.stderr
-        assert "E-GUARD-UNSIGNED" in (w.chome / "run" / "guard.log").read_text()
+        assert "E-GUARD-UNSIGNED" in guard_log(w).read_text()
         assert self.signature(w).startswith("N|")
 
     def test_no_verify_changes_nothing_about_the_checks_or_the_warning(
@@ -615,7 +638,7 @@ class TestRealSigning:
         )  # fmt: skip
         assert done.returncode == 0, done.stderr
         assert "unsigned or not signed" in done.stderr
-        assert "E-GUARD-UNSIGNED" in (world.chome / "run" / "guard.log").read_text()
+        assert "E-GUARD-UNSIGNED" in guard_log(world).read_text()
 
 
 class TestHostileInput:

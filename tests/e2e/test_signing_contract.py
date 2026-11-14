@@ -270,7 +270,7 @@ class TestK1AndTheTiers:
         )  # the hook added it once
         assert (
             "unsigned or not signed" not in out
-            and not (lab.rig.home / ".carter" / "run" / "guard.log").exists()
+            and not (lab.rig.home / ".carter" / "state" / "audit" / "guard.log").exists()
         )
         flags = set(status(lab.rig)[0]["flags"])
         assert not {"sign-unavailable", "config-error"} & flags

@@ -24,6 +24,7 @@ from typing import NamedTuple
 
 from carter.guard import gitconfig, mirror_io
 from carter.guard.state import GuardState, load_or_empty_readonly, save
+from carter.home import STAMP_FORMAT
 from carter.identity import agent_paths, agent_setup, github, shim
 from carter.identity.config import ConfigError, load_identity
 from carter.identity.errors import (
@@ -384,7 +385,7 @@ def apply_add(plan: AddPlan, *, home: Path | None = None) -> list[str]:
     snapshot = {p: p.read_bytes() if p.is_file() else None for p in touched}
     frag_dir = carter / "gitconfig.d"
     frags_before = {p: p.read_bytes() for p in frag_dir.glob("*")} if frag_dir.is_dir() else {}
-    stamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%S")
+    stamp = datetime.now(UTC).strftime(STAMP_FORMAT)
     notices: list[str] = []
     try:
         read = load_or_empty_readonly(guard_state_path(None))

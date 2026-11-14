@@ -11,6 +11,7 @@ from pathlib import Path
 
 from carter import __version__, ui, unknownkeys
 from carter.home import tilde
+from carter.install.backups import BackupRoot, prune
 from carter.install.components import (
     install_agents,
     install_knowledge,
@@ -26,11 +27,13 @@ from carter.install.console import _log, log_debug, log_step, set_verbosity
 from carter.install.mcp import configure_mcp_servers
 from carter.install.paths import backups_dir
 from carter.install.prereqs import (
+    PrerequisiteError,
     check_credentials,
     check_optional_tools,
     detect_environment,
     require_opencode,
 )
+from carter.install.reports import InstallReport, render_install
 
 
 def run(
@@ -54,6 +57,8 @@ def run(
         PrerequisiteError: OpenCode is missing or older than 2.1.
     """
     set_verbosity(verbosity)
+    if verbosity >= 1:
+        ui.header("Carter install", f"v{__version__}")
 
     _mcp_label = "no (use --mcp to install)"
     if mcp:
@@ -71,7 +76,13 @@ def run(
         log_step("Skipping MCP credentials (no --mcp flag)")
 
     now = datetime.now(UTC)
-    backup_root = backups_dir(base_dir) / now.strftime("%Y%m%dT%H%M%S")
+    backup_root = BackupRoot(backups_dir(base_dir), now)
+    try:  # made now, so a backups folder that cannot be used stops the install before any write
+        backup_root.make()
+    except OSError as exc:
+        raise PrerequisiteError(
+            f"Cannot use {tilde(backup_root.parent)} for backups ({exc})."
+        ) from exc
 
     manifest: dict = {
         "version": __version__,
@@ -85,11 +96,13 @@ def run(
     existing = read_manifest(base_dir)
     if existing:
         manifest["installed_at"] = existing.get("installed_at", now.isoformat())
+        # The previous hashes tell an edit from Carter's own output (see files._install_content).
+        manifest["file_hashes"].update(existing.get("file_hashes") or {})
         log_debug("Existing installation found — updating")
 
     agent_stats = install_agents(base_dir, manifest, backup_root)
     skill_stats = install_skills(base_dir, manifest, backup_root)
-    remove_retired_skills(base_dir, existing, backup_root)
+    remove_retired_skills(base_dir, existing)
     install_opencode_rules(base_dir, manifest, existing)
     knowledge_count = install_knowledge(base_dir, manifest, backup_root)
     memory_count = install_memories(base_dir, manifest)
@@ -102,11 +115,11 @@ def run(
         mcp_count = 0
 
     manifest_path = write_manifest(manifest, base_dir)
+    backup_root.close()
+    pruned = prune(backups_dir(base_dir))
+    if pruned:
+        _log(f"pruned {pruned} old backups", level=2)
 
-    total_agents = agent_stats["created"] + agent_stats["updated"] + agent_stats["unchanged"]
-
-    if verbosity >= 1:
-        ui.ok("installed", f"{total_agents} agents · {skill_stats['skills']} skills")
     _log(f"Ops config: {'created' if ops_created else 'kept'}", level=2)
     _log(f"MCP servers: {mcp_count}", level=2)
     _log(f"Knowledge files: {knowledge_count} new · memory dirs: {memory_count} new", level=2)
@@ -122,10 +135,26 @@ def run(
         )
 
     code = 0
+    accepted: list[str] = []
     if guards:
+        from carter.guard.report import accepted_groups
         from carter.guard.wiring import install_guards
 
         code = install_guards(base_dir, assume_yes=assume_yes)
+        accepted = accepted_groups(base_dir) if code == 0 else []
+    if verbosity >= 1:
+        render_install(
+            InstallReport(
+                agents=agent_stats,
+                skills=skill_stats,
+                knowledge=knowledge_count,
+                config_created=ops_created,
+                pruned=pruned,
+                guards=accepted,
+                replaced=backup_root.copied,
+                backup_dir=backup_root.path,
+            )
+        )
     # leftover keys Carter no longer reads, once per key, after everything else
     unknownkeys.report(unknownkeys.once_per_key(unknownkeys.host(base_dir)))
     return code

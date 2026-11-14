@@ -73,6 +73,9 @@
     {"id": "deny-edit-carter-run", "group": "config-edit", "action": "tool.use", "resource": "edit:<home>/.carter/run/*", "effect": "deny"},
     {"id": "deny-edit-carter-secrets", "group": "config-edit", "action": "tool.use", "resource": "edit:<home>/.carter/secrets/*", "effect": "deny"},
     {"id": "deny-edit-carter-audit", "group": "config-edit", "action": "tool.use", "resource": "edit:<home>/.carter/state/audit/*", "effect": "deny"},
+    {"id": "deny-edit-carter-backups", "group": "config-edit", "action": "tool.use", "resource": "edit:<home>/.carter/backups/*", "effect": "deny"},
+    {"id": "deny-edit-carter-manifest", "group": "config-edit", "action": "tool.use", "resource": "edit:<home>/.carter/manifest.json", "effect": "deny"},
+    {"id": "deny-edit-carter-workspaces", "group": "config-edit", "action": "tool.use", "resource": "edit:<home>/.carter/workspaces", "effect": "deny"},
     {"id": "deny-edit-carter-isolation", "group": "config-edit", "action": "tool.use", "resource": "edit:<home>/.carter/isolation.json", "effect": "deny"},
     {"id": "deny-edit-carter-gitconfig", "group": "config-edit", "action": "tool.use", "resource": "edit:<home>/.carter/gitconfig*", "effect": "deny"},
     {"id": "deny-edit-carter-guard-state", "group": "config-edit", "action": "tool.use", "resource": "edit:<home>/.carter/guard-state.json", "effect": "deny"},
@@ -87,6 +90,6 @@
   "plugin": {"gate_args": ["-I", "-m", "carter.gate", "--json"], "env_args": ["-I", "-m", "carter.identity.env", "--json"], "pat_prefix": "github_pat_", "gh_token_dummy": "carter-no-read-token", "self_test_ms": 2000, "gate_timeout_ms": 1000, "env_timeout_ms": 2000, "status_dir": "run/plugin-status", "broker_args": ["-I", "-m", "carter.broker_cli"], "b_caller": "carter-devops"},
   "shim": {"y_ops": ["verify", "find-principals", "check-novalidate"], "namespace": "git", "sign_options": ["-n", "-f", "-U"], "min_git": [2, 40], "min_openssh": [8, 4]},
   "credential_paths": ["/.ssh/", "/.config/gh/", "opencode/service.json", "/.git-credentials", "/proc/*/environ", "/Library/Keychains/", "/.carter/secrets/"],
-  "control_paths": ["~/.carter/bin/", "~/.carter/hooks/", "~/.carter/run/", "~/.carter/isolation.json", "~/.carter/gitconfig", "~/.carter/gitconfig.d/", "~/.carter/config.toml", "~/.carter/guard-state.json", "~/.carter/state/audit/", "~/.config/opencode/plugin/", "~/.config/opencode/plugins/"],
+  "control_paths": ["~/.carter/bin/", "~/.carter/hooks/", "~/.carter/run/", "~/.carter/isolation.json", "~/.carter/gitconfig", "~/.carter/gitconfig.d/", "~/.carter/config.toml", "~/.carter/guard-state.json", "~/.carter/state/audit/", "~/.carter/backups/", "~/.carter/manifest.json", "~/.carter/workspaces", "~/.config/opencode/plugin/", "~/.config/opencode/plugins/"],
   "human_identity": {"fallback_emails": ["carter-bot@*"], "fallback_pairs": [["Carter", "state@carter.invalid"]], "note": "Values that mean git had no real human identity: `carter-bot@*` on its own, and the state-commit fallback pair Carter + state@carter.invalid (each alone is a valid identity). Rendered into the guard script at install; tests/data/human_identity_vectors.json is the shared oracle."}
 }

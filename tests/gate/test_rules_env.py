@@ -58,6 +58,16 @@ class TestEveryListedName:
         assert rule_of(f"export OK=1 {name}=2") == "env-overrides"
 
 
+def test_the_guard_script_config_variable_cannot_be_set_by_an_agent() -> None:
+    """``CARTER_GUARD_CONFIG`` moves the unsigned-commit log; ``CARTER_*`` already covers it."""
+    for form in (
+        "CARTER_GUARD_CONFIG=/tmp/x git commit -m x",
+        "export CARTER_GUARD_CONFIG=/tmp/x",
+        "env CARTER_GUARD_CONFIG=/tmp/x git status",
+    ):
+        assert rule_of(form) == "env-overrides", form
+
+
 class TestReadingIsFine:
     @pytest.mark.parametrize(
         "cmd",

@@ -12,7 +12,8 @@ import pytest
 from click.testing import CliRunner
 
 from carter.cli import main
-from carter.install.mcp import configure_mcp_servers, merge_mcp_servers
+from carter.install.backups import BackupRoot
+from carter.install.mcp import configure_mcp_servers, merge_mcp_servers, remove_carter_servers
 from carter.install.prereqs import PrerequisiteError, parse_opencode_version, require_opencode
 
 
@@ -108,7 +109,7 @@ class TestInstallGate:
 class TestV2McpShape:
     def _wire(self, base: Path, servers: list[str] | None = None) -> dict:
         manifest: dict = {}
-        configure_mcp_servers(base, manifest, base / "backup", servers=servers)
+        configure_mcp_servers(base, manifest, BackupRoot(base / "backup"), servers=servers)
         return json.loads((base / "opencode" / "opencode.json").read_text())
 
     def test_servers_live_under_mcp_servers(self, tmp_path: Path) -> None:
@@ -137,7 +138,7 @@ class TestV2McpShape:
         """Omitting the selection wires all servers. Per-agent MCP scope lives in agent
         frontmatter, so the global wiring has exactly the server keys, no role keys."""
         manifest: dict = {}
-        configure_mcp_servers(tmp_path, manifest, tmp_path / "backup")
+        configure_mcp_servers(tmp_path, manifest, BackupRoot(tmp_path / "backup"))
         triple = ["carter-github", "carter-terraform", "carter-atlassian"]
         assert manifest["mcp_servers"] == triple
         servers = json.loads((tmp_path / "opencode" / "opencode.json").read_text())["mcp"]
@@ -197,8 +198,123 @@ class TestMergeIntoUserConfig:
 
     def test_backup_before_modify(self, tmp_path: Path) -> None:
         path = self._cfg(tmp_path, json.dumps({"theme": "x"}))
-        merge_mcp_servers(path, {"carter-github": {}}, tmp_path / "backup")
-        assert json.loads((tmp_path / "backup" / "opencode.json").read_text()) == {"theme": "x"}
+        merge_mcp_servers(path, {"carter-github": {}}, BackupRoot(tmp_path / "backup"))
+        copy = next((tmp_path / "backup").rglob("opencode.json"))
+        assert json.loads(copy.read_text()) == {"theme": "x"}
+
+
+class TestMergeIsIdempotent:
+    """``install --mcp`` run again changes nothing, so it copies and reports nothing."""
+
+    ENTRY = {"carter-github": {"type": "local", "command": ["d"]}}
+
+    def test_a_file_that_already_holds_the_entries_is_neither_copied_nor_rewritten(
+        self, tmp_path: Path
+    ) -> None:
+        path = tmp_path / "opencode.jsonc"
+        text = '{\n  // mine\n  "mcp": {"servers": {"carter-github": {"type": "local", "command": ["d"]}}},\n}\n'  # noqa: E501
+        path.write_text(text)
+        assert merge_mcp_servers(path, self.ENTRY, BackupRoot(tmp_path / "backup")) is True
+        assert path.read_text() == text  # comments included
+        assert not (tmp_path / "backup").exists()
+        assert not (tmp_path / "opencode.jsonc.carter-backup").exists()
+
+    def test_a_changed_entry_is_updated_with_a_copy(self, tmp_path: Path) -> None:
+        path = tmp_path / "opencode.json"
+        path.write_text(json.dumps({"mcp": {"servers": {"carter-github": {"type": "old"}}}}))
+        assert merge_mcp_servers(path, self.ENTRY, BackupRoot(tmp_path / "backup")) is True
+        assert json.loads(path.read_text())["mcp"]["servers"] == self.ENTRY
+        assert len(list((tmp_path / "backup").rglob("opencode.json"))) == 1
+
+    def test_a_second_install_with_mcp_makes_no_new_backup_and_reports_no_replacement(
+        self, fake_opencode, tmp_path: Path
+    ) -> None:
+        fake_opencode()
+        base = tmp_path / "home"
+        cfg = base / "opencode" / "opencode.json"
+        cfg.parent.mkdir(parents=True)
+        cfg.write_text(json.dumps({"theme": "x"}))
+        first = _install(base, "--mcp")
+        assert first.exit_code == 0, first.output
+        folders = sorted((base / "carter" / "backups").iterdir())
+        assert len(folders) == 1  # the copy of the file as the user left it
+        second = _install(base, "--mcp")
+        assert second.exit_code == 0, second.output
+        assert sorted((base / "carter" / "backups").iterdir()) == folders
+        assert "Replaced" not in second.stderr
+
+
+class TestLinksInTheWay:
+    """``opencode.json`` and its ``.carter-backup`` sit where agents can plant links (security
+    review B, round 2): a link is never written through to a file of Carter's."""
+
+    COMMENTED = '{\n  // mine\n  "theme": "x",\n}\n'
+    ENTRY = {"carter-github": {"type": "local", "command": ["d"]}}
+
+    @staticmethod
+    def _guard() -> Path:
+        guard = Path.home() / ".carter" / "hooks" / "carter-guard"
+        guard.parent.mkdir(parents=True)
+        guard.write_text("the real guard\n")
+        guard.chmod(0o755)
+        return guard
+
+    def test_a_link_planted_at_the_comment_backup_is_not_written_through(
+        self, tmp_path: Path
+    ) -> None:
+        guard = self._guard()
+        cfg = tmp_path / "opencode.json"
+        cfg.write_text(self.COMMENTED)
+        cfg.chmod(0o755)
+        backup = tmp_path / "opencode.json.carter-backup"
+        backup.symlink_to(guard)
+        assert merge_mcp_servers(cfg, self.ENTRY) is True
+        assert guard.read_text() == "the real guard\n" and guard.stat().st_mode & 0o777 == 0o755
+        assert not backup.is_symlink() and backup.read_text() == self.COMMENTED
+        assert backup.stat().st_mode & 0o777 == 0o600  # not the source's 755
+
+    def test_a_backup_that_cannot_be_made_stops_the_rewrite(self, tmp_path: Path) -> None:
+        cfg = tmp_path / "opencode.json"
+        cfg.write_text(self.COMMENTED)
+        (tmp_path / "opencode.json.carter-backup").mkdir()  # in the way, not removable as a file
+        assert merge_mcp_servers(cfg, self.ENTRY) is False
+        assert cfg.read_text() == self.COMMENTED  # the comments are not lost without a copy
+
+    def test_a_config_linked_into_carters_own_files_is_not_rewritten(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        state = Path.home() / ".carter" / "guard-state.json"
+        state.parent.mkdir(parents=True)
+        state.write_text('{"consents": {}}\n')
+        cfg = tmp_path / "opencode.json"
+        cfg.symlink_to(state)
+        assert merge_mcp_servers(cfg, self.ENTRY) is False
+        assert state.read_text() == '{"consents": {}}\n' and cfg.is_symlink()
+        assert "points into Carter's own files" in capsys.readouterr().err
+
+    def test_removal_does_not_rewrite_a_config_linked_into_carters_files_either(
+        self, tmp_path: Path
+    ) -> None:
+        state = Path.home() / ".carter" / "isolation.json"
+        state.parent.mkdir(parents=True)
+        text = json.dumps({"mcp": {"servers": {"carter-github": {}}}})
+        state.write_text(text)
+        cfg = tmp_path / "opencode.json"
+        cfg.symlink_to(state)
+        assert remove_carter_servers(cfg) == []
+        assert state.read_text() == text
+
+    def test_a_link_into_dotfiles_is_still_followed(self, tmp_path: Path) -> None:
+        dotfiles = tmp_path / "dotfiles" / "opencode.json"
+        dotfiles.parent.mkdir()
+        dotfiles.write_text(json.dumps({"theme": "x"}))
+        cfg = tmp_path / "opencode.json"
+        cfg.symlink_to(dotfiles)
+        assert merge_mcp_servers(cfg, self.ENTRY) is True
+        assert (
+            cfg.is_symlink()
+            and "carter-github" in json.loads(dotfiles.read_text())["mcp"]["servers"]
+        )
 
 
 class TestUninstallV2:
@@ -223,7 +339,7 @@ class TestJsoncTarget:
     COMMENTED = '{\n  // my theme\n  "theme": "x",\n}\n'
 
     def _wire(self, base: Path) -> None:
-        configure_mcp_servers(base, {}, base / "backup", servers=["github"])
+        configure_mcp_servers(base, {}, BackupRoot(base / "backup"), servers=["github"])
 
     def _servers(self, path: Path) -> set[str]:
         from carter.install.jsonc import _load_jsonc
@@ -294,7 +410,11 @@ class TestJsoncTarget:
         assert result.exit_code == 0, result.output
         from carter.install.jsonc import _load_jsonc
 
-        assert _load_jsonc(cfg) == {"theme": "x", "mcp": {"servers": {}}}
+        # Only the names Carter ships go; a stray ``carter-old`` entry is not Carter's to remove.
+        assert _load_jsonc(cfg) == {
+            "theme": "x",
+            "mcp": {"servers": {"carter-old": {"type": "local"}}},
+        }
         assert (oc / "opencode.jsonc.carter-backup").read_text().startswith("// keep")
         assert "comments" in result.output
 

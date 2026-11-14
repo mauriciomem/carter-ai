@@ -72,8 +72,13 @@ def test_next_prints_only_ascii(capsys: pytest.CaptureFixture[str], monkeypatch)
 def test_every_printed_glyph_has_an_ascii_stand_in(glyph: str, stand_in: str) -> None:
     ascii_stream = io.TextIOWrapper(io.BytesIO(), encoding="ascii")
     utf8_stream = io.TextIOWrapper(io.BytesIO(), encoding="utf-8")
-    assert ui._plain(f"a {glyph} b", ascii_stream) == f"a {stand_in} b"
-    assert ui._plain(f"a {glyph} b", utf8_stream) == f"a {glyph} b"
+    assert ui._plain(f"a{glyph}b", ascii_stream) == f"a{stand_in}b"
+    assert ui._plain(f"a{glyph}b", utf8_stream) == f"a{glyph}b"
+
+
+def test_an_inline_list_separator_becomes_a_comma_on_an_ascii_stream() -> None:
+    stream = io.TextIOWrapper(io.BytesIO(), encoding="ascii")
+    assert ui._plain("g2 · hooks · · lone", stream) == "g2, hooks, - lone"
 
 
 def test_a_character_without_a_stand_in_becomes_an_escape_so_a_pasted_path_stays_exact() -> None:

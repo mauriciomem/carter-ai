@@ -8,6 +8,7 @@ the knowledge base, manifest and backups live under ``~/.carter`` (see
 from __future__ import annotations
 
 import json
+import shlex
 import shutil
 from datetime import UTC, datetime
 from pathlib import Path
@@ -17,9 +18,11 @@ from carter.home import tilde
 from carter.identity import ConfigError
 from carter.identity.config import read_document
 from carter.identity.schema import IdentityConfig
-from carter.identity.writer import write_config
+from carter.identity.writer import dumps, write_config
+from carter.install.backups import BackupRoot
 from carter.install.console import log_err, log_ok, log_skip, log_step, log_warn
 from carter.install.files import (
+    _control_target,
     _install_file,
     _install_rendered_file,
     _sha256,
@@ -29,6 +32,7 @@ from carter.install.paths import (
     REPO_ROOT,
     _carter_base,
     _opencode_base,
+    backups_dir,
     knowledge_dir,
     manifest_path,
 )
@@ -37,7 +41,7 @@ from carter.install.paths import (
 def install_agents(
     base_dir: Path | None,
     manifest: dict,
-    backup_root: Path,
+    backup_root: BackupRoot,
 ) -> dict[str, int]:
     """Install the OpenCode agents rendered from the shipped guarded defaults."""
     log_step("Installing agents...")
@@ -61,8 +65,7 @@ def rerender_agents(base_dir: Path | None) -> dict[str, int] | None:
     agents_dir = _opencode_base(base_dir) / "agents"
     ours = {str(agents_dir / name) for name in _render_opencode_agents(base_dir)}
     manifest["files"] = [f for f in manifest["files"] if f not in ours]
-    backup_root = _carter_base(base_dir) / "backups" / "agents"
-    stats = install_agents(base_dir, manifest, backup_root)
+    stats = install_agents(base_dir, manifest, BackupRoot(backups_dir(base_dir)))
     manifest["updated_at"] = datetime.now(UTC).isoformat()
     write_manifest(manifest, base_dir)
     return stats
@@ -90,7 +93,7 @@ def _render_opencode_agents(base_dir: Path | None = None) -> dict[str, str]:
 def install_skills(
     base_dir: Path | None,
     manifest: dict,
-    backup_root: Path,
+    backup_root: BackupRoot,
 ) -> dict[str, int]:
     log_step("Installing skills...")
     src_dir = REPO_ROOT / "skills"
@@ -115,17 +118,14 @@ def install_skills(
     return stats
 
 
-def remove_retired_skills(
-    base_dir: Path | None,
-    previous: dict | None,
-    backup_root: Path,
-) -> int:
+def remove_retired_skills(base_dir: Path | None, previous: dict | None) -> int:
     """Remove ``carter-*`` skills Carter no longer ships, if still Carter-owned.
 
     A retired skill directory is deleted only when every file in it is listed in
     the previous install manifest and still has its recorded hash. Otherwise it is
     kept and the user is told how to remove it. Non-``carter-*`` skills and skills
-    Carter still ships are never touched. Returns the number of skills removed.
+    Carter still ships are never touched. Nothing is copied first: what goes is Carter's own
+    unchanged output. Returns the number of skills removed.
     """
     skills_root = _opencode_base(base_dir) / "skills"
     if not skills_root.is_dir():
@@ -146,12 +146,14 @@ def remove_retired_skills(
                 for f in files
             )
         if not owned:
+            # A name is the user's (or an agent's) input: quoted, absolute, and no command at all
+            # for one with a control character in it.
+            rm = f": rm -r {shlex.quote(str(skill))}" if str(skill).isprintable() else ""
             log_warn(
                 f"{shown} (no longer shipped by Carter; edited or not recorded, kept)",
-                hint=f"remove it manually if unused: rm -r {shown}",
+                hint=f"remove it manually if unused{rm}",
             )
             continue
-        shutil.copytree(skill, backup_root / "retired-skills" / skill.name, dirs_exist_ok=True)
         shutil.rmtree(skill)
         log_ok(f"{shown} (removed: no longer shipped by Carter)")
         removed += 1
@@ -230,6 +232,11 @@ def install_opencode_rules(
     shown = tilde(dst)
     owned = True
     recorded = ((previous or {}).get("file_hashes") or {}).get(str(dst))
+    # A link into dotfiles is followed (people keep this file there). One that points at nothing
+    # would make the write create its target, and one into Carter's own files must not be written.
+    if dst.is_symlink() and (not dst.exists() or _control_target(dst)):
+        log_warn(f"{shown} (a symlink to nothing, or into Carter's own files; not written)")
+        return
     if not dst.exists():
         dst.write_text(_OPENCODE_AGENTS_MD, encoding="utf-8")
         log_ok(shown)
@@ -279,7 +286,7 @@ def install_memories(
 def install_knowledge(
     base_dir: Path | None,
     manifest: dict,
-    backup_root: Path,
+    backup_root: BackupRoot,
 ) -> int:
     log_step("Initializing knowledge base...")
     src_dir = REPO_ROOT / "knowledge"
@@ -302,6 +309,11 @@ def install_knowledge(
             count += 1
 
     return count
+
+
+def default_config_text() -> str:
+    """The exact text ``install`` writes to a missing ``config.toml``."""
+    return dumps(IdentityConfig(state="current"))
 
 
 def ensure_config(path: Path) -> bool:
@@ -338,7 +350,11 @@ def install_ops(base_dir: Path | None, manifest: dict) -> bool:
 def write_manifest(manifest: dict, base_dir: Path | None) -> Path:
     path = manifest_path(base_dir)
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
+    # Hashes are kept only for the paths the manifest still lists.
+    listed = set(manifest.get("files", []))
+    hashes = {k: v for k, v in manifest.get("file_hashes", {}).items() if k in listed}
+    text = json.dumps({**manifest, "file_hashes": hashes}, indent=2)
+    path.write_text(text + "\n", encoding="utf-8")
     return path
 
 

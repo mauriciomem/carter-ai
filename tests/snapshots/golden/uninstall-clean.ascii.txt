@@ -1,0 +1,13 @@
+Carter uninstall  v0.19.2
+
+ok Removed
+    guards
+    agents            8
+    skills           27
+    plugin
+    AGENTS.md
+    knowledge files   4
+    config.toml          was all defaults
+
+ok Uninstalled
+-> last step, remove the command  uv tool uninstall carter-ai

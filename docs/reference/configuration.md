@@ -178,11 +178,36 @@ English.
 
 ## User config: `~/.carter/config.toml`
 
-`carter install` creates it if it is missing and never rewrites it. A key Carter doesn't read is
+`carter install` creates it if it is missing, with one comment line and `schema = 2`, and never
+rewrites it. Only what you set is stored: a key that holds its default is not written, and the
+defaults below apply to every key that is absent. Commands that change the file (`identity add`,
+`carter update` pins) rewrite it in that form and drop its comments (a copy of the previous file goes
+to `~/.carter/backups/`); an older file that lists every key shrinks the first time. After
+`carter identity add` it looks like this:
+
+```toml
+schema = 2
+
+[identity]
+login = "carter-bot"
+id = 12345
+name = "Carter Bot"
+email = "12345+carter-bot@users.noreply.github.com"
+
+[identity.signing]
+public_key_path = "/home/you/.ssh/carter-bot.pub"
+public_key = "ssh-ed25519 AAAA..."
+fingerprint = "SHA256:..."
+private_key_path = "/home/you/.ssh/carter-bot"
+```
+
+A key Carter doesn't read is
 named by `carter check --host`, `carter install` and `carter update` with its file, for example
 ``⚠ unknown key `x.y` in /home/you/.carter/config.toml → delete it``, and `carter identity add` refuses
 to rewrite the file until you delete it. Loading the file never writes to it. `carter check` reports
 unknown keys in `.carter/carter.yaml` and in plans the same way.
+
+Every key you may set, with its default:
 
 ```toml
 schema = 2
@@ -257,7 +282,7 @@ the LLM signs agent commits; if signing cannot happen the commit fails and stays
 `max_tier = "t1"` for a workspace lets agents commit unsigned there. A `max_tier` takes effect for
 the hooks when you run `carter update` (it writes the cap into `~/.carter/gitconfig`); the plugin
 reads `config.toml` directly. **Worktree limit:** the cap follows the *main* repository of a
-linked worktree, not the worktree's path (`carter check --host` lists such worktrees). Unset optional
-keys are left out of the file. A file Carter cannot read or that is incomplete
+linked worktree, not the worktree's path (`carter check --host` lists such worktrees). Keys that hold
+their default are left out of the file. A file Carter cannot read or that is incomplete
 (for example, signing keys without an account) is `E-CONFIG`: agent commits are refused
 instead of falling back to defaults.

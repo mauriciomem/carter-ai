@@ -56,11 +56,21 @@ class TestJobs:
             "macos-sh",
             "install-smoke",
             "identity-ssh",
+            "lifecycle",
             "ci-template",
         ],
     )
     def test_the_job_exists(self, ci: dict, name: str) -> None:
         assert name in ci["jobs"]
+
+    def test_lifecycle_runs_its_directory_on_both_systems_without_skips(self, ci: dict) -> None:
+        job = ci["jobs"]["lifecycle"]
+        assert set(job["strategy"]["matrix"]["os"]) == {"ubuntu-latest", "macos-latest"}
+        assert job["strategy"]["fail-fast"] is False and not job.get("continue-on-error")
+        runs = " ".join(s.get("run", "") for s in steps(job))
+        assert "pytest tests/lifecycle" in runs and " -m " not in runs and "--deselect" not in runs
+        sources = (ROOT / "tests" / "lifecycle").glob("*.py")
+        assert not [p.name for p in sources if re.search(r"\bskip(if)?\b", p.read_text())]
 
     def test_plugin_runs_node_22_and_24_on_both_systems(self, ci: dict) -> None:
         matrix = ci["jobs"]["plugin"]["strategy"]["matrix"]
