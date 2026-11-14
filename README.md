@@ -52,7 +52,7 @@ modeling, Jira, and more) that an agent loads only when the task needs one.
 You need [uv](https://docs.astral.sh/uv/), git and OpenCode 2.1 or newer on your `PATH`.
 
 ```bash
-uv tool install carter-ai    # from PyPI; or: pipx install carter-ai
+uv tool install carter-ai    # from PyPI; or: pipx install carter-ai (needs Python 3.11 or newer)
 carter install
 ```
 

@@ -240,11 +240,13 @@ them when installing, so to check a release yourself:
 ```bash
 uvx pypi-attestations verify pypi \
   --repository https://github.com/mauriciomem/carter-ai \
-  pypi:carter_ai-X.Y.Z-py3-none-any.whl
+  pypi:carter_ai-X.Y.Z-py3-none-any.whl     # or pypi:carter_ai-X.Y.Z.tar.gz for the sdist
 ```
 
-It passes only if the wheel was built by the Carter repository's own release workflow. The
-expected publisher is in [SECURITY.md](../../SECURITY.md#verifying-a-release).
+It passes only if PyPI holds an attestation for that file that names the Carter repository
+(`mauriciomem/carter-ai`). The workflow and the environment are not checked by the command: the
+**Provenance** section of the file on pypi.org shows them. The expected values are in
+[SECURITY.md](../../SECURITY.md#verifying-a-release).
 
 ## Uninstall
 

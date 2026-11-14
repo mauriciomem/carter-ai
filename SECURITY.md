@@ -38,18 +38,27 @@ the files carry [PEP 740](https://peps.python.org/pep-0740/) attestations.
 |------|----------------|
 | PyPI project | `carter-ai` |
 | Source repository | `mauriciomem/carter-ai` |
-| Publishing workflow | `release.yml` |
+| Publishing workflow | `.github/workflows/release.yml` |
+| Git ref | `refs/heads/main` |
 | GitHub environment | `pypi` (each publication needs a maintainer's approval) |
 | GitHub Releases | Created by the same workflow |
 
-Check a wheel:
+Every release is uploaded to TestPyPI first as a rehearsal. TestPyPI files are not supported for
+installs: install `carter-ai` only from PyPI.
+
+Check the wheel or the sdist (the file name is on the PyPI page of that version):
 
 ```bash
 uvx pypi-attestations verify pypi \
   --repository https://github.com/mauriciomem/carter-ai \
-  pypi:carter_ai-X.Y.Z-py3-none-any.whl
+  pypi:carter_ai-X.Y.Z-py3-none-any.whl     # or pypi:carter_ai-X.Y.Z.tar.gz
 ```
 
-If a release on PyPI has no attestation, or names another repository or workflow, do not use it
-and report it as described above. uv and pip do not check attestations when installing, so
-pinning a version (`uv tool install carter-ai==X.Y.Z`) and verifying are your choice to make.
+This passes only if PyPI holds an attestation for that exact file that names the repository
+`mauriciomem/carter-ai`. It does not check the workflow or the environment: the **Provenance**
+section of each file on pypi.org shows them, and they must match the table above.
+
+If a release on PyPI has no attestation, or names another repository, workflow or environment,
+do not use it and report it as described above. uv and pip do not check attestations when
+installing, so pinning a version (`uv tool install carter-ai==X.Y.Z`) and verifying are your
+choice to make.
