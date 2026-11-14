@@ -55,6 +55,15 @@ writes and `gh api *` are denied to every agent, DevOps included, and `gh api` i
 reads. Opening, editing and commenting on a pull request (`gh pr create|edit|comment`) is allowed
 Pushing is done by you with `carter push`.
 
+With the guards installed, the command gate also refuses environment variables that make `gh`
+or `git` start another program: the pager, editor and browser variables (`GH_PAGER`, `PAGER`,
+`GIT_PAGER`, `GH_EDITOR`, `GIT_EDITOR`, `GIT_SEQUENCE_EDITOR`, `VISUAL`, `EDITOR`, `GH_BROWSER`,
+`BROWSER`), `GIT_EXTERNAL_DIFF`, `GIT_PROXY_COMMAND`, `SSH_ASKPASS`, `LESSOPEN` and `LESSCLOSE`.
+They may be set to nothing or `cat` (`GIT_PAGER=cat git log`), nothing else. `GH_FORCE_TTY`,
+`GH_HOST`, `GH_REPO`, `GH_ENTERPRISE_TOKEN` and `GITHUB_ENTERPRISE_TOKEN` are refused with any
+value, and `-R`/`--repo` must be `OWNER/REPO`, with no host part. The list is generated into the
+`carter-ops` skill from `carter/identity/g2_rules.json` (the `env-overrides` rule).
+
 ## Effects per level
 
 | Category | `guarded` | `strict` |

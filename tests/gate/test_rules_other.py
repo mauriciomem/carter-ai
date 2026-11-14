@@ -81,6 +81,42 @@ class TestGh:
         decision = __import__("carter.gate", fromlist=["check"]).check(cmd)
         assert decision.rule == "other-verbs" and "after the subcommand" in (decision.message or "")
 
+    @pytest.mark.parametrize(
+        "cmd",
+        [
+            "gh pr view 1 -R github.localhost/o/r",
+            "gh pr view 1 -R evil.example/o/r",
+            "gh pr view 1 -Rgithub.localhost/o/r",
+            "gh pr view 1 -R=github.localhost/o/r",
+            "gh pr view 1 --repo github.localhost/o/r",
+            "gh pr view 1 --repo=github.localhost/o/r",
+            "gh pr view 1 --repo https://github.localhost/o/r",
+            "gh pr view 1 -wR github.localhost/o/r",
+            "gh issue list --json number -R h/o/r",
+            "gh pr view 1 -R $REPO",
+            "gh pr view 1 --repo=$(git remote get-url origin)",
+        ],
+    )
+    def test_a_repo_with_a_host_part_or_a_computed_repo_is_refused(self, cmd: str) -> None:
+        decision = __import__("carter.gate", fromlist=["check"]).check(cmd)
+        assert decision.rule == "other-verbs" and "HOST/OWNER/REPO" in (decision.message or "")
+
+    @pytest.mark.parametrize(
+        "cmd",
+        [
+            "gh pr view 1 -R o/r",
+            "gh pr view 1 -Ro/r",
+            "gh pr view 1 -R=o/r",
+            "gh pr view 1 --repo o/r",
+            "gh pr view 1 --repo=o/r",
+            "gh pr view 1 -R 'o/r'",
+            "gh pr create --title x --head feat/x --body-file docs/a/b.md",
+            "gh pr view 1 -R",
+        ],
+    )
+    def test_owner_repo_stays_fine(self, cmd: str) -> None:
+        assert rule_of(cmd) is None, cmd
+
     def test_paths_and_wrappers_do_not_hide_gh(self) -> None:
         for cmd in ("/usr/bin/gh api x", "env gh api x", "command gh api x", "sh -c 'gh api x'"):
             assert rule_of(cmd) == "other-verbs", cmd

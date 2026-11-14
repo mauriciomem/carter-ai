@@ -23,6 +23,8 @@ GH_HINT = (
     "comment, issue view|list, run view|list, repo view, search); `gh pr merge|close|review` and "
     "`gh api` are never allowed. Ask the human for anything else."
 )
+# `-R v`, `-Rv`, `-R=v`, a cluster such as `-wR v`, `--repo v` and `--repo=v`
+REPO_FLAG = re.compile(r"(?:--repo(?:=|\Z)|-[A-Za-z]*?R=?)(?P<value>.*)\Z", re.S)
 GIT_WORD = re.compile(r"(?<![\w.-])(git|gh)(?![\w-])")
 SUDO_WORD = re.compile(r"(?<![\w.-])(sudo|docker|podman)(?![\w-])")
 
@@ -47,6 +49,19 @@ def gh(eng: Judge, argv: list[Word]) -> None:
         for e in rules()["gh_allow"]
     ):
         eng.deny("other-verbs", GH_HINT)
+    for i, w in enumerate(args):
+        m = REPO_FLAG.match(w.text)
+        if not m:
+            continue
+        detached = not m["value"] and i + 1 < len(args)  # `-R o/r`: the value is the next word
+        source = args[i + 1] if detached else w
+        text = source.text if detached else m["value"]
+        if not source.static or text.count("/") >= 2:
+            eng.deny(
+                "other-verbs",
+                "`-R` takes OWNER/REPO written out; a host part (HOST/OWNER/REPO) or a computed "
+                "value is refused.",
+            )
 
 
 def other_verb(eng: Judge, name: str, argv: list[Word]) -> None:
