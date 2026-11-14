@@ -104,6 +104,37 @@ class TestGh:
     @pytest.mark.parametrize(
         "cmd",
         [
+            "gh pr view 1 -R git@github.localhost:o/r",
+            "gh pr view 1 --repo=git@github.localhost:o/r",
+            "gh pr view 1 -R ssh://git@github.localhost/o/r",
+            "gh pr view 1 -R github.localhost:o/r",
+            "gh pr view 1 -R user@o/r",
+            "gh pr view https://github.localhost/o/r/pull/1",
+            "gh issue view https://github.localhost/o/r/issues/1",
+            "gh pr diff https://github.localhost/o/r/pull/1",
+            "gh pr checks http://evil.example/o/r/pull/1",
+            "gh pr comment https://evil.example/o/r/pull/1 --body x",
+        ],
+    )
+    def test_scp_style_urls_and_selector_urls_off_github_are_refused(self, cmd: str) -> None:
+        decision = __import__("carter.gate", fromlist=["check"]).check(cmd)
+        assert decision.rule == "other-verbs", cmd
+
+    @pytest.mark.parametrize(
+        "cmd",
+        [
+            "gh pr view https://github.com/o/r/pull/1",
+            "gh issue view https://GitHub.com/o/r/issues/1 --json title",
+            "gh pr comment 1 --body https://example.com/x",
+            "gh pr comment 1 --body 'see git@host:o/r'",
+        ],
+    )
+    def test_github_urls_and_urls_in_a_body_are_fine(self, cmd: str) -> None:
+        assert rule_of(cmd) is None, cmd
+
+    @pytest.mark.parametrize(
+        "cmd",
+        [
             "gh pr view 1 -R o/r",
             "gh pr view 1 -Ro/r",
             "gh pr view 1 -R=o/r",

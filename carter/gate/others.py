@@ -25,6 +25,7 @@ GH_HINT = (
 )
 # `-R v`, `-Rv`, `-R=v`, a cluster such as `-wR v`, `--repo v` and `--repo=v`
 REPO_FLAG = re.compile(r"(?:--repo(?:=|\Z)|-[A-Za-z]*?R=?)(?P<value>.*)\Z", re.S)
+URL_HOST = re.compile(r"https?://([^/]+)")
 GIT_WORD = re.compile(r"(?<![\w.-])(git|gh)(?![\w-])")
 SUDO_WORD = re.compile(r"(?<![\w.-])(sudo|docker|podman)(?![\w-])")
 
@@ -44,24 +45,35 @@ def gh(eng: Judge, argv: list[Word]) -> None:
             "other-verbs",
             "put `-R` after the subcommand (`gh pr view 12 -R o/r`); a leading -R is refused.",
         )
-    if not any(
-        len(args) >= len(e) and all(args[i].text == e[i] for i in range(len(e)))
+    allowed = [
+        e
         for e in rules()["gh_allow"]
-    ):
+        if len(args) >= len(e) and all(args[i].text == e[i] for i in range(len(e)))
+    ]
+    if not allowed:
         eng.deny("other-verbs", GH_HINT)
+    elif reaches_other_host(args, len(allowed[0])):
+        eng.deny(
+            "other-verbs",
+            "gh sends its token to the host it is pointed at: `-R` takes OWNER/REPO written out "
+            "(no HOST/OWNER/REPO, `git@host:` or URL, nothing computed) and a pull request or "
+            "issue URL must be on github.com.",
+        )
+
+
+def reaches_other_host(args: list[Word], verb_len: int) -> bool:
+    """True for a ``-R``/``--repo`` that is not a plain OWNER/REPO, or a URL off github.com."""
     for i, w in enumerate(args):
         m = REPO_FLAG.match(w.text)
-        if not m:
-            continue
-        detached = not m["value"] and i + 1 < len(args)  # `-R o/r`: the value is the next word
-        source = args[i + 1] if detached else w
-        text = source.text if detached else m["value"]
-        if not source.static or text.count("/") >= 2:
-            eng.deny(
-                "other-verbs",
-                "`-R` takes OWNER/REPO written out; a host part (HOST/OWNER/REPO) or a computed "
-                "value is refused.",
-            )
+        if m:
+            detached = not m["value"] and i + 1 < len(args)  # `-R o/r`: the value is the next word
+            value = args[i + 1] if detached else w
+            text = value.text if detached else m["value"]
+            if not value.static or text.count("/") >= 2 or ":" in text or "@" in text:
+                return True
+    selector = args[verb_len].text if len(args) > verb_len else ""  # `gh pr view URL`
+    url = URL_HOST.match(selector)
+    return url is not None and url.group(1).lower() != "github.com"
 
 
 def other_verb(eng: Judge, name: str, argv: list[Word]) -> None:

@@ -1959,10 +1959,10 @@ cases:
   rule: env-overrides
   why: a computed value cannot be judged
 - id: lv-unset-pager
-  command: unset PAGER
+  command: unset GIT_PAGER GIT_DIR
   expect: deny
   rule: env-overrides
-  why: a listed name is not unset from an agent shell (same as every listed name)
+  why: a protected name stays refused next to a launcher (a launcher alone may be unset)
 - id: lv-gh-host
   command: GH_HOST=github.localhost gh pr view 1
   expect: deny
@@ -2026,3 +2026,201 @@ cases:
   command: gh issue view 3 --repo=o/r --json title
   expect: allow
   why: OWNER/REPO in the long form
+- id: lv2-env-dashdash
+  command: env -- GH_BROWSER=sudo gh pr view 1 --web
+  expect: deny
+  rule: env-overrides
+  why: GNU env still takes NAME=value words after --
+- id: lv2-env-i-dashdash
+  command: env -i -- GIT_EXTERNAL_DIFF=sudo git diff
+  expect: deny
+  rule: env-overrides
+  why: the same after -i and --
+- id: lv2-time-prefix
+  command: time GH_BROWSER=sudo gh pr view 1 --web
+  expect: deny
+  rule: env-overrides
+  why: bash's time keyword takes prefix assignments
+- id: lv2-time-p-prefix
+  command: time -p GH_BROWSER=sudo gh pr view 1 --web
+  expect: deny
+  rule: env-overrides
+  why: time -p too
+- id: lv2-time-braces
+  command: '{ time GIT_EXTERNAL_DIFF=sudo git diff; }'
+  expect: deny
+  rule: env-overrides
+  why: time inside a group
+- id: lv2-export-computed-name
+  command: x=GH_BROWSER; export $x=sudo; gh pr view 1 --web
+  expect: deny
+  rule: env-overrides
+  why: a computed name may be a launcher
+- id: lv2-export-braced-name
+  command: x=GH_BROWSER; export ${x}=sudo; gh pr view 1 --web
+  expect: deny
+  rule: env-overrides
+  why: a braced computed name
+- id: lv2-nameref
+  command: declare -n r=GH_BROWSER; export r=sudo; gh pr view 1 --web
+  expect: deny
+  rule: env-overrides
+  why: a nameref writes through to the launcher
+- id: lv2-nameref-late
+  command: declare -n r; r=GH_BROWSER
+  expect: deny
+  rule: env-overrides
+  why: a nameref bound later is refused too
+- id: lv2-read
+  command: read EDITOR <<< sudo; git commit
+  expect: deny
+  rule: env-overrides
+  why: read stores into an exported variable
+- id: lv2-printf-v
+  command: printf -v EDITOR sudo; git commit
+  expect: deny
+  rule: env-overrides
+  why: printf -v stores into an exported variable
+- id: lv2-set-a-read
+  command: set -a; read GH_BROWSER <<< sudo; gh pr view 1 --web
+  expect: deny
+  rule: env-overrides
+  why: allexport makes read export
+- id: lv2-set-a-printf
+  command: set -a; printf -v GH_BROWSER sudo; gh pr view 1 --web
+  expect: deny
+  rule: env-overrides
+  why: allexport makes printf -v export
+- id: lv2-set-a-default
+  command: 'set -a; : ${GH_BROWSER:=sudo}; gh pr view 1 --web'
+  expect: deny
+  rule: env-overrides
+  why: a default-assign expansion writes the variable
+- id: lv2-default-plain
+  command: echo ${GH_BROWSER=sudo}
+  expect: deny
+  rule: env-overrides
+  why: the = form of the default-assign expansion
+- id: lv2-set-a-for
+  command: set -a; for GH_BROWSER in sudo; do gh pr view 1 --web; done
+  expect: deny
+  rule: env-overrides
+  why: a for loop assigns its variable
+- id: lv2-xargs-env-stdin
+  command: echo 'sudo id' | xargs env
+  expect: deny
+  rule: dynamic-command
+  why: the program comes from stdin through env
+- id: lv2-xargs-env-assign-stdin
+  command: echo 'GH_BROWSER=sudo gh pr view 1 --web' | xargs env
+  expect: deny
+  rule: dynamic-command
+  why: the whole command line comes from stdin
+- id: lv2-xargs-replace-env
+  command: echo GH_BROWSER=sudo | xargs -I{} env {} gh pr view 1 --web
+  expect: deny
+  rule: dynamic-command
+  why: the replacement string is the assignment
+- id: lv2-xargs-replace-program
+  command: echo sudo | xargs -I{} {} id
+  expect: deny
+  rule: dynamic-command
+  why: the replacement string is the program
+- id: lv2-xargs-replace-shell
+  command: echo 'sudo id' | xargs -I{} sh -c '{}'
+  expect: deny
+  rule: dynamic-command
+  why: stdin becomes shell text
+- id: lv2-source-subst
+  command: source <(echo export GH_BROWSER=sudo); gh pr view 1 --web
+  expect: deny
+  rule: dynamic-command
+  why: inline script text from a substitution, like bash <(...)
+- id: lv2-source-stdin-herestring
+  command: . /dev/stdin <<< 'export GH_BROWSER=sudo'; gh pr view 1 --web
+  expect: deny
+  rule: env-overrides
+  why: inline script text through stdin is judged like bash <<<
+- id: lv2-source-pipe
+  command: echo 'export X=1' | source /dev/stdin
+  expect: deny
+  rule: dynamic-command
+  why: a piped script is not judged
+- id: lv2-gh-scp-repo
+  command: gh pr view 1 -R git@github.localhost:o/r
+  expect: deny
+  rule: other-verbs
+  why: an scp-style repo carries a host
+- id: lv2-gh-url-pr
+  command: gh pr view https://github.localhost/o/r/pull/1
+  expect: deny
+  rule: other-verbs
+  why: a pull request URL picks the host
+- id: lv2-gh-url-issue
+  command: gh issue view https://github.localhost/o/r/issues/1
+  expect: deny
+  rule: other-verbs
+  why: an issue URL picks the host
+- id: lv2-gh-url-diff
+  command: gh pr diff https://github.localhost/o/r/pull/1
+  expect: deny
+  rule: other-verbs
+  why: a diff URL picks the host
+- id: lv2-unset-protected
+  command: unset GIT_DIR
+  expect: deny
+  rule: env-overrides
+  why: only launchers may be unset; GIT_DIR stays protected
+- id: lv2-env-unset-protected
+  command: env -u HOME ls
+  expect: deny
+  rule: env-overrides
+  why: env -u of a protected name
+- id: ok-git-editor-true-rebase
+  command: GIT_EDITOR=true git rebase --continue
+  expect: allow
+  why: 'the non-interactive rebase idiom: true runs no editor'
+- id: ok-git-editor-colon-amend
+  command: 'GIT_EDITOR=: git commit --amend'
+  expect: allow
+  why: ': is the no-op editor'
+- id: ok-sequence-editor-colon
+  command: 'GIT_SEQUENCE_EDITOR=: git rebase -i HEAD~3'
+  expect: allow
+  why: accept the todo list as it is
+- id: ok-editor-true-amend
+  command: EDITOR=true git commit --amend
+  expect: allow
+  why: EDITOR=true
+- id: ok-export-git-editor-true
+  command: export GIT_EDITOR=true
+  expect: allow
+  why: export of a no-op launcher
+- id: ok-env-unset-pager
+  command: env -u PAGER git log
+  expect: allow
+  why: removing a launcher is harmless
+- id: ok-unset-pager
+  command: unset PAGER
+  expect: allow
+  why: removing a launcher is harmless
+- id: ok-xargs-named-program
+  command: git ls-files | xargs wc -l
+  expect: allow
+  why: the program is written out
+- id: ok-xargs-replace-argument
+  command: ls | xargs -I{} wc -l {}
+  expect: allow
+  why: the replacement string is an argument, not the program
+- id: ok-source-file
+  command: source ./env.sh
+  expect: allow
+  why: a script file is the accepted residual
+- id: ok-gh-github-url
+  command: gh pr view https://github.com/o/r/pull/1
+  expect: allow
+  why: a github.com URL is fine
+- id: ok-read-plain-name
+  command: read -r line <<< x
+  expect: allow
+  why: read into a name that is not listed

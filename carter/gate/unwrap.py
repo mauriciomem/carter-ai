@@ -14,6 +14,7 @@ import re
 from collections.abc import Callable
 
 from carter.gate.words import Cmd, Word
+from carter.gate.wrappers import env, skip, time
 
 SHELLS = frozenset({"sh", "bash", "zsh", "dash", "ksh", "ash", "mksh", "csh", "tcsh", "fish"})
 INTERPRETERS = re.compile(
@@ -34,6 +35,13 @@ CODE_FLAGS = {
     "deno": "e",
 }
 MAX_WRAP = 12
+STDIN_FILES = ("/dev/stdin", "/dev/fd/", "/proc/self/fd/")
+# wrappers that run the words after them as a command line; with nothing after them (``xargs env``)
+# the program comes from standard input
+RUNNERS = frozenset(
+    {"env", "command", "exec", "nohup", "setsid", "time", "nice", "ionice", "timeout", "stdbuf"}
+    | {"unbuffer", "chronic", "watch"}
+)
 
 
 class Eff:
@@ -50,6 +58,8 @@ class Eff:
         self.stdin_shell = False  # a shell with no -c and no script file: program from stdin
         self.script_subst = False  # a shell whose script is a <(...) substitution
         self.dynamic = False
+        self.from_stdin = False  # an xargs ran: it appends the words it reads to the command
+        self.replace = ""  # xargs -I/-i/--replace string
 
 
 def base(word: Word) -> str:
@@ -62,65 +72,6 @@ def interpreter_kind(name: str) -> str | None:
     return re.sub(r"[0-9.]+\Z", "", name) or name
 
 
-def _skip(
-    args: list[Word], valued: str | set[str], long_valued: tuple[str, ...] = (), positional: int = 0
-) -> list[Word]:
-    """Skip options (those in ``valued`` take a value) then ``positional`` leading words."""
-    i = 0
-    while i < len(args):
-        a = args[i].text
-        if a == "--":
-            i += 1
-            break
-        if not a.startswith("-") or a == "-":
-            break
-        if a.startswith("--"):
-            i += 2 if a in long_valued else 1
-        elif len(a) == 2 and a[1] in valued:
-            i += 2
-        else:
-            i += 1  # a flag cluster or an option with an attached value
-    return args[i + positional :]
-
-
-def _env(args: list[Word], eff: Eff) -> list[Word]:
-    i = 0
-    while i < len(args):
-        a = args[i].text
-        nxt = args[i + 1] if i + 1 < len(args) else None
-        if a == "--":
-            return args[i + 1 :]
-        if a in ("-u", "--unset") and nxt is not None:
-            eff.unsets.append(nxt.text)
-            i += 2
-        elif a.startswith("--unset="):
-            eff.unsets.append(a[8:])
-            i += 1
-        elif a.startswith("-u") and len(a) > 2 and not a.startswith("--"):
-            eff.unsets.append(a[2:])
-            i += 1
-        elif a in ("-C", "--chdir") and nxt is not None:
-            i += 2
-        elif a in ("-S", "--split-string") and nxt is not None:
-            eff.nested_text.append(nxt)
-            i += 2
-        elif a.startswith("--split-string=") or (
-            a.startswith("-S") and len(a) > 2 and not a.startswith("--")
-        ):
-            eff.nested_text.append(
-                Word(text=a.split("=", 1)[1] if a.startswith("--") else a[2:], quoted=True)
-            )
-            i += 1
-        elif args[i].assign is not None:
-            eff.assigns.append(args[i])
-            i += 1
-        elif a.startswith("-") and a != "-" or a == "-":
-            i += 1
-        else:
-            return args[i:]
-    return []
-
-
 def _command(args: list[Word], eff: Eff) -> list[Word]:
     rest = args
     while rest and rest[0].text in ("-p", "--"):
@@ -131,7 +82,7 @@ def _command(args: list[Word], eff: Eff) -> list[Word]:
 
 
 def _exec(args: list[Word], eff: Eff) -> list[Word]:
-    return _skip(args, "a")
+    return skip(args, "a")
 
 
 def _xargs(args: list[Word], eff: Eff) -> list[Word]:
@@ -145,7 +96,20 @@ def _xargs(args: list[Word], eff: Eff) -> list[Word]:
         "--eof",
         "--process-slot-var",
     )
-    return _skip(args, "InLPsdaE", long_valued)
+    rest = skip(args, "InLPsdaE", long_valued)
+    eff.from_stdin = True
+    options = args[: len(args) - len(rest)]
+    for i, w in enumerate(
+        options
+    ):  # the replacement string: `-I X`, `-IX`, `-i[X]`, `--replace[=X]`
+        a = w.text
+        if a in ("-I", "-J") and i + 1 < len(options):
+            eff.replace = options[i + 1].text
+        elif a.startswith(("-I", "-J", "-i")) and not a.startswith("--"):
+            eff.replace = a[2:] or "{}"
+        elif a.startswith("--replace"):
+            eff.replace = a.partition("=")[2] or "{}"
+    return rest
 
 
 def _shell(name: str) -> Callable[[list[Word], Eff], list[Word]]:
@@ -189,6 +153,15 @@ def _eval(args: list[Word], eff: Eff) -> list[Word]:
     return []
 
 
+def _source(args: list[Word], eff: Eff) -> list[Word]:
+    """``source``/``.`` runs a script in this shell: judge it like ``sh`` reading the same input."""
+    target = args[0] if args else None
+    if target is not None and target.text.startswith(("<(", *STDIN_FILES)):
+        eff.stdin_shell = True
+        eff.script_subst = target.text.startswith("<(")
+    return []
+
+
 def _find(args: list[Word], eff: Eff) -> list[Word]:
     i = 0
     while i < len(args):
@@ -203,12 +176,12 @@ def _find(args: list[Word], eff: Eff) -> list[Word]:
 
 
 def _timeout(args: list[Word], eff: Eff) -> list[Word]:
-    return _skip(args, "sk", ("--signal", "--kill-after"), positional=1)
+    return skip(args, "sk", ("--signal", "--kill-after"), positional=1)
 
 
 def _uv_run(args: list[Word], eff: Eff) -> list[Word]:
     if args and args[0].text == "run":
-        return _skip(
+        return skip(
             args[1:],
             "pP",
             (
@@ -233,30 +206,32 @@ def _sub_run(args: list[Word], eff: Eff) -> list[Word]:
 
 
 WRAPPERS = {
-    "env": _env,
+    "env": env,
     "command": _command,
     "builtin": lambda a, e: a,
     "exec": _exec,
     "nohup": lambda a, e: a,
-    "setsid": lambda a, e: _skip(a, ""),
-    "time": lambda a, e: _skip(a, "of", ("--format", "--output")),
-    "nice": lambda a, e: _skip(a, "n", ("--adjustment",)),
-    "ionice": lambda a, e: _skip(a, "cnp"),
+    "setsid": lambda a, e: skip(a, ""),
+    "time": time,
+    "nice": lambda a, e: skip(a, "n", ("--adjustment",)),
+    "ionice": lambda a, e: skip(a, "cnp"),
     "timeout": _timeout,
-    "stdbuf": lambda a, e: _skip(a, "ioe"),
-    "unbuffer": lambda a, e: _skip(a, ""),
+    "stdbuf": lambda a, e: skip(a, "ioe"),
+    "unbuffer": lambda a, e: skip(a, ""),
     "chronic": lambda a, e: a,
     "xargs": _xargs,
-    "watch": lambda a, e: _skip(a, "ndp", ("--interval", "--differences")),
+    "watch": lambda a, e: skip(a, "ndp", ("--interval", "--differences")),
     "eval": _eval,
+    "source": _source,
+    ".": _source,
     "find": _find,
     "uv": _uv_run,
-    "uvx": lambda a, e: _skip(a, "p", ("--from", "--with", "--python")),
+    "uvx": lambda a, e: skip(a, "p", ("--from", "--with", "--python")),
     "poetry": _sub_run,
     "pipenv": _sub_run,
     "pdm": _sub_run,
     "hatch": _sub_run,
-    "npx": lambda a, e: _skip(a, "p", ("--package",)),
+    "npx": lambda a, e: skip(a, "p", ("--package",)),
     **{s: _shell(s) for s in SHELLS},
 }
 KEEPS_COMMAND = frozenset(
@@ -282,7 +257,17 @@ def unwrap(cmd: Cmd) -> Eff:
             handler(argv[1:], eff)
             break
         argv = handler(argv[1:], eff)
+        if eff.from_stdin and not argv and name in RUNNERS:
+            eff.dynamic = True  # `xargs env`: stdin supplies the program
     else:  # more wrappers than MAX_WRAP: what runs is unknown, so refuse (never judge a prefix)
         eff.dynamic = True
     eff.argv = argv
+    if eff.replace and stdin_names_program(eff):
+        eff.dynamic = True
     return eff
+
+
+def stdin_names_program(eff: Eff) -> bool:
+    """``xargs -I{} {} ...`` or ``xargs -I{} sh -c '{}'``: the replaced word is what runs."""
+    first = eff.argv[:1] + eff.nested_text
+    return any(eff.replace in w.text for w in first)

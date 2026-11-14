@@ -59,10 +59,15 @@ With the guards installed, the command gate also refuses environment variables t
 or `git` start another program: the pager, editor and browser variables (`GH_PAGER`, `PAGER`,
 `GIT_PAGER`, `GH_EDITOR`, `GIT_EDITOR`, `GIT_SEQUENCE_EDITOR`, `VISUAL`, `EDITOR`, `GH_BROWSER`,
 `BROWSER`), `GIT_EXTERNAL_DIFF`, `GIT_PROXY_COMMAND`, `SSH_ASKPASS`, `LESSOPEN` and `LESSCLOSE`.
-They may be set to nothing or `cat` (`GIT_PAGER=cat git log`), nothing else. `GH_FORCE_TTY`,
-`GH_HOST`, `GH_REPO`, `GH_ENTERPRISE_TOKEN` and `GITHUB_ENTERPRISE_TOKEN` are refused with any
-value, and `-R`/`--repo` must be `OWNER/REPO`, with no host part. The list is generated into the
-`carter-ops` skill from `carter/identity/g2_rules.json` (the `env-overrides` rule).
+They may be set to nothing, `cat`, `true` or `:` (`GIT_PAGER=cat git log`,
+`GIT_EDITOR=true git rebase --continue`) and unset; nothing else. Every way of writing a variable
+counts: a prefix, `env`, `time`, `export`/`declare`, `read`, `printf -v`, `for NAME in`,
+`${NAME:=…}` and namerefs. `GH_FORCE_TTY`, `GH_HOST`, `GH_REPO`, `GH_ENTERPRISE_TOKEN` and
+`GITHUB_ENTERPRISE_TOKEN` are refused with any value, and `-R`/`--repo` must be `OWNER/REPO`
+(no host, no `git@host:`, no URL); a pull request or issue URL must be on github.com. The program
+a command runs must be written out: `xargs env`, `xargs -I{} {}` and `source <(…)` are refused.
+The list is generated into the `carter-ops` skill from `carter/identity/g2_rules.json` (the
+`env-overrides` rule).
 
 ## Effects per level
 
