@@ -393,7 +393,28 @@ def _note_stale_workspace_rules(target: Path, config: dict, env: Environment) ->
         )
 
 
-@main.command()
+_LOOSENING_HELP = (
+    "A workspace can only tighten agent permissions. Keys in carter.yaml that loosen "
+    "them (policy.allowlist additions, policy.overrides to a looser gate) are ignored; "
+    "`-v` names them. Tightening keys apply: level: strict, a stricter override, an "
+    "allowlist entry set to false. Loosening is human-only and will be set in "
+    "~/.carter/config.toml."
+)
+
+
+def _report_ignored_policy(config: dict, command: str) -> None:
+    """One warning line when carter.yaml holds loosening policy keys; ``-v`` lists them."""
+    from carter.config import ignored_policy_keys
+
+    keys = ignored_policy_keys(config)
+    if keys:
+        noun = "key" if len(keys) == 1 else "keys"
+        ui.warn(f"carter.yaml: ignored {len(keys)} loosening {noun} (see: carter {command} --help)")
+        for key in keys:
+            ui.detail(key)
+
+
+@main.command(epilog=_LOOSENING_HELP)
 @click.argument("target_dir", default=".", type=click.Path(exists=True, file_okay=False))
 @click.option("--dry-run", is_flag=True, help="Show what would change; write nothing.")
 @click.option("--yes", "-y", "assume_yes", is_flag=True, hidden=True)
@@ -413,6 +434,7 @@ def update(target_dir: str, dry_run: bool, assume_yes: bool) -> None:
     except ConfigError as e:
         raise click.ClickException(str(e)) from e
 
+    _report_ignored_policy(config, "update")
     _pin_identity_policy(target, config, dry_run=dry_run)
     _sync_mirror(dry_run=dry_run)
     _refresh_agents(dry_run=dry_run)
@@ -443,7 +465,7 @@ _UPDATE = "run `carter update`"
 _EDIT = "fix the file named above, then run `carter check` again"
 
 
-@main.command()
+@main.command(epilog=_LOOSENING_HELP)
 @click.argument("target_dir", default=".", type=click.Path(exists=True, file_okay=False))
 @click.option(
     "--no-harness",
@@ -505,6 +527,7 @@ def check(target_dir: str, no_harness: bool, host: bool, probe: bool) -> None:
         config = load_config(config_path)
     except ConfigError as e:
         raise click.ClickException(str(e)) from e
+    _report_ignored_policy(config, "check")
 
     # Check agent and instruction files exist in OpenCode's discovery paths,
     # collecting each role's parsed frontmatter for the policy lint as we go.

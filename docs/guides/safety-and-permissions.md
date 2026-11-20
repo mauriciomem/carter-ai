@@ -105,6 +105,8 @@ use `guarded`.
   out.
 - **`deny` is a hard stop.** If an ask is not enough, use `strict` or a `deny`
   override (below).
+- **A workspace cannot loosen anything.** Keys in `.carter/carter.yaml` that widen what agents
+  may do are ignored (see Customize); an agent that edits the file gains nothing.
 
 ## What the guards cannot do
 
@@ -148,25 +150,30 @@ spelling) does the real work. The command gate is a speed bump in front of it, n
 
 ## Customize
 
-Both settings merge with Carter's defaults, so you only write what you change.
+A workspace can only tighten permissions. `.carter/carter.yaml` is a file agents can edit, so
+a key that loosens a control is ignored: `carter update` and `carter check` print one line
+(`carter update -v` names the keys) and render Carter's defaults. Loosening is human-only; it
+will be set in `~/.carter/config.toml`.
 
-Make a category stricter (or looser) for every agent that holds it:
+Make a category stricter for every agent that holds it:
 
 ```yaml
 policy:
   overrides:
-    remote-write: deny   # allow | ask | gate | deny
+    remote-write: deny   # a gate at least as strict as the level's: ask < gate < deny
 ```
 
-Grant an extra category to one agent. Be careful: this one breaks the "only DevOps
-changes things" rule. It does not allow pushing, which is denied for every agent.
+Take a category away from one agent:
 
 ```yaml
 policy:
   allowlist:
-    engineer:
-      remote-write: true
+    devops:
+      dangerous: false
 ```
+
+An `allowlist` entry set to `true` that Carter does not already grant (for example
+`engineer: remote-write: true`) is ignored, and so is an override to a looser gate.
 
 Run `carter update` after each change and `carter check` to confirm OpenCode loaded
 it. A typo in `overrides` or `allowlist` fails with a clear error, and so does an
