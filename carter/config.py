@@ -208,13 +208,16 @@ def _validate_policy(policy: Any, agents: list[str] | None = None) -> None:
     # default in place, silently, so it resolves via the normal default path downstream.
     if level not in POLICY_LEVELS:
         policy["level"] = level = "guarded"
-    for cat, gate in (policy.get("overrides") or {}).items():
+    overrides = policy.get("overrides") or {}
+    if not isinstance(overrides, dict):
+        raise ConfigError(f"Invalid policy.overrides: {overrides!r} (must be a mapping)")
+    for cat, gate in overrides.items():
         if cat not in RISK_TAXONOMY:
             raise ConfigError(
                 f"Invalid policy.overrides category {cat!r}. "
                 f"Must be one of: {', '.join(RISK_TAXONOMY)}."
             )
-        if gate not in GATE_SEVERITY:
+        if not isinstance(gate, str) or gate not in GATE_SEVERITY:
             raise ConfigError(
                 f"Invalid policy.overrides[{cat!r}]: {gate!r}. "
                 f"Must be one of: {', '.join(GATE_SEVERITY)}."

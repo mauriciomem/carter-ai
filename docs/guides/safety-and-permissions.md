@@ -105,8 +105,11 @@ use `guarded`.
   out.
 - **`deny` is a hard stop.** If an ask is not enough, use `strict` or a `deny`
   override (below).
-- **A workspace cannot loosen anything.** Keys in `.carter/carter.yaml` that widen what agents
-  may do are ignored (see Customize); an agent that edits the file gains nothing.
+- **A workspace cannot loosen Carter's defaults, but it cannot keep your tightening either.**
+  Loosening keys in `.carter/carter.yaml` are ignored (see Customize). An agent that can edit the
+  file can still undo a stricter setting you wrote there, until a human-side floor
+  (`[access]` in `~/.carter/config.toml`) arrives. An agent with edit or shell access can also
+  change its rendered agent file directly; `carter check` reports the drift.
 
 ## What the guards cannot do
 

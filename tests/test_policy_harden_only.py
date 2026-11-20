@@ -16,8 +16,10 @@ from click.testing import CliRunner
 from carter.cli import main
 from carter.config import (
     AGENT_ALLOWLIST,
+    ConfigError,
     generate_default_config,
     ignored_policy_keys,
+    load_config,
     permission_rules,
     policy_gate_table,
 )
@@ -80,6 +82,58 @@ def test_tightening_changes_the_rendered_permissions():
     deny = {"action": "shell", "resource": "terraform apply *", "effect": "deny"}
     assert deny in permission_rules(no_danger, "devops")
     assert deny not in permission_rules(base, "devops")
+
+
+def test_a_stricter_override_changes_the_rendered_permissions():
+    vault = {"action": "shell", "resource": "vault read *", "effect": "deny"}
+    assert vault not in permission_rules(generate_default_config(), "devops")
+    assert vault in permission_rules(_with_policy(overrides={"remote-write": "deny"}), "devops")
+
+
+def test_strict_with_a_gate_override_on_dangerous_is_ignored():
+    config = _with_policy(level="strict", overrides={"dangerous": "gate"})  # gate < strict's deny
+    assert ignored_policy_keys(config) == ["policy.overrides.dangerous"]
+    assert permission_rules(config, "devops") == permission_rules(
+        _with_policy(level="strict"), "devops"
+    )
+
+
+def _load_raw_policy(tmp_path: Path, policy_yaml: str) -> dict:
+    config = generate_default_config()
+    del config["policy"]
+    path = tmp_path / "carter.yaml"
+    path.write_text(yaml.dump(config) + policy_yaml)
+    return load_config(path)
+
+
+@pytest.mark.parametrize(
+    "policy_yaml",
+    [
+        # YAML 1.1 booleans and a merge key must not slip past the clamp
+        "policy:\n  allowlist:\n    engineer:\n      dangerous: yes\n",
+        "policy:\n  allowlist:\n    engineer: &e {dangerous: on}\n    pm:\n      <<: *e\n",
+        "policy:\n  overrides: &o {dangerous: allow}\n  allowlist: {}\n",
+    ],
+)
+def test_the_real_loader_cannot_smuggle_a_loosening_key(tmp_path, policy_yaml):
+    config = _load_raw_policy(tmp_path, policy_yaml)
+    assert ignored_policy_keys(config)
+    for role in ROLES:
+        assert permission_rules(config, role) == permission_rules(generate_default_config(), role)
+
+
+@pytest.mark.parametrize(
+    "policy_yaml",
+    [
+        "policy:\n  overrides: [dangerous, deny]\n",
+        "policy:\n  overrides:\n    dangerous: {x: 1}\n",
+        "policy:\n  allowlist: [engineer]\n",
+        "policy:\n  allowlist:\n    engineer: [read]\n",
+    ],
+)
+def test_malformed_policy_shapes_are_a_config_error_not_a_traceback(tmp_path, policy_yaml):
+    with pytest.raises(ConfigError, match="policy"):
+        _load_raw_policy(tmp_path, policy_yaml)
 
 
 def test_the_default_config_ignores_nothing():
