@@ -128,6 +128,7 @@ SECTIONS: tuple[tuple[str, tuple[str, ...], type], ...] = (
     ("broker", ("broker",), Broker),
 )
 TABLE_WORKSPACES = "workspaces"
+TABLE_ACCESS = "access"
 WORKSPACE_PLACEHOLDER = '"<abs path>"'
 
 State = Literal["absent", "current"]
@@ -144,6 +145,9 @@ class IdentityConfig:
     github: Github = field(default_factory=Github)
     broker: Broker = field(default_factory=Broker)
     workspaces: dict[str, Workspace] = field(default_factory=dict)
+    # `[access]`: free keys (capability ids), so it is kept as read, in file order, and judged
+    # by `carter.access`. Not in SECTIONS: its names are not frozen here.
+    access: tuple[tuple[str, str | int | bool], ...] = ()
     schema: int = SCHEMA_VERSION
     state: State = "absent"
     unknown_keys: tuple[str, ...] = ()  # dotted paths the writer does not model
