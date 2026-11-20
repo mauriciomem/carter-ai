@@ -10,10 +10,12 @@ from typing import Any
 import yaml
 
 from carter import _yaml
+from carter.access import Access, UserAccess, resolve_config
 from carter.identity.policyset import (
     agent_mcp_denies,
     agent_permission_denies,
     agent_permission_exempt,
+    gh_allowlist,
 )
 
 # `identity` is optional policy (role, require_tier), not a required key: a workspace
@@ -81,12 +83,10 @@ DEFAULT_CONFIG: dict[str, Any] = {
     },
     # Risk-based strictness policy. Control keys only; the shipped taxonomy and
     # per-agent allowlist live as module constants below (carter.yaml can only
-    # tighten them, see `ignored_policy_keys`). `guarded` is the floor
-    # and the default for everything (new and existing/omitted) — strictness is two
-    # levels only, so an absent or unrecognized level resolves to `guarded` through
-    # this default.
+    # tighten them, see `ignored_policy_keys`). There is no `level` default: the access
+    # level is set by the human in their Carter config (`strict` when absent), and
+    # `policy.level` in carter.yaml is only a deprecated alias that can tighten it.
     "policy": {
-        "level": "guarded",  # guarded | strict
         "overrides": {},  # category -> gate, explicit per-category override
     },
     # Per-agent model. Each tier is ONE OpenCode V2 model string,
@@ -194,20 +194,14 @@ def _validate_models(models: Any) -> None:
 def _validate_policy(policy: Any, agents: list[str] | None = None) -> None:
     """Validate the ``policy`` block at the config boundary.
 
-    Normalizes an out-of-vocabulary ``policy.level`` to the ``guarded`` default
-    and catches an override category/gate or allowlist agent/category/value that
-    isn't known,
-    so a typo there fails fast with a clear ``ConfigError`` instead of a raw
-    ``KeyError`` deep in rendering. ``GATE_SEVERITY``/``POLICY_LEVELS`` are defined
-    below in the policy-model section.
+    Catches an override category/gate or allowlist agent/category/value that isn't
+    known, so a typo there fails fast with a clear ``ConfigError`` instead of a raw
+    ``KeyError`` deep in rendering. ``policy.level`` is not checked here: ``carter.access``
+    reads it as an alias, and an unknown value means ``strict``. ``GATE_SEVERITY`` is
+    defined below in the policy-model section.
     """
     if not isinstance(policy, dict):
         raise ConfigError(f"Invalid policy block: {policy!r} (must be a mapping)")
-    level = policy.get("level", "guarded")
-    # Strictness is `guarded`/`strict` only. Any other level normalizes to the `guarded`
-    # default in place, silently, so it resolves via the normal default path downstream.
-    if level not in POLICY_LEVELS:
-        policy["level"] = level = "guarded"
     overrides = policy.get("overrides") or {}
     if not isinstance(overrides, dict):
         raise ConfigError(f"Invalid policy.overrides: {overrides!r} (must be a mapping)")
@@ -312,10 +306,6 @@ def _deep_merge(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any
 
 # Gate vocabulary, least -> most restrictive.
 GATE_SEVERITY: dict[str, int] = {"allow": 0, "ask": 1, "gate": 2, "deny": 3}
-
-# Valid strictness levels (validated at the config boundary). There are two;
-# `guarded` is the floor and default.
-POLICY_LEVELS: tuple[str, ...] = ("guarded", "strict")
 
 # 4-category risk taxonomy: category -> {level -> gate}. Fixed, shipped with
 # Carter. Collapsed from an earlier seven: reading secrets gates the same as any
@@ -437,9 +427,13 @@ def resolve_model(config: dict[str, Any], role: str) -> str:
 # Loosening is human-only and will live in ``~/.carter/config.toml``.
 
 
-def _hardening_overrides(policy: dict[str, Any]) -> dict[str, str]:
+def _taxonomy_level(access: Access) -> str:
+    """The taxonomy has two gate columns: `relaxed` gates like `guarded`."""
+    return "strict" if access.effective_level == "strict" else "guarded"
+
+
+def _hardening_overrides(policy: dict[str, Any], level: str) -> dict[str, str]:
     """The ``policy.overrides`` that are at least as strict as the level's own gate."""
-    level = policy.get("level", "guarded")
     return {
         cat: gate
         for cat, gate in (policy.get("overrides") or {}).items()
@@ -450,7 +444,7 @@ def _hardening_overrides(policy: dict[str, Any]) -> dict[str, str]:
 def ignored_policy_keys(config: dict[str, Any]) -> list[str]:
     """Dotted names of the ``policy`` keys in carter.yaml that loosen the baseline."""
     policy = config.get("policy") or {}
-    kept = _hardening_overrides(policy)
+    kept = _hardening_overrides(policy, _taxonomy_level(resolve_config(config)))
     keys = [
         f"policy.allowlist.{agent}.{cat}"
         for agent, cats in (policy.get("allowlist") or {}).items()
@@ -578,16 +572,19 @@ def permission_rules(config: dict[str, Any], role: str) -> list[Rule]:
     5. ``subagent * → deny``; the maestro alone then allows ``carter-*``.
        Then the per-agent broker denies (``carter_push``, every role but
        devops) and the GitHub-MCP deny for roles that do not need it (see ``_broker_denies``).
-    6. Category rules from the allowlist x gates; ``gate`` emitted as ``ask``. The
-       ``github-write`` shell verbs are denied for every role.
-    7. G2's consented deny set: ``config["guard_rules"]``, last, so it wins over
-       everything above (see ``carter.guard.agent_rules``). Absent = nothing is installed.
+    6. ``edit`` and ``shell`` follow the role and the ``workspace_edit`` / ``run_commands``
+       capabilities (the stricter wins). Category rules: the allowlist, ``policy.overrides``
+       and the ``destructive`` / ``infra_apply`` capabilities (the stricter wins); ``gate`` is
+       emitted as ``ask``. The ``github-write`` shell verbs are denied for every role.
+    7. G2's consented deny set: ``config["guard_rules"]``, so it wins over everything above
+       (see ``carter.guard.agent_rules``). Absent = nothing is installed.
+    8. The rows of the GitHub and commit capabilities (``_access_rules``): only stricter than
+       what is already there, except ``issue_write``, which G2's ``gh *`` deny precedes.
     Anything else (MCP tools, websearch, execute) falls to the baseline ask.
     """
-    policy = config.get("policy") or {}
-    level = policy.get("level", "guarded")
+    access = resolve_config(config, role)
+    hardened = _hardening_overrides(config.get("policy") or {}, _taxonomy_level(access))
     allowed = [cat for cat, on in sorted(effective_allowlist(config).get(role, {}).items()) if on]
-    gates = _gates_for(allowed, level, _hardening_overrides(policy))
     writes = "local-write" in allowed
 
     rules = [_rule("*", "*", "ask")]
@@ -608,20 +605,81 @@ def permission_rules(config: dict[str, Any], role: str) -> list[Rule]:
         rules.append(_rule("subagent", "carter-*", "allow"))
     rules += _broker_denies(role)
     local = "allow" if writes else "ask"
-    rules += [_rule(action, "*", local) for action in ("edit", "shell", "webfetch")]
+    rules += [
+        _rule("edit", "*", _stricter(local, _effect(access, "workspace_edit"))),
+        _rule("shell", "*", _stricter(local, _effect(access, "run_commands"))),
+        _rule("webfetch", "*", local),
+    ]
     for cat, commands in _BASH_COMMANDS.items():
-        if cat in _ALWAYS_DENY:
-            effect = "deny"
-        else:
-            effect = _OPENCODE_GATE[gates[cat]] if cat in allowed else "deny"
-        rules += [_rule("shell", cmd, effect) for cmd in commands]
+        for cmd in commands:
+            if cat in _ALWAYS_DENY:
+                if cmd not in _ISSUE_COMMANDS:  # `issue_write` owns these two verbs
+                    rules.append(_rule("shell", cmd, "deny"))
+                continue
+            cap = _COMMAND_CAPABILITY[cmd]
+            available = writes if cap == "destructive" else cat in allowed  # D6: every writer
+            base = "deny" if not available else _OPENCODE_GATE[hardened.get(cat, "allow")]
+            rules.append(_rule("shell", cmd, _stricter(base, _effect(access, cap))))
     rules += [dict(rule) for rule in config.get("guard_rules") or ()]
+    return rules + _access_rules(access, role)
+
+
+# ``allowed`` / ``ask`` / ``denied`` of a capability as an OpenCode effect.
+_EFFECT = {"allowed": "allow", "ask": "ask", "denied": "deny"}
+_EFFECT_RANK = {"allow": 0, "ask": 1, "deny": 2}
+
+
+def _effect(access: Access, capability: str) -> str:
+    return _EFFECT[access.values[capability]]
+
+
+def _stricter(*effects: str) -> str:
+    return max(effects, key=_EFFECT_RANK.__getitem__)
+
+
+# The shell commands a capability owns. Every row of `remote-write` and `dangerous` has one;
+# the category (allowlist, `policy.overrides`) can only make it stricter.
+_COMMAND_CAPABILITY: dict[str, str] = {
+    **dict.fromkeys(
+        _BASH_COMMANDS["remote-write"] + _BASH_COMMANDS["dangerous"][:4], "infra_apply"
+    ),
+    **dict.fromkeys(_BASH_COMMANDS["dangerous"][4:], "destructive"),
+}
+_ISSUE_COMMANDS = ("gh issue create *", "gh issue comment *")
+_PR_WRITE_VERBS = ("pr create", "pr edit", "pr comment")  # `pr edit` is human-only later
+
+
+def _access_rules(access: Access, role: str) -> list[Rule]:
+    """The rules that follow G2's, for the capabilities whose value is not ``allowed``.
+
+    They come last because G2's `gh` allows (after its `gh *` deny) would otherwise lift
+    them. A row is emitted only when it is stricter than what is already there (an ``allowed``
+    capability adds nothing), except `issue_write`, whose verbs are denied before it: its
+    ``ask`` or ``allow`` has to come after G2's `gh *` deny to take effect. Per-verb flags are
+    the command gate's job.
+    """
+    rules: list[Rule] = []
+    for verb in gh_allowlist():
+        cap = "pr_write" if verb.verb in _PR_WRITE_VERBS else "github_read"
+        if _effect(access, cap) != "allow":
+            rules.append(_rule("shell", verb.pattern, _effect(access, cap)))
+    mcp_action, mcp_roles = agent_mcp_denies()
+    if _effect(access, "github_read") != "allow" and role not in mcp_roles:  # keep their deny
+        rules.append(_rule(mcp_action, "*", _effect(access, "github_read")))
+    if _effect(access, "git_commit") != "allow":
+        rules.append(_rule("shell", "git commit *", _effect(access, "git_commit")))
+    rules += [_rule("shell", cmd, _effect(access, "issue_write")) for cmd in _ISSUE_COMMANDS]
     return rules
 
 
 def with_guard_rules(config: dict[str, Any], rules: list[Rule]) -> dict[str, Any]:
     """A copy of ``config`` that carries G2's rules for rendering (never written to disk)."""
     return {**config, "guard_rules": list(rules)}
+
+
+def with_user_access(config: dict[str, Any], user: UserAccess) -> dict[str, Any]:
+    """A copy of ``config`` that carries the human's ``[access]`` for rendering (never written)."""
+    return {**config, "access_user": user}
 
 
 def policy_native_keys(config: dict[str, Any], role: str) -> dict[str, Any]:
@@ -652,9 +710,9 @@ def policy_gate_table(config: dict[str, Any]) -> list[dict[str, str]]:
     applied. ``strict`` shows the real ``deny`` row for ``dangerous``.
     """
     policy = config.get("policy") or {}
-    level = policy.get("level", "guarded")
+    level = _taxonomy_level(resolve_config(config))
     cats = ("read", "local-write", "remote-write", "dangerous")
-    gates = _gates_for(list(cats), level, _hardening_overrides(policy))
+    gates = _gates_for(list(cats), level, _hardening_overrides(policy, level))
     return [{"category": cat, "gate": gates[cat]} for cat in cats]
 
 
@@ -665,8 +723,6 @@ def generate_default_config(
     """Generate a default config dict for a new workspace."""
     config = copy.deepcopy(DEFAULT_CONFIG)
     config["workspace"] = {"name": workspace_name, "mode": mode}
-    # `guarded` is the floor and the DEFAULT_CONFIG value, so new
-    # installs and existing/omitted configs both resolve to it — no per-install bump.
     return config
 
 

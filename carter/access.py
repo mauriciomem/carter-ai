@@ -76,8 +76,17 @@ SCOPE_ISSUES = "issues"
 
 _CONFIG = "config.toml [access]: "
 FALLBACK = "! access config invalid: using strict"
+UNREADABLE = "config.toml unreadable or not valid TOML"
 _LEVEL_HELP = "level must be strict/guarded/relaxed"
 _VALUE_HELP = " must be allowed/ask/denied"
+
+
+@dataclass(frozen=True)
+class UserAccess:
+    """What the loader read of ``config.toml``: the ``[access]`` table or why there is none."""
+
+    table: Any = None  # the raw table; ``None`` when the file or the table is absent
+    error: str | None = None  # the file could not be read or parsed: fail closed
 
 
 @dataclass(frozen=True)
@@ -85,6 +94,7 @@ class Access:
     """The resolved capabilities for one role (or none) and the lines to show."""
 
     level: str  # the user's level, `strict` after a fallback or when absent
+    effective_level: str  # the stricter of the user's and the workspace's level
     level_source: str  # `default` (not set), `config` or `fallback` (an error)
     values: dict[str, str]  # id -> allowed | ask | denied, every adjustable id
     sources: dict[str, str]  # id -> preset | override | workspace | role
@@ -134,8 +144,8 @@ def _read_user(table: Any) -> tuple[str, dict[str, str], list[str]]:
 
 def _read_workspace(
     table: Any, policy_level: Any, user_level: str, user_values: Mapping[str, str]
-) -> tuple[dict[str, str], list[str]]:
-    """The workspace's value per id (only the ids it sets) and its lines.
+) -> tuple[dict[str, str], str | None, list[str]]:
+    """The workspace's value per id (only the ids it sets), its level and its lines.
 
     Never raises and never loosens: an invalid row is ``denied``, an invalid level is
     ``strict``, and a value looser than the user's is reported and left to the merge.
@@ -175,11 +185,11 @@ def _read_workspace(
     for name, level in levels:
         if LEVELS.index(level) > LEVELS.index(user_level):
             notes.append(f"! carter.yaml {name} ignored: can only harden")
-    if levels:  # the stricter of the two keys; an explicit row replaces its preset
-        strictest = min((level for _name, level in levels), key=LEVELS.index)
+    strictest = min((level for _name, level in levels), key=LEVELS.index, default=None)
+    if strictest:  # the stricter of the two keys; an explicit row replaces its preset
         for cap in CAPABILITIES:
             rows.setdefault(cap.id, cap.preset(strictest))
-    return rows, notes
+    return rows, strictest, notes
 
 
 def _role_cap(role: str | None, cap_id: str) -> str:
@@ -198,14 +208,18 @@ def resolve(
     workspace: Any = None,
     workspace_policy_level: Any = None,
     role: str | None = None,
+    user_error: str | None = None,
 ) -> Access:
     """The effective access for ``role`` (``None``: no role cap, as ``carter access`` shows).
 
     ``user`` is ``[access]`` from ``config.toml`` and ``workspace`` is ``access:`` from
     ``carter.yaml``, both ``None`` when absent. ``workspace_policy_level`` is the
     deprecated ``policy.level`` of ``carter.yaml`` (same merge, one deprecation line).
+    ``user_error`` says ``config.toml`` could not be read: strict, with that line.
     """
     level, overrides, errors = _read_user(user)
+    if user_error:
+        errors.append(user_error)
     if errors:
         level, overrides = "strict", {}
         notes = [*errors, FALLBACK]
@@ -215,7 +229,10 @@ def resolve(
         level_source = "config" if isinstance(user, Mapping) and "level" in user else "default"
 
     user_values = {c.id: overrides.get(c.id, c.preset(level)) for c in CAPABILITIES}
-    ws_rows, ws_notes = _read_workspace(workspace, workspace_policy_level, level, user_values)
+    ws_rows, ws_level, ws_notes = _read_workspace(
+        workspace, workspace_policy_level, level, user_values
+    )
+    effective = min(filter(None, (level, ws_level)), key=LEVELS.index)
 
     values: dict[str, str] = {}
     sources: dict[str, str] = {}
@@ -227,7 +244,19 @@ def resolve(
             (_role_cap(role, cap.id), "role"),
         ]
         values[cap.id], sources[cap.id] = max(candidates, key=lambda c: RANK[c[0]])
-    return Access(level, level_source, values, sources, (*notes, *ws_notes))
+    return Access(level, effective, level_source, values, sources, (*notes, *ws_notes))
+
+
+def resolve_config(config: Mapping[str, Any], role: str | None = None) -> Access:
+    """``resolve`` for a loaded ``carter.yaml`` dict: the one call every reader makes.
+
+    The user's side comes from ``config["access_user"]`` (``carter.config.with_user_access``);
+    without it the user has no ``[access]`` and the level is ``strict``.
+    """
+    user = config.get("access_user") or UserAccess()
+    policy = config.get("policy") or {}
+    level = policy.get("level") if isinstance(policy, Mapping) else None
+    return resolve(user.table, config.get("access"), level, role, user_error=user.error)
 
 
 def warnings(

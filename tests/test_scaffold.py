@@ -813,13 +813,21 @@ class TestAgentSuffix:
 # ─── Policy gate table + notice + redaction handoff ───────────────────────────
 
 
+def _guarded(config: dict) -> dict:
+    """``config`` for a human who set ``[access] level = "guarded"`` (the default is strict)."""
+    from carter.access import UserAccess
+    from carter.config import with_user_access
+
+    return with_user_access(config, UserAccess(table={"level": "guarded"}))
+
+
 class TestPolicyGateTable:
     """`policy_gate_table` drives the always-on maestro risk/gate table."""
 
     def test_guarded_table_has_all_four_categories(self):
         from carter.config import policy_gate_table
 
-        rows = policy_gate_table({"policy": {"level": "guarded"}})
+        rows = policy_gate_table(_guarded({}))
         assert [r["category"] for r in rows] == [
             "read",
             "local-write",
@@ -830,9 +838,7 @@ class TestPolicyGateTable:
     def test_guarded_gates_match_taxonomy(self):
         from carter.config import policy_gate_table
 
-        gates = {
-            r["category"]: r["gate"] for r in policy_gate_table({"policy": {"level": "guarded"}})
-        }
+        gates = {r["category"]: r["gate"] for r in policy_gate_table(_guarded({}))}
         assert gates == {
             "read": "allow",
             "local-write": "allow",
@@ -850,13 +856,13 @@ class TestPolicyGateTable:
         assert gates["dangerous"] == "deny"
         assert gates["remote-write"] == "gate"
 
-    def test_missing_policy_defaults_guarded(self):
+    def test_missing_policy_defaults_strict(self):
         from carter.config import policy_gate_table
 
-        # An absent policy block resolves to guarded (the floor).
+        # No `[access]` and no policy block: the default level is strict.
         gates = {r["category"]: r["gate"] for r in policy_gate_table({})}
-        assert gates["remote-write"] == "ask"
-        assert gates["dangerous"] == "gate"
+        assert gates["remote-write"] == "gate"
+        assert gates["dangerous"] == "deny"
 
 
 class TestMaestroPolicyTable:
@@ -889,12 +895,17 @@ class TestPolicyNotice:
     """`policy_notice` surfaces the active-level notice. Both shipped
     levels enforce gates, so the notice always fires (no quiet advisory level)."""
 
-    def test_notice_fires_for_guarded(self):
+    def test_notice_fires_for_the_default_strict(self):
         from carter.scaffold import policy_notice
 
-        msg = policy_notice(generate_default_config())  # new install -> guarded
+        msg = policy_notice(generate_default_config())  # new install -> strict
         assert msg is not None
-        assert "guarded" in msg.lower()
+        assert "strict" in msg.lower()
+
+    def test_notice_names_the_humans_level(self):
+        from carter.scaffold import policy_notice
+
+        assert "'guarded'" in policy_notice(_guarded(generate_default_config()))
 
     def test_notice_fires_for_strict(self):
         from carter.scaffold import policy_notice

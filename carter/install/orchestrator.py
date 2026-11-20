@@ -9,7 +9,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from pathlib import Path
 
-from carter import __version__, ui, unknownkeys
+from carter import __version__, accessload, ui, unknownkeys
 from carter.home import tilde
 from carter.install.backups import BackupRoot, prune
 from carter.install.components import (
@@ -155,6 +155,9 @@ def run(
                 backup_dir=backup_root.path,
             )
         )
+    if verbosity >= 1 and code == 0 and accessload.notice_due(base_dir):
+        ui.warn(accessload.NOTICE.removeprefix("! "))  # the level the new agents carry
+        accessload.record_notice(base_dir)
     # leftover keys Carter no longer reads, once per key, after everything else
     unknownkeys.report(unknownkeys.once_per_key(unknownkeys.host(base_dir)))
     return code

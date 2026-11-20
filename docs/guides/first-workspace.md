@@ -83,7 +83,7 @@ The settings you are most likely to change:
 
 | Key | What it does |
 |-----|-------------|
-| `policy.level` | `guarded` (default) or `strict`. See [Safety](safety-and-permissions.md) |
+| `policy.level` | Deprecated alias that can only tighten the level in `~/.carter/config.toml`. See [Safety](safety-and-permissions.md) |
 | `profile` / `models` | Which AI model each agent uses. See [Cost and models](cost-and-models.md) |
 | `quality_gate` | Turn the pre-push review on or off; set the number of review rounds |
 | `tdd.strict` | Make the Engineer write tests before code, always |

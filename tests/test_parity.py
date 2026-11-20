@@ -374,7 +374,8 @@ class TestNoAgentPushes:
     devops template does not claim it pushes) is in the next test.
     """
 
-    PUSH_VERBS = ("git push", "gh pr create", "gh pr merge", "gh api", "gh release")
+    # Opening a PR is the `pr_write` capability (it asks at the strict default), not a push.
+    PUSH_VERBS = ("git push", "gh pr merge", "gh api", "gh release")
 
     @staticmethod
     def _rules(rendered_agents_dir: Path) -> dict[str, list[dict]]:

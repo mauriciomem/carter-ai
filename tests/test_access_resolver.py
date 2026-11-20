@@ -272,3 +272,24 @@ class TestWarnings:
         assert len(lines) == 3
         assert lines[0].startswith("! config-edit")
         assert all(len(line) <= 60 for line in lines)
+
+
+class TestEffectiveLevelAndUnreadableConfig:
+    def test_effective_level_is_the_stricter_of_user_and_workspace(self):
+        assert resolve({"level": "relaxed"}, workspace={"level": "guarded"}).effective_level == (
+            "guarded"
+        )
+        assert resolve({"level": "guarded"}, workspace={"level": "relaxed"}).effective_level == (
+            "guarded"
+        )
+        assert resolve(None).effective_level == "strict"
+
+    def test_a_row_only_workspace_leaves_the_level_alone(self):
+        assert resolve({"level": "relaxed"}, workspace={"pr_write": "denied"}).effective_level == (
+            "relaxed"
+        )
+
+    def test_an_unreadable_config_is_strict_with_its_line_and_the_fallback(self):
+        result = resolve(None, user_error="config.toml unreadable or not valid TOML")
+        assert result.values == STRICT
+        assert result.notes == ("config.toml unreadable or not valid TOML", FALLBACK)

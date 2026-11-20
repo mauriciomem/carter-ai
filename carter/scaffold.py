@@ -8,6 +8,7 @@ from typing import Any
 
 from jinja2 import Environment, FileSystemLoader
 
+from carter.access import UserAccess, resolve_config
 from carter.aplus.push import OWN_TERMINAL
 from carter.config import (
     PRIMARY_ROLE,
@@ -17,6 +18,7 @@ from carter.config import (
     policy_native_keys,
     resolve_model,
     with_guard_rules,
+    with_user_access,
 )
 from carter.resources import templates_dir
 
@@ -106,12 +108,12 @@ def agent_filename(role: str, config: dict[str, Any]) -> str:
 
 
 def policy_notice(config: dict[str, Any]) -> str:
-    """The 'you're guarded now' notice, surfaced at init/update.
+    """The one-line policy notice (shown with ``-v``) at init/update.
 
-    Both shipped levels (``guarded``/``strict``) enforce gates, so the notice always
-    fires, naming the active level and the gated categories.
+    Every level enforces gates, so the notice always fires, naming the effective access
+    level (the human's, hardened by the workspace) and the gated categories.
     """
-    level = (config.get("policy") or {}).get("level", "guarded")
+    level = resolve_config(_for_render(config, [], None)).effective_level
     return (
         f"Strictness policy is '{level}': remote-write and dangerous "
         "(infra-mutate / destructive) actions are gated per the risk taxonomy "
@@ -152,10 +154,24 @@ def _guard_rules(rules: list[dict[str, str]] | None) -> list[dict[str, str]]:
     return current_rules()
 
 
+def _for_render(
+    config: dict[str, Any],
+    guard_rules: list[dict[str, str]] | None,
+    user_access: UserAccess | None,
+) -> dict[str, Any]:
+    """``config`` plus what this machine adds to every render: G2's rules and the human's
+    ``[access]``. Both default to this machine's state, so workspace and global renders agree."""
+    from carter.accessload import load_user_access  # noqa: PLC0415
+
+    config = with_guard_rules(config, _guard_rules(guard_rules))
+    return with_user_access(config, user_access or config.get("access_user") or load_user_access())
+
+
 def lint_policy(
     config: dict[str, Any],
     installed: dict[str, dict[str, Any]],
     guard_rules: list[dict[str, str]] | None = None,
+    user_access: UserAccess | None = None,
 ) -> list[str]:
     """Lint emitted agent frontmatter against carter.yaml; returns the errors.
 
@@ -165,7 +181,7 @@ def lint_policy(
     ``permissions:`` must equal the expected list exactly.
     """
     errors: list[str] = []
-    config = with_guard_rules(config, _guard_rules(guard_rules))
+    config = _for_render(config, guard_rules, user_access)
     for role, frontmatter in installed.items():
         fm = frontmatter or {}
         expected = policy_native_keys(config, role)
@@ -202,11 +218,13 @@ def render_agents(
     config: dict[str, Any],
     env: Environment,
     guard_rules: list[dict[str, str]] | None = None,
+    user_access: UserAccess | None = None,
 ) -> dict[str, str]:
     """Render all configured agent templates.
 
-    ``guard_rules`` are G2's consented deny rules; ``None`` reads this machine's guard
-    state, so a workspace render and the global one carry the same set.
+    ``guard_rules`` are G2's consented deny rules and ``user_access`` the human's
+    ``[access]``; ``None`` reads this machine's, so a workspace render and the global one
+    carry the same set.
 
     Returns a dict of {filename: rendered_content}. Filenames and internal
     ``carter-<role>`` references honor ``config["agent_suffix"]`` so workspace
@@ -216,7 +234,7 @@ def render_agents(
     assert isinstance(env.loader, FileSystemLoader)  # always created via create_env
     templates_dir = Path(env.loader.searchpath[0])
     _validate_agents(config["agents"], templates_dir)
-    config = with_guard_rules(config, _guard_rules(guard_rules))
+    config = _for_render(config, guard_rules, user_access)
 
     suffix = _suffix_token(config)
     roles = config["agents"]

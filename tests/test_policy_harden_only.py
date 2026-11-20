@@ -13,6 +13,7 @@ import pytest
 import yaml
 from click.testing import CliRunner
 
+from carter.access import UserAccess
 from carter.cli import main
 from carter.config import (
     AGENT_ALLOWLIST,
@@ -22,6 +23,7 @@ from carter.config import (
     load_config,
     permission_rules,
     policy_gate_table,
+    with_user_access,
 )
 
 ROLES = tuple(AGENT_ALLOWLIST)
@@ -32,8 +34,16 @@ LOOSENING = {
 }
 
 
+_GUARDED = UserAccess(table={"level": "guarded"})
+
+
+def _baseline():
+    """The default config for a human who set `[access] level = "guarded"`."""
+    return with_user_access(generate_default_config(), UserAccess(table={"level": "guarded"}))
+
+
 def _with_policy(**policy):
-    config = generate_default_config()
+    config = _baseline()
     config["policy"].update(policy)
     return config
 
@@ -41,8 +51,8 @@ def _with_policy(**policy):
 @pytest.mark.parametrize("role", ROLES)
 def test_loosening_keys_render_the_same_permissions_as_the_baseline(role):
     config = _with_policy(**LOOSENING)
-    assert permission_rules(config, role) == permission_rules(generate_default_config(), role)
-    assert policy_gate_table(config) == policy_gate_table(generate_default_config())
+    assert permission_rules(config, role) == permission_rules(_baseline(), role)
+    assert policy_gate_table(config) == policy_gate_table(_baseline())
 
 
 def test_loosening_keys_are_named():
@@ -75,7 +85,7 @@ def test_tightening_keys_still_apply_and_are_not_reported(policy):
 
 
 def test_tightening_changes_the_rendered_permissions():
-    base = generate_default_config()
+    base = _baseline()
     strict = _with_policy(level="strict")
     assert permission_rules(strict, "devops") != permission_rules(base, "devops")
     no_danger = _with_policy(allowlist={"devops": {"dangerous": False}})
@@ -86,7 +96,7 @@ def test_tightening_changes_the_rendered_permissions():
 
 def test_a_stricter_override_changes_the_rendered_permissions():
     vault = {"action": "shell", "resource": "vault read *", "effect": "deny"}
-    assert vault not in permission_rules(generate_default_config(), "devops")
+    assert vault not in permission_rules(_baseline(), "devops")
     assert vault in permission_rules(_with_policy(overrides={"remote-write": "deny"}), "devops")
 
 
@@ -116,10 +126,10 @@ def _load_raw_policy(tmp_path: Path, policy_yaml: str) -> dict:
     ],
 )
 def test_the_real_loader_cannot_smuggle_a_loosening_key(tmp_path, policy_yaml):
-    config = _load_raw_policy(tmp_path, policy_yaml)
+    config = with_user_access(_load_raw_policy(tmp_path, policy_yaml), _GUARDED)
     assert ignored_policy_keys(config)
     for role in ROLES:
-        assert permission_rules(config, role) == permission_rules(generate_default_config(), role)
+        assert permission_rules(config, role) == permission_rules(_baseline(), role)
 
 
 @pytest.mark.parametrize(
@@ -137,7 +147,7 @@ def test_malformed_policy_shapes_are_a_config_error_not_a_traceback(tmp_path, po
 
 
 def test_the_default_config_ignores_nothing():
-    assert ignored_policy_keys(generate_default_config()) == []
+    assert ignored_policy_keys(_baseline()) == []
 
 
 # ── the commands ─────────────────────────────────────────────────────────────
@@ -145,6 +155,9 @@ def test_the_default_config_ignores_nothing():
 
 @pytest.fixture
 def ws(tmp_path: Path) -> Path:
+    home = Path.home() / ".carter"  # the hermetic home: the human chose `guarded`
+    home.mkdir(parents=True, exist_ok=True)
+    (home / "config.toml").write_text('schema = 2\n[access]\nlevel = "guarded"\n')
     path = tmp_path / "ws"
     path.mkdir()
     assert CliRunner().invoke(main, ["init", str(path), "--no-git-state"]).exit_code == 0

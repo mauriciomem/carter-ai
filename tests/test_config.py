@@ -13,6 +13,7 @@ from __future__ import annotations
 import pytest
 import yaml
 
+from carter.access import UserAccess
 from carter.config import (
     AGENT_ALLOWLIST,
     DEFAULT_CONFIG,
@@ -21,6 +22,7 @@ from carter.config import (
     effective_allowlist,
     generate_default_config,
     load_config,
+    with_user_access,
 )
 
 
@@ -34,36 +36,34 @@ def _minimal_existing_config() -> dict:
     }
 
 
+def _guarded(config: dict) -> dict:
+    """``config`` for a human who set ``[access] level = "guarded"`` (the default is strict)."""
+    return with_user_access(config, UserAccess(table={"level": "guarded"}))
+
+
 class TestPolicyBlock:
     def test_default_config_has_policy_control_keys(self):
-        """DEFAULT_CONFIG ships the policy control keys; `guarded` is the floor."""
+        """DEFAULT_CONFIG ships the override map and no level: the level is the human's."""
         policy = DEFAULT_CONFIG["policy"]
-        assert policy == {"level": "guarded", "overrides": {}}
+        assert policy == {"overrides": {}}
 
-    def test_existing_config_omitting_policy_resolves_guarded(self, tmp_path):
-        """An existing config with no policy block resolves to `guarded`
-        (the floor and default for everything)."""
+    def test_existing_config_omitting_policy_has_no_level(self, tmp_path):
+        """No `policy.level` is invented: the access level resolves to `strict` elsewhere."""
         cfg_path = tmp_path / "carter.yaml"
         cfg_path.write_text(yaml.dump(_minimal_existing_config()))
-        merged = load_config(cfg_path)
-        assert merged["policy"]["level"] == "guarded"
+        assert "level" not in load_config(cfg_path)["policy"]
 
-    def test_stale_loose_level_resolves_guarded_silently(self, tmp_path):
-        """A stale `level: loose` from a prior install loads as
-        `guarded` — no error, no migration notice, via the normal default path
-        (no dedicated `loose` coercion branch). Any unrecognized level does the same.
-        """
+    def test_a_stale_level_loads_as_written(self, tmp_path):
+        """`policy.level` is a deprecated alias judged by `carter.access` (unknown means
+        `strict`); the loader neither raises nor rewrites it."""
         cfg = _minimal_existing_config()
         cfg["policy"] = {"level": "loose"}
         cfg_path = tmp_path / "carter.yaml"
         cfg_path.write_text(yaml.dump(cfg))
-        merged = load_config(cfg_path)  # must NOT raise
-        assert merged["policy"]["level"] == "guarded"
+        assert load_config(cfg_path)["policy"]["level"] == "loose"  # must NOT raise
 
-    def test_new_install_defaults_guarded(self):
-        """A freshly generated config (new install) defaults to guarded."""
-        cfg = generate_default_config()
-        assert cfg["policy"]["level"] == "guarded"
+    def test_new_install_has_no_level(self):
+        assert "level" not in generate_default_config()["policy"]
 
     def test_policy_block_is_independent_per_generation(self):
         """Mutating a generated policy block must not corrupt DEFAULT_CONFIG."""
@@ -79,9 +79,8 @@ class TestPolicyOverridesAreHonored:
     def test_override_tightens_emitted_gate(self):
         from carter.config import permission_rules
 
-        cfg = generate_default_config()
+        cfg = _guarded(generate_default_config())
         cfg["agent_suffix"] = ""
-        cfg["policy"]["level"] = "guarded"
         cfg["policy"]["overrides"] = {"remote-write": "deny"}  # tighten ask -> deny
         rules = permission_rules(cfg, "devops")
         assert {"action": "shell", "resource": "vault read *", "effect": "deny"} in rules
@@ -89,39 +88,34 @@ class TestPolicyOverridesAreHonored:
     def test_override_reflected_in_gate_table(self):
         from carter.config import policy_gate_table
 
-        rows = policy_gate_table(
-            {"policy": {"level": "guarded", "overrides": {"dangerous": "deny"}}}
-        )
+        rows = policy_gate_table(_guarded({"policy": {"overrides": {"dangerous": "deny"}}}))
         gates = {r["category"]: r["gate"] for r in rows}
         assert gates["dangerous"] == "deny"  # tightened from the guarded default (gate)
 
     def test_no_override_uses_taxonomy_default(self):
         from carter.config import policy_gate_table
 
-        rows = policy_gate_table({"policy": {"level": "guarded"}})
+        rows = policy_gate_table(_guarded({"policy": {}}))
         gates = {r["category"]: r["gate"] for r in rows}
         assert gates["remote-write"] == "ask"  # unchanged shipped default
 
     def test_override_only_affects_named_category(self):
         from carter.config import policy_gate_table
 
-        rows = policy_gate_table(
-            {"policy": {"level": "guarded", "overrides": {"remote-write": "deny"}}}
-        )
+        rows = policy_gate_table(_guarded({"policy": {"overrides": {"remote-write": "deny"}}}))
         gates = {r["category"]: r["gate"] for r in rows}
         assert gates["remote-write"] == "deny"
         assert gates["dangerous"] == "gate"  # untouched
 
 
 class TestPolicyLevelValidation:
-    """`guarded`/`strict` are the only levels; an out-of-vocabulary
-    `policy.level` (a stale `loose`, a typo) normalizes to the `guarded` default at
-    the boundary rather than raising — no dedicated migration branch. Override
-    category/gate typos still fail fast."""
+    """`policy.level` is read by `carter.access` (an unknown value means `strict`), so the
+    loader does not raise on it. Override category/gate typos still fail fast."""
 
-    def test_unknown_level_normalizes_to_guarded(self, tmp_path):
+    def test_unknown_level_is_not_a_load_error(self, tmp_path):
         import yaml as _yaml
 
+        from carter.access import resolve_config
         from carter.config import load_config
 
         cfg = {
@@ -133,8 +127,8 @@ class TestPolicyLevelValidation:
         }
         path = tmp_path / "carter.yaml"
         path.write_text(_yaml.dump(cfg))
-        # Unknown level resolves to guarded via the default path (no raise).
-        assert load_config(path)["policy"]["level"] == "guarded"
+        config = load_config(path)  # no raise
+        assert resolve_config(_guarded(config)).effective_level == "strict"
 
     def test_valid_levels_accepted(self, tmp_path):
         import yaml as _yaml
@@ -343,33 +337,36 @@ class TestGithubWritesAreHumanOnly:
         "gh api *",
     )
 
+    # `issue_write` owns the two issue verbs (its rows come after G2's); the rest is the floor.
+    FLOOR_VERBS = tuple(v for v in VERBS if not v.startswith("gh issue c"))
+
     @pytest.mark.parametrize("role", sorted(AGENT_ALLOWLIST))
-    @pytest.mark.parametrize("level", ["guarded", "strict"])
-    def test_every_verb_is_denied_for_every_agent_including_devops(self, role, level):
+    @pytest.mark.parametrize("level", ["strict", "guarded", "relaxed"])
+    def test_every_floor_verb_is_denied_for_every_agent_including_devops(self, role, level):
         from carter.config import permission_rules
 
-        cfg = generate_default_config()
-        cfg["policy"]["level"] = level
+        cfg = with_user_access(generate_default_config(), UserAccess(table={"level": level}))
         rules = permission_rules(cfg, role)
-        for verb in self.VERBS:
+        for verb in self.FLOOR_VERBS:
             matching = [r for r in rules if r["action"] == "shell" and r["resource"] == verb]
             assert matching and matching[-1]["effect"] == "deny", (role, verb)
 
     def test_a_policy_override_cannot_loosen_them(self):
         from carter.config import permission_rules
 
-        cfg = generate_default_config()
+        cfg = _guarded(generate_default_config())
         cfg["policy"]["overrides"] = {"remote-write": "allow", "dangerous": "allow"}
         cfg["policy"]["allowlist"] = {"engineer": {"remote-write": True}}
         for role in ("devops", "engineer"):
             rules = permission_rules(cfg, role)
-            assert {"action": "shell", "resource": "git push *", "effect": "deny"} in rules
-            assert rules[-1] == {"action": "shell", "resource": "gh api *", "effect": "deny"}
+            for verb in self.FLOOR_VERBS:
+                last = [r for r in rules if r["resource"] == verb][-1]
+                assert last["effect"] == "deny", (role, verb)
 
     def test_vault_stays_gated_for_devops(self):
         from carter.config import permission_rules
 
-        rules = permission_rules(generate_default_config(), "devops")
+        rules = permission_rules(_guarded(generate_default_config()), "devops")
         assert {"action": "shell", "resource": "vault read *", "effect": "ask"} in rules
         assert {"action": "shell", "resource": "vault write *", "effect": "ask"} in rules
 
