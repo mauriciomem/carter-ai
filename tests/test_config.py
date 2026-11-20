@@ -90,10 +90,10 @@ class TestPolicyOverridesAreHonored:
         from carter.config import policy_gate_table
 
         rows = policy_gate_table(
-            {"policy": {"level": "guarded", "overrides": {"dangerous": "ask"}}}
+            {"policy": {"level": "guarded", "overrides": {"dangerous": "deny"}}}
         )
         gates = {r["category"]: r["gate"] for r in rows}
-        assert gates["dangerous"] == "ask"  # overridden from the guarded default (gate)
+        assert gates["dangerous"] == "deny"  # tightened from the guarded default (gate)
 
     def test_no_override_uses_taxonomy_default(self):
         from carter.config import policy_gate_table
@@ -222,7 +222,7 @@ class TestAllowlistValidation:
     def test_valid_override_and_false_drop_render(self, tmp_path):
         path = self._write(tmp_path, {"engineer": {"remote-write": True, "local-write": False}})
         effective = effective_allowlist(load_config(path))
-        assert effective["engineer"]["remote-write"] is True
+        assert "remote-write" not in effective["engineer"]  # a loosening key is ignored
         assert effective["engineer"]["local-write"] is False
 
     def test_update_reports_typo_without_traceback(self, tmp_path):
@@ -383,14 +383,12 @@ class TestGithubWritesAreHumanOnly:
 
 class TestUserOverridesDoNotWipeShippedMaps:
     def test_allowlist_override_merges_not_replaces(self):
-        """A user allowlist tweak deep-merges without wiping other shipped agents."""
-        config = {"policy": {"allowlist": {"engineer": {"remote-write": True}}}}
+        """A user allowlist tweak changes only the named entry, not other shipped agents."""
+        config = {"policy": {"allowlist": {"engineer": {"local-write": False}}}}
         effective = effective_allowlist(config)
-        # the shipped sole remote-write holder is untouched
-        assert effective["devops"]["remote-write"] is True
-        # the user's extension applied on top of engineer's shipped categories
+        assert effective["devops"]["remote-write"] is True  # the sole holder is untouched
         assert effective["engineer"]["read"] is True
-        assert effective["engineer"]["remote-write"] is True
+        assert effective["engineer"]["local-write"] is False
 
     def test_no_policy_overrides_returns_shipped_defaults(self):
         """With no overrides, the effective allowlist equals the shipped one."""

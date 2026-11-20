@@ -142,8 +142,15 @@ See [Safety and permissions](../guides/safety-and-permissions.md).
 | Key | Default | Description |
 |-----|---------|-------------|
 | `level` | `guarded` | `guarded` or `strict`. Anything else counts as `guarded` |
-| `overrides` | `{}` | Per-category effect, e.g. `{remote-write: deny}`. Categories: `read`, `local-write`, `remote-write`, `dangerous`. Effects: `allow`, `ask`, `gate`, `deny` |
-| `allowlist` | not set | Grant or remove categories per agent, e.g. `{engineer: {remote-write: true}}` |
+| `overrides` | `{}` | Per-category effect, e.g. `{remote-write: deny}`. Categories: `read`, `local-write`, `remote-write`, `dangerous`. Effects: `allow`, `ask`, `gate`, `deny`. Only an effect at least as strict as the level's own is applied |
+| `allowlist` | not set | Remove a category from an agent, e.g. `{devops: {dangerous: false}}`. A `true` Carter does not already grant is ignored |
+
+A workspace can only tighten. Keys here that loosen a control (an override to a looser effect,
+an extra category for an agent) are ignored: `carter update` and `carter check` print one line
+and `-v` names the keys. Loosening is human-only and will be set in `~/.carter/config.toml`.
+This does not protect your own tightening: an agent that can edit `carter.yaml` can remove it,
+and one with edit or shell access can change the rendered agent files directly (`carter check`
+reports the drift). A durable floor will come with `[access]` in `~/.carter/config.toml`.
 
 An invalid category or effect in `overrides` is an error. In `allowlist`, every
 agent must be listed in `agents:`, every category must be one of the four, and every

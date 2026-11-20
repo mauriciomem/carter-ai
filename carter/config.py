@@ -80,8 +80,8 @@ DEFAULT_CONFIG: dict[str, Any] = {
         "step_max_lines": 80,  # step-file split budget
     },
     # Risk-based strictness policy. Control keys only; the shipped taxonomy and
-    # per-agent allowlist live as module constants below (the allowlist is
-    # user-extensible via carter.yaml policy.allowlist). `guarded` is the floor
+    # per-agent allowlist live as module constants below (carter.yaml can only
+    # tighten them, see `ignored_policy_keys`). `guarded` is the floor
     # and the default for everything (new and existing/omitted) — strictness is two
     # levels only, so an absent or unrecognized level resolves to `guarded` through
     # this default.
@@ -208,13 +208,16 @@ def _validate_policy(policy: Any, agents: list[str] | None = None) -> None:
     # default in place, silently, so it resolves via the normal default path downstream.
     if level not in POLICY_LEVELS:
         policy["level"] = level = "guarded"
-    for cat, gate in (policy.get("overrides") or {}).items():
+    overrides = policy.get("overrides") or {}
+    if not isinstance(overrides, dict):
+        raise ConfigError(f"Invalid policy.overrides: {overrides!r} (must be a mapping)")
+    for cat, gate in overrides.items():
         if cat not in RISK_TAXONOMY:
             raise ConfigError(
                 f"Invalid policy.overrides category {cat!r}. "
                 f"Must be one of: {', '.join(RISK_TAXONOMY)}."
             )
-        if gate not in GATE_SEVERITY:
+        if not isinstance(gate, str) or gate not in GATE_SEVERITY:
             raise ConfigError(
                 f"Invalid policy.overrides[{cat!r}]: {gate!r}. "
                 f"Must be one of: {', '.join(GATE_SEVERITY)}."
@@ -303,10 +306,9 @@ def _deep_merge(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any
 # ──────────────────────────────────────────────────────────────────────────────
 # Risk-based strictness policy model
 # ──────────────────────────────────────────────────────────────────────────────
-# The taxonomy and per-agent allowlist are shipped with Carter; the allowlist is
-# user-extensible via carter.yaml. They are dict-shaped on purpose: `_deep_merge`
-# replaces lists wholesale, so a list shape would let a single user override silently
-# wipe the shipped defaults. Dicts merge key-by-key instead.
+# The taxonomy and per-agent allowlist are shipped with Carter; carter.yaml can only
+# tighten them. They are dict-shaped on purpose: `_deep_merge` replaces lists wholesale,
+# so a list shape would let a single user override silently wipe the shipped defaults.
 
 # Gate vocabulary, least -> most restrictive.
 GATE_SEVERITY: dict[str, int] = {"allow": 0, "ask": 1, "gate": 2, "deny": 3}
@@ -430,10 +432,45 @@ def resolve_model(config: dict[str, Any], role: str) -> str:
     return str(models.get("default") or "")
 
 
+# The workspace can only harden. carter.yaml is writable by agents, so a key that loosens
+# the code baseline (the built-in allowlist, the level's gates) is ignored, never applied.
+# Loosening is human-only and will live in ``~/.carter/config.toml``.
+
+
+def _hardening_overrides(policy: dict[str, Any]) -> dict[str, str]:
+    """The ``policy.overrides`` that are at least as strict as the level's own gate."""
+    level = policy.get("level", "guarded")
+    return {
+        cat: gate
+        for cat, gate in (policy.get("overrides") or {}).items()
+        if GATE_SEVERITY[gate] >= GATE_SEVERITY[RISK_TAXONOMY[cat][level]]
+    }
+
+
+def ignored_policy_keys(config: dict[str, Any]) -> list[str]:
+    """Dotted names of the ``policy`` keys in carter.yaml that loosen the baseline."""
+    policy = config.get("policy") or {}
+    kept = _hardening_overrides(policy)
+    keys = [
+        f"policy.allowlist.{agent}.{cat}"
+        for agent, cats in (policy.get("allowlist") or {}).items()
+        for cat, on in cats.items()
+        if on and not AGENT_ALLOWLIST.get(agent, {}).get(cat)
+    ]
+    keys += [
+        f"policy.overrides.{cat}" for cat in (policy.get("overrides") or {}) if cat not in kept
+    ]
+    return keys
+
+
 def effective_allowlist(config: dict[str, Any]) -> dict[str, dict[str, bool]]:
-    """Shipped per-agent allowlist with any ``policy.allowlist`` overrides merged on top."""
-    overrides = (config.get("policy") or {}).get("allowlist", {})
-    return _deep_merge(copy.deepcopy(AGENT_ALLOWLIST), overrides)
+    """Shipped per-agent allowlist; ``policy.allowlist`` may only switch a category off."""
+    effective = copy.deepcopy(AGENT_ALLOWLIST)
+    for agent, cats in ((config.get("policy") or {}).get("allowlist") or {}).items():
+        for cat, on in cats.items():
+            if not on and cat in effective.get(agent, {}):
+                effective[agent][cat] = False
+    return effective
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -550,7 +587,7 @@ def permission_rules(config: dict[str, Any], role: str) -> list[Rule]:
     policy = config.get("policy") or {}
     level = policy.get("level", "guarded")
     allowed = [cat for cat, on in sorted(effective_allowlist(config).get(role, {}).items()) if on]
-    gates = _gates_for(allowed, level, policy.get("overrides"))
+    gates = _gates_for(allowed, level, _hardening_overrides(policy))
     writes = "local-write" in allowed
 
     rules = [_rule("*", "*", "ask")]
@@ -616,9 +653,8 @@ def policy_gate_table(config: dict[str, Any]) -> list[dict[str, str]]:
     """
     policy = config.get("policy") or {}
     level = policy.get("level", "guarded")
-    overrides = policy.get("overrides") or {}
     cats = ("read", "local-write", "remote-write", "dangerous")
-    gates = _gates_for(list(cats), level, overrides)
+    gates = _gates_for(list(cats), level, _hardening_overrides(policy))
     return [{"category": cat, "gate": gates[cat]} for cat in cats]
 
 
