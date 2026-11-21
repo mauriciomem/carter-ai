@@ -165,14 +165,25 @@ check of the plugin; until it has run, `carter check --host` says the server is 
 first agent command.
 
 If your global git config is a symlink or read-only (dotfiles, Nix), Carter doesn't write it. It
-prints the exact line instead:
+says so in one line (`! ~/.gitconfig is a symlink: add Carter's include line`) and points to
+`carter install --help`. Add this to your dotfiles' git config once; it never changes:
 
-```text
-git config --global --add include.path /home/you/.carter/gitconfig
+```ini
+[include]
+    path = ~/.carter/gitconfig
 ```
 
-Add that one line to your dotfiles' git config yourself. Until you do, the `pre-push` hook is
-inactive and `carter check --host` says so.
+Carter recognises the line in any spelling git resolves to its file: `~/.carter/gitconfig`, the
+absolute path, a path through a symlink, or a line inside a file you include. When it finds one it
+prints nothing. If the file behind the symlink is writable, this does the same, because git writes
+through the link (Carter never does):
+
+```text
+git config --global --add include.path ~/.carter/gitconfig
+```
+
+Until the line is there, the `pre-push` hook is inactive and `carter check --host` says so.
+`carter uninstall` does not edit that file either: delete the line from your dotfiles.
 
 Check it with `carter check --host` (read-only, in your terminal). To see that a shell really is
 isolated, ask an agent to run `carter check --probe`.

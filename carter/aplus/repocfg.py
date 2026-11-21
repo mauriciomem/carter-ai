@@ -78,11 +78,17 @@ class CarterOwned:
     hook_files: tuple[str, ...] = ()  # hook files Carter installed (per-repo fallback)
 
     @classmethod
-    def from_state(cls, state: object) -> CarterOwned:
+    def from_state(cls, state: object, base_dir: Path | None = None) -> CarterOwned:
         from carter.guard.state import GuardState
+        from carter.install.paths import carter_gitconfig_path
 
         assert isinstance(state, GuardState)
         value = (state.gitconfig or {}).get("value", "")
+        if not value:
+            # The human added the include line (dotfiles): Carter recorded none, but its own file
+            # is still recorded with a hash. A file that changed since is not trusted.
+            own = carter_gitconfig_path(base_dir)
+            value = str(own) if state.owned_unchanged(own) else ""
         hooks = [r["path"] for r in state.repo_hooks]
         return cls(
             include=(value,) if value else (),

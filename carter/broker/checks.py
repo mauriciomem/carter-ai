@@ -53,7 +53,9 @@ def load_context(*, git: str, gh: str, base_dir: Path | None = None) -> Context:
     """Config, ownership and tools. A broken ``config.toml`` refuses (``E-CONFIG``)."""
     cfg = load_identity(carter_config_path(base_dir))
     read = load_or_empty_readonly(guard_state_path(base_dir))
-    owned = repocfg.CarterOwned.from_state(read.state if read.status == "ok" else GuardState())
+    owned = repocfg.CarterOwned.from_state(
+        read.state if read.status == "ok" else GuardState(), base_dir
+    )
     tools = Tools(git=git, gh=gh, ssh_bin_dir=cfg.signing.ssh_bin_dir)
     return Context(cfg, owned, tools, account_home(), base_dir)
 

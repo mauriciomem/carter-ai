@@ -105,6 +105,51 @@ class TestCleanAndAllowlist:
         assert {f.scope for f in findings} == {"global"}
 
 
+class TestDotfilesInclude:
+    """The human added the include line to a dotfile-managed config (the ``~/`` spelling), so
+    guard state holds no include record. Carter's own file is still Carter's: it is recorded
+    with its hash, and git reports its hook keys with that file as origin."""
+
+    @pytest.fixture
+    def carter_file(self) -> Path:
+        path = Path.home() / ".carter" / "gitconfig"
+        path.parent.mkdir()
+        for key, value in (("event", "commit-msg"), ("command", "true")):
+            git("config", "--file", str(path), f"hook.carter-guard-commit-msg.{key}", value)
+        return path
+
+    @staticmethod
+    def state_with(path: Path):
+        from carter.guard.state import GuardState
+
+        state = GuardState()
+        state.record_file(path, path.read_bytes())
+        return state
+
+    def test_carters_hook_keys_are_not_findings(
+        self, repo: Path, global_git, carter_file: Path
+    ) -> None:
+        global_git("include.path", "~/.carter/gitconfig", add=True)
+        owned = repocfg.CarterOwned.from_state(self.state_with(carter_file))
+        assert check(repo, owned=owned) == []
+
+    def test_an_edited_file_is_not_trusted(self, repo: Path, global_git, carter_file: Path) -> None:
+        global_git("include.path", "~/.carter/gitconfig", add=True)
+        state = self.state_with(carter_file)
+        carter_file.write_text(carter_file.read_text() + '[hook "x"]\n\tevent = pre-push\n')
+        findings = check(repo, owned=repocfg.CarterOwned.from_state(state))
+        assert "hook.carter-guard-commit-msg.command" in keys(findings)
+
+    def test_a_file_carter_never_recorded_is_not_trusted(
+        self, repo: Path, global_git, carter_file: Path
+    ) -> None:
+        from carter.guard.state import GuardState
+
+        global_git("include.path", "~/.carter/gitconfig", add=True)
+        findings = check(repo, owned=repocfg.CarterOwned.from_state(GuardState()))
+        assert "hook.carter-guard-commit-msg.command" in keys(findings)
+
+
 class TestGlobalScope:
     def test_gh_auth_setup_git_credential_helper_passes(self, repo: Path, global_git) -> None:
         global_git("credential.https://github.com.helper", "!gh auth git-credential")

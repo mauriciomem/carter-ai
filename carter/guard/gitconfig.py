@@ -7,8 +7,11 @@ include.path <that value>``. Rules:
 
 - The include value is **absolute and unresolved** (a relative path breaks through a
   symlinked ``~/.gitconfig``; a resolved one would not match ``--fixed-value --unset``).
-- A symlinked, read-only or dotfile-managed global config is **never written**: Carter
-  returns the exact line for the human to add (or remove) and records nothing.
+- A symlinked, read-only or dotfile-managed global config is **never written**: Carter says
+  so in one line (the line to add or remove is in ``carter install --help``) and records
+  nothing. A line the human added counts in any spelling git resolves to Carter's file
+  (``~/.carter/gitconfig``, absolute, through a symlink, in an included file): then Carter
+  prints nothing.
 - ``probe_scope`` asks git, in a scratch config, where an included hook is read from:
   ``include`` (global: use the include), ``direct`` (hooks work but not as ``global``:
   write the keys straight into the global config, tracked key by key) or
@@ -37,6 +40,7 @@ from pathlib import Path
 from typing import Literal
 
 from carter.guard.state import GuardState
+from carter.home import tilde
 from carter.install.atomic import atomic_write_bytes
 from carter.install.paths import carter_gitconfig_path
 
@@ -49,6 +53,9 @@ HEADER = (
 )
 PROBE_HOOK = "carter-probe"
 INCLUDE_KEY = "include.path"
+# The line that follows a one-line warning about the include line: where the snippet lives.
+SEE_INSTALL = "→ see: carter install --help"
+SEE_UNINSTALL = "→ see: carter uninstall --help"
 
 
 class GitError(Exception):
@@ -167,10 +174,10 @@ def global_config_path(env: Mapping[str, str] | None = None) -> Path:
 def manual_reason(path: Path) -> str | None:
     """Why Carter must not write ``path``: symlinked (dotfiles, Nix) or not writable."""
     if path.is_symlink():
-        return f"{path} is a symlink (dotfile-managed?)"
+        return f"{tilde(path)} is a symlink"
     probe = path if path.exists() else next((p for p in path.parents if p.exists()), path.parent)
     if not os.access(probe, os.W_OK) or (path.exists() and not os.access(path.parent, os.W_OK)):
-        return f"{path} is not writable"
+        return f"{tilde(path)} is not writable"
     return None
 
 
@@ -179,8 +186,10 @@ def manual_reason(path: Path) -> str | None:
 
 @dataclass
 class IncludeResult:
-    status: Literal["added", "present", "removed", "absent", "manual"]
-    line: str | None = None  # what the human should run, for "manual"
+    """``yours``: the human's own line (any spelling) is there; Carter changes and records nothing.
+    ``manual``: the config is not Carter's to write; ``note`` is the one-line warning."""
+
+    status: Literal["added", "present", "yours", "removed", "absent", "manual"]
     note: str = ""
 
 
@@ -191,8 +200,34 @@ def _absolute(value: str) -> str:
 
 
 def has_include_line(path: Path, value: str) -> bool:
+    """Exactly ``value`` is an ``include.path`` of ``path`` (what Carter writes and unsets)."""
     args = [str(path), "--fixed-value", "--get-all", INCLUDE_KEY, value]
     return _file_git(*args).returncode == 0
+
+
+def include_present(path: Path, value: str, env: Mapping[str, str] | None = None) -> bool:
+    """Does ``path`` include the file ``value``, however the line is spelled?
+
+    Git expands ``~/`` (``--type=path``) and follows the include lines of included files
+    (``--includes``); two spellings are the same file when their real paths are equal, so a
+    path through a symlink counts. ``$HOME`` is not expanded by git, so it does not count. A
+    relative path is skipped. If an included file is malformed git fails: then only the lines
+    of ``path`` itself are read, and as a last resort the exact comparison."""
+    if not path.exists():
+        return False
+    git_env = file_env()
+    if env and env.get("HOME"):
+        git_env["HOME"] = env["HOME"]  # the ``~`` git expands is the one this caller means
+    wanted = os.path.realpath(value)
+    for flags in (["--includes", "--type=path"], ["--type=path"]):
+        proc = run_git(
+            ["config", "--file", str(path), *flags, "--get-all", INCLUDE_KEY], env=git_env
+        )
+        if proc.returncode in (0, 1):  # 1: no such key
+            return any(
+                os.path.realpath(v) == wanted for v in proc.stdout.splitlines() if os.path.isabs(v)
+            )
+    return has_include_line(path, value)
 
 
 def parses(path: Path) -> bool:
@@ -201,18 +236,26 @@ def parses(path: Path) -> bool:
     return _file_git(str(path), "--list").returncode == 0
 
 
+def plan_include(path: Path, value: str) -> IncludeResult:
+    """What adding ``include.path = value`` to ``path`` would do. Read-only: ``added`` means a
+    write is needed, ``present`` is Carter's own exact line, ``yours`` the human's equivalent."""
+    value = _absolute(value)
+    why = manual_reason(path)
+    if why is None and path.exists() and has_include_line(path, value):
+        return IncludeResult("present")
+    if include_present(path, value):
+        return IncludeResult("yours")
+    if why is not None:
+        return IncludeResult("manual", f"{why}: add Carter's include line")
+    return IncludeResult("added")
+
+
 def add_include(path: Path, value: str) -> IncludeResult:
     """Append ``include.path = value`` to the global config unless it is there already."""
-    value = _absolute(value)
-    line = f"git config --global --add {INCLUDE_KEY} {shlex.quote(value)}"
-    if (why := manual_reason(path)) is not None:
-        return IncludeResult(
-            "manual", line, f"{why}; Carter did not write it. Add the line yourself."
-        )
-    if path.exists() and has_include_line(path, value):
-        return IncludeResult("present")
-    _checked(str(path), "--add", INCLUDE_KEY, value)
-    return IncludeResult("added")
+    result = plan_include(path, value)
+    if result.status == "added":
+        _checked(str(path), "--add", INCLUDE_KEY, value)
+    return result
 
 
 def remove_include(path: Path, value: str) -> IncludeResult:
@@ -221,35 +264,26 @@ def remove_include(path: Path, value: str) -> IncludeResult:
     if not path.exists() or not has_include_line(path, value):
         return IncludeResult("absent", note=f"include line not found in {path}; nothing changed")
     if (why := manual_reason(path)) is not None:
-        line = f"git config --global --fixed-value --unset-all {INCLUDE_KEY} {shlex.quote(value)}"
-        return IncludeResult(
-            "manual", line, f"{why}; Carter did not edit it. Remove the line yourself."
-        )
+        return IncludeResult("manual", f"{why}: remove Carter's include line")
     _checked(str(path), "--fixed-value", "--unset-all", INCLUDE_KEY, value)
     return IncludeResult("removed")
 
 
 def manual_include_state(base_dir: Path | None, env: Mapping[str, str] | None = None) -> str:
     """For a hook install whose include line Carter did not write (dotfiles, read-only):
-    ``present`` (the human added it), ``missing`` or ``unknown`` (git cannot say)."""
+    ``present`` (the human added it, in any spelling), ``missing`` or ``unknown`` (git cannot
+    say)."""
     value = str(carter_gitconfig_path(base_dir))
     try:
         target = global_config_path(env)
     except GitError:
         return "unknown"
-    if target.exists() and has_include_line(target, value):
-        return "present"
-    return "missing"
+    return "present" if include_present(target, value, env) else "missing"
 
 
 def include_line(base_dir: Path | None) -> str:
     value = shlex.quote(str(carter_gitconfig_path(base_dir)))
     return f"git config --global --add {INCLUDE_KEY} {value}"
-
-
-def unset_line(base_dir: Path | None) -> str:
-    value = shlex.quote(str(carter_gitconfig_path(base_dir)))
-    return f"git config --global --fixed-value --unset-all {INCLUDE_KEY} {value}"
 
 
 def record_include(state: GuardState, path: Path, value: str, result: IncludeResult) -> None:

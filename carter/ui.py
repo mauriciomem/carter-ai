@@ -150,6 +150,14 @@ def warn(text: str, fix: str = "") -> None:
     _emit(err, *lines)
 
 
+def fix(text: str) -> None:
+    """``  → text`` on stderr, under a warning. A message is one line (a ``\\n`` in it would be
+    written out, see ``_visible``), so the command, or the pointer to the help that has it, goes
+    here as its own line."""
+    err = sys.stderr
+    _emit(err, _fix_line(err, text))
+
+
 def fail(cause: str, fix: str = "", code: str = "", *, inline: bool = False) -> None:
     """``✗ cause`` / ``→ fix`` with the error code dimmed at the end, on stderr.
 

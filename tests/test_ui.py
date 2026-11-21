@@ -44,6 +44,26 @@ def test_warn_goes_to_stderr_and_is_one_line(capsys: pytest.CaptureFixture[str])
     assert out.out == "" and out.err == "! the key has no passphrase\n"
 
 
+def test_fix_is_the_arrow_line_under_a_warning_on_stderr(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    ui.warn("~/.gitconfig is a symlink")
+    ui.fix("see: carter install --help")
+    out = capsys.readouterr()
+    assert out.out == ""
+    assert out.err.splitlines() == ["! ~/.gitconfig is a symlink", "  → see: carter install --help"]
+
+
+def test_a_newline_inside_a_message_is_still_written_out_not_obeyed(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """A file name may hold a newline and fake a line (PR #49): ``_visible`` stays strict, so a
+    message is one line and a command goes on its own ``ui.fix`` line."""
+    ui.warn("a\nb")
+    ui.fix("c\nd")
+    assert capsys.readouterr().err == "! a\\nb\n  → c\\nd\n"
+
+
 def test_square_brackets_are_not_markup(capsys: pytest.CaptureFixture[str]) -> None:
     ui.fail("[identity] mode is not [bold]auto[/bold]", "set [y/N]")
     err = capsys.readouterr().err

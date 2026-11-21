@@ -18,6 +18,7 @@ import click
 from carter import terminal, ui
 from carter.broker import counter
 from carter.cliguard import guarded, verbose_option
+from carter.dotfiles_help import INSTALL_EPILOG, UNINSTALL_EPILOG
 from carter.guard import consent, engine, report, status
 from carter.install.paths import run_dir
 
@@ -68,7 +69,7 @@ def guard() -> None:
     """Install, inspect and remove Carter's guards."""
 
 
-@guard.command("install")
+@guard.command("install", epilog=INSTALL_EPILOG)
 @_common
 @verbose_option
 def install_cmd(
@@ -95,7 +96,7 @@ def install_cmd(
     _guarded(run)
 
 
-@guard.command("remove")
+@guard.command("remove", epilog=UNINSTALL_EPILOG)
 @lambda f: _common(f, remove=True)
 @verbose_option
 def remove_cmd(
@@ -141,15 +142,19 @@ def status_cmd(base_dir: Path | None, reset_b: bool) -> None:
             for line in lines:
                 click.echo(line)
             return 0
-        problems = [ln.strip() for ln in lines if report.PROBLEM.search(ln)]
-        for line in problems:
-            ui.warn(line)
+        problems = 0
+        for before, line in zip(["", *lines], lines, strict=False):
+            if report.PROBLEM.search(line):
+                ui.warn(line.strip())
+                problems += 1
+            elif line.startswith("→ ") and report.PROBLEM.search(before):  # its help pointer
+                ui.fix(line.removeprefix("→ "))
         active = next((ln for ln in lines if ln.startswith("Active groups:")), "")
         groups = active.partition(": ")[2]
         if "absent" in lines[0]:
             ui.info("no guards installed: run `carter guard install`")
         elif problems:
-            ui.warn(f"guards: {len(problems)} problem(s)", "run `carter guard install` again")
+            ui.warn(f"guards: {problems} problem(s)", "run `carter guard install` again")
         else:
             ui.ok("guards", groups if groups != "none" else "none accepted")
         return 0

@@ -116,7 +116,9 @@ def _signed_count(repo: Path, commits: tuple[str, ...]) -> int:
 def _identity_and_owned(base_dir: Path | None) -> tuple[IdentityConfig, repocfg.CarterOwned]:
     cfg = load_identity(carter_config_path(base_dir))  # a broken file refuses (E-CONFIG)
     read = load_or_empty_readonly(guard_state_path(base_dir))
-    owned = repocfg.CarterOwned.from_state(read.state if read.status == "ok" else GuardState())
+    owned = repocfg.CarterOwned.from_state(
+        read.state if read.status == "ok" else GuardState(), base_dir
+    )
     return cfg, owned
 
 
