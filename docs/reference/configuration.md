@@ -50,7 +50,6 @@ plans:
   readme_max_lines: 150
   step_max_lines: 80
 policy:
-  level: guarded
   overrides: {}
 models:
   default: anthropic/claude-opus-5-5
@@ -141,16 +140,17 @@ See [Safety and permissions](../guides/safety-and-permissions.md).
 
 | Key | Default | Description |
 |-----|---------|-------------|
-| `level` | `guarded` | `guarded` or `strict`. Anything else counts as `guarded` |
+| `level` | not set | Deprecated alias of `access.level`: it can only tighten the level set in `~/.carter/config.toml` (`strict` when that is absent). An unknown value counts as `strict` |
 | `overrides` | `{}` | Per-category effect, e.g. `{remote-write: deny}`. Categories: `read`, `local-write`, `remote-write`, `dangerous`. Effects: `allow`, `ask`, `gate`, `deny`. Only an effect at least as strict as the level's own is applied |
 | `allowlist` | not set | Remove a category from an agent, e.g. `{devops: {dangerous: false}}`. A `true` Carter does not already grant is ignored |
 
 A workspace can only tighten. Keys here that loosen a control (an override to a looser effect,
 an extra category for an agent) are ignored: `carter update` and `carter check` print one line
-and `-v` names the keys. Loosening is human-only and will be set in `~/.carter/config.toml`.
-This does not protect your own tightening: an agent that can edit `carter.yaml` can remove it,
+and `-v` names the keys. Loosening is human-only: it is set with `[access]` in
+`~/.carter/config.toml`. This does not protect your own tightening: an agent that can edit `carter.yaml` can remove it,
 and one with edit or shell access can change the rendered agent files directly (`carter check`
-reports the drift). A durable floor will come with `[access]` in `~/.carter/config.toml`.
+reports the drift). `[access]` in `~/.carter/config.toml` is the level you set; a workspace can
+only tighten it.
 
 An invalid category or effect in `overrides` is an error. In `allowlist`, every
 agent must be listed in `agents:`, every category must be one of the four, and every
@@ -256,6 +256,7 @@ require_tier = "t2"       # pinned by `carter update`
 | `[github]` | `read_token_file`: where `carter github-token set` stored the GitHub token (a path only, never the token itself). `probe_repo`: optional `owner/name` that `github-token check` uses for its refused push attempt and its pull-request probe instead of a repository you own |
 | `[broker]` | Optional, for [`carter_push`](../guides/write-operations.md#letting-devops-ask-you-to-push). `min_dwell_ms`: the shortest an approval may take before it is refused as automatic; the effective value is never below 500 and never above 10000. It always uses the home in your system account entry (what OpenSSH reads) for its git and ssh calls and for the `~/.ssh/config` scan; there is no setting for it |
 | `[attribution]` | `footer`: appended to GitHub and Jira bodies |
+| `[access]` | What agents may do: `level` (`strict`, the default when absent, `guarded` or `relaxed`) and, optionally, one value per capability (`allowed`, `ask` or `denied`, up to the row's ceiling): `workspace_edit`, `run_commands`, `git_commit`, `github_read`, `pr_write`, `issue_write`, `destructive`, `infra_apply`, `opencode_config`. Carter keeps the table when it rewrites this file. Any error in it, or a file that does not parse, renders `strict` and `carter update` says why. See [Safety and permissions](../guides/safety-and-permissions.md#choose-a-level) |
 | `[workspaces."<path>"]` | `max_tier`, `role`, `require_tier`, `allow_project_opencode_edit`. The path is the resolved absolute path of the workspace |
 
 ### Letting agents edit a project's OpenCode config

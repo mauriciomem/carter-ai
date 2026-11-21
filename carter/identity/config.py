@@ -25,6 +25,7 @@ from carter.identity.schema import (
     KEY_SCHEMA,
     SCHEMA_VERSION,
     SECTIONS,
+    TABLE_ACCESS,
     TABLE_WORKSPACES,
     Attribution,
     IdentityConfig,
@@ -129,6 +130,23 @@ def _known_tree() -> dict[str, Any]:
     return tree
 
 
+def _access_table(doc: dict[str, Any]) -> tuple[tuple[tuple[str, Any], ...], tuple[str, ...]]:
+    """``([access] scalar pairs in file order, dotted names that cannot be kept)``.
+
+    Any scalar is kept, even a wrong one, so it reaches the access resolver (which reports
+    it) instead of blocking every writer. A nested table, a list or a float cannot be written
+    back: those are unknown keys, and so is an ``access`` that is not a table.
+    """
+    table = doc.get(TABLE_ACCESS)
+    if table is None:
+        return (), ()
+    if not isinstance(table, dict):
+        return (), (TABLE_ACCESS,)
+    scalar = (str, int, bool)
+    kept = tuple((k, v) for k, v in table.items() if isinstance(v, scalar))
+    return kept, tuple(f"{TABLE_ACCESS}.{k}" for k, v in table.items() if not isinstance(v, scalar))
+
+
 def unknown_keys(doc: dict[str, Any]) -> tuple[str, ...]:
     """Dotted paths in ``doc`` that schema 2 does not model (a rewrite would lose them)."""
     unknown: list[str] = []
@@ -149,7 +167,12 @@ def unknown_keys(doc: dict[str, Any]) -> tuple[str, ...]:
             elif isinstance(known[key], dict) and isinstance(value, dict):
                 walk(value, known[key], f"{prefix}{key}.")
 
-    walk({k: v for k, v in doc.items() if k != TABLE_WORKSPACES}, _known_tree(), "")
+    walk(
+        {k: v for k, v in doc.items() if k not in (TABLE_WORKSPACES, TABLE_ACCESS)},
+        _known_tree(),
+        "",
+    )
+    unknown.extend(_access_table(doc)[1])
     ws_keys = {f.name for f in fields(Workspace)}
     for ws_path, table in doc.get(TABLE_WORKSPACES, {}).items():
         unknown.extend(f"{TABLE_WORKSPACES}.{ws_path}.{k}" for k in table if k not in ws_keys)
@@ -177,7 +200,11 @@ def parse_identity(doc: dict[str, Any] | None) -> IdentityConfig:
         key: _build(Workspace, table, f"{TABLE_WORKSPACES}.<path>") for key, table in raw_ws.items()
     }
     return IdentityConfig(
-        **parts, workspaces=workspaces, state="current", unknown_keys=unknown_keys(doc)
+        **parts,
+        workspaces=workspaces,
+        access=_access_table(doc)[0],
+        state="current",
+        unknown_keys=unknown_keys(doc),
     )
 
 

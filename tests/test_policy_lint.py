@@ -12,11 +12,13 @@ import pytest
 import yaml
 from click.testing import CliRunner
 
+from carter.access import UserAccess
 from carter.config import (
     generate_default_config,
     load_config,
     permission_rules,
     policy_frontmatter,
+    with_user_access,
     write_config,
 )
 from carter.scaffold import create_env, lint_policy, render_agents
@@ -45,15 +47,9 @@ _BASELINE = [
     _r("read", "~/.carter/*", "allow"),
 ]
 _MEMORIES_EDIT = _r("edit", "~/.carter/memories/*", "allow")
-_DANGEROUS = (
-    "terraform apply *",
-    "terraform destroy *",
-    "kubectl apply *",
-    "helm upgrade *",
-    "rm -rf *",
-    "git reset --hard *",
-    "git push --force *",
-)
+_INFRA = ("terraform apply *", "terraform destroy *", "kubectl apply *", "helm upgrade *")
+_DESTRUCTIVE = ("rm -rf *", "git reset --hard *")
+_DANGEROUS = _INFRA + _DESTRUCTIVE
 
 
 _VAULT = ("vault read *", "vault write *")  # the only shell verbs left in remote-write
@@ -62,33 +58,42 @@ _VAULT = ("vault read *", "vault write *")  # the only shell verbs left in remot
 # opening, editing and commenting on a PR are allowed; merge, close, review and ready are not.
 _GITHUB_WRITE = (
     "git push *",
+    "git push --force *",
     "gh pr merge *",
     "gh pr close *",
     "gh pr review *",
     "gh pr ready *",
-    "gh issue create *",
-    "gh issue comment *",
     "gh issue edit *",
     "gh release *",
     "gh api *",
 )
+_ISSUE = ("gh issue create *", "gh issue comment *")  # `issue_write` rows, after G2's rules
 _BROKER = [_r("carter_push", "*", "deny")]  # all but devops
 _MCP_GITHUB = _r("carter_github_*", "*", "deny")  # roles that do not need it
 
 
-def _shell(remote_write: str, dangerous: str) -> list[dict[str, str]]:
+_PR = ("gh pr create *", "gh pr edit *", "gh pr comment *")  # `pr_write` rows, after G2's
+
+
+def _shell(
+    infra: str, destructive: str, issue: str = "ask", pr: str | None = None
+) -> list[dict[str, str]]:
+    """The category rows, the GitHub-write denies, then the `pr_write` rows (only when not
+    allowed) and the `issue_write` rows (vault is infra)."""
     return (
-        [_r("shell", cmd, remote_write) for cmd in _VAULT]
-        + [_r("shell", cmd, dangerous) for cmd in _DANGEROUS]
+        [_r("shell", cmd, infra) for cmd in _VAULT + _INFRA]
+        + [_r("shell", cmd, destructive) for cmd in _DESTRUCTIVE]
         + [_r("shell", cmd, "deny") for cmd in _GITHUB_WRITE]
+        + ([_r("shell", cmd, pr) for cmd in _PR] if pr else [])
+        + [_r("shell", cmd, issue) for cmd in _ISSUE]
     )
 
 
 def _config(level: str = "guarded") -> dict:
+    """A default config for a human who set ``[access] level = <level>``."""
     cfg = generate_default_config(workspace_name="lint", mode="single")
     cfg["agent_suffix"] = ""
-    cfg["policy"]["level"] = level
-    return cfg
+    return with_user_access(cfg, UserAccess(table={"level": level}))
 
 
 def _installed(config: dict) -> dict[str, dict]:
@@ -108,7 +113,7 @@ class TestRuleOrder:
             _r("edit", "*", "ask"),
             _r("shell", "*", "ask"),
             _r("webfetch", "*", "ask"),
-            *_shell("deny", "deny"),
+            *_shell("deny", "deny", pr="ask"),
         ]
         assert permission_rules(_config(), "architect") == expected
 
@@ -121,7 +126,7 @@ class TestRuleOrder:
             _r("edit", "*", "ask"),
             _r("shell", "*", "ask"),
             _r("webfetch", "*", "ask"),
-            *_shell("deny", "deny"),
+            *_shell("deny", "deny", pr="ask"),
         ]
         assert permission_rules(_config(), "maestro") == expected
 
@@ -134,19 +139,22 @@ class TestRuleOrder:
             _r("edit", "*", "allow"),
             _r("shell", "*", "allow"),
             _r("webfetch", "*", "allow"),
-            *_shell("deny", "deny"),
+            *_shell("deny", "ask"),  # destructive follows the level for every writer
         ]
         assert permission_rules(_config(), "engineer") == expected
 
     def test_devops_guarded_gate_emitted_as_ask(self):
-        # guarded: remote-write ask, dangerous gate -> ask.
+        # guarded: infra (vault included) and destructive ask.
         rules = permission_rules(_config("guarded"), "devops")
-        assert rules[-len(_VAULT) - len(_DANGEROUS) - len(_GITHUB_WRITE) :] == _shell("ask", "ask")
+        assert rules[-len(_shell("ask", "ask")) :] == _shell("ask", "ask")
 
     def test_devops_strict(self):
-        # strict: remote-write gate -> ask, dangerous deny.
+        # strict: infra, destructive and issue verbs denied; PR verbs ask (before the issue rows).
         rules = permission_rules(_config("strict"), "devops")
-        assert rules[-len(_VAULT) - len(_DANGEROUS) - len(_GITHUB_WRITE) :] == _shell("ask", "deny")
+        pr_rows = [_r("shell", f"gh pr {v} *", "ask") for v in ("create", "edit", "comment")]
+        assert all(row in rules for row in pr_rows)
+        rest = [r for r in rules if r not in pr_rows]
+        assert rest[-len(_shell("deny", "deny", "deny")) :] == _shell("deny", "deny", "deny")
 
     def test_overrides_are_honored(self):
         cfg = _config()
@@ -166,9 +174,14 @@ class TestRuleOrder:
 
     @pytest.mark.parametrize("role", _ALL_ROLES)
     @pytest.mark.parametrize("level", ["guarded", "strict"])
-    def test_github_writes_are_denied_for_every_agent_and_come_last(self, role, level):
+    def test_github_writes_are_denied_for_every_agent_and_nothing_reopens_them(self, role, level):
         rules = permission_rules(_config(level), role)
-        assert rules[-len(_GITHUB_WRITE) :] == [_r("shell", c, "deny") for c in _GITHUB_WRITE]
+        denies = [_r("shell", c, "deny") for c in _GITHUB_WRITE]
+        start = rules.index(denies[0])
+        assert rules[start : start + len(denies)] == denies
+        for cmd in _GITHUB_WRITE:  # nothing after a deny allows or asks for the same verb
+            last = [r for r in rules if r["resource"] == cmd][-1]
+            assert last["effect"] == "deny"
 
     @pytest.mark.parametrize("level", ["guarded", "strict"])
     def test_devops_has_no_push_allow_or_ask_anywhere(self, level):
@@ -177,14 +190,11 @@ class TestRuleOrder:
             if rule["action"] == "shell" and rule["resource"].startswith(
                 ("git push", "gh pr merge", "gh api")
             ):
-                assert rule["effect"] in {"deny", "ask"}
+                assert rule["effect"] == "deny"  # a force-push is a push: floor, never ask
         pushes = [r for r in rules if r["action"] == "shell" and "git push" in r["resource"]]
-        # `git push --force *` stays a dangerous-category gate, but the later `git push *` deny wins
-        last = [r for r in pushes if r["resource"] == "git push *"][-1]
-        assert rules.index(last) > max(rules.index(r) for r in pushes if r is not last)
-        assert last["effect"] == "deny"
+        assert pushes and all(r["effect"] == "deny" for r in pushes)
 
-    def test_devops_keeps_remote_write_for_vault_only(self):
+    def test_devops_keeps_vault_gated(self):
         rules = permission_rules(_config(), "devops")
         assert _r("shell", "vault read *", "ask") in rules
         assert _r("shell", "vault write *", "ask") in rules
@@ -355,17 +365,18 @@ class TestCheckCliIntegration:
         result = runner.invoke(main, ["check", str(tmp_path)])
         assert result.exit_code == 0, result.output
 
-    def test_init_surfaces_guarded_policy_notice(self, tmp_path):
+    def test_init_surfaces_strict_policy_notice(self, tmp_path):
         runner, main = self._init(tmp_path)
         result = runner.invoke(main, ["update", "-v", str(tmp_path)])
-        assert "Strictness policy is 'guarded'" in result.output
+        assert "Strictness policy is 'strict'" in result.output
 
-    def test_stale_loose_resolves_guarded_on_update(self, tmp_path):
+    def test_an_unknown_policy_level_means_strict_not_guarded(self, tmp_path):
         runner, main = self._init(tmp_path)
         cfg_path = tmp_path / ".carter" / "carter.yaml"
-        raw = cfg_path.read_text().replace("level: guarded", "level: loose")
-        cfg_path.write_text(raw)
+        config = load_config(cfg_path)
+        config["policy"]["level"] = "loose"
+        write_config(cfg_path, config)
         result = runner.invoke(main, ["update", "-v", str(tmp_path)])
         assert result.exit_code == 0, result.output
-        assert "Strictness policy is 'guarded'" in result.output
-        assert load_config(cfg_path)["policy"]["level"] == "guarded"
+        assert "Strictness policy is 'strict'" in result.output
+        assert "policy.level invalid: using strict" in result.output

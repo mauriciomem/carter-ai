@@ -24,15 +24,16 @@ credentials and refuse pushes in any spelling.
 
 ## The four risk categories
 
-| Category | Examples | `guarded` (default) | `strict` |
-|----------|----------|---------------------|----------|
+| Category | Examples | `guarded` | `strict` (default) |
+|----------|----------|-----------|--------------------|
 | **read** | read and search files, `git status`, `git diff` | allow | allow |
 | **local-write** | edit files, run commands and tests, `git commit` | allow | allow |
-| **remote-write** | Jira and Slack writes, `vault read` | ask | ask |
-| **dangerous** | `terraform apply`, `kubectl apply`, `helm upgrade`, `rm -rf` | ask | **deny** |
+| **remote-write** | `vault read` | ask | **deny** |
+| **dangerous** | `terraform apply`, `kubectl apply`, `helm upgrade`, `rm -rf`, `git reset --hard` | ask | **deny** |
 
-Pushing, merging and the `gh` writes other than opening, editing and commenting on a pull
-request are denied to every agent whatever the level. The exact command patterns are in the
+At `strict`, opening and commenting on a pull request also ask. Pushing, merging and the `gh`
+writes other than opening, editing and commenting on a pull request are denied to every agent
+whatever the level. The exact command patterns are in the
 [permissions reference](../reference/permissions.md).
 
 ## Who can do what
@@ -60,18 +61,21 @@ What that means in practice:
   its model read tools only, has `contents: read`, and Carter refuses commits in a detected CI.
 - **Only DevOps can change infrastructure** and send Jira and Slack text.
 - **Agents without local-write still can, but must ask.** Maestro, Architect and Learner get a
-  prompt before they edit a file or run a shell command, including `git commit`.
-- **Remote and dangerous commands are denied** to every agent except DevOps.
+  prompt before they edit a file or run a shell command, including `git commit`. They also
+  ask, at every level, before opening or commenting on a pull request or an issue.
+- **Infrastructure and remote commands are denied** to every agent except DevOps. `rm -rf` and
+  `git reset --hard` follow the level for every agent that can write: they ask at `guarded`
+  and are denied at `strict`.
 - **Reading `.env` files asks** for every agent. `.env.example` is allowed.
 - **Only Maestro launches subagents**, and only Carter ones (`carter-*`).
 
 ## Choose a level
 
-In a workspace, set the level in `.carter/carter.yaml` and regenerate:
+Set the level in `~/.carter/config.toml`, which only you edit, and regenerate:
 
-```yaml
-policy:
-  level: guarded   # guarded | strict
+```toml
+[access]
+level = "guarded"   # strict | guarded | relaxed
 ```
 
 ```bash
@@ -80,11 +84,17 @@ carter update
 
 | Level | Use it for |
 |-------|-----------|
-| `guarded` | Day-to-day work. Remote and destructive actions wait for you |
-| `strict` | Regulated or production-critical repositories. Destructive and infrastructure-changing commands are blocked outright |
+| `strict` (default) | Agents edit, run and commit locally. Opening a pull request asks; destructive and infrastructure commands and issue writes are denied |
+| `guarded` | Day-to-day work. Pull requests open without asking; issues, destructive and infrastructure commands ask |
+| `relaxed` | `guarded`, and agents open and comment on issues without asking |
 
-A missing or unknown level counts as `guarded`. The global agents from `carter install` always
-use `guarded`.
+Issue writes are not usable yet: the command gate refuses `gh issue create` and `comment` at
+every level until its per-verb flag allowlist lands, so the issue rows only set the permission.
+
+A missing `[access]` counts as `strict`, and so does an invalid one (`carter update` names the
+problem). The first `carter update` after the upgrade says so once. Global and workspace agents use
+the same level. A workspace can only tighten it: `access:` in `.carter/carter.yaml` takes the same
+keys, and `policy.level` there is a deprecated alias; a looser value is ignored with one line.
 
 ## Know the limits
 
@@ -155,8 +165,8 @@ spelling) does the real work. The command gate is a speed bump in front of it, n
 
 A workspace can only tighten permissions. `.carter/carter.yaml` is a file agents can edit, so
 a key that loosens a control is ignored: `carter update` and `carter check` print one line
-(`carter update -v` names the keys) and render Carter's defaults. Loosening is human-only; it
-will be set in `~/.carter/config.toml`.
+(`carter update -v` names the keys) and render Carter's defaults. Loosening is human-only: it
+is set with `[access]` in `~/.carter/config.toml`.
 
 Make a category stricter for every agent that holds it:
 

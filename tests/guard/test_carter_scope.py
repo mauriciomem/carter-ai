@@ -99,8 +99,9 @@ class TestRendering:
         config = generate_default_config()
         extra = [{"action": "shell", "resource": "zz *", "effect": "deny"}]
         rules = permission_rules(with_guard_rules(config, extra), "engineer")
-        assert rules[-1] == extra[0]
-        assert permission_rules(config, "engineer") == rules[:-1]
+        assert [r for r in rules if r != extra[0]] == permission_rules(config, "engineer")
+        # Only the GitHub capabilities follow, and never with an `allow` (strict is the default).
+        assert all(r["effect"] != "allow" for r in rules[rules.index(extra[0]) + 1 :])
 
     def test_render_agents_reads_this_machines_guard_state(self, home: Path) -> None:
         from carter.config import generate_default_config

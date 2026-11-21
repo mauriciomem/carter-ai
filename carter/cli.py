@@ -340,21 +340,40 @@ def _report_unknown_keys(target: Path) -> None:
     unknownkeys.report(unknownkeys.once_per_key(hits))
 
 
+def _report_access(config: dict, *, record: bool) -> None:
+    """The access lines of this run, each once: a bad ``[access]`` (then strict), a workspace
+    value that cannot loosen, the ``policy.level`` alias. With no ``[access]`` at all, the
+    one-time "now strict" notice (recorded only when a human at a terminal saw it)."""
+    from carter import accessload
+    from carter.access import resolve_config
+    from carter.config import with_user_access
+
+    user = accessload.load_user_access()
+    for line in resolve_config(with_user_access(config, user)).notes:
+        ui.warn(line.removeprefix("! "))
+    if accessload.notice_due(user=user):
+        ui.warn(accessload.NOTICE.removeprefix("! "))
+        if record:
+            accessload.record_notice()
+
+
 def _refresh_agents(*, dry_run: bool) -> None:
     """and: the global Carter agent files carry G2's rules, including the opt-outs read
-    from ``config.toml``. Re-render them from a human's shell when they differ; ``update`` never
-    fails here."""
-    from carter.guard.agent_rules import current_rules
+    from ``config.toml``, and the access level. Re-render them from a human's shell when they
+    differ; ``update`` never fails here."""
+    from carter.guard.agent_rules import agent_file_state, current_rules
     from carter.install import components
     from carter.terminal import is_agent_shell
 
-    if not current_rules():
-        return  # no guards installed with consent: update never creates any
+    guards = bool(current_rules())
+    if not guards and components.read_manifest(None) is None:
+        return  # nothing installed here: update never creates any
     if dry_run:
         ui.detail("the global Carter agent files would be refreshed (dry run)")
         return
     if is_agent_shell():
-        ui.warn("global Carter agents not refreshed: agent shells never change them")
+        if guards or agent_file_state()[1]:  # say so only when there is something to refresh
+            ui.warn("global Carter agents not refreshed: agent shells never change them")
         return
     try:
         stats = components.rerender_agents(None)
@@ -404,9 +423,10 @@ _LOOSENING_HELP = (
 
 def _report_ignored_policy(config: dict, command: str) -> None:
     """One warning line when carter.yaml holds loosening policy keys; ``-v`` lists them."""
-    from carter.config import ignored_policy_keys
+    from carter.accessload import load_user_access
+    from carter.config import ignored_policy_keys, with_user_access
 
-    keys = ignored_policy_keys(config)
+    keys = ignored_policy_keys(with_user_access(config, load_user_access()))
     if keys:
         noun = "key" if len(keys) == 1 else "keys"
         ui.warn(f"carter.yaml: ignored {len(keys)} loosening {noun} (see: carter {command} --help)")
@@ -435,6 +455,7 @@ def update(target_dir: str, dry_run: bool, assume_yes: bool) -> None:
         raise click.ClickException(str(e)) from e
 
     _report_ignored_policy(config, "update")
+    _report_access(config, record=not dry_run)
     _pin_identity_policy(target, config, dry_run=dry_run)
     _sync_mirror(dry_run=dry_run)
     _refresh_agents(dry_run=dry_run)

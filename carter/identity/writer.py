@@ -21,7 +21,13 @@ from pathlib import Path
 from typing import Any
 
 from carter.identity.config import ConfigError, default_path, load_identity, parse_identity
-from carter.identity.schema import SCHEMA_VERSION, SECTIONS, TABLE_WORKSPACES, IdentityConfig
+from carter.identity.schema import (
+    SCHEMA_VERSION,
+    SECTIONS,
+    TABLE_ACCESS,
+    TABLE_WORKSPACES,
+    IdentityConfig,
+)
 
 _BARE = re.compile(r"[A-Za-z0-9_-]+")
 _ESC = {"\\": "\\\\", '"': '\\"', "\b": "\\b", "\t": "\\t", "\n": "\\n", "\f": "\\f", "\r": "\\r"}
@@ -81,6 +87,9 @@ def dumps(cfg: IdentityConfig) -> str:
         body = _body(getattr(cfg, attr))
         if body:  # a table with nothing set is not written
             out += ["", "[" + ".".join(path) + "]", *body]
+    if cfg.access:
+        keys = [(k if _BARE.fullmatch(k) else _str(k), v) for k, v in cfg.access]
+        out += ["", f"[{TABLE_ACCESS}]", *(f"{k} = {_value(v)}" for k, v in keys)]
     for ws_path, ws in cfg.workspaces.items():
         out += ["", f"[{TABLE_WORKSPACES}.{_str(ws_path)}]", *_body(ws)]
     return "\n".join(out) + "\n"
@@ -142,10 +151,12 @@ def write_config(
     ``UnmodelledKeysError`` for data that would be lost.
     """
     path = path or default_path()
-    new = _checked(cfg)
     old = path.read_text(encoding="utf-8") if path.exists() else None
-    if old is not None:
-        existing = load_identity(path)  # raises ConfigError on a broken file
+    existing = load_identity(path) if old is not None else None  # raises on a broken file
+    if existing is not None and not cfg.access:
+        cfg = replace(cfg, access=existing.access)  # the human's `[access]` survives any write
+    new = _checked(cfg)
+    if old is not None and existing is not None:
         if existing.unknown_keys:
             lines = difflib.unified_diff(
                 old.splitlines(), new.splitlines(), "config.toml", "(rewritten)", lineterm=""

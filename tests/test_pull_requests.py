@@ -103,13 +103,18 @@ class TestGhAllowlist:
         assert check(command).decision == "deny", command
 
     def test_agent_permissions_deny_merge_not_create(self) -> None:
-        from carter.config import generate_default_config, permission_rules
+        from carter.access import UserAccess
+        from carter.config import generate_default_config, permission_rules, with_user_access
 
-        rules = permission_rules(generate_default_config(), "engineer")
+        config = generate_default_config()
+        guarded = with_user_access(config, UserAccess(table={"level": "guarded"}))
+        rules = permission_rules(guarded, "engineer")
         shell = {r["resource"]: r["effect"] for r in rules if r["action"] == "shell"}
         assert shell["gh pr merge *"] == "deny" and shell["gh pr review *"] == "deny"
         for allowed in ("gh pr create *", "gh pr edit *", "gh pr comment *"):
-            assert allowed not in shell, allowed
+            assert allowed not in shell, allowed  # guarded: `pr_write` adds nothing
+        strict = {r["resource"]: r["effect"] for r in permission_rules(config, "engineer")}
+        assert strict["gh pr create *"] == strict["gh pr comment *"] == "ask"  # the default
 
 
 class TestTokenPullRequestProbe:

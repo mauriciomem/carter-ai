@@ -43,7 +43,7 @@ def install_agents(
     manifest: dict,
     backup_root: BackupRoot,
 ) -> dict[str, int]:
-    """Install the OpenCode agents rendered from the shipped guarded defaults."""
+    """Install the OpenCode agents rendered from the shipped defaults and the access level."""
     log_step("Installing agents...")
     stats: dict[str, int] = {"created": 0, "updated": 0, "unchanged": 0}
     for name, content in sorted(_render_opencode_agents(base_dir).items()):
@@ -79,6 +79,7 @@ def _render_opencode_agents(base_dir: Path | None = None) -> dict[str, str]:
     ``base_dir`` records them. The scaffold/Jinja stack is imported lazily so importing
     the installer stays cheap.
     """
+    from carter.accessload import load_user_access
     from carter.config import generate_default_config
     from carter.guard.agent_rules import current_rules
     from carter.scaffold import create_env, render_agents
@@ -87,7 +88,7 @@ def _render_opencode_agents(base_dir: Path | None = None) -> dict[str, str]:
     cfg["agent_suffix"] = ""
     # Global agents serve every workspace: defer to each workspace's docs_language.
     cfg["docs_language"] = None
-    return render_agents(cfg, create_env(), current_rules(base_dir))
+    return render_agents(cfg, create_env(), current_rules(base_dir), load_user_access(base_dir))
 
 
 def install_skills(
