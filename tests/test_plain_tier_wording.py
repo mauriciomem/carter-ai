@@ -73,7 +73,7 @@ class TestNothingShowsACode:
 
     def test_every_help_text(self) -> None:
         paths = commands(main)  # through get_command: the lazy groups are part of the surface
-        assert len(paths) == 30  # the root, 14 commands and their subcommands (not fewer, ever)
+        assert len(paths) == 31  # the root, 15 commands and their subcommands (not fewer, ever)
         for path in paths:
             out = CliRunner().invoke(main, [*path, "--help"]).output
             assert CODE.findall(out) == [], path

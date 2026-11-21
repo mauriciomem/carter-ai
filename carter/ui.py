@@ -190,13 +190,15 @@ COMMAND_STYLE = "cyan bold"
 
 
 class Row(NamedTuple):
-    """One report line: ``label  count  note``, and an optional ``→ fix`` line under it."""
+    """One report line: ``label  count  note``, and optional lines under it: a dim ``more``
+    line (detail shown with ``-v``) and a ``→ fix`` line."""
 
     label: str
     num: int | None = None
     note: str = ""
     cmd: bool = False  # the note is a command to copy: bold cyan instead of dim, never shortened
     fix: str = ""
+    more: str = ""
 
 
 def _width(stream: TextIO) -> int | None:
@@ -269,6 +271,8 @@ def rows(items: Iterable[Row], *, paths: bool = False, err: bool = False) -> Non
                 if r.note:
                     parts += [("  " if count_w else "", ""), note]
             lines.append(parts)
+        if r.more:
+            lines.append([(" " * (INDENT + 2), ""), (r.more, "dim")])
         if r.fix:
             lines.append(_fix_line(stream, r.fix, INDENT + 2))
     _emit(stream, *lines)

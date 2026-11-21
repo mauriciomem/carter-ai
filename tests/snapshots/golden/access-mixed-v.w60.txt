@@ -1,0 +1,42 @@
+Access level: guarded  (~/.carter/config.toml)
+! g2 not installed: push, gh_api, github_admin not denied
+    Workspace edits        [workspace_edit]
+      allowed  preset
+      enforced by OpenCode edit permission: medium
+    Run commands           [run_commands]
+      allowed  preset
+      enforced by OpenCode shell permission: medium
+    Git commit             [git_commit]
+      allowed  preset
+      enforced by command gate, git hooks, tier check: weak
+    GitHub reads           [github_read]
+      allowed  preset
+      enforced by token scopes, command gate: strong with a read-only token
+    PRs open/comment       [pr_write]
+      ask      override
+      enforced by command gate flags, ask: weak; strong if token cannot write
+    Issues open/comment    [issue_write]
+      denied   workspace
+      enforced by command gate flags, ask: weak; strong if token cannot write
+    Destructive commands   [destructive]
+      denied   workspace
+      enforced by OpenCode command globs: weak
+    Infra apply            [infra_apply]
+      ask      preset
+      enforced by OpenCode command globs: weak; cloud credentials are the limit
+    Project OpenCode conf  [opencode_config]
+      allowed  opt-out
+      enforced by OpenCode edit deny: medium; shell writes not covered
+    Push from the shell    [push]              never
+      enforced by no SSH agent, pre-push hook: strong for token, weak for keys
+    GitHub API             [gh_api]            never
+      enforced by command gate: weak
+    GitHub decisions       [github_admin]      never
+      enforced by command gate: weak; strong for scopes the token lacks
+    Root                   [sudo]              never
+      enforced by OpenCode denies, gate: medium for tools, weak for shell
+    Secrets                [secrets]           never
+      enforced by OpenCode denies, gate: medium for tools, weak for shell
+    Carter internals       [carter_internals]  never
+      enforced by OpenCode denies, gate: medium for tools, weak for shell
+see: carter access --help

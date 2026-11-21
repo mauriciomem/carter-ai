@@ -65,6 +65,54 @@ CAPABILITY_IDS = tuple(c.id for c in CAPABILITIES)
 FLOOR_IDS = tuple(floor_id for floor_id, _label in FLOOR)
 _BY_ID = {c.id: c for c in CAPABILITIES}
 
+# What enforces each row and how strongly, for `carter access -v`:
+# id -> (layer, strength). One entry per id; a test pins the keys to the schema.
+_TOOLS = ("OpenCode denies, gate", "medium for tools, weak for shell")
+ENFORCED: dict[str, tuple[str, str]] = {
+    "workspace_edit": ("OpenCode edit permission", "medium"),
+    "run_commands": ("OpenCode shell permission", "medium"),
+    "git_commit": ("command gate, git hooks, tier check", "weak"),
+    "github_read": ("token scopes, command gate", "strong with a read-only token"),
+    "pr_write": ("command gate flags, ask", "weak; strong if token cannot write"),
+    "issue_write": ("command gate flags, ask", "weak; strong if token cannot write"),
+    "destructive": ("OpenCode command globs", "weak"),
+    "infra_apply": ("OpenCode command globs", "weak; cloud credentials are the limit"),
+    "opencode_config": ("OpenCode edit deny", "medium; shell writes not covered"),
+    "push": ("no SSH agent, pre-push hook", "strong for token, weak for keys"),
+    "gh_api": ("command gate", "weak"),
+    "github_admin": ("command gate", "weak; strong for scopes the token lacks"),
+    "sudo": _TOOLS,
+    "secrets": _TOOLS,
+    "carter_internals": _TOOLS,
+}
+
+# Consent groups whose rules hold floor items up: group -> the floor ids that are not denied
+# while it is missing. `hooks` (or `repo_hooks`) and `config-edit` have their own lines.
+GROUP_FLOORS: dict[str, tuple[str, ...]] = {
+    "g2": ("push", "gh_api", "github_admin"),
+    "sudo-docker": ("sudo",),
+    "read-edit-denies": ("secrets",),
+}
+_COMMIT_HOOKS = frozenset({"hooks", "repo_hooks"})  # either one does the job (git version)
+_CONFIG_EDIT = "config-edit"
+
+
+def missing_group_lines(accepted: Iterable[str]) -> tuple[str, ...]:
+    """One ``!`` line (<= 60 chars) per consent group that is not installed and whose floor
+    items are therefore not denied. ``accepted`` is what the guard state records."""
+    have = set(accepted)
+    lines = [
+        f"! {group} not installed: {', '.join(ids)} not denied"
+        for group, ids in GROUP_FLOORS.items()
+        if group not in have
+    ]
+    if not have & _COMMIT_HOOKS:
+        lines.append("! hooks not installed: agent commits are not checked")
+    if _CONFIG_EDIT not in have:
+        lines.append("! config-edit off: agents can edit this level")
+    return tuple(lines)
+
+
 # Roles (D6). Kept here, not imported from `carter.config`, so the renderer can import
 # this module; a test pins both sets to `AGENT_ALLOWLIST`.
 LOCAL_WRITE_ROLES = frozenset({"pm", "narrator", "engineer", "security", "devops"})
@@ -267,18 +315,14 @@ def resolve_config(config: Mapping[str, Any], role: str | None = None) -> Access
     return resolve(user.table, config.get("access"), level, role, user_error=user.error)
 
 
-def warnings(
-    access: Access, *, config_edit: bool, token_writes: Iterable[str] = ()
-) -> tuple[str, ...]:
-    """Facts the user should see next to the table (the table's `!` lines): one line each, as data.
+def warnings(access: Access, *, token_writes: Iterable[str] = ()) -> tuple[str, ...]:
+    """Token facts the user should see next to the table: one `!` line each, as data.
 
-    ``config_edit`` is whether the ``config-edit`` group is installed; ``token_writes`` the
-    write scopes of the agent token (``SCOPE_*``). The resolver does not print them.
+    ``token_writes`` are the write scopes of the agent token (``SCOPE_*``). Missing consent
+    groups have their own lines (``missing_group_lines``). The resolver does not print them.
     """
     scopes = set(token_writes)
     lines = []
-    if not config_edit:
-        lines.append("! config-edit off: agents can edit this level")
     if SCOPE_PULL_REQUESTS in scopes:
         lines.append("! token can approve PRs: github_admin is text-gated")
     if SCOPE_ISSUES in scopes and access.values["issue_write"] != "allowed":

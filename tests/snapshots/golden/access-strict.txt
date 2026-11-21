@@ -1,0 +1,17 @@
+Access level: strict  (default)
+    Workspace edits        [workspace_edit]    allowed  preset
+    Run commands           [run_commands]      allowed  preset
+    Git commit             [git_commit]        allowed  preset
+    GitHub reads           [github_read]       allowed  preset
+    PRs open/comment       [pr_write]          ask      preset
+    Issues open/comment    [issue_write]       denied   preset
+    Destructive commands   [destructive]       denied   preset
+    Infra apply            [infra_apply]       denied   preset
+    Project OpenCode conf  [opencode_config]   denied   preset
+    Push from the shell    [push]              never
+    GitHub API             [gh_api]            never
+    GitHub decisions       [github_admin]      never
+    Root                   [sudo]              never
+    Secrets                [secrets]           never
+    Carter internals       [carter_internals]  never
+see: carter access --help

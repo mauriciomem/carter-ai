@@ -98,17 +98,18 @@ def test_the_profile_choices_are_the_configured_profiles() -> None:
 
 
 def test_root_help_and_tab_completion_list_every_command_without_importing_them() -> None:
-    """Run in a child process: the 7 lazy modules must stay unimported while listing."""
+    """Run in a child process: the 8 lazy modules must stay unimported while listing."""
     code = (
         "import sys, click\n"
         "from carter.cli import main\n"
         "ctx = click.Context(main)\n"
         "text = main.get_help(ctx)\n"
         "names = [i.value for i in main.shell_complete(ctx, '')]\n"
-        "assert names == main.list_commands(ctx) and len(names) == 14, names\n"
+        "assert names == main.list_commands(ctx) and len(names) == 15, names\n"
         "assert all(n in text for n in names)\n"
         "assert [i.value for i in main.shell_complete(ctx, 'gu')] == ['guard']\n"
-        "loaded = [m for m in sys.modules if m.endswith(('guard.cli', 'ci_cli', 'identity_cli'))]\n"
+        "lazy = ('guard.cli', 'ci_cli', 'identity_cli', 'access_cli')\n"
+        "loaded = [m for m in sys.modules if m.endswith(lazy)]\n"
         "assert not loaded, loaded\n"
     )
     done = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True)

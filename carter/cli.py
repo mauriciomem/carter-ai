@@ -15,6 +15,8 @@ from carter.cliguard import LazyGroup, verbose_option
 if TYPE_CHECKING:
     from jinja2 import Environment
 
+    from carter.access import UserAccess
+
 # Imports stay inside the command bodies: `carter --help` and Tab completion must not load
 # jinja2, yaml or the network stack (tests/test_startup.py holds the line).
 
@@ -22,6 +24,7 @@ if TYPE_CHECKING:
 # The summary is what `carter --help` lists without importing the module: the first line of
 # the command's docstring, kept equal by tests/test_help.py.
 _LAZY = {
+    "access": ("carter.access_cli:access_cmd", "Show what agents may do here."),
     "ci": ("carter.ci_cli:ci", "Review-only CI workflow: no commits, read-only."),
     "commit": (
         "carter.commit_cli:commit_cmd",
@@ -340,10 +343,9 @@ def _report_unknown_keys(target: Path) -> None:
     unknownkeys.report(unknownkeys.once_per_key(hits))
 
 
-def _report_access(config: dict, *, record: bool) -> None:
+def _report_access_notes(config: dict) -> UserAccess:
     """The access lines of this run, each once: a bad ``[access]`` (then strict), a workspace
-    value that cannot loosen, the ``policy.level`` alias. With no ``[access]`` at all, the
-    one-time "now strict" notice (recorded only when a human at a terminal saw it)."""
+    value that cannot loosen, the ``policy.level`` alias. Returns what was read of config.toml."""
     from carter import accessload
     from carter.access import resolve_config
     from carter.config import with_user_access
@@ -351,6 +353,15 @@ def _report_access(config: dict, *, record: bool) -> None:
     user = accessload.load_user_access()
     for line in resolve_config(with_user_access(config, user)).notes:
         ui.warn(line.removeprefix("! "))
+    return user
+
+
+def _report_access(config: dict, *, record: bool) -> None:
+    """``update``: the access lines, and with no ``[access]`` at all the one-time "now strict"
+    notice (recorded only when a human at a terminal saw it)."""
+    from carter import accessload
+
+    user = _report_access_notes(config)
     if accessload.notice_due(user=user):
         ui.warn(accessload.NOTICE.removeprefix("! "))
         if record:
@@ -525,7 +536,7 @@ def check(target_dir: str, no_harness: bool, host: bool, probe: bool) -> None:
         click.echo("checking GitHub...", err=True)  # the network calls below take a few seconds
         items = run_host_checks(cwd=Path(target_dir).resolve(), **live_readers())
         raise SystemExit(ui.items(items, "host"))
-    from carter import unknownkeys
+    from carter import accessload, unknownkeys
     from carter.config import ConfigError, load_config
     from carter.harness import Expected, validate_agents
     from carter.plans import parse_frontmatter, validate_checkpoint, validate_plans_dir
@@ -549,6 +560,9 @@ def check(target_dir: str, no_harness: bool, host: bool, probe: bool) -> None:
     except ConfigError as e:
         raise click.ClickException(str(e)) from e
     _report_ignored_policy(config, "check")
+    _report_access_notes(config)
+    for line in accessload.missing_groups():
+        ui.warn(line.removeprefix("! "))
 
     # Check agent and instruction files exist in OpenCode's discovery paths,
     # collecting each role's parsed frontmatter for the policy lint as we go.
