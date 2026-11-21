@@ -269,6 +269,7 @@ def load_config(config_path: Path) -> dict[str, Any]:
     _validate_policy(merged.get("policy", {}), merged.get("agents"))
     _validate_profile(merged.get("profile"))
     _validate_docs_language(merged.get("docs_language"))
+    merged.pop("access_user", None)  # render-time only: never from a file agents can write
     return merged
 
 
@@ -489,27 +490,22 @@ _OPENCODE_GATE: dict[str, str] = {
 #
 # `github-write` is not a risk category and has no allowlist entry: every GitHub write
 # is human-only, so these are `deny` for EVERY agent, devops
-# included. It comes last so no earlier rule (e.g. `git push --force *` under
-# `dangerous`) can re-open a verb: last match wins. devops asks the human to run
-# `carter push` or calls the broker tool; it never pushes from its shell.
+# included. It comes last so no earlier rule can re-open a verb: last match wins. devops
+# asks the human to run `carter push` or calls the broker tool; it never pushes from its
+# shell. A force-push is a push: `git push *` already matches `-f` and `--force-with-lease`.
 # Opening, editing and commenting on a PR with `gh` is allowed; merging, closing,
 # reviewing and marking ready stay with the human.
+#
+# The `dangerous` rows belong to a capability, by name (see `_COMMAND_CAPABILITY`).
+_VAULT_COMMANDS = ("vault read *", "vault write *")
+_INFRA_COMMANDS = ("terraform apply *", "terraform destroy *", "kubectl apply *", "helm upgrade *")
+_DESTRUCTIVE_COMMANDS = ("rm -rf *", "git reset --hard *")
 _BASH_COMMANDS: dict[str, tuple[str, ...]] = {
-    "remote-write": (
-        "vault read *",
-        "vault write *",
-    ),
-    "dangerous": (
-        "terraform apply *",
-        "terraform destroy *",
-        "kubectl apply *",
-        "helm upgrade *",
-        "rm -rf *",
-        "git reset --hard *",
-        "git push --force *",
-    ),
+    "remote-write": _VAULT_COMMANDS,
+    "dangerous": _INFRA_COMMANDS + _DESTRUCTIVE_COMMANDS,
     "github-write": (
         "git push *",
+        "git push --force *",
         "gh pr merge *",
         "gh pr close *",
         "gh pr review *",
@@ -640,10 +636,8 @@ def _stricter(*effects: str) -> str:
 # The shell commands a capability owns. Every row of `remote-write` and `dangerous` has one;
 # the category (allowlist, `policy.overrides`) can only make it stricter.
 _COMMAND_CAPABILITY: dict[str, str] = {
-    **dict.fromkeys(
-        _BASH_COMMANDS["remote-write"] + _BASH_COMMANDS["dangerous"][:4], "infra_apply"
-    ),
-    **dict.fromkeys(_BASH_COMMANDS["dangerous"][4:], "destructive"),
+    **dict.fromkeys(_VAULT_COMMANDS + _INFRA_COMMANDS, "infra_apply"),
+    **dict.fromkeys(_DESTRUCTIVE_COMMANDS, "destructive"),
 }
 _ISSUE_COMMANDS = ("gh issue create *", "gh issue comment *")
 _PR_WRITE_VERBS = ("pr create", "pr edit", "pr comment")  # `pr edit` is human-only later
@@ -710,9 +704,17 @@ def policy_gate_table(config: dict[str, Any]) -> list[dict[str, str]]:
     applied. ``strict`` shows the real ``deny`` row for ``dangerous``.
     """
     policy = config.get("policy") or {}
-    level = _taxonomy_level(resolve_config(config))
+    access = resolve_config(config)
+    level = _taxonomy_level(access)
     cats = ("read", "local-write", "remote-write", "dangerous")
     gates = _gates_for(list(cats), level, _hardening_overrides(policy, level))
+    # The renderer takes the stricter of the category and the capability that owns the rows
+    # (vault follows `infra_apply`), so the table the maestro reads says the same.
+    owners = {"remote-write": ("infra_apply",), "dangerous": ("infra_apply", "destructive")}
+    for cat, caps in owners.items():
+        gates[cat] = max(
+            [gates[cat], *(_effect(access, cap) for cap in caps)], key=GATE_SEVERITY.__getitem__
+        )
     return [{"category": cat, "gate": gates[cat]} for cat in cats]
 
 

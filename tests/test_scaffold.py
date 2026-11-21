@@ -847,21 +847,21 @@ class TestPolicyGateTable:
         }
 
     def test_strict_table_emits_deny(self):
-        """strict emits deny for dangerous and gate for remote-write."""
+        """strict denies both: vault (remote-write) follows `infra_apply`, as the renderer does."""
         from carter.config import policy_gate_table
 
         gates = {
             r["category"]: r["gate"] for r in policy_gate_table({"policy": {"level": "strict"}})
         }
         assert gates["dangerous"] == "deny"
-        assert gates["remote-write"] == "gate"
+        assert gates["remote-write"] == "deny"
 
     def test_missing_policy_defaults_strict(self):
         from carter.config import policy_gate_table
 
         # No `[access]` and no policy block: the default level is strict.
         gates = {r["category"]: r["gate"] for r in policy_gate_table({})}
-        assert gates["remote-write"] == "gate"
+        assert gates["remote-write"] == "deny"
         assert gates["dangerous"] == "deny"
 
 

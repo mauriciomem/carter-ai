@@ -40,15 +40,17 @@ Reads such as `git log` or `gh pr list` don't need `ops:`.
 | Push | **You**, with `carter push` in your terminal or OpenCode's `!` shell. DevOps may *ask* you to approve it ([below](#letting-devops-ask-you-to-push)) |
 | Open, edit and comment on a pull request | Any Carter agent, with `gh pr create`, `gh pr edit` and `gh pr comment`, once the branch is on `origin`. At the default `strict` level each one asks you first |
 | Merge, close, review or ready a pull request; releases | **You**. No agent has a path to them |
-| Open and comment on issues | Denied at `strict`; asks at `guarded`; allowed at `relaxed` ([levels](safety-and-permissions.md#choose-a-level)). Editing, labelling and closing issues stay yours |
+| Open and comment on issues | Not yet: the level sets the permission (denied at `strict`, asks at `guarded`, allowed at `relaxed`; [levels](safety-and-permissions.md#choose-a-level)), but the command gate refuses these verbs until its per-verb flag allowlist lands. Editing, labelling and closing issues stay yours |
 | Jira writes (through the `carter-atlassian` MCP server) | DevOps, by the skill's routing. OpenCode asks you before every MCP call, in any agent |
 | Text that leaves your machine (PR bodies, Jira comments, release notes) | Drafted by the Narrator, which removes secrets and internal details; Jira text is then sent by DevOps, PR text with `gh`, release notes come to you as a draft |
 
 OpenCode enforces the restriction for shell commands: `git push`, `gh pr merge`, `close`,
 `review` and `ready`, `gh issue edit` and the `gh release` commands are denied to every
-Carter agent, and `gh api` is denied outright. `gh issue create` and `comment` follow the level. Jira writes are MCP tool calls, which have no
-specific rule: any agent could make one, but OpenCode asks you first. Keeping them with DevOps,
-and the Narrator step, are instructions the agents follow; see
+Carter agent, and `gh api` is denied outright. `gh issue create` and `comment` follow the
+level, but the command gate still refuses them until it gets a per-verb flag allowlist, so
+today an agent cannot open or comment on issues at any level. Jira writes are MCP tool calls,
+which have no specific rule: any agent could make one, but OpenCode asks you first. Keeping
+them with DevOps, and the Narrator step, are instructions the agents follow; see
 [the limits](safety-and-permissions.md#know-the-limits).
 
 ## Pushing and pull requests

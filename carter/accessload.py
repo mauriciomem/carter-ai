@@ -6,7 +6,8 @@ or the file Carter writes itself. The judging of the table is ``carter.access``'
 
 The notice is recorded in ``guard-state.json`` (a Carter-owned file), as the additive key
 ``access_notice``, and only when it was shown to a human at a terminal: an agent shell or a
-pipe never counts, so it cannot silence the notice for the human.
+pipe never counts, so it cannot silence the notice for the human. A machine with no state
+file records nothing (see ``record_notice``).
 """
 
 from __future__ import annotations
@@ -36,9 +37,11 @@ def load_user_access(base_dir: Path | None = None) -> UserAccess:
     return UserAccess(table=(doc or {}).get("access"))
 
 
-def notice_due(base_dir: Path | None = None) -> bool:
-    """True while ``[access]`` is absent and no human has been shown the notice yet."""
-    user = load_user_access(base_dir)
+def notice_due(base_dir: Path | None = None, user: UserAccess | None = None) -> bool:
+    """True while ``[access]`` is absent and no human has been shown the notice yet.
+
+    ``user`` is what ``load_user_access`` already returned, to read the file once."""
+    user = user or load_user_access(base_dir)
     if user.table is not None or user.error:
         return False  # the human set a level (or it is broken: the fallback line says so)
     try:
@@ -52,10 +55,14 @@ def _human_at_terminal() -> bool:
 
 
 def record_notice(base_dir: Path | None = None, *, today: str | None = None) -> bool:
-    """Remember the notice as shown, if a human at a terminal saw it. True when recorded."""
-    if not _human_at_terminal():
-        return False
+    """Remember the notice as shown, if a human at a terminal saw it. True when recorded.
+
+    Only an existing ``guard-state.json`` is updated: creating one would turn "no guards
+    installed" (which ``check --host`` and ``guard status`` report) into "state present".
+    Without it the notice simply keeps showing."""
     path = guard_state_path(base_dir)
+    if not path.exists() or not _human_at_terminal():
+        return False
     try:
         state = load(path)
         state.extra[_KEY] = {"date": today or date.today().isoformat(), "level": "strict"}

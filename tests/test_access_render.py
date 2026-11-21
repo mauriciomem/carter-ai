@@ -3,9 +3,16 @@
 The reference for the `guarded` level is the renderer as it was before levels existed
 (`_legacy_rules`, copied from it): `guarded` must render the same, except the rows listed in
 `_intended_changes`. `strict` is the default; every other test pins one capability to its rules.
+
+`_legacy_rules` reads the code's own command tables, so it freezes the algorithm, not the data;
+it is to be replaced by literal expected lists per role class once the `gh` flag allowlist
+lands. (`git push --force *` moved from `dangerous` to the push floor: it was shadowed by
+`git push *`, so the effect is unchanged.)
 """
 
 from __future__ import annotations
+
+from fnmatch import fnmatchcase
 
 import pytest
 import yaml
@@ -39,7 +46,10 @@ G2 = [
     _rule("shell", "gh pr comment *", "allow"),
 ]
 ISSUE = ("gh issue create *", "gh issue comment *")
-DESTRUCTIVE = ("rm -rf *", "git reset --hard *", "git push --force *")
+DESTRUCTIVE = ("rm -rf *", "git reset --hard *")
+PR = ("gh pr create *", "gh pr edit *", "gh pr comment *")
+READ_ONLY = ("maestro", "architect", "learner")
+PUSHES = ("git push --force origin x", "git push -f", "git push --force-with-lease", "git push")
 
 
 def _config(level=None, /, *, guard_rules=(), **access):
@@ -52,6 +62,19 @@ def _config(level=None, /, *, guard_rules=(), **access):
 def _verdict(rules, resource):
     """What OpenCode does with ``resource``: the effect of the last row that names it."""
     return [r["effect"] for r in rules if r["resource"] == resource][-1]
+
+
+def _effective(rules, command):
+    """OpenCode's verdict for a shell ``command``: the last rule whose glob matches it
+    (``*`` matches anything, and a trailing ` *` also matches the bare command)."""
+    effect = "ask"
+    for rule in rules:
+        pattern = rule["resource"]
+        if rule["action"] == "shell" and (
+            fnmatchcase(command, pattern) or command == pattern.removesuffix(" *")
+        ):
+            effect = rule["effect"]
+    return effect
 
 
 def _legacy_rules(role, guard_rules=()):
@@ -86,11 +109,12 @@ def _legacy_rules(role, guard_rules=()):
 
 
 def _intended_changes(legacy, role, issue="ask"):
-    """The only two differences of `guarded` from the old render, by design:
+    """The only differences of `guarded` from the old render, by design:
 
     * `destructive` follows the level for every local-write role (it was denied to all but
-      devops): ``rm -rf``, ``reset --hard`` and ``push --force`` ask;
-    * the two issue verbs left the always-denied list; `issue_write` owns them, after G2's rules.
+      devops): ``rm -rf`` and ``reset --hard`` ask;
+    * the two issue verbs left the always-denied list; `issue_write` owns them, after G2's rules;
+    * a read-only role asks before opening or commenting on a PR (G2's `gh` allow would let it).
     """
     out = []
     for rule in legacy:
@@ -99,6 +123,8 @@ def _intended_changes(legacy, role, issue="ask"):
         if rule["resource"] in DESTRUCTIVE and role in LOCAL_WRITE:
             rule = {**rule, "effect": "ask"}
         out.append(rule)
+    if role not in LOCAL_WRITE:
+        out += [_rule("shell", cmd, "ask") for cmd in PR]
     return out + [_rule("shell", cmd, issue) for cmd in ISSUE]
 
 
@@ -109,11 +135,18 @@ class TestGuardedRendersAsToday:
         got = permission_rules(_config("guarded", guard_rules=guard), role)
         assert got == _intended_changes(_legacy_rules(role, guard), role)
 
-    @pytest.mark.parametrize("role", ROLES)
+    @pytest.mark.parametrize("role", LOCAL_WRITE)
     def test_relaxed_is_guarded_plus_issue_verbs_allowed(self, role):
         guarded = permission_rules(_config("guarded"), role)
         relaxed = permission_rules(_config("relaxed"), role)
-        assert relaxed == [*guarded[:-2], *(_rule("shell", c, "allow") for c in ISSUE)]
+        rest = [r for r in guarded if r["resource"] not in ISSUE]
+        assert relaxed == [*rest, *(_rule("shell", c, "allow") for c in ISSUE)]
+
+    @pytest.mark.parametrize("role", READ_ONLY)
+    def test_relaxed_changes_nothing_for_a_read_only_role(self, role):
+        assert permission_rules(_config("relaxed"), role) == permission_rules(
+            _config("guarded"), role
+        )
 
 
 class TestStrictIsTheDefault:
@@ -128,6 +161,16 @@ class TestStrictIsTheDefault:
             assert _verdict(rules, cmd) == "deny", (role, cmd)
         for cmd in ("gh pr create *", "gh pr edit *", "gh pr comment *"):
             assert _verdict(rules, cmd) == "ask", (role, cmd)
+
+    @pytest.mark.parametrize("guard", [(), G2], ids=["no-g2", "g2"])
+    @pytest.mark.parametrize("level", [None, "strict", "guarded", "relaxed"])
+    @pytest.mark.parametrize("role", ROLES)
+    def test_a_force_push_is_denied_at_every_level_for_every_role(self, role, level, guard):
+        rules = permission_rules(_config(level, guard_rules=guard), role)
+        for command in PUSHES:
+            assert _effective(rules, command) == "deny", (role, level, command)
+        for cmd in ("git push *", "git push --force *"):
+            assert _verdict(rules, cmd) == "deny"
 
     @pytest.mark.parametrize("role", LOCAL_WRITE)
     def test_strict_still_lets_writers_edit_and_run(self, role):
@@ -187,11 +230,22 @@ class TestCapabilities:
         rules = permission_rules(_config("guarded", **access), role)
         assert _rule(*expected) in rules
 
-    @pytest.mark.parametrize("role", [r for r in ROLES if r not in LOCAL_WRITE])
-    def test_a_read_only_role_never_gets_looser_than_ask(self, role):
-        rules = permission_rules(_config("relaxed"), role)
+    @pytest.mark.parametrize("guard", [(), G2], ids=["no-g2", "g2"])
+    @pytest.mark.parametrize("level", [None, "strict", "guarded", "relaxed"])
+    @pytest.mark.parametrize("role", READ_ONLY)
+    def test_a_read_only_role_never_gets_looser_than_ask(self, role, level, guard):
+        rules = permission_rules(_config(level, guard_rules=guard), role)
         assert _rule("edit", "*", "ask") in rules and _rule("shell", "*", "ask") in rules
         assert _verdict(rules, "rm -rf *") == "deny"
+        for command in ("gh pr create -t x", "gh pr comment 1 -b x", "gh pr edit 1"):
+            assert _effective(rules, command) in ("ask", "deny"), (role, level, command)
+        for command in ("gh issue create -t x", "gh issue comment 1 -b x"):
+            assert _effective(rules, command) in ("ask", "deny"), (role, level, command)
+
+    def test_a_writer_keeps_what_the_level_gives(self):
+        rules = permission_rules(_config("relaxed", guard_rules=G2), "engineer")
+        assert _effective(rules, "gh issue create -t x") == "allow"
+        assert _effective(rules, "gh pr create -t x") == "allow"
 
     def test_infra_apply_reaches_devops_only(self):
         for role in ROLES:
@@ -244,6 +298,69 @@ class TestHardenOnly:
         rules = permission_rules(config, "devops")
         assert _verdict(rules, "terraform apply *") == "deny"
         assert _verdict(rules, "rm -rf *") == "ask"  # `destructive` is every writer's (D6)
+
+
+class TestAWorkspaceCannotFillTheHumansSlot:
+    """`carter.yaml` is a file agents can write: its `access_user` key is never read."""
+
+    HOSTILE = {"table": {"level": "relaxed"}}
+
+    def test_resolve_config_takes_only_a_real_user_access(self):
+        from carter.access import UNAVAILABLE, resolve_config
+
+        config = generate_default_config() | {"access_user": self.HOSTILE}
+        access = resolve_config(config)  # no crash
+        assert access.level == "strict" and access.level_source == "fallback"
+        assert access.notes[0] == UNAVAILABLE
+        assert resolve_config(generate_default_config() | {"access_user": "x"}).level == "strict"
+
+    def test_the_loader_drops_the_key(self, tmp_path):
+        from carter.config import load_config
+
+        path = tmp_path / "carter.yaml"
+        path.write_text(yaml.safe_dump(generate_default_config() | {"access_user": self.HOSTILE}))
+        assert "access_user" not in load_config(path)
+
+    @pytest.mark.parametrize("role", ROLES)
+    def test_render_and_lint_use_the_machines_level_not_the_key(self, role):
+        from carter.scaffold import create_env, lint_policy, render_agents
+
+        config = generate_default_config(workspace_name="w", mode="single") | {
+            "access_user": self.HOSTILE
+        }
+        rendered = render_agents(config, create_env(), [], UserAccess(table={"level": "guarded"}))
+        fm = yaml.safe_load(rendered[f"carter-{role}-local.md"].split("---", 2)[1])
+        assert fm["permissions"] == permission_rules(_config("guarded"), role)
+        installed = {role: {"permissions": fm["permissions"], "model": fm["model"]}}
+        assert lint_policy(config, installed, [], UserAccess(table={"level": "guarded"})) == []
+        # nothing given: the machine's `[access]` (none in the hermetic home) is strict
+        drift = lint_policy(config, installed, [])
+        assert drift and "drifted" in drift[0]
+
+    def test_a_workspace_key_cannot_loosen_the_render(self):
+        from carter.scaffold import create_env, render_agents
+
+        config = generate_default_config(workspace_name="w", mode="single") | {
+            "access_user": self.HOSTILE
+        }
+        got = render_agents(config, create_env(), [])  # the machine has no [access]: strict
+        want = render_agents(
+            generate_default_config(workspace_name="w", mode="single"), create_env(), []
+        )
+        assert got == want
+
+
+class TestCommandCapabilityGroups:
+    def test_every_non_floor_command_has_a_capability_by_name(self):
+        from carter.config import _COMMAND_CAPABILITY
+
+        for cat, commands in _BASH_COMMANDS.items():
+            if cat != "github-write":
+                assert all(cmd in _COMMAND_CAPABILITY for cmd in commands), cat
+        assert _COMMAND_CAPABILITY["rm -rf *"] == "destructive"
+        assert _COMMAND_CAPABILITY["terraform apply *"] == "infra_apply"
+        assert _COMMAND_CAPABILITY["vault read *"] == "infra_apply"
+        assert "git push --force *" not in _COMMAND_CAPABILITY  # a push is the floor
 
 
 class TestFailClosed:

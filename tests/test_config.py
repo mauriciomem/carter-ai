@@ -326,6 +326,7 @@ class TestGithubWritesAreHumanOnly:
 
     VERBS = (
         "git push *",
+        "git push --force *",
         "gh pr merge *",
         "gh pr close *",
         "gh pr review *",

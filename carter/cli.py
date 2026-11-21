@@ -348,10 +348,10 @@ def _report_access(config: dict, *, record: bool) -> None:
     from carter.access import resolve_config
     from carter.config import with_user_access
 
-    access = resolve_config(with_user_access(config, accessload.load_user_access()))
-    for line in access.notes:
+    user = accessload.load_user_access()
+    for line in resolve_config(with_user_access(config, user)).notes:
         ui.warn(line.removeprefix("! "))
-    if accessload.notice_due():
+    if accessload.notice_due(user=user):
         ui.warn(accessload.NOTICE.removeprefix("! "))
         if record:
             accessload.record_notice()

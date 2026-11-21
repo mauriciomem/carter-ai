@@ -48,7 +48,7 @@ _BASELINE = [
 ]
 _MEMORIES_EDIT = _r("edit", "~/.carter/memories/*", "allow")
 _INFRA = ("terraform apply *", "terraform destroy *", "kubectl apply *", "helm upgrade *")
-_DESTRUCTIVE = ("rm -rf *", "git reset --hard *", "git push --force *")
+_DESTRUCTIVE = ("rm -rf *", "git reset --hard *")
 _DANGEROUS = _INFRA + _DESTRUCTIVE
 
 
@@ -58,6 +58,7 @@ _VAULT = ("vault read *", "vault write *")  # the only shell verbs left in remot
 # opening, editing and commenting on a PR are allowed; merge, close, review and ready are not.
 _GITHUB_WRITE = (
     "git push *",
+    "git push --force *",
     "gh pr merge *",
     "gh pr close *",
     "gh pr review *",
@@ -71,12 +72,19 @@ _BROKER = [_r("carter_push", "*", "deny")]  # all but devops
 _MCP_GITHUB = _r("carter_github_*", "*", "deny")  # roles that do not need it
 
 
-def _shell(infra: str, destructive: str, issue: str = "ask") -> list[dict[str, str]]:
-    """The category rows, the GitHub-write denies and the `issue_write` rows (vault is infra)."""
+_PR = ("gh pr create *", "gh pr edit *", "gh pr comment *")  # `pr_write` rows, after G2's
+
+
+def _shell(
+    infra: str, destructive: str, issue: str = "ask", pr: str | None = None
+) -> list[dict[str, str]]:
+    """The category rows, the GitHub-write denies, then the `pr_write` rows (only when not
+    allowed) and the `issue_write` rows (vault is infra)."""
     return (
         [_r("shell", cmd, infra) for cmd in _VAULT + _INFRA]
         + [_r("shell", cmd, destructive) for cmd in _DESTRUCTIVE]
         + [_r("shell", cmd, "deny") for cmd in _GITHUB_WRITE]
+        + ([_r("shell", cmd, pr) for cmd in _PR] if pr else [])
         + [_r("shell", cmd, issue) for cmd in _ISSUE]
     )
 
@@ -105,7 +113,7 @@ class TestRuleOrder:
             _r("edit", "*", "ask"),
             _r("shell", "*", "ask"),
             _r("webfetch", "*", "ask"),
-            *_shell("deny", "deny"),
+            *_shell("deny", "deny", pr="ask"),
         ]
         assert permission_rules(_config(), "architect") == expected
 
@@ -118,7 +126,7 @@ class TestRuleOrder:
             _r("edit", "*", "ask"),
             _r("shell", "*", "ask"),
             _r("webfetch", "*", "ask"),
-            *_shell("deny", "deny"),
+            *_shell("deny", "deny", pr="ask"),
         ]
         assert permission_rules(_config(), "maestro") == expected
 
@@ -182,12 +190,9 @@ class TestRuleOrder:
             if rule["action"] == "shell" and rule["resource"].startswith(
                 ("git push", "gh pr merge", "gh api")
             ):
-                assert rule["effect"] in {"deny", "ask"}
+                assert rule["effect"] == "deny"  # a force-push is a push: floor, never ask
         pushes = [r for r in rules if r["action"] == "shell" and "git push" in r["resource"]]
-        # `git push --force *` stays a dangerous-category gate, but the later `git push *` deny wins
-        last = [r for r in pushes if r["resource"] == "git push *"][-1]
-        assert rules.index(last) > max(rules.index(r) for r in pushes if r is not last)
-        assert last["effect"] == "deny"
+        assert pushes and all(r["effect"] == "deny" for r in pushes)
 
     def test_devops_keeps_vault_gated(self):
         rules = permission_rules(_config(), "devops")

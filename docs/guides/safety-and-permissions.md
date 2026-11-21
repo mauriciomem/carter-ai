@@ -61,7 +61,8 @@ What that means in practice:
   its model read tools only, has `contents: read`, and Carter refuses commits in a detected CI.
 - **Only DevOps can change infrastructure** and send Jira and Slack text.
 - **Agents without local-write still can, but must ask.** Maestro, Architect and Learner get a
-  prompt before they edit a file or run a shell command, including `git commit`.
+  prompt before they edit a file or run a shell command, including `git commit`. They also
+  ask, at every level, before opening or commenting on a pull request or an issue.
 - **Infrastructure and remote commands are denied** to every agent except DevOps. `rm -rf` and
   `git reset --hard` follow the level for every agent that can write: they ask at `guarded`
   and are denied at `strict`.
@@ -86,6 +87,9 @@ carter update
 | `strict` (default) | Agents edit, run and commit locally. Opening a pull request asks; destructive and infrastructure commands and issue writes are denied |
 | `guarded` | Day-to-day work. Pull requests open without asking; issues, destructive and infrastructure commands ask |
 | `relaxed` | `guarded`, and agents open and comment on issues without asking |
+
+Issue writes are not usable yet: the command gate refuses `gh issue create` and `comment` at
+every level until its per-verb flag allowlist lands, so the issue rows only set the permission.
 
 A missing `[access]` counts as `strict`, and so does an invalid one (`carter update` names the
 problem). The first `carter update` after the upgrade says so once. Global and workspace agents use

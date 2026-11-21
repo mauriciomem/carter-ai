@@ -146,8 +146,8 @@ See [Safety and permissions](../guides/safety-and-permissions.md).
 
 A workspace can only tighten. Keys here that loosen a control (an override to a looser effect,
 an extra category for an agent) are ignored: `carter update` and `carter check` print one line
-and `-v` names the keys. Loosening is human-only: it is set with `[access]` in `~/.carter/config.toml`.
-This does not protect your own tightening: an agent that can edit `carter.yaml` can remove it,
+and `-v` names the keys. Loosening is human-only: it is set with `[access]` in
+`~/.carter/config.toml`. This does not protect your own tightening: an agent that can edit `carter.yaml` can remove it,
 and one with edit or shell access can change the rendered agent files directly (`carter check`
 reports the drift). `[access]` in `~/.carter/config.toml` is the level you set; a workspace can
 only tighten it.

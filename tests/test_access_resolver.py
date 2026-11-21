@@ -293,3 +293,24 @@ class TestEffectiveLevelAndUnreadableConfig:
         result = resolve(None, user_error="config.toml unreadable or not valid TOML")
         assert result.values == STRICT
         assert result.notes == ("config.toml unreadable or not valid TOML", FALLBACK)
+
+
+class TestReadOnlyRolesAskBeforeWritingToGitHub:
+    @pytest.mark.parametrize("level", LEVELS)
+    @pytest.mark.parametrize("role", ["maestro", "architect", "learner", "intruder"])
+    @pytest.mark.parametrize("cap", ["pr_write", "issue_write"])
+    def test_capped_at_ask_at_every_level(self, level, role, cap):
+        values = resolve({"level": level, cap: "allowed"}, role=role).values
+        assert values[cap] in ("ask", "denied")
+        assert resolve({"level": level}, role=role).sources[cap] in ("preset", "role")
+
+    @pytest.mark.parametrize("role", ["pm", "narrator", "engineer", "security", "devops"])
+    def test_a_writer_keeps_the_level(self, role):
+        values = resolve({"level": "relaxed"}, role=role).values
+        assert (values["pr_write"], values["issue_write"]) == ("allowed", "allowed")
+
+    def test_no_role_means_no_cap(self):
+        assert resolve({"level": "relaxed"}).values["issue_write"] == "allowed"
+
+    def test_a_stricter_value_is_kept(self):
+        assert resolve({"level": "strict"}, role="maestro").values["issue_write"] == "denied"

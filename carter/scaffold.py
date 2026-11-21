@@ -164,7 +164,11 @@ def _for_render(
     from carter.accessload import load_user_access  # noqa: PLC0415
 
     config = with_guard_rules(config, _guard_rules(guard_rules))
-    return with_user_access(config, user_access or config.get("access_user") or load_user_access())
+    # Only an object a caller attached counts: a key of that name in a loaded carter.yaml
+    # (a file agents can write) is never the human's `[access]`.
+    carried = config.get("access_user")
+    carried = carried if isinstance(carried, UserAccess) else None
+    return with_user_access(config, user_access or carried or load_user_access())
 
 
 def lint_policy(

@@ -67,7 +67,7 @@ def test_an_override_looser_than_the_chosen_level_is_ignored():
     config = _with_policy(level="strict", overrides={"remote-write": "ask"})
     assert ignored_policy_keys(config) == ["policy.overrides.remote-write"]
     gates = {row["category"]: row["gate"] for row in policy_gate_table(config)}
-    assert gates["remote-write"] == "gate"  # the strict gate, not the override
+    assert gates["remote-write"] == "deny"  # the strict level, not the override
 
 
 @pytest.mark.parametrize(

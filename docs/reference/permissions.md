@@ -43,9 +43,9 @@ asks.
 | Category | Commands |
 |----------|----------|
 | remote-write | `vault read *`, `vault write *` (also limited by `infra_apply`) |
-| github-write (denied to every agent) | `git push *`, `gh pr merge *`, `gh pr close *`, `gh pr review *`, `gh pr ready *`, `gh issue edit *`, `gh release *`, `gh api *` |
+| github-write (denied to every agent) | `git push *` (also `--force`, `-f`, `--force-with-lease`), `gh pr merge *`, `gh pr close *`, `gh pr review *`, `gh pr ready *`, `gh issue edit *`, `gh release *`, `gh api *` |
 | issue_write (follows the level, rows after the guards' rules) | `gh issue create *`, `gh issue comment *` |
-| dangerous | `terraform apply *`, `terraform destroy *`, `kubectl apply *`, `helm upgrade *` (`infra_apply`); `rm -rf *`, `git reset --hard *`, `git push --force *` (`destructive`) |
+| dangerous | `terraform apply *`, `terraform destroy *`, `kubectl apply *`, `helm upgrade *` (`infra_apply`); `rm -rf *`, `git reset --hard *` (`destructive`) |
 
 A pattern ending in ` *` also matches the bare command (`git push *` matches
 `git push`). This is a list of common risky commands, not a sandbox: anything else
@@ -79,12 +79,19 @@ capability. What an agent that can write gets:
 |----------|--------------------|-----------|-----------|
 | `gh pr create`, `gh pr edit`, `gh pr comment` | ask | allow | allow |
 | `gh issue create`, `gh issue comment` | deny | ask | allow |
-| `rm -rf`, `git reset --hard`, `git push --force` | deny | ask | ask |
+| `rm -rf`, `git reset --hard` | deny | ask | ask |
 | `terraform apply`, `kubectl apply`, `helm upgrade`, `vault` (DevOps only; others deny) | deny | ask | ask |
 
-An `allow` adds no rule: the command follows the agent's general shell rule. `ask` and `deny` are
-written after the guards' rules, so they win over the `gh` allows. Agents without local-write ask
-for edits and commands at every level. `edit`, `shell` and `git commit` can also be set per
+A force-push is a push: denied at every level, like `git push`.
+
+The issue rows show the permission only. The command gate refuses `gh issue create` and
+`comment` at every level until its per-verb flag allowlist lands, so today agents cannot use them.
+
+An `allow` adds no rule: the command follows the agent's general shell rule. The pull request,
+issue and `git commit` rows are written after the guards' rules, so they win over the `gh`
+allows. Agents without local-write (Maestro, Architect, Learner) ask for edits and commands at
+every level, and never get more than `ask` for pull requests and issues. `edit`, `shell` and
+`git commit` can also be set per
 capability; see [Safety and permissions](../guides/safety-and-permissions.md#choose-a-level). The
 category gates `read`, `local-write`, `remote-write` and `dangerous` in `policy.overrides` still
 apply on top: only an effect at least as strict as the level's counts. `gate` is written as `ask`;

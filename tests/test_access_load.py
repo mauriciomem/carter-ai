@@ -97,13 +97,31 @@ class TestUpgradeNotice:
         assert f"! {STRICT_NOTICE}" == accessload.NOTICE
         assert len(accessload.NOTICE) <= 60
 
+    def _a_state_file(self) -> Path:
+        """What any machine that ran `carter install` has: a guard state (here, no consents)."""
+        path = guard_state_path(None)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps({"schema": 1}))
+        return path
+
     def test_shown_once_to_a_human_then_never_again(self, ws, human):
+        path = self._a_state_file()
         first = _update(ws)
         assert first.exit_code == 0, first.output
         assert STRICT_NOTICE in first.output
-        recorded = json.loads(guard_state_path(None).read_text())["access_notice"]
-        assert recorded["level"] == "strict"
+        assert json.loads(path.read_text())["access_notice"]["level"] == "strict"
         assert STRICT_NOTICE not in _update(ws).output
+
+    def test_it_never_creates_the_guard_state(self, ws, human):
+        """A machine without guards must keep reporting "none is installed"."""
+        from carter.guard.state import load_or_empty_readonly
+
+        assert STRICT_NOTICE in _update(ws).output
+        assert not guard_state_path(None).exists()
+        assert load_or_empty_readonly(guard_state_path(None)).status == "absent"
+        host = CliRunner().invoke(main, ["check", "--host", str(ws)]).output
+        assert "the guards are off: none is installed" in host
+        assert STRICT_NOTICE in _update(ws).output  # nothing to record it in: it keeps showing
 
     def test_a_non_tty_run_shows_it_but_does_not_count(self, ws):
         assert STRICT_NOTICE in _update(ws).output
@@ -127,8 +145,7 @@ class TestUpgradeNotice:
         assert not guard_state_path(None).exists()
 
     def test_other_state_is_kept_when_the_notice_is_recorded(self, ws, human):
-        path = guard_state_path(None)
-        path.parent.mkdir(parents=True, exist_ok=True)
+        path = self._a_state_file()
         path.write_text(json.dumps({"schema": 1, "guard_version": "9.9.9", "future": [1]}))
         _update(ws)
         data = json.loads(path.read_text())
@@ -171,16 +188,36 @@ class TestUpdateReportsTheAccessLines:
 
 
 class TestGlobalAgentsFollowTheLevel:
-    def test_update_refreshes_the_installed_global_agents(self, ws, fake_opencode, human):
-        from carter.install import components
+    @pytest.fixture
+    def installed(self, fake_opencode) -> Path:
+        """Global agents installed with a manifest but no guards (none accepted)."""
+        from carter.guard.agent_rules import current_rules
+        from carter.install import components, orchestrator
 
         fake_opencode()
-        from carter.install import orchestrator
+        orchestrator.run(base_dir=None, verbosity=0, guards=False)
+        assert components.read_manifest(None) is not None and current_rules() == []
+        return Path.home() / ".config" / "opencode" / "agents" / "carter-engineer.md"
 
-        orchestrator.run(base_dir=None, verbosity=0)
-        agent = Path.home() / ".config" / "opencode" / "agents" / "carter-engineer.md"
-        strict_text = agent.read_text()
+    def test_update_refreshes_the_global_agents_with_a_manifest_and_no_guards(self, ws, installed):
+        strict_text = installed.read_text()
+        _home_config('schema = 2\n[access]\nlevel = "relaxed"\n')
+        result = _update(ws)
+        assert "global Carter agents refreshed" in result.output
+        assert installed.read_text() != strict_text
+
+    def test_an_agent_shell_refreshes_nothing_and_says_so_only_when_something_differs(
+        self, ws, installed
+    ):
+        agent = {"AGENT": "1"}
+        assert "not refreshed" not in _update(ws, env=agent).output  # nothing differs yet
+        before = installed.read_text()
+        _home_config('schema = 2\n[access]\nlevel = "relaxed"\n')
+        out = _update(ws, env=agent).output
+        assert "global Carter agents not refreshed: agent shells never change them" in out
+        assert installed.read_text() == before
+
+    def test_without_a_manifest_update_creates_nothing(self, ws):
         _home_config('schema = 2\n[access]\nlevel = "relaxed"\n')
         _update(ws)
-        assert agent.read_text() != strict_text
-        assert components.read_manifest(None) is not None
+        assert not (Path.home() / ".config" / "opencode" / "agents").exists()

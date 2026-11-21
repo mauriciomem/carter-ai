@@ -77,6 +77,7 @@ SCOPE_ISSUES = "issues"
 _CONFIG = "config.toml [access]: "
 FALLBACK = "! access config invalid: using strict"
 UNREADABLE = "config.toml unreadable or not valid TOML"
+UNAVAILABLE = "config.toml [access] was not read"
 _LEVEL_HELP = "level must be strict/guarded/relaxed"
 _VALUE_HELP = " must be allowed/ask/denied"
 
@@ -200,6 +201,8 @@ def _role_cap(role: str | None, cap_id: str) -> str:
         return "denied"
     if cap_id == "destructive" and role not in LOCAL_WRITE_ROLES:
         return "denied"
+    if cap_id in ("pr_write", "issue_write") and role not in LOCAL_WRITE_ROLES:
+        return "ask"  # a read-only role asks before it writes anywhere, at every level
     return "allowed"
 
 
@@ -251,9 +254,14 @@ def resolve_config(config: Mapping[str, Any], role: str | None = None) -> Access
     """``resolve`` for a loaded ``carter.yaml`` dict: the one call every reader makes.
 
     The user's side comes from ``config["access_user"]`` (``carter.config.with_user_access``);
-    without it the user has no ``[access]`` and the level is ``strict``.
+    without it the user has no ``[access]`` and the level is ``strict``. Only a real
+    ``UserAccess`` counts: anything else (a ``carter.yaml`` that names the key) is strict.
     """
-    user = config.get("access_user") or UserAccess()
+    user = config.get("access_user")
+    if user is None:
+        user = UserAccess()
+    elif not isinstance(user, UserAccess):
+        user = UserAccess(error=UNAVAILABLE)
     policy = config.get("policy") or {}
     level = policy.get("level") if isinstance(policy, Mapping) else None
     return resolve(user.table, config.get("access"), level, role, user_error=user.error)
