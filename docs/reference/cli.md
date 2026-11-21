@@ -594,11 +594,11 @@ run it.
 
 ```text
 Access level: guarded  (~/.carter/config.toml)
-    Workspace edits        [workspace_edit]    allowed  preset
-    PRs open/comment       [pr_write]          ask      override
-    Destructive commands   [destructive]       denied   workspace
-    Project OpenCode conf  [opencode_config]   denied   preset
-    Push from the shell    [push]              never
+    Workspace edits   [workspace_edit]    allowed  preset
+    PR writes         [pr_write]          ask      override
+    Destructive       [destructive]       denied   workspace
+    OpenCode config   [opencode_config]   denied   preset
+    Push from shell   [push]              never
 see: carter access --help
 ```
 
@@ -610,19 +610,22 @@ The header names the level and where it comes from: `(default)` when `[access]` 
 
 A `!` line under the header is a fact to act on. It goes to stderr:
 
-- A consent group is not installed, so the floor items it backs are not denied, for example
-  `! g2 not installed: push, gh_api, github_admin not denied`. The groups are `g2`, `sudo-docker`,
+- A consent group is not installed (`off`), so the floor rows it lists are not denied, for example
+  `! g2 off: push, gh_api, github_admin, carter_internals`. The groups are `g2`, `sudo-docker`,
   `read-edit-denies`, `hooks` and `config-edit`. Run `carter guard install`.
 - The error of an invalid `[access]`, or a workspace value that cannot loosen.
 
-`carter check` prints the same lines. Network and package installs are not rows: they are not
-limited until a sandbox exists.
+`carter check` prints the invalid-`[access]` and workspace lines too, but only one line for the
+groups: `! 3 guard groups missing (see: carter access)`. Network and package installs are not rows:
+they are not limited until a sandbox exists.
 
 | Option | Description |
 |--------|-------------|
 | `-v`, `--verbose` | Add a line under each row: what enforces it, and how strongly |
 
-Exit status is 0 whatever it prints. Without `[access]` the level is `strict` and `carter update`
+Exit status is 0, whatever the `!` lines say. The one failure is a `.carter/carter.yaml` that cannot
+be read: Carter does not guess, because a skipped workspace file could show looser values than
+apply. Without `[access]` the level is `strict` and `carter update`
 says so; that notice repeats while `~/.carter/guard-state.json` is missing.
 
 ## carter check
@@ -654,9 +657,10 @@ On success, `carter check` prints `✓ Workspace OK` and, above it, one line nam
 because Carter can't verify that your provider offers them (`-v` adds the role behind each model).
 On failure every `✗` line has its `→` fix and the run ends with `✗ workspace: N problems`.
 
-Before the checks, `carter check` prints the same `!` lines as [`carter access`](#carter-access): an
-invalid `[access]`, a workspace value that cannot loosen, and one line for each consent group that
-is not installed. They are warnings and never change the exit status.
+Before the checks, `carter check` prints the access warnings of [`carter access`](#carter-access): an
+invalid `[access]`, a workspace value that cannot loosen, and, when consent groups are not
+installed, one line (`! 3 guard groups missing (see: carter access)`). They are warnings and never
+change the exit status.
 
 ### carter check --host
 

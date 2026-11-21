@@ -87,8 +87,8 @@ def _config_section() -> str:
     """The `[access]` part of the configuration reference."""
     body = text("reference/configuration.md")
     start = body.index("### access")
-    end = body.index("\n### ", start + 1)
-    return body[start:end]
+    end = body.find("\n### ", start + 1)
+    return body[start:] if end == -1 else body[start:end]
 
 
 def _table_rows(block: str) -> list[list[str]]:

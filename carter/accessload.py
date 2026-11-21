@@ -16,7 +16,7 @@ import sys
 from datetime import date
 from pathlib import Path
 
-from carter.access import UNREADABLE, UserAccess, missing_group_lines
+from carter.access import UNREADABLE, UserAccess
 from carter.guard import consent, optout
 from carter.guard.state import load, load_or_empty_readonly, save
 from carter.identity import load_identity
@@ -42,11 +42,6 @@ def accepted_groups(base_dir: Path | None = None) -> list[str]:
     """The consent groups recorded as accepted; none when the state file is absent or broken."""
     read = load_or_empty_readonly(guard_state_path(base_dir))
     return consent.accepted_groups(read.state) if read.status == "ok" else []
-
-
-def missing_groups(base_dir: Path | None = None) -> tuple[str, ...]:
-    """The ``!`` lines for consent groups that are not installed (``carter access``, ``check``)."""
-    return missing_group_lines(accepted_groups(base_dir))
 
 
 def project_config_open(workspace: Path, accepted: list[str], base_dir: Path | None = None) -> bool:

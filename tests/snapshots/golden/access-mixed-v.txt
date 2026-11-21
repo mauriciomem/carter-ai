@@ -1,33 +1,33 @@
 Access level: guarded  (~/.carter/config.toml)
-! g2 not installed: push, gh_api, github_admin not denied
-    Workspace edits        [workspace_edit]    allowed  preset
+! g2 off: push, gh_api, github_admin, carter_internals
+    Workspace edits   [workspace_edit]    allowed  preset
       enforced by OpenCode edit permission: medium
-    Run commands           [run_commands]      allowed  preset
+    Run commands      [run_commands]      allowed  preset
       enforced by OpenCode shell permission: medium
-    Git commit             [git_commit]        allowed  preset
+    Git commit        [git_commit]        allowed  preset
       enforced by command gate, git hooks, tier check: weak
-    GitHub reads           [github_read]       allowed  preset
-      enforced by token scopes, command gate: strong with a read-only token
-    PRs open/comment       [pr_write]          ask      override
-      enforced by command gate flags, ask: weak; strong if token cannot write
-    Issues open/comment    [issue_write]       denied   workspace
-      enforced by command gate flags, ask: weak; strong if token cannot write
-    Destructive commands   [destructive]       denied   workspace
+    GitHub reads      [github_read]       allowed  preset
+      enforced by token scopes, gate: strong if token is read-only
+    PR writes         [pr_write]          ask      override
+      enforced by gate flags, ask: weak; strong if token lacks write
+    Issue writes      [issue_write]       denied   workspace
+      enforced by gate flags, ask: weak; strong if token lacks write
+    Destructive       [destructive]       denied   workspace
       enforced by OpenCode command globs: weak
-    Infra apply            [infra_apply]       ask      preset
-      enforced by OpenCode command globs: weak; cloud credentials are the limit
-    Project OpenCode conf  [opencode_config]   allowed  opt-out
-      enforced by OpenCode edit deny: medium; shell writes not covered
-    Push from the shell    [push]              never
-      enforced by no SSH agent, pre-push hook: strong for token, weak for keys
-    GitHub API             [gh_api]            never
+    Infra apply       [infra_apply]       ask      preset
+      enforced by command globs: weak; cloud credentials limit it
+    OpenCode config   [opencode_config]   allowed  opt-out
+      enforced by OpenCode edit deny: medium; not shell writes
+    Push from shell   [push]              never
+      enforced by no SSH agent, hook: strong vs token, weak vs keys
+    GitHub API        [gh_api]            never
       enforced by command gate: weak
-    GitHub decisions       [github_admin]      never
-      enforced by command gate: weak; strong for scopes the token lacks
-    Root                   [sudo]              never
-      enforced by OpenCode denies, gate: medium for tools, weak for shell
-    Secrets                [secrets]           never
-      enforced by OpenCode denies, gate: medium for tools, weak for shell
-    Carter internals       [carter_internals]  never
-      enforced by OpenCode denies, gate: medium for tools, weak for shell
+    GitHub decisions  [github_admin]      never
+      enforced by command gate: weak; strong if token lacks scope
+    Root              [sudo]              never
+      enforced by OpenCode denies, gate: medium tools, weak shell
+    Secrets           [secrets]           never
+      enforced by OpenCode denies, gate: medium tools, weak shell
+    Carter internals  [carter_internals]  never
+      enforced by OpenCode denies, gate: medium tools, weak shell
 see: carter access --help

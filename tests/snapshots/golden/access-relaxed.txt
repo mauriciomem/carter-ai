@@ -1,17 +1,17 @@
 Access level: relaxed  (~/.carter/config.toml)
-    Workspace edits        [workspace_edit]    allowed  preset
-    Run commands           [run_commands]      allowed  preset
-    Git commit             [git_commit]        allowed  preset
-    GitHub reads           [github_read]       allowed  preset
-    PRs open/comment       [pr_write]          allowed  preset
-    Issues open/comment    [issue_write]       allowed  preset
-    Destructive commands   [destructive]       ask      preset
-    Infra apply            [infra_apply]       ask      preset
-    Project OpenCode conf  [opencode_config]   denied   preset
-    Push from the shell    [push]              never
-    GitHub API             [gh_api]            never
-    GitHub decisions       [github_admin]      never
-    Root                   [sudo]              never
-    Secrets                [secrets]           never
-    Carter internals       [carter_internals]  never
+    Workspace edits   [workspace_edit]    allowed  preset
+    Run commands      [run_commands]      allowed  preset
+    Git commit        [git_commit]        allowed  preset
+    GitHub reads      [github_read]       allowed  preset
+    PR writes         [pr_write]          allowed  preset
+    Issue writes      [issue_write]       allowed  preset
+    Destructive       [destructive]       ask      preset
+    Infra apply       [infra_apply]       ask      preset
+    OpenCode config   [opencode_config]   denied   preset
+    Push from shell   [push]              never
+    GitHub API        [gh_api]            never
+    GitHub decisions  [github_admin]      never
+    Root              [sudo]              never
+    Secrets           [secrets]           never
+    Carter internals  [carter_internals]  never
 see: carter access --help

@@ -105,19 +105,17 @@ def test_colour_only_on_a_terminal() -> None:
 
 @pytest.mark.parametrize("name", list(_scenarios()))
 @pytest.mark.parametrize("v", [False, True])
-def test_no_line_is_wider_than_80_and_the_status_lines_than_60(name: str, v: bool) -> None:
+def test_no_line_is_wider_than_60_or_70_with_v(name: str, v: bool) -> None:
     lines = play(name, "pipe", v=v).text().splitlines()
-    assert max(len(line) for line in lines) <= 80
+    assert max(len(line) for line in lines) <= (70 if v else 60)  # rows fit 60 columns too
     status = [ln for ln in lines if ln.startswith(("Access level", "!", "see:"))]
     assert status and all(len(ln) <= 60 for ln in status), status
 
 
 @pytest.mark.parametrize("v", [False, True])
-def test_on_a_60_column_terminal_the_rows_stack_and_nothing_is_cut(
-    v: bool, update_golden: bool
-) -> None:
+def test_on_a_60_column_terminal_no_row_stacks(v: bool) -> None:
+    """The rows fit 60 columns, so the layout is the pipe's (no golden file of its own)."""
     text = ANSI.sub("", play("mixed", "tty", columns=60, v=v).text())
-    widest = max(len(line) for line in text.splitlines())
-    assert widest <= (80 if v else 60)  # the "enforced by" lines wrap on a narrow terminal
-    assert text.count("[") == 15
-    _golden(f"mixed{'-v' if v else ''}.w60", text, update_golden)
+    assert text == play("mixed", "pipe", v=v).text()
+    # With -v the "enforced by" lines are up to 70 wide; the terminal wraps them, Carter does not.
+    assert max(len(line) for line in text.splitlines()) <= (70 if v else 60)

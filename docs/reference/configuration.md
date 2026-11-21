@@ -281,11 +281,15 @@ pr_write = "ask"    # any capability id, up to its ceiling
 | `run_commands` | Run commands | allowed | allowed | allowed | allowed |
 | `git_commit` | Git commit | allowed | allowed | allowed | allowed |
 | `github_read` | GitHub reads | allowed | allowed | allowed | allowed |
-| `pr_write` | PRs open/comment | ask | allowed | allowed | allowed |
-| `issue_write` | Issues open/comment | denied | ask | allowed | allowed |
-| `destructive` | Destructive commands | denied | ask | ask | ask |
+| `pr_write` | PR writes | ask | allowed | allowed | allowed |
+| `issue_write` | Issue writes | denied | ask | allowed | allowed |
+| `destructive` | Destructive | denied | ask | ask | ask |
 | `infra_apply` | Infra apply | denied | ask | ask | ask |
-| `opencode_config` | Project OpenCode conf | denied | denied | denied | denied |
+| `opencode_config` | OpenCode config | denied | denied | denied | denied |
+
+`pr_write` and `issue_write` cover opening and commenting. `destructive` covers `rm -rf` and
+`git reset --hard`; `infra_apply` covers `terraform apply` and similar. `opencode_config` is edits
+of a project's OpenCode config.
 
 The ceiling is the loosest value a key may take; a looser value is an error. `opencode_config`
 opens only for a workspace that sets `allow_project_opencode_edit` (below). `carter access` then
@@ -295,7 +299,7 @@ The floor shows `never` at every level. Setting one of these ids is an error:
 
 | Id | Label | Value |
 |----|-------|-------|
-| `push` | Push from the shell | never |
+| `push` | Push from shell | never |
 | `gh_api` | GitHub API | never |
 | `github_admin` | GitHub decisions | never |
 | `sudo` | Root | never |
@@ -306,7 +310,8 @@ The source column is `preset` (from the level), `override` (your key), `workspac
 value from `carter.yaml`) or `opt-out`. A workspace takes the same ids under `access:` in
 `.carter/carter.yaml` and can only tighten them; `policy.level` there is a deprecated alias of
 `access.level`. Any error in `[access]`, or a file that does not parse, renders `strict`;
-`carter update` and `carter access` say why. Carter keeps the table when it rewrites the file. See
+`carter update` and `carter access` say why. Today Carter keeps this table whenever it rewrites the
+file; a later release makes `config.toml` human-only and Carter stops rewriting it. See
 [Safety and permissions](../guides/safety-and-permissions.md#choose-a-level).
 
 ### Letting agents edit a project's OpenCode config

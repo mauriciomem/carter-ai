@@ -537,6 +537,7 @@ def check(target_dir: str, no_harness: bool, host: bool, probe: bool) -> None:
         items = run_host_checks(cwd=Path(target_dir).resolve(), **live_readers())
         raise SystemExit(ui.items(items, "host"))
     from carter import accessload, unknownkeys
+    from carter.access import missing_group_lines, missing_groups_summary
     from carter.config import ConfigError, load_config
     from carter.harness import Expected, validate_agents
     from carter.plans import parse_frontmatter, validate_checkpoint, validate_plans_dir
@@ -561,8 +562,9 @@ def check(target_dir: str, no_harness: bool, host: bool, probe: bool) -> None:
         raise click.ClickException(str(e)) from e
     _report_ignored_policy(config, "check")
     _report_access_notes(config)
-    for line in accessload.missing_groups():
-        ui.warn(line.removeprefix("! "))
+    summary = missing_groups_summary(missing_group_lines(accessload.accepted_groups()))
+    if summary:
+        ui.warn(summary.removeprefix("! "))  # `carter access` lists them
 
     # Check agent and instruction files exist in OpenCode's discovery paths,
     # collecting each role's parsed frontmatter for the policy lint as we go.
