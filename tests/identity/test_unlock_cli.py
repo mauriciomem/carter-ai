@@ -10,6 +10,7 @@ left to manual checks.
 from __future__ import annotations
 
 import hashlib
+import re
 import sys
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass
@@ -242,6 +243,24 @@ class TestConfigNeeds:
                 assert done.exit_code == 0 and "managed by your password manager" in done.output
 
 
+# `perform_unlock` prints `unlocked  <fingerprint[:19]>…` and, with --ttl, ` · <ttl>` right after
+# the ellipsis (`, ` on a stream that cannot show the dot). A bare "8h" would also match inside
+# the random base64 fingerprint.
+LIFETIME = re.compile(r"(?:…|\.\.\.)(?: ·|,) (?P<ttl>\w+)")
+
+
+def test_the_lifetime_pattern_ignores_a_fingerprint_that_contains_8h() -> None:
+    """The CI failure: a random fingerprint held "8h" and a substring check read it as a lifetime."""
+    assert not LIFETIME.search("✓ unlocked  SHA256:r55H8hctA8As…\x1b[0m\n")
+    assert not LIFETIME.search("ok unlocked  SHA256:r55H8hctA8As...\n")
+    for line in (
+        "✓ unlocked  SHA256:r55H8hctA8As… · 8h",
+        "ok unlocked  SHA256:r55H8hctA8As..., 8h",
+    ):
+        found = LIFETIME.search(line)
+        assert found and found["ttl"] == "8h"
+
+
 @real_ssh
 class TestUnlockFlows:
     def test_a_passphrase_key_is_unlocked_once_and_the_second_call_does_not_prompt(
@@ -252,7 +271,7 @@ class TestUnlockFlows:
         first = cli_env.run("unlock", answers=[pw])
         assert first.rc == 0, first.output
         assert "unlocked" in first.output and cli_env.key.fingerprint[:19] in first.output
-        assert "8h" not in first.output  # no lifetime unless --ttl
+        assert not LIFETIME.search(first.output)  # no lifetime unless --ttl
         assert pw not in first.output
         second = cli_env.run("unlock")  # nothing typed: a prompt would time out
         assert second.rc == 0 and "already unlocked" in second.output
@@ -262,9 +281,11 @@ class TestUnlockFlows:
     def test_extend_asks_again_and_ttl_is_passed_to_ssh_add(self, cli_env: Env) -> None:
         pw = cli_env.key.passphrase
         assert pw
-        assert cli_env.run("unlock", "--ttl", "30m", answers=[pw]).rc == 0
+        first = cli_env.run("unlock", "--ttl", "30m", answers=[pw])
+        assert first.rc == 0 and (m := LIFETIME.search(first.output)) and m["ttl"] == "30m"
         again = cli_env.run("unlock", "--extend", "--ttl", "2h", answers=[pw])
-        assert again.rc == 0 and "2h" in again.output and "Enter passphrase" in again.output
+        assert again.rc == 0 and "Enter passphrase" in again.output
+        assert (m := LIFETIME.search(again.output)) and m["ttl"] == "2h"
 
     def test_a_wrong_passphrase_is_ssh_adds_own_retry_and_a_blank_line_ends_it(
         self, cli_env: Env
