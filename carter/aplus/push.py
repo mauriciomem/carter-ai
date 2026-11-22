@@ -55,8 +55,10 @@ class Options:
     set_upstream: bool = False
 
 
-def _args(detail: str) -> IdentityError:
-    return IdentityError(E_APLUS_ARGS, detail=detail)
+def _args(message: str, detail: str = "", fix: str = "") -> IdentityError:
+    """A refusal of ``carter push`` with its own short message (the registry's says only "pushes
+    the current branch to origin"); the long part goes in ``detail`` and shows with ``-v``."""
+    return IdentityError(E_APLUS_ARGS, message=message, detail=detail, fix=fix)
 
 
 def clean(text: str, limit: int = 100) -> str:
@@ -84,7 +86,11 @@ def _fetch_target(repo: Path, branch: str) -> None:
     proc = run.network_git(["fetch", "--no-tags", "--no-recurse-submodules", REMOTE, refspec], repo)
     if proc.returncode == 0 or "couldn't find remote ref" in proc.stderr:
         return  # the branch does not exist on origin yet: a new branch
-    raise _args(f"cannot fetch from origin ({mask_userinfo(clean(proc.stderr.strip(), 300))})")
+    raise _args(
+        "cannot fetch from origin",
+        mask_userinfo(clean(proc.stderr.strip(), 300)),
+        "check the remote and your ssh key: ssh -T git@github.com",
+    )
 
 
 def _default_branch(repo: Path) -> str | None:
@@ -129,7 +135,9 @@ def _local_checks(
     try:
         findings = repocfg.check_repo_config(repo, origin_url=url, owned=owned)
     except repocfg.RepoCheckError as exc:
-        raise _args(f"cannot inspect the repository ({exc})") from exc
+        raise _args(
+            "cannot inspect the repository", str(exc), "check the repo's git config"
+        ) from exc
     host = ssh_host(url)
     if host:
         findings += sshcfg.check_ssh_config(home, ssh_bin_dir=cfg.signing.ssh_bin_dir, host=host)
@@ -147,13 +155,12 @@ def vet_local(
     cfg, found = _local_checks(repo, url, base_dir, home)
     if not found:
         return cfg, None
-    names = ", ".join(dict.fromkeys(f"{f.scope} {f.key}" for f in found[:3]))
-    more = f" (+{len(found) - 3})" if len(found) > 3 else ""
-    ui.warn(f"settings could run code with your credentials or reroute the push: {names}{more}")
+    noun = "git setting" if len(found) == 1 else "git settings"
+    ui.warn(f"{len(found)} {noun} could run code on push (see: carter push -v)")
     for finding in found:
         ui.detail(finding.render())
     if dry_run:
-        ui.info("dry run: nothing was fetched or pushed (fetching would run those settings)")
+        ui.info("dry run: nothing fetched or pushed")
         return cfg, 0
     return cfg, None
 
@@ -171,10 +178,10 @@ def run_push(
 def _flow(repo: Path, opts: Options, base_dir: Path | None, home: Path) -> int:
     branch = _out(repo, ["symbolic-ref", "--short", "-q", "HEAD"])
     if not branch:
-        raise _args("detached HEAD: check out the branch you want to push")
+        raise _args("detached HEAD", fix="check out the branch you want to push")
     url = _out(repo, ["remote", "get-url", "--push", REMOTE])
     if url is None:
-        raise _args(f"no remote named {REMOTE}")
+        raise _args(f"no remote named {REMOTE}", fix=f"git remote add {REMOTE} <url>")
     cfg, stop = vet_local(repo, url, base_dir=base_dir, home=home, dry_run=opts.dry_run)
     if stop is not None:
         return stop
@@ -182,20 +189,24 @@ def _flow(repo: Path, opts: Options, base_dir: Path | None, home: Path) -> int:
     rng = rangecalc.compute_range(repo)
     if not rng.new_branch and not rng.fast_forward:
         raise _args(
-            f"non-fast-forward: {REMOTE}/{branch} has commits you do not have; "
-            "fetch and rebase (carter push never forces)"
+            f"{REMOTE}/{branch} has commits you lack",
+            fix="fetch and rebase; carter push never forces",
         )
     ui.detail(f"{branch} -> {REMOTE} ({mask_userinfo(url)})")
     where = f"{branch} → {REMOTE}"
     if not rng.commits:
-        ui.summary(where, f"up to date, no commits beyond {rng.base_ref}")
+        ui.detail(f"no commits beyond {rng.base_ref}")
+        ui.summary(where, "up to date")
         return 0
     failed = sigcheck.check_signatures(repo, rng.commits, sigcheck.SigIdentity.from_config(cfg))
     for line in _commit_lines(repo, rng.commits):
         ui.detail(line)
     _show_changes(rng)
     if error := sigcheck.to_error(failed):
-        raise error
+        shas = ui.short_list((f.key[:12] for f in failed), 2)
+        raise IdentityError(
+            error.code, f"LLM commits without a valid signature: {shas}", error.detail, error.fix
+        )
     count = len(rng.commits)
     ui.detail(f"{count} commit(s), {rng.base_label}")
     noun = f"{count} commit{'s' if count != 1 else ''}"
@@ -211,9 +222,10 @@ def _show_changes(rng: rangecalc.RangeInfo) -> None:
     if len(rng.changes) > MAX_CHANGES_SHOWN:
         ui.detail(f"... and {len(rng.changes) - MAX_CHANGES_SHOWN} more files")
     if rng.sensitive:
-        shown = ", ".join(clean(c.path, 60) for c in rng.sensitive[:3])
-        more = f" (+{len(rng.sensitive) - 3})" if len(rng.sensitive) > 3 else ""
-        ui.warn(f"changes paths that can run code on someone's machine or in CI: {shown}{more}")
+        noun = "file" if len(rng.sensitive) == 1 else "files"
+        ui.warn(f"{len(rng.sensitive)} changed {noun} can run code (see: carter push -v)")
+        for change in rng.sensitive:
+            ui.detail(f"{change.status} {clean(change.path)}")
 
 
 def _push(
@@ -232,7 +244,7 @@ def _push(
         # URL (long in a deep checkout); they must not push the remote's own message out
         reasons = [ln.strip() for ln in lines if ln.strip() and not ln.startswith(NOISE)]
         why = " | ".join(reasons)[-300:]
-        ui.fail(f"git push failed (exit {proc.returncode}): {why}", "nothing was forced")
+        ui.fail(f"git push failed (exit {proc.returncode})", "nothing was forced", why=why)
         return 1
     state = (
         "signed" if signed == count else "unsigned" if not signed else f"{count - signed} unsigned"

@@ -15,6 +15,7 @@ import click
 from carter import ghtoken, ui
 from carter.cliguard import guarded as _guarded
 from carter.cliguard import verbose_option
+from carter.home import tilde
 from carter.terminal import require_human_terminal, stdin_is_tty
 
 _BASE_DIR = click.option(
@@ -39,10 +40,7 @@ def set_cmd(extra: tuple[str, ...], base_dir: Path | None) -> None:
     """Store a read-only token (stdin or a hidden prompt)."""
 
     if extra:  # never echo it: click would print the extra argument, i.e. the token
-        raise click.UsageError(
-            "`carter github-token set` takes no arguments: the token is read from stdin. "
-            "If that was a real token, it is in your shell history; revoke it."
-        )
+        raise click.UsageError("takes no arguments; if that was a token, revoke it")
 
     def run() -> int:
         require_human_terminal("carter github-token set", streams=("stderr",))
@@ -51,7 +49,7 @@ def set_cmd(extra: tuple[str, ...], base_dir: Path | None) -> None:
         else:
             raw = click.get_text_stream("stdin").read(_MAX_READ)
         stored = ghtoken.store_token(raw, base_dir)
-        ui.ok("token stored", f"{stored.path} (0600)")
+        ui.ok("token stored", f"{tilde(stored.path)} (0600)")
         if stored.note:
             ui.detail(stored.note)
         ui.info("→ next: carter github-token check")

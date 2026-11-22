@@ -97,7 +97,7 @@ class TestRefusals:
         self, work: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         monkeypatch.setenv("OPENCODE_SESSION_ID", "s1")
-        text = push_cli().output
+        text = push_cli().output  # the detail (which signal) is shown under the cause
         assert "E-HUMAN-TERMINAL" in text and "agent shell" in text
         assert "!carter push" in OWN_TERMINAL and "not through an agent" in OWN_TERMINAL
 
@@ -148,7 +148,7 @@ class TestRefusals:
         commit_file(work, "mine.txt")
         calls.clear()
         res = push_cli()
-        assert res.exit_code == 1 and "non-fast-forward" in res.output
+        assert res.exit_code == 1 and "has commits you lack" in res.output
         assert "never forces" in res.output
         assert not any(a[0] == "push" for _, a in calls)
         assert (
@@ -283,18 +283,19 @@ class TestFindingsAreOneWarning:
         self, work: Path, calls: Calls
     ) -> None:
         git("config", "core.sshCommand", "sh -c 'touch /tmp/never'", cwd=work)
-        res = push_cli()
+        res = push_cli("-v")
         assert res.exit_code == 0, res.output  # a warning, not a question
-        warning = [ln for ln in res.output.splitlines() if "could run code" in ln]
-        assert len(warning) == 1 and "core.sshcommand" in warning[0].lower()
+        warning = [ln for ln in res.output.splitlines() if ln.startswith("!")]
+        assert warning == ["! 1 git setting could run code on push (see: carter push -v)"]
+        assert "core.sshcommand" in res.output.lower()  # named under -v, one per line
         assert "touch" not in res.output  # the value is never printed
         assert net_calls(calls) == ["fetch", "push"]
 
     def test_dry_run_with_findings_does_not_fetch(self, work: Path, calls: Calls) -> None:
         git("config", "credential.helper", "!echo hi", cwd=work)
-        res = push_cli("--dry-run")
+        res = push_cli("--dry-run", "-v")
         assert res.exit_code == 0 and "credential.helper" in res.output
-        assert "nothing was fetched" in res.output and net_calls(calls) == []
+        assert "nothing fetched" in res.output and net_calls(calls) == []
 
     def test_a_repo_hook_is_named_and_never_run_by_the_push(
         self, work: Path, tmp_path: Path
@@ -303,7 +304,7 @@ class TestFindingsAreOneWarning:
         hook = work / ".git" / "hooks" / "pre-push"
         hook.write_text(f"#!/bin/sh\ntouch {marker}\n")
         hook.chmod(hook.stat().st_mode | stat.S_IXUSR)
-        res = push_cli()
+        res = push_cli("-v")
         assert res.exit_code == 0, res.output
         assert "pre-push" in res.output and not marker.exists()
         assert "feat/x" in remote_refs(work)
@@ -318,10 +319,10 @@ class TestWhatYouAreShown:
     def test_hook_and_ci_paths_are_one_warning_line(self, work: Path) -> None:
         commit_file(work, ".husky/pre-commit", "echo hi\n")
         commit_file(work, ".github/workflows/ci.yml", "on: push\n")
-        plain = push_cli("--dry-run")
-        warning = [ln for ln in plain.output.splitlines() if "can run code on someone's" in ln]
-        assert len(warning) == 1
-        assert ".husky/pre-commit" in warning[0] and ".github/workflows/ci.yml" in warning[0]
+        plain = push_cli("--dry-run", "-v")
+        warning = [ln for ln in plain.output.splitlines() if "can run code" in ln]
+        assert warning == ["! 2 changed files can run code (see: carter push -v)"]
+        assert ".husky/pre-commit" in plain.output and ".github/workflows/ci.yml" in plain.output
         assert "\x1b[" not in plain.output  # piped output is plain text
 
     def test_ordinary_paths_do_not_trigger_the_sensitive_block(self, work: Path) -> None:
@@ -384,7 +385,9 @@ class TestPushFailures:
         monkeypatch.setattr(run, "network_git", padded)
         res = push_cli()
         assert res.exit_code == 1 and "git push failed" in res.output
-        assert "no thanks" in res.output and "pre-receive hook declined" in res.output
+        text = " ".join(res.output.split())  # the reason is wrapped under the line budget
+        assert "no thanks" in text and "pre-receive hook declined" in text
+        assert all(len(ln) <= 80 for ln in res.output.splitlines() if "x" * 20 not in ln)
 
     def test_an_unreachable_origin_is_a_clear_error(self, work: Path) -> None:
         git("remote", "set-url", "origin", f"file://{work}/nope.git", cwd=work)

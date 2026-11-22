@@ -22,8 +22,14 @@ def report(exc: BaseException) -> bool:
     if found is None:
         return False
     cause, fix, code = found
-    ui.fail(cause, fix, code)
+    ui.fail(cause, fix, code, why=show_detail(exc, cause))
     return True
+
+
+def show_detail(exc: BaseException, cause: str) -> str:
+    """The technical detail ``describe_error`` left out of a too long cause (shown under it)."""
+    detail = str(getattr(exc, "detail", ""))
+    return "" if not detail or detail in cause else detail
 
 
 def guarded(fn: Callable[[], int]) -> None:

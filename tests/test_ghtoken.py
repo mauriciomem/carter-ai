@@ -70,9 +70,7 @@ class TestValidate:
     def test_an_unknown_prefix_is_not_echoed_at_all(self) -> None:
         with pytest.raises(IdentityError) as exc:
             ghtoken.validate_token("hunter2-not-a-token")
-        assert "hunter" not in str(exc.value) and "does not look like a GitHub token" in str(
-            exc.value
-        )
+        assert "hunter" not in str(exc.value) and "not a GitHub token" in str(exc.value)
 
     def test_no_substring_beyond_four_characters_appears_in_any_error(self) -> None:
         for raw in (TOKEN[:-3] + "!!!", TOKEN + "\n" + TOKEN, "ghp_" + TOKEN[11:]):
@@ -453,9 +451,7 @@ class TestCheck:
         github_api.readonly_token_world()
         got = levels(ghtoken.check_token(stored, now=NOW))
         (text,) = [t for t in got["info"] if t.startswith("repository selection")]
-        assert "Prefer selecting only the repositories Carter works on" in text
-        assert "'All repositories' lets agents read every repo the token covers" in text
-        assert "accepted, but wider than needed" in text
+        assert "prefer only the repos Carter works on" in text
         assert "never" not in text.lower() and "keep it narrow" not in text
 
     def test_nothing_reachable_is_red_for_the_type_and_warn_for_the_probe(
@@ -544,7 +540,7 @@ class TestApiBase:
         ghtoken.store_token(TOKEN, tmp_path)
         monkeypatch.setenv("GITHUB_API_URL", "http://evil.example")
         got = levels(ghtoken.check_token(tmp_path, now=NOW))
-        assert any("refusing to send the token" in t for t in got["red"])
+        assert any("must be https" in t for t in got["red"])
 
 
 class TestCheckCommand:

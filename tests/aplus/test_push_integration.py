@@ -91,7 +91,7 @@ class TestLlmSignatures:
         self, branch: Path, t2: None, ssh_keygen_dir: str
     ) -> None:
         sha = llm_commit(branch, "a.txt", key=None, bindir=ssh_keygen_dir)
-        res = push_cli(input="y\n")
+        res = push_cli("-v", input="y\n")
         assert res.exit_code == 1 and E_B_UNSIGNED in res.output
         assert sha[:12] in res.output and "not signed" in res.output
         assert not remote_has(branch, "feat/llm")

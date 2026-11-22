@@ -133,7 +133,7 @@ def _reason(scope: str, key: str, value: str, origin_url: str | None) -> str | N
             return "reroutes or runs code during a push"
         return None
     if key in _EXACT or key.startswith(_PREFIXES) or any(p.fullmatch(key) for p in _PATTERNS):
-        return "could run code with your credentials or reroute the push"
+        return "could run code or reroute the push"
     return None
 
 
