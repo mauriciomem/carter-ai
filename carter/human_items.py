@@ -20,7 +20,7 @@ from carter.identity.schema import IdentityConfig
 from carter.identity.trailer import noreply_email
 
 DCO_FILES = (".github/dco.yml", ".github/dco.yaml", ".dco.yml", "DCO")
-USE_NOREPLY = "or set user.email to your <id>+<login>@users.noreply.github.com address."
+USE_NOREPLY = "or use your <id>+<login>@users.noreply.github.com email."
 
 
 def dco_file(cwd: Path) -> str:
@@ -57,7 +57,7 @@ def human_items(
                 "human identity",
                 f"{E_HUMAN_IDENTITY}: your git identity in this directory is unusable "
                 f"({human.problem}); role author refuses to commit",
-                "Set user.name and user.email in your git config (an includeIf override counts).",
+                "Set user.name and user.email in your git config.",
             )
         ]
     out = [Item("ok", "human identity", "your git user.name and user.email are usable")]
@@ -80,9 +80,8 @@ def human_items(
             Item(
                 "warn",
                 "co-author link",
-                "your address is not known to be linked to a GitHub account: in role author the "
-                "Co-authored-by line is your only credit there",
-                "Run `carter check --host` in your own terminal to check it, " + USE_NOREPLY,
+                "your address may not be linked to GitHub (role author: trailer only)",
+                "Run `carter check --host` in your terminal, " + USE_NOREPLY,
             )
         )
     return out
@@ -96,8 +95,7 @@ def dco_items(cwd: Path) -> list[Item]:
         Item(
             "warn",
             "dco",
-            f"this repository has {name}: a DCO check compares the sign-off with the AUTHOR, and "
-            "Carter never signs off for the LLM, so role author cannot pass it",
-            "Pin `role: co-author` in carter.yaml and run `carter update` for this workspace.",
+            f"this repository has {name}: role author cannot pass a DCO check",
+            "Pin `role: co-author` in carter.yaml, then run `carter update`.",
         )
     ]

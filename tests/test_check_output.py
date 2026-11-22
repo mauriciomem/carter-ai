@@ -12,10 +12,7 @@ from access_support import ALL_GROUPS, record_groups
 from carter.cli import main
 from carter.harness import UNAVAILABLE_FIX, HarnessResult
 
-ADVISORY = (
-    "Pinned models: anthropic/claude-opus-5-5, anthropic/claude-sonnet-5-5. "
-    "Carter cannot verify your provider has them."
-)
+ADVISORY = "2 models pinned, not verifiable (see: carter check -v)"
 
 
 @pytest.fixture

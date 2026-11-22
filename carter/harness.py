@@ -46,16 +46,10 @@ DEFAULT_BACKOFF = (0.5, 1.0, 2.0, 4.0)
 DEFAULT_TIMEOUT = 30.0
 # Minimum age of the newest agent file before the first call (file-watcher lag).
 DEFAULT_SETTLE = 1.5
-STALE_HINT = (
-    "OpenCode may be serving stale agent config (its background service reloads "
-    "files asynchronously); re-run `carter check` to confirm."
-)
+STALE_HINT = "OpenCode may serve stale agents: run `carter check` again"
 
 # The fix when OpenCode itself did not answer (re-rendering the agent files cannot help then).
-UNAVAILABLE_FIX = (
-    "check that `opencode debug agents` runs in this directory (restart the OpenCode server "
-    "if it hangs), then run `carter check` again"
-)
+UNAVAILABLE_FIX = "check that `opencode debug agents` runs here, then run `carter check`"
 
 Rule = dict[str, Any]
 
@@ -145,11 +139,7 @@ def _diff(
     for name, exp in expected.items():
         loaded = agents.get(name)
         if loaded is None:
-            missing.append(
-                f"{name}: not loaded by OpenCode — its agent file is likely malformed "
-                "or uses a key OpenCode rejects. "
-                "Run `carter update` to re-render it."
-            )
+            missing.append(f"{name}: not loaded by OpenCode (fix: carter update)")
             continue
         errors: list[str] = []
         if exp.description is not None and loaded.get("description") != exp.description:
@@ -164,10 +154,7 @@ def _diff(
             block = [_expand(r, home) for r in exp.rules if isinstance(r, dict)]
             got = [_expand(r, None) for r in effective if isinstance(r, dict)]
             if not _contains_block(got, block):
-                errors.append(
-                    f"{name}: effective OpenCode permissions do not contain the emitted "
-                    "`permissions:` rules in order after OpenCode's base rules."
-                )
+                errors.append(f"{name}: OpenCode permissions lack Carter's rules, in order")
         if errors:
             mismatched[name] = errors
     return missing, mismatched
@@ -198,8 +185,7 @@ def validate_agents(
     if not opencode:
         return HarnessResult(
             "skipped",
-            warning="opencode not found on PATH — skipping harness validation "
-            "(`opencode debug agents`).",
+            warning="opencode not found on PATH: harness validation skipped",
         )
     do_sleep = sleep or time.sleep
     want = {k: v if isinstance(v, Expected) else Expected(rules=v) for k, v in expected.items()}

@@ -261,7 +261,7 @@ class TestAgentValidation:
     def test_error_message_lists_valid_agents(self, default_config, env):
         """Error message for unknown agent includes available options."""
         default_config["agents"] = ["nonexistent"]
-        with pytest.raises(ConfigError, match="maestro"):
+        with pytest.raises(ConfigError, match="available"):
             render_agents(default_config, env)
 
     def test_path_traversal_rejected(self, default_config, env):

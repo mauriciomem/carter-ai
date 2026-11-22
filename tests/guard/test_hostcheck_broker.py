@@ -52,7 +52,7 @@ def test_a_fresh_full_install_reports_b_on_and_nothing_red(stack) -> None:
     installed(stack)
     items = check()
     assert find(items, "enabled for devops only", "ok")
-    assert find(items, "profile for headless runs is present", "ok")
+    assert find(items, "headless-run profile is present", "ok")
     assert not [i for i in b_items(items) if i.level == "red"]
     assert not find(items, "push tool", "red")
 
@@ -80,7 +80,7 @@ def test_isolation_enabling_b_without_the_consent_is_red(stack) -> None:
     state.consent("g2", "accepted", "2026-11-01", 2)
     save(state, guard_state_path(None))  # the file still says b_enabled true
     items = check()
-    assert find(items, "enables the push tool but guard state does not have it confirmed", "red")
+    assert find(items, "enables the push tool, guard state does not", "red")
 
 
 def test_consent_without_b_in_isolation_is_a_warning(stack) -> None:
@@ -88,7 +88,7 @@ def test_consent_without_b_in_isolation_is_a_warning(stack) -> None:
     doc = json.loads(isolation_path(None).read_text())
     doc["plugin"]["b_enabled"] = False
     isolation_path(None).write_text(json.dumps(doc))
-    assert find(check(), "isolation.json has it off", "warn")
+    assert find(check(), "off in isolation.json", "warn")
 
 
 def test_an_edited_profile_is_a_warning(stack) -> None:
@@ -145,7 +145,7 @@ class TestAutoaccept:
             json.dumps({"session": {"permissions": "autoaccept"}, "prompt": {"x": "SECRET-TEXT"}})
         )
         items = check()
-        (warn,) = find(items, "auto-accept permissions", "warn")
+        (warn,) = find(items, "auto-accepts permissions", "warn")
         assert "E-B-DWELL" in warn.text and "SECRET-TEXT" not in " ".join(i.render() for i in items)
 
     def test_prompt_mode_and_a_missing_file_are_quiet(self, stack, home: Path) -> None:
@@ -216,12 +216,12 @@ class TestOriginAndTools:
             ["git", "-C", str(repo), "remote", "add", "origin", "https://github.com/o/r.git"],
             check=True,
         )
-        assert find(check(cwd=repo), "origin of this repository is HTTPS", "warn")
+        assert find(check(cwd=repo), "origin is HTTPS", "warn")
         subprocess.run(
             ["git", "-C", str(repo), "remote", "set-url", "origin", "git@github.com:o/r.git"],
             check=True,
         )
-        assert not find(check(cwd=repo), "origin of this repository is HTTPS")
+        assert not find(check(cwd=repo), "origin is HTTPS")
 
     def test_tools_not_owned_by_root_are_named_without_a_path(self, stack, tmp_path: Path) -> None:
         installed(stack)

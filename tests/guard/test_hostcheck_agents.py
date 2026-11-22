@@ -59,8 +59,8 @@ class TestAgentDenies:
         got = items(agents, state, loaded)
         dropped = [i for i in got if "dropped" in i.text]
         assert dropped and "agent build" in dropped[0].text and dropped[0].level == "red"
-        assert "OpenCode drops an agent's whole config entry" in dropped[0].fix
-        assert "agents.build" in dropped[0].fix and "/h/opencode.jsonc" in dropped[0].fix
+        assert "fix or remove" in dropped[0].fix
+        assert "agents.build" in dropped[0].fix
 
     def test_the_config_file_check_stays_separate(self) -> None:
         from carter.hostcheck import _policies  # the file-level check still exists
@@ -133,7 +133,7 @@ class TestVersionBands:
         monkeypatch.setattr(prereqs, "_which", lambda _c: "/x/opencode")
         monkeypatch.setattr(prereqs, "_cmd_version", lambda *_a, **_k: "opencode v2.1.2")
         assert prereqs.require_opencode() == (2, 1, 2)
-        assert messages and "the guards are untested on 2.1.2" in messages[0][-1]
+        assert messages and "guards untested on 2.1.2" in messages[0][-1]
         messages.clear()
         monkeypatch.setattr(prereqs, "_cmd_version", lambda *_a, **_k: "opencode v2.1.4")
         prereqs.require_opencode()

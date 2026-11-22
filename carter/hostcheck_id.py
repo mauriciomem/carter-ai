@@ -16,6 +16,7 @@ from pathlib import Path
 from carter.checkitems import Item, Level
 from carter.guard import consent, gitconfig, hooks, mirror_io, repohooks
 from carter.guard.state import GuardState
+from carter.home import tilde
 from carter.human_items import dco_items, human_items
 from carter.identity import mirror, shim
 from carter.identity.agent_setup import setup_from_config
@@ -76,7 +77,7 @@ def mirror_items(
 ) -> list[Item]:
     path = carter_gitconfig_path(base_dir)
     if not path.exists():
-        text = "~/.carter/gitconfig is missing: the commit hooks assume no LLM identity"
+        text = "~/.carter/gitconfig is missing: hooks assume no LLM identity"
         return [Item("red", "hook tier", text, UPDATE)]
     out = [
         Item("red", "hook tier", f"{key} differs from config.toml", UPDATE)
@@ -133,11 +134,11 @@ def worktree_items(cfg: IdentityConfig) -> list[Item]:
             continue
         gaps = mirror.worktree_cap_gaps(key)
         for path in gaps.fail_open:
-            text = f"{path} is inside the capped workspace but its main repository is outside"
-            out.append(Item("warn", "worktree", text + ": the cap does NOT apply there"))
+            text = f"{tilde(path)} is in the capped workspace, its repo is outside"
+            out.append(Item("warn", "worktree", text + ": no cap there"))
         for path in gaps.capped_outside:
-            text = f"{path} is outside the capped workspace but its main repository is inside"
-            out.append(Item("warn", "worktree", text + ": the cap applies there"))
+            text = f"{tilde(path)} is outside the capped workspace, its repo is inside"
+            out.append(Item("warn", "worktree", text + ": cap applies"))
     return out
 
 
@@ -150,9 +151,7 @@ def key_items(cfg: IdentityConfig, home: Path) -> list[Item]:
     if cfg.signing.program:
         out.append(Item("info", "signing agent", "managed by the signing program; not checked"))
     elif setup.file_mode:
-        out.append(
-            Item("ok", "signing agent", "no passphrase: the signing helper signs from the key file")
-        )
+        out.append(Item("ok", "signing agent", "no passphrase: the helper signs from the key file"))
     else:
         state = probe_setup(setup, cfg).state
         _, text, fix = PROBE_TEXT[state]
@@ -163,7 +162,7 @@ def key_items(cfg: IdentityConfig, home: Path) -> list[Item]:
     if shim_state(home).ok:
         out.append(Item("ok", "signing helper", "the signing helper is Carter's and unchanged"))
     else:
-        text = f"{shim_path(home)} is missing, not executable or changed: agent commits fail"
+        text = f"{tilde(shim_path(home))} is missing or changed: agent commits fail"
         out.append(Item("red", "signing helper", text, AGAIN))
     named = shim_socket(home)
     if named is not None and named != expected_socket(cfg, home):
@@ -171,12 +170,12 @@ def key_items(cfg: IdentityConfig, home: Path) -> list[Item]:
             Item(
                 "red",
                 "signing helper",
-                "the signing helper uses another agent socket than config.toml says",
+                "the helper uses another agent socket than config.toml",
                 AGAIN,
             )
         )
     if not shim.allowed_signers_path(home).exists():
-        text = "allowed_signers is missing: post-commit and verify cannot check signatures"
+        text = "allowed_signers is missing: signatures cannot be checked"
         out.append(Item("warn", "allowed_signers", text, AGAIN))
     return out
 
@@ -192,14 +191,14 @@ def hygiene_items(cfg: IdentityConfig, fetch: Fetch | None) -> list[Item]:
             Item("info", "key on GitHub", "authentication keys not read (offline): not checked")
         )
     elif blob in lists.auth:
-        text = "the LLM key is an AUTHENTICATION key on the account: it could log in as the LLM"
+        text = "the LLM key is an AUTHENTICATION key: it could log in as the LLM"
         out.append(Item("red", "key on GitHub", text, "Register it as a signing key only."))
     else:
         out.append(Item("ok", "key on GitHub", "the key is absent from the account's login keys"))
     if lists.signing is None:
         out.append(Item("info", "key on GitHub", "signing keys not read (offline): not checked"))
     elif blob not in lists.signing:
-        text = "the key is not an SSH signing key on the account: commits show Unverified"
+        text = "the key is not a signing key on the account: shows Unverified"
         out.append(Item("warn", "key on GitHub", text, "Register it as a signing key on GitHub."))
     return out
 
@@ -209,15 +208,15 @@ def guard_items(state: GuardState, git: tuple[int, int] | None) -> list[Item]:
     if not set(consent.COMMIT_GUARDS) & set(consent.accepted_groups(state)):
         group = "repo_hooks" if git is not None and git < repohooks.MIN_CONFIG_HOOKS else "hooks"
         record = state.consents.get(group, {})
-        text = "signed agent commits are on but the commit hooks are not installed"
+        text = "signed agent commits are on, commit hooks are not installed"
         fix = "Run `carter guard install` in your terminal."
         if record.get("decision") == "declined":
             when = record.get("date", "")
             text += f" (you declined `{group}`{f' on {when}' if when else ''})"
-            fix = f"Run `carter guard install --only {group}` in your terminal and answer yes."
+            fix = f"Run `carter guard install --only {group}` and answer yes."
         out.append(Item("red", "guards", text, fix))
     else:
-        text = "the commit hooks are installed; an agent commit that cannot be signed fails"
+        text = "commit hooks installed: an unsignable agent commit fails"
         out.append(Item("info", "guards", text))
         for old, version in repohooks.other_old_gits():
             text = f"an older git is also installed ({old}, {version}): no config hook through it"
@@ -261,8 +260,7 @@ def role_items(
                 f"role author needs LLM signing on, but {why}: agent commits are refused "
                 f"({E_ROLE_B_TIER}), "
                 "never made as role co-author",
-                "Remove the cap or add the signing key (`carter identity add`), or choose "
-                "`--role co-author`.",
+                "Remove the cap, add a key (carter identity add), or --role co-author.",
             )
         )
         return out
@@ -273,8 +271,7 @@ def role_items(
             Item(
                 "red",
                 "guards",
-                "the commit hook script is from an older Carter and does not know role author: "
-                "it would credit the LLM, not you",
+                "the commit hook script predates role author (it would credit the LLM)",
                 "Run `carter guard install` in your terminal.",
             )
         )
