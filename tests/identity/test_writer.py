@@ -430,8 +430,20 @@ class TestRefusesUnmodelledKeys:
         assert exc.value.keys == ("extra.precious",)
         assert "-precious = 1" in exc.value.diff
         assert "+" in exc.value.diff
-        assert "precious" in str(exc.value)  # the printed diff
+        message = str(exc.value)  # one line: the diff is data, kept apart for `update -v`
+        assert "\n" not in message and len(message) <= 80
+        assert message == "config.toml has unknown keys: extra.precious (delete them)"
         assert [p.name for p in tmp_path.iterdir()] == ["config.toml"]
+
+    def test_many_unknown_keys_stay_on_one_short_line(self, tmp_path):
+        path = tmp_path / "config.toml"
+        extra = "".join(f"[extra{i}]\nkey = 1\n" for i in range(6))
+        path.write_text("schema = 2\n" + extra)
+        with pytest.raises(UnmodelledKeysError) as exc:
+            write_config(FULL, path)
+        message = str(exc.value)
+        assert len(exc.value.keys) == 6
+        assert message == "config.toml has unknown keys: extra0.key, +5 more (delete them)"
 
     def test_unknown_key_inside_a_known_table(self, tmp_path):
         path = tmp_path / "config.toml"

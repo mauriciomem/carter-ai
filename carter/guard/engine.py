@@ -213,18 +213,23 @@ def _remove_script(base_dir: Path | None, state: GuardState, echo: Echo) -> None
     state.forget_file(path)
 
 
+def _warn_with_help(echo: Echo, note: str, see: str) -> None:
+    """A warning is one line; where to read the details goes on its own ``→`` line."""
+    echo(f"⚠ {note}")
+    echo(see)
+
+
 def _remove_git(base_dir: Path | None, state: GuardState, echo: Echo) -> None:
-    """Take Carter's git config (include line, file, direct keys) away; a manual line is printed."""
+    """Take Carter's git config (include line, file, direct keys) away; a manual line is warned."""
     # the human added (or must add) the include line themselves: tell them to take it out
     ours = state.gitconfig is None and state.owned_unchanged(carter_gitconfig_path(base_dir))
     if ours and gitconfig.manual_include_state(base_dir) == "present":
-        echo(
-            "⚠ your global git config still has Carter's include line; remove it yourself:\n"
-            f"    {gitconfig.unset_line(base_dir)}"
+        _warn_with_help(
+            echo, "your global git config still includes Carter's file", gitconfig.SEE_UNINSTALL
         )
     git = gitconfig.remove_all(base_dir, state)
     if git.include is not None and git.include.status == "manual":
-        echo(f"⚠ {git.include.note}\n    {git.include.line}")
+        _warn_with_help(echo, git.include.note, gitconfig.SEE_UNINSTALL)
     elif git.include is not None and git.include.status == "absent":
         echo(f"  {git.include.note}")
     for name in git.files.removed:
@@ -332,9 +337,10 @@ def _git_step(
         echo(f"git config: {len(entries)} key(s), mode {mode}")
         target = gitconfig.global_config_path()
         if dry_run:
-            if mode != "direct" and (why := gitconfig.manual_reason(target)) is not None:
-                line = gitconfig.include_line(base_dir)
-                echo(f"⚠ {why}; Carter would not write it. Add the line yourself:\n    {line}")
+            if mode != "direct":
+                line = gitconfig.plan_include(target, str(carter_gitconfig_path(base_dir)))
+                if line.status == "manual":
+                    _warn_with_help(echo, line.note, gitconfig.SEE_INSTALL)
         else:
             _apply_entries(entries, base_dir, state, echo, mode=mode or "include")
     if want_repo:
@@ -364,7 +370,7 @@ def _apply_entries(
     if res.file == "edited-kept":
         echo(f"⚠ kept your edited {carter_gitconfig_path(base_dir)}; it is not rewritten")
     if res.include and res.include.status == "manual":
-        echo(f"⚠ {res.include.note}\n    {res.include.line}")
+        _warn_with_help(echo, res.include.note, gitconfig.SEE_INSTALL)
     if res.direct:
         for line in res.direct.manual:
             echo(f"⚠ add by hand: {line}")

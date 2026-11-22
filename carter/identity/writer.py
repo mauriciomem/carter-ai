@@ -45,10 +45,8 @@ class UnmodelledKeysError(WriterError):
     """The existing file holds data the writer would drop; ``diff`` shows the change."""
 
     def __init__(self, keys: tuple[str, ...], diff: str) -> None:
-        names = ", ".join(f"`{k}`" for k in keys)
-        super().__init__(
-            f"refusing to rewrite config.toml: unknown key(s) {names}; delete them, retry\n{diff}"
-        )
+        more = f", +{len(keys) - 1} more" if len(keys) > 1 else ""
+        super().__init__(f"config.toml has unknown keys: {keys[0]}{more} (delete them)")
         self.keys, self.diff = keys, diff
 
 

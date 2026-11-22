@@ -177,8 +177,8 @@ class TestDotfiles:
         stack.fake()
         res = guard("install", "--yes")
         assert res.exit_code == 0, res.output
-        line = f"git config --global --add include.path {carter_gitconfig_path(None)}"
-        assert line in res.output and "symlink" in res.output
+        assert "is a symlink: add Carter's include line" in res.output
+        assert "carter install --help" in res.output
         assert real.read_bytes() == before and global_cfg().is_symlink()
         state = load(guard_state_path(None))
         assert state.gitconfig is None  # not ours: nothing recorded
@@ -208,7 +208,9 @@ class TestDotfiles:
         )
         assert "present (you added it" in guard("status").output
 
-    def test_remove_prints_the_unset_line_when_you_added_it(self, stack, tmp_path: Path) -> None:
+    def test_remove_says_the_line_is_yours_to_remove_when_you_added_it(
+        self, stack, tmp_path: Path
+    ) -> None:
         real = self.symlinked(tmp_path)
         stack.fake()
         guard("install", "--yes")
@@ -220,7 +222,8 @@ class TestDotfiles:
         stack.fake(before=debug_config(stack.live), after=debug_config())
         res = guard("remove", "--yes")
         assert res.exit_code == 0, res.output
-        assert f"git config --global --fixed-value --unset-all include.path {value}" in res.output
+        assert "still includes Carter's file" in res.output
+        assert "carter uninstall --help" in res.output
         assert real.read_bytes() == before  # still the human's to edit
 
     def test_a_read_only_config_is_treated_the_same(
@@ -238,8 +241,7 @@ class TestDotfiles:
             stack.fake()
             res = guard("install", "--yes")
             assert res.exit_code == 0, res.output
-            assert "not writable" in res.output
-            assert "git config --global --add include.path" in res.output
+            assert "is not writable: add Carter's include line" in res.output
             assert cfg.read_bytes() == before
             assert load(guard_state_path(None)).gitconfig is None
         finally:
@@ -254,7 +256,7 @@ class TestDotfiles:
         stack.fake()
         res = guard("install", "--dry-run")
         assert res.exit_code == 0, res.output
-        assert "include.path" in res.output and "Add the line yourself" in res.output
+        assert "is a symlink: add Carter's include line" in res.output
         assert before == (real.read_bytes(), sorted(p.name for p in global_cfg().parent.iterdir()))
         assert not guard_script_path(None).exists() and not guard_state_path(None).exists()
 

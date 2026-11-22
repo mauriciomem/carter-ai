@@ -53,6 +53,14 @@ def update(ws: Path, *args: str, env: dict[str, str] | None = None):
     return CliRunner().invoke(main, ["update", "-v", str(ws), *args], env=env)
 
 
+def plain_update(ws: Path, *args: str):
+    """``carter update`` as a user runs it by default: no ``-v`` (the switch is process-wide)."""
+    from carter import ui
+
+    ui.configure(verbose=False)
+    return CliRunner().invoke(main, ["update", str(ws), *args])
+
+
 def pinned(cfg_path: Path, ws: Path) -> dict:
     doc = tomllib.loads(cfg_path.read_text(encoding="utf-8"))
     return doc.get("workspaces", {}).get(str(ws.resolve()), {})
@@ -305,7 +313,11 @@ class TestRefusals:
         set_policy(ws, role="author")
         result = update(ws, "--yes")
         assert result.exit_code == 1
-        assert "unknown key(s) `attribution.name`" in result.output
+        assert "config.toml has unknown keys: attribution.name (delete them)" in result.output
+        assert "\\n" not in result.output  # one line; the diff lines come with -v, one by one
+        assert "-name = " in result.output
+        plain = plain_update(ws, "--yes")
+        assert "-name = " not in plain.output and "has unknown keys" in plain.output
         assert cfg_path.read_text() == legacy
 
     def test_invalid_yaml_policy_stops_update(self, ws, cfg_path):
@@ -372,10 +384,14 @@ class TestWorkspaceLevelNoteOnly:
         agents = ws / "AGENTS.md"
         agents.write_text("# Mine\n" + self.OLD)
 
-        out = update(ws, "--yes").output
+        out = update(ws, "--yes").output  # with -v
 
         assert "AGENTS.md" in out and "not rewritten" in out
         assert "coauthor_trailer" in out  # the current workspace rule is shown
+        plain = plain_update(ws, "--yes").output
+        assert "→ see the new rules: carter update -v" in plain
+        assert "coauthor_trailer" not in plain and "\\n" not in plain  # the rules are for -v
+        assert all(len(line) <= 80 for line in plain.splitlines() if "AGENTS.md" in line)
         assert agents.read_text() == "# Mine\n" + self.OLD  # never clobbered
         assert not (home / ".carter" / "upgrade-notes").exists()
 

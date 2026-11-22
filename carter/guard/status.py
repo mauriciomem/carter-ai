@@ -86,10 +86,8 @@ def _git(state: GuardState, base_dir: Path | None, echo: Echo) -> None:
         if have == "present":
             echo("include.path: present (you added it; Carter did not write your global config)")
         else:
-            echo(
-                "include.path: NOT in your global git config: the pre-push hook is inactive "
-                f"until you run\n    {gitconfig.include_line(base_dir)}"
-            )
+            echo("include.path: NOT in your global git config: hooks inactive")
+            echo(gitconfig.SEE_INSTALL)
     elif rec is None and not state.git_config:
         echo(GIT_NOT_NEEDED)
         return

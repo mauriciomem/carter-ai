@@ -366,6 +366,6 @@ def test_the_writer_names_unknown_keys_and_still_refuses_to_lose_them(cfg_path: 
     from carter.identity.writer import UnmodelledKeysError, write_config
 
     cfg_path.write_text('[attribution]\nname = "bot"\n')
-    with pytest.raises(UnmodelledKeysError, match=r"unknown key\(s\) `attribution.name`"):
+    with pytest.raises(UnmodelledKeysError, match=r"unknown keys: attribution.name"):
         write_config(IdentityConfig(state="current"), cfg_path)
     assert re.search(r'name = "bot"', cfg_path.read_text())

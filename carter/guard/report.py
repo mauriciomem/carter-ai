@@ -20,6 +20,8 @@ def say(line: str) -> None:
     text = line.strip()
     if text.startswith("✓ "):  # a result the user should always see (the notice)
         ui.ok(text.removeprefix("✓ "))
+    elif text.startswith("→ "):  # the line under a warning: where to read more, or what to run
+        ui.fix(text.removeprefix("→ "))
     elif text.startswith(("⚠", "Declined", "Not confirmed", "no terminal", "Opt-outs")) or (
         "need your confirmation" in text or "needs your confirmation" in text
     ):

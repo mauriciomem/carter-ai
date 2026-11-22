@@ -11,6 +11,7 @@ import click
 
 from carter import ui
 from carter.cliguard import LazyGroup, verbose_option
+from carter.dotfiles_help import INSTALL_EPILOG, UNINSTALL_EPILOG
 
 if TYPE_CHECKING:
     from jinja2 import Environment
@@ -59,7 +60,7 @@ def main() -> None:
     """Carter AI: agents, guards and the LLM identity for OpenCode."""
 
 
-@main.command()
+@main.command(epilog=INSTALL_EPILOG)
 @click.option("--mcp", is_flag=True, help="Also set up MCP servers.")
 @click.option(
     "--mcp-servers",
@@ -133,7 +134,7 @@ def install(
         ui.next("restart the OpenCode server from a clean terminal to load the agents and plugin")
 
 
-@main.command()
+@main.command(epilog=UNINSTALL_EPILOG)
 @click.option(
     "--base-dir",
     type=click.Path(file_okay=False, path_type=Path),
@@ -251,7 +252,7 @@ def _pin_identity_policy(target: Path, config: dict, *, dry_run: bool) -> None:
     from carter.identity import ConfigError, load_identity
     from carter.identity.pin import apply_pin, plan_pin
     from carter.identity.workspace import workspace_key
-    from carter.identity.writer import WriterError
+    from carter.identity.writer import UnmodelledKeysError, WriterError
 
     identity = config.get("identity") or {}
     role, tier = identity.get("role") or "", identity.get("require_tier") or ""
@@ -290,6 +291,9 @@ def _pin_identity_policy(target: Path, config: dict, *, dry_run: bool) -> None:
     try:
         apply_pin(cfg, plan)
     except (WriterError, ConfigError) as exc:
+        if isinstance(exc, UnmodelledKeysError):
+            for line in exc.diff.splitlines():  # what a rewrite would drop, line by line
+                ui.detail(line)
         raise click.ClickException(str(exc)) from exc
     unpinned = all(c.new == "(unset)" for c in plan.changes)
     ui.ok("identity policy unpinned" if unpinned else "identity policy pinned", what)
@@ -415,11 +419,11 @@ def _note_stale_workspace_rules(target: Path, config: dict, env: Environment) ->
         if marker not in have
     ]
     if missing:
-        rules = "\n   ".join(missing)
+        for rule in missing:
+            ui.detail(rule)
         ui.warn(
-            f"{instructions.relative_to(target)} has rules that are out of date "
-            "(not rewritten: it may hold your edits)",
-            rules,
+            f"{instructions.relative_to(target)} has out-of-date rules (not rewritten)",
+            "see the new rules: carter update -v",
         )
 
 

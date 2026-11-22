@@ -14,6 +14,7 @@ import pytest
 
 from carter.guard import gitconfig as gc
 from carter.guard.state import GuardState
+from carter.home import tilde
 from carter.install.paths import carter_gitconfig_path
 
 
@@ -192,11 +193,12 @@ class TestNotWrittenWhenNotOurs:
         global_cfg.unlink()
         global_cfg.symlink_to(real)
         res = gc.add_include(global_cfg, value)
-        assert res.status == "manual" and "symlink" in res.note
-        assert res.line == f"git config --global --add include.path {value}"
+        assert res.status == "manual"
+        assert res.note == f"{tilde(global_cfg)} is a symlink: add Carter's include line"
+        assert "\n" not in res.note
         assert real.read_text() == "[user]\n\tname = D\n" and global_cfg.is_symlink()
 
-    def test_remove_prints_the_matching_unset_line(
+    def test_remove_says_in_one_line_that_the_line_is_the_humans_to_remove(
         self, tmp_path: Path, global_cfg: Path, value: str
     ) -> None:
         real = tmp_path / "dotfiles" / "gitconfig"
@@ -206,7 +208,7 @@ class TestNotWrittenWhenNotOurs:
         global_cfg.symlink_to(real)
         res = gc.remove_include(global_cfg, value)
         assert res.status == "manual"
-        assert res.line == f"git config --global --fixed-value --unset-all include.path {value}"
+        assert res.note == f"{tilde(global_cfg)} is a symlink: remove Carter's include line"
         assert value in real.read_text()
 
     @needs_user
@@ -214,7 +216,7 @@ class TestNotWrittenWhenNotOurs:
         global_cfg.chmod(0o444)
         before = global_cfg.read_bytes()
         res = gc.add_include(global_cfg, value)
-        assert res.status == "manual" and "not writable" in res.note and res.line
+        assert res.status == "manual" and "not writable" in res.note
         assert global_cfg.read_bytes() == before
 
     @needs_user
@@ -247,6 +249,101 @@ class TestNotWrittenWhenNotOurs:
         assert state.gitconfig == {"file": str(global_cfg), "key": "include.path", "value": value}
         gc.record_include(state, global_cfg, value, gc.add_include(global_cfg, value))  # "present"
         assert state.gitconfig["value"] == value
+
+
+class TestEquivalentIncludeLines:
+    """A human's dotfiles spell the include line their own way. ``git`` resolves ``~/`` (and a
+    path through a symlink) to the same file, so Carter must recognise every one of them."""
+
+    @pytest.fixture
+    def target(self) -> str:
+        return str(Path.home() / ".carter" / "gitconfig")  # git ignores a file that is missing
+
+    def write(self, cfg: Path, *paths: str) -> None:
+        cfg.write_text("".join(f"[include]\n\tpath = {p}\n" for p in paths))
+
+    def test_the_absolute_value_still_matches(self, global_cfg: Path, target: str) -> None:
+        self.write(global_cfg, target)
+        assert gc.include_present(global_cfg, target)
+
+    def test_the_tilde_form_matches(self, global_cfg: Path, target: str) -> None:
+        self.write(global_cfg, "~/.carter/gitconfig")
+        assert gc.include_present(global_cfg, target)
+
+    def test_a_path_through_a_symlink_matches(
+        self, tmp_path: Path, global_cfg: Path, target: str
+    ) -> None:
+        link = tmp_path / "homelink"
+        link.symlink_to(Path.home(), target_is_directory=True)
+        self.write(global_cfg, str(link / ".carter" / "gitconfig"))
+        assert gc.include_present(global_cfg, target)
+
+    def test_a_line_in_an_included_file_matches(
+        self, tmp_path: Path, global_cfg: Path, target: str
+    ) -> None:
+        extra = tmp_path / "work.gitconfig"
+        self.write(extra, "~/.carter/gitconfig")
+        self.write(global_cfg, "/nowhere/else", str(extra))
+        assert gc.include_present(global_cfg, target)
+
+    def test_a_broken_included_file_does_not_hide_the_line_in_the_file_itself(
+        self, tmp_path: Path, global_cfg: Path, target: str
+    ) -> None:
+        broken = tmp_path / "broken.gitconfig"
+        broken.write_text("[a\n\tb = ")
+        self.write(global_cfg, str(broken), "~/.carter/gitconfig")
+        assert gc.include_present(global_cfg, target)
+
+    @pytest.mark.parametrize(
+        "other",
+        [
+            "~/.carter/other",
+            "~/.carter/gitconfig.d/abc",
+            "~/carter/gitconfig",
+            "$HOME/.carter/gitconfig",  # git does not expand variables: it would not be read
+            "",
+        ],
+    )
+    def test_another_file_does_not_match(self, global_cfg: Path, target: str, other: str) -> None:
+        self.write(global_cfg, other)
+        assert not gc.include_present(global_cfg, target)
+
+    def test_no_include_at_all_does_not_match(self, global_cfg: Path, target: str) -> None:
+        assert not gc.include_present(global_cfg, target)
+        assert not gc.include_present(global_cfg.parent / "absent", target)
+
+    def test_manual_state_is_present_for_the_tilde_form(
+        self, global_cfg: Path, target: str
+    ) -> None:
+        assert gc.manual_include_state(None) == "missing"
+        self.write(global_cfg, "~/.carter/gitconfig")
+        assert gc.manual_include_state(None) == "present"
+
+    def test_a_writable_config_with_the_tilde_line_gets_no_second_line(
+        self, global_cfg: Path, target: str
+    ) -> None:
+        self.write(global_cfg, "~/.carter/gitconfig")
+        before = global_cfg.read_bytes()
+        res = gc.add_include(global_cfg, target)
+        assert res.status == "yours" and global_cfg.read_bytes() == before
+
+    def test_a_symlinked_config_with_the_tilde_line_is_not_manual(
+        self, tmp_path: Path, global_cfg: Path, target: str
+    ) -> None:
+        real = tmp_path / "real"
+        self.write(real, "~/.carter/gitconfig")
+        global_cfg.unlink()
+        global_cfg.symlink_to(real)
+        state = GuardState()
+        res = gc.add_include(global_cfg, target)
+        gc.record_include(state, global_cfg, target, res)
+        assert res.status == "yours" and state.gitconfig is None  # yours, not recorded as ours
+
+    def test_remove_leaves_the_humans_tilde_line_alone(self, global_cfg: Path, target: str) -> None:
+        self.write(global_cfg, "~/.carter/gitconfig")
+        before = global_cfg.read_bytes()
+        assert gc.remove_include(global_cfg, target).status == "absent"
+        assert global_cfg.read_bytes() == before
 
 
 class TestCartersFile:
@@ -607,7 +704,7 @@ class TestApplyKeys:
         global_cfg.unlink()
         global_cfg.symlink_to(real)
         state, res = self.apply(tmp_path, "include")
-        assert res.include.status == "manual" and res.include.line
+        assert res.include.status == "manual" and res.include.note
         assert state.gitconfig is None and carter_gitconfig_path(tmp_path).exists()
 
     def test_remove_all_undoes_include_mode(self, tmp_path: Path, global_cfg: Path) -> None:
