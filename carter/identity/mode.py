@@ -50,16 +50,14 @@ def resolve_mode(configured: str, env: Mapping[str, str]) -> ModeResolution:
     if value.lower() in UNBUILT:
         return _fail(
             source,
-            f"{where} asks for a CI context that is not built (contexts C and D);"
-            " only `review` exists in CI",
+            f"{where} asks for a CI context that is not built; only `review` exists",
         )
     if value and value not in MODES:
         return _fail(source, f"{where} is not one of {list(MODES)}")
     if value == "interactive" and ci:
         return _fail(
             source,
-            f"{where} = interactive inside CI would be context C (commits), which is not built; "
-            "a CI run is `review`",
+            f"{where} = interactive in CI is not built; a CI run is `review`",
         )
     if value in ("interactive", "review"):
         return ModeResolution(value, source)

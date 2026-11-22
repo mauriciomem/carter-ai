@@ -47,7 +47,7 @@ def test_a_missing_agent_names_the_fix_and_ends_with_a_summary(ws: Path) -> None
     assert result.exit_code == 1
     assert result.stdout == ""  # no advisory or "OK" on a failed check
     assert result.stderr.splitlines() == [
-        "✗ Missing agent file: .opencode/agents/carter-pm-local.md",
+        "✗ missing agent file: carter-pm-local.md",
         "→ run `carter update`",
         "✗ workspace: 1 problem",
     ]

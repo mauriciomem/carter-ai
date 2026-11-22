@@ -365,10 +365,10 @@ def _pull_request_item(base: str, token: str, repo: str) -> Item:
 def _file_items(path: Path, required: bool) -> tuple[list[Item], str | None]:
     """The static checks. Returns the items and the token (``None`` if checking must stop)."""
     if not path.is_symlink() and not path.exists():
-        how = "run `carter github-token set` in your own terminal"
+        how = "Run `carter github-token set` in your own terminal."
         if required:
-            return [Item("red", "file", f"no token file; {how}")], None
-        return [Item("warn", "file", f"not provisioned ({how})")], None
+            return [Item("red", "file", "no token file", how)], None
+        return [Item("warn", "file", "not provisioned", how)], None
     if problem := location_problem(path, creating=False):
         return [Item("red", "file", f"{E_PAT_PERM}: {problem}")], None
     try:

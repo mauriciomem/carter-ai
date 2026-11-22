@@ -465,7 +465,9 @@ class TestCheck:
         self, tmp_path, github_api
     ) -> None:
         required = levels(ghtoken.check_token(tmp_path, now=NOW))
-        assert any("carter github-token set" in t for t in required["red"])
+        assert any("no token file" in t for t in required["red"])
+        fixes = [i.fix for i in ghtoken.check_token(tmp_path, now=NOW)]
+        assert any("carter github-token set" in f for f in fixes)  # the command is the fix line
         optional = levels(ghtoken.check_token(tmp_path, now=NOW, required=False))
         assert "red" not in optional and any("not provisioned" in t for t in optional["warn"])
         assert github_api.requests == []

@@ -257,9 +257,7 @@ def role_items(
             Item(
                 "red",
                 "role",
-                f"role author needs LLM signing on, but {why}: agent commits are refused "
-                f"({E_ROLE_B_TIER}), "
-                "never made as role co-author",
+                f"role author needs LLM signing on, but {why}: commits refused ({E_ROLE_B_TIER})",
                 "Remove the cap, add a key (carter identity add), or --role co-author.",
             )
         )

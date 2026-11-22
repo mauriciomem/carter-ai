@@ -21,7 +21,6 @@ from carter.config import (
     with_user_access,
 )
 from carter.resources import templates_dir
-from carter.ui import short_list
 
 TEMPLATES_DIR = templates_dir()
 
@@ -82,11 +81,10 @@ def _validate_agents(agent_names: list[str], templates_dir: Path) -> None:
     for name in agent_names:
         if not name or not _AGENT_NAME_RE.match(name):
             raise ConfigError(
-                f"Invalid agent name '{name}': use a-z, 0-9, hyphens "
-                f"(available: {short_list(available)})"
+                f"Invalid agent name '{name}': use a-z, 0-9, hyphens (see: carter update --help)"
             )
         if name not in available:
-            raise ConfigError(f"Unknown agent '{name}' (available: {short_list(available)})")
+            raise ConfigError(f"Unknown agent '{name}' (see: carter update --help)")
 
 
 def _suffix_token(config: dict[str, Any]) -> str:

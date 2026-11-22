@@ -17,7 +17,6 @@ from carter.identity.policyset import (
     agent_permission_exempt,
     gh_allowlist,
 )
-from carter.ui import short_list
 
 # `identity` is optional policy (role, require_tier), not a required key: a workspace
 # with no policy has no block at all.
@@ -175,7 +174,7 @@ def _validate_models(models: Any) -> None:
     """Validate the ``models`` block: every tier/override is a V2 model string."""
     if not isinstance(models, dict):
         raise ConfigError(f"Invalid models block: {models!r} (must be a mapping)")
-    hint = "Must be a single 'provider/model[#variant]' string, e.g. 'anthropic/claude-opus-5-5'."
+    hint = "Use 'provider/model[#variant]', e.g. 'anthropic/claude-opus-5-5'."
     entries = [(f"models.{k}", v) for k, v in models.items() if k != "overrides"]
     overrides = models.get("overrides") or {}
     if not isinstance(overrides, dict):
@@ -221,7 +220,7 @@ def _validate_allowlist(allowlist: Any, agents: list[str]) -> None:
     for agent, cats in allowlist.items():
         if agent not in agents:
             raise ConfigError(
-                f"Invalid policy.allowlist agent {agent!r} (configured: {short_list(agents)})"
+                f"Invalid policy.allowlist agent {agent!r} (see: carter update --help)"
             )
         if not isinstance(cats, dict):
             raise ConfigError(f"Invalid policy.allowlist.{agent}: {cats!r} (must be a mapping)")
@@ -246,8 +245,13 @@ def load_config(config_path: Path) -> dict[str, Any]:
     if not config_path.exists():
         raise ConfigError(f"Config file not found: {config_path}")
 
-    with open(config_path, encoding="utf-8") as f:
-        config = _yaml.load(f)
+    try:
+        with open(config_path, encoding="utf-8") as f:
+            config = _yaml.load(f)
+    except yaml.YAMLError as exc:  # a line, not a traceback
+        mark = getattr(exc, "problem_mark", None)
+        where = f" (line {mark.line + 1})" if mark is not None else ""
+        raise ConfigError(f"{config_path.name} is not valid YAML{where}") from exc
 
     if not isinstance(config, dict):
         raise ConfigError(f"Invalid config format in {config_path}")

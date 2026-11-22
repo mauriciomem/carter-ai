@@ -42,8 +42,8 @@ def check_text(text: str) -> list[str]:
             problems.append(f"{name}: markers {begin} ... {end} not found")
         elif actual != expected:
             problems.append(
-                f"{name}: block differs from its data file. Run "
-                f"`python -m carter.identity.blocks <file>` or paste this:\n{expected}"
+                f"{name}: block differs from its data file. Run:\n"
+                f"  python -m carter.identity.blocks <file>\nor paste this:\n{expected}"
             )
     return problems
 

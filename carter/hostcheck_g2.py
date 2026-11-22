@@ -18,6 +18,7 @@ from carter import harness
 from carter.checkitems import Item, Level
 from carter.guard import consent, gitconfig, hooks, plugin, repohooks
 from carter.guard.state import GuardState
+from carter.home import tilde
 from carter.identity.errors import E_GIT_OLD, E_OPENCODE_VERSION, registry
 from carter.identity.rules import pollution_hits
 from carter.install import prereqs
@@ -25,7 +26,7 @@ from carter.install.paths import carter_gitconfig_path, isolation_path, plugin_d
 
 BAKED = re.compile(r'ISOLATION_SHA256\s*=\s*"([0-9a-f]{64})"')
 RESTART = "restart the OpenCode server"
-DROPPED_HINT = "fix or remove `agents.{name}`, then rerun `carter guard install`"
+DROPPED_HINT = "fix or remove `agents.{name}` in {config}"
 LIMITS = "shells can still write OpenCode/git/repo config"
 
 
@@ -171,10 +172,7 @@ def status_items(
             out.append(Item("ok", "plugin", f"{label}: working"))
         elif st == "failed":
             why = doc.get("failed_reason")
-            text = (
-                f"{label}: the plugin's own check failed ({why}); "
-                "every shell there is treated as an agent shell"
-            )
+            text = f"{label}: plugin self-check failed ({why}); shells count as agent"
             out.append(Item("red", "plugin", text, f"See {E_OPENCODE_VERSION}; {RESTART}."))
         else:
             out.append(Item("warn", "plugin", f"{label}: waiting for the first agent command"))
@@ -284,7 +282,7 @@ def agent_items(
     if isinstance(known, Mapping):
         for rec in state.owned_permissions():
             if rec["agent"] not in known:
-                hint = DROPPED_HINT.format(name=rec["agent"], config=config_path)
+                hint = DROPPED_HINT.format(name=rec["agent"], config=tilde(config_path))
                 text = f"agent {rec['agent']}: OpenCode dropped its config entry"
                 out.append(Item("red", "agent permissions", text, hint))
     if not out:
@@ -308,10 +306,7 @@ def version_items(opencode: tuple[int, int, int] | None, git: tuple[int, int] | 
                 Item("red", "opencode", f"{shown} is older than 2.1: Carter needs 2.1 or newer")
             )
         elif band in ("untested-low", "above"):
-            text = (
-                f"{E_OPENCODE_VERSION}: the guards are untested on OpenCode {shown}; "
-                "relying on the plugin's own check"
-            )
+            text = f"{E_OPENCODE_VERSION}: guards untested on OpenCode {shown}"
             out.append(Item("warn", "opencode", text))
         else:
             out.append(Item("ok", "opencode", f"{shown} (tested)"))

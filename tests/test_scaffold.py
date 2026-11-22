@@ -261,7 +261,7 @@ class TestAgentValidation:
     def test_error_message_lists_valid_agents(self, default_config, env):
         """Error message for unknown agent includes available options."""
         default_config["agents"] = ["nonexistent"]
-        with pytest.raises(ConfigError, match="available"):
+        with pytest.raises(ConfigError, match="Unknown agent"):
             render_agents(default_config, env)
 
     def test_path_traversal_rejected(self, default_config, env):
@@ -992,7 +992,7 @@ class TestInitFlags:
     def test_invalid_agent_suffix_rejected(self, tmp_path):
         result = self._run_init(tmp_path, "--agent-suffix", "Bad!")
         assert result.exit_code != 0
-        assert "agent_suffix" in result.output
+        assert "agent-suffix" in result.output
 
     def test_init_warns_on_redaction_gap(self, tmp_path):
         # Default config has narrator + redaction on, so no warning by default;

@@ -235,11 +235,9 @@ def ownership_items(plugin: dict | None) -> list[Item]:
         checks["ssh_bin_dir"] = ssh
     loose = [name for name, path in checks.items() if path and _unsafe(path)]
     if loose:
-        text = (
-            f"not root-owned, or writable by others: {', '.join(loose)} "
-            "(the push tool runs them with your credentials)"
-        )
-        return [Item("warn", "push tool", text, "Use the system tools, or accept the risk.")]
+        text = f"not root-owned, or writable by others: {', '.join(loose)}"
+        fix = "Use the system tools (the push tool runs them with your credentials)."
+        return [Item("warn", "push tool", text, fix)]
     return []
 
 

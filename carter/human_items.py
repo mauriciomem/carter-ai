@@ -55,8 +55,7 @@ def human_items(
             Item(
                 "red",
                 "human identity",
-                f"{E_HUMAN_IDENTITY}: your git identity in this directory is unusable "
-                f"({human.problem}); role author refuses to commit",
+                f"{E_HUMAN_IDENTITY}: your git identity here is unusable ({human.problem})",
                 "Set user.name and user.email in your git config.",
             )
         ]

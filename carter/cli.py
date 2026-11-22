@@ -11,7 +11,7 @@ import click
 
 from carter import ui
 from carter.cliguard import LazyGroup, verbose_option
-from carter.dotfiles_help import INSTALL_EPILOG, UNINSTALL_EPILOG
+from carter.dotfiles_help import INSTALL_EPILOG, INSTALL_POINTER, UNINSTALL_EPILOG
 
 if TYPE_CHECKING:
     from jinja2 import Environment
@@ -60,7 +60,7 @@ def main() -> None:
     """Carter AI: agents, guards and the LLM identity for OpenCode."""
 
 
-@main.command(epilog=INSTALL_EPILOG)
+@main.command(epilog=INSTALL_POINTER + INSTALL_EPILOG)
 @click.option("--mcp", is_flag=True, help="Also set up MCP servers.")
 @click.option(
     "--mcp-servers",
@@ -207,7 +207,9 @@ def init(
         try:
             _validate_agent_suffix(agent_suffix)
         except ConfigError as e:
-            raise click.BadParameter(str(e), param_hint="--agent-suffix") from e
+            raise click.BadParameter(
+                str(e).partition(": ")[2] or str(e), param_hint="--agent-suffix"
+            ) from e
         config["agent_suffix"] = agent_suffix
     # `profile:` is seeded only when chosen — an absent key keeps carter.yaml minimal and
     # resolves to the shipped default tiers (click.Choice already rejects a bad value).
@@ -217,7 +219,9 @@ def init(
         try:
             _validate_docs_language(docs_language)
         except ConfigError as e:
-            raise click.BadParameter(str(e), param_hint="--docs-language") from e
+            raise click.BadParameter(
+                str(e).partition(": ")[2] or str(e), param_hint="--docs-language"
+            ) from e
         config["docs_language"] = docs_language
 
     # Create .carter/ structure
@@ -427,8 +431,14 @@ def _note_stale_workspace_rules(target: Path, config: dict, env: Environment) ->
         )
 
 
+AGENTS_HELP = (
+    "Agents (the `agents:` list of carter.yaml): architect, devops, engineer, "
+    "learner, maestro, narrator, pm, security."
+)
 _LOOSENING_HELP = (
-    "A workspace can only tighten agent permissions. Keys in carter.yaml that loosen "
+    AGENTS_HELP
+    + "\n\n"
+    + "A workspace can only tighten agent permissions. Keys in carter.yaml that loosen "
     "them (policy.allowlist additions, policy.overrides to a looser gate) are ignored; "
     "`-v` names them. Tightening keys apply: level: strict, a stricter override, an "
     "allowlist entry set to false. Loosening is human-only and will be set in "
@@ -577,7 +587,7 @@ def check(target_dir: str, no_harness: bool, host: bool, probe: bool) -> None:
     for agent_name in config["agents"]:
         agent_file = agents_dir / agent_filename(agent_name, config)
         if not agent_file.exists():
-            errors.append((f"Missing agent file: {agent_file.relative_to(target)}", _UPDATE))
+            errors.append((f"missing agent file: {agent_file.name}", _UPDATE))
             continue
         parsed = parse_frontmatter(agent_file.read_text(encoding="utf-8"))
         if parsed is None:
