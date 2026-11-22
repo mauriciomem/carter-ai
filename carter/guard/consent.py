@@ -38,7 +38,7 @@ PLUGIN_REV = 2  # the plugin and isolation.json belong to g2 from this revision 
 BROKER_REV = 3  # the push tool (carter_push) needs g2 at this revision
 PENDING_NOTICE = "⚠ {group} has new content: run carter guard install"
 OPTIONAL_NOTICE = "{group} is optional and not installed (see: carter guard install --help)"
-SKIPPED_NOTICE = "⚠ no terminal: guards not installed (use one, or --yes)"
+SKIPPED_NOTICE = "⚠ no terminal: guards not installed (see: carter guard --help)"
 
 
 def group_names() -> tuple[str, ...]:

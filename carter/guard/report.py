@@ -18,7 +18,9 @@ PROBLEM = re.compile(
 def say(line: str) -> None:
     """Engine lines: problems surface as warnings, the rest shows with ``-v``."""
     text = line.strip()
-    if text.startswith("✓ "):  # a result the user should always see (the notice)
+    if isinstance(line, ui.Raw):  # a command or snippet: shown whole with -v
+        ui.detail(ui.Raw("  " + text))
+    elif text.startswith("✓ "):  # a result the user should always see (the notice)
         ui.ok(text.removeprefix("✓ "))
     elif text.startswith("→ "):  # the line under a warning: where to read more, or what to run
         ui.fix(text.removeprefix("→ "))
@@ -39,4 +41,4 @@ def installed(base_dir: Path | None) -> None:
     """The one line ``carter guard install`` ends with: what is accepted now."""
     done = accepted_groups(base_dir)
     if done:
-        ui.ok("guards installed", ui.short_list(done, 3, " · "))
+        ui.ok("guards installed", f"{len(done)} groups (see: carter guard status)")

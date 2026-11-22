@@ -19,6 +19,7 @@ from carter.cli import main
 from carter.guard import gitconfig as gc
 from carter.guard import hooks, repohooks
 from carter.guard.state import GuardState, load
+from carter.identity.errors import E_GIT_OLD, registry
 from carter.install.paths import carter_gitconfig_path, guard_script_path, guard_state_path
 from guard.conftest import REAL_GIT
 from guard.helpers import debug_config, install_old_git, verbose
@@ -246,7 +247,7 @@ class TestInstallOnOldGit:
     ) -> None:
         res = guard("install", "--yes")
         assert res.exit_code == 0, res.output
-        assert "needs git 2.54 or newer" in res.output
+        assert registry()[E_GIT_OLD].message in " ".join(res.output.split())
         hook = repo / ".git" / "hooks" / "pre-push"
         state = load(guard_state_path(None))
         assert (
@@ -372,7 +373,7 @@ class TestInstallOnOldGit:
         res = guard("remove", "--yes")
         assert res.exit_code == 0, res.output
         assert not (repo / ".git" / "hooks" / "pre-push").exists()
-        assert edited.exists() and f"kept {edited}" in res.output
+        assert edited.exists() and f"kept {edited}" in " ".join(res.output.split())
         assert (
             not guard_script_path(None).exists()
             and not repohooks.template_dir(None).joinpath("hooks", "pre-push").exists()
@@ -415,7 +416,7 @@ class TestMigration:
         (old / "git").symlink_to(REAL_GIT)
         stack.fake(before=debug_config(stack.live))
         res = guard("install", "--yes", "--only", "hooks")
-        assert hook.exists() and f"kept {hook}" in res.output
+        assert hook.exists() and f"kept {hook}" in " ".join(res.output.split())
 
     def test_it_warns_when_an_older_git_is_still_around(
         self, stack, old: Path, repo: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
@@ -487,3 +488,13 @@ class TestStep23MatrixOnARepoLocalInstall:
 
 def test_the_probe_reports_old_git_for_the_wrapper(old: Path) -> None:
     assert gc.probe_scope() == "no-config-hooks"
+
+
+def test_a_snippet_is_prose_then_a_command_that_is_never_wrapped() -> None:
+    from carter import ui
+    from carter.guard import engine
+
+    seen: list[str] = []
+    engine._echo_snippet(seen.append, "core.hooksPath is x: add this to its hook:\n  [ -x a ] && b")
+    assert seen[0] == "  core.hooksPath is x: add this to its hook:"
+    assert isinstance(seen[1], ui.Raw) and seen[1] == "    [ -x a ] && b"

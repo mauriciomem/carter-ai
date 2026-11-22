@@ -175,7 +175,7 @@ class TestHashes:
 WORDS = {
     "unproven": "waiting for the first agent command",
     "passed": "working",
-    "failed": "own check failed",
+    "failed": "self-check failed",
 }
 
 
@@ -224,7 +224,7 @@ class TestStatus:
             )
         )
         items = check()
-        assert find(items, "working", "ok") and find(items, "own check failed", "red")
+        assert find(items, "working", "ok") and find(items, "self-check failed", "red")
 
 
 class TestG2States:

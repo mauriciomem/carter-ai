@@ -108,7 +108,11 @@ def inspect(repo: Path, state: GuardState, base_dir: Path | None, event: str = H
     owned = any(h["path"] == str(hook) for h in state.repo_hooks)
     reason = "edited hook" if owned else "foreign hook"
     return RepoStatus(
-        repo, "unguarded", reason, hook, f"add this to {hook}:\n  {chain_snippet(script, event)}"
+        repo,
+        "unguarded",
+        reason,
+        hook,
+        f"add this to {tilde(hook)}:\n  {chain_snippet(script, event)}",
     )
 
 
@@ -174,8 +178,8 @@ def plan_template(global_config: Path, base_dir: Path | None) -> TemplatePlan:
         theirs = have.stdout.strip()
         snippet = (
             f"{TEMPLATE_KEY} is yours ({tilde(theirs)}): new clones are NOT guarded. "
-            f"Copy {tilde(directory / 'hooks' / HOOK)} into it, or chain: "
-            f"{chain_snippet(hooks.script_path(base_dir))}"
+            f"Copy {tilde(directory / 'hooks' / HOOK)} into it, or chain:\n"
+            f"  {chain_snippet(hooks.script_path(base_dir))}"
         )
         return TemplatePlan("kept-user-value", directory, snippet)
     return TemplatePlan("set", directory)

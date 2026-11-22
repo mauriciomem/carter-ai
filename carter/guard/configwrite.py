@@ -77,9 +77,7 @@ def _writable(real: Path) -> bool:
 
 def _lost(message: str, items: list[str]) -> IdentityError:
     template = registry()[E_POLICIES_MISSING].message
-    shown = ", ".join(f"`{i}`" for i in items[:2]) + (
-        f" (+{len(items) - 2})" if len(items) > 2 else ""
-    )
+    shown = f"`{items[0]}`" + (f" (+{len(items) - 1})" if len(items) > 1 else "")
     return IdentityError(
         E_POLICIES_MISSING, template.replace("`<statement>`", shown), detail=message
     )

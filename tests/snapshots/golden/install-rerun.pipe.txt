@@ -4,6 +4,6 @@ Carter install  v0.19.2
 ✓ Installed
     agents   8  up to date
     skills  27  up to date
-    guards      g2 · hooks · sudo-docker (+2)
+    guards      5 installed (see: carter guard status)
 
 → restart OpenCode from a clean terminal

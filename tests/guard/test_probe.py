@@ -194,7 +194,7 @@ class TestCommand:
     def test_it_refuses_outside_an_agent_shell(self) -> None:
         res = self.invoke("--probe")
         assert res.exit_code == 1 and "E-PROBE-SCOPE" in res.output
-        assert "ask your agent to run it" in res.output
+        assert "ask your agent" in res.output
 
     def test_probe_and_host_are_mutually_exclusive(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("AGENT", "1")

@@ -21,28 +21,28 @@ _OPT_OUT = "opt-out"  # the source of `opencode_config` when config.toml opens t
 _VALUE_WIDTH = len("allowed")
 
 _EPILOG = """\
-Levels: strict (the default), guarded and relaxed. Set the level, and any row, in
-~/.carter/config.toml, which only you edit:
+Levels: strict (the default), guarded and relaxed. Set the level, and any row,
+in ~/.carter/config.toml, which only you edit:
 
 \b
   [access]
   level = "guarded"
   pr_write = "ask"
 
-Each id in brackets is a key of [access]. Values: allowed, ask, denied. A row cannot
-go past its ceiling: destructive and infra_apply stop at ask, opencode_config stays
-denied. Rows marked never are the floor: no level opens them. A workspace can only
-tighten: access: in carter.yaml takes the same keys.
+Each id in brackets is a key of [access]. Values: allowed, ask, denied. A row
+cannot go past its ceiling: destructive and infra_apply stop at ask,
+opencode_config stays denied. Rows marked never are the floor: no level opens
+them. A workspace can only tighten: access: in carter.yaml takes the same keys.
 
-Sources: preset (the level), override (your key), workspace (carter.yaml), opt-out
-(allow_project_opencode_edit in config.toml).
+Sources: preset (the level), override (your key), workspace (carter.yaml),
+opt-out (allow_project_opencode_edit in config.toml).
 
-A line like "! g2 off: push, gh_api" names a consent group that is not installed; the
-rows it lists are not denied: run `carter guard install`. -v shows what enforces each
-row and how strongly.
+A line like "! g2 off: push, gh_api" names a consent group that is not
+installed; the rows it lists are not denied: run `carter guard install`.
+-v shows what enforces each row and how strongly.
 
-Without [access] the level is strict, and `carter update` says so. That notice repeats
-on every update while ~/.carter/guard-state.json is missing.
+Without [access] the level is strict, and `carter update` says so. That notice
+repeats on every update while ~/.carter/guard-state.json is missing.
 
 Network and package installs are not limited until a sandbox exists.\
 """

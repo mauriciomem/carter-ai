@@ -4,6 +4,6 @@
 ✓[1m Installed[0m
     agents  [1m 8[0m  [2mup to date[0m
     skills  [1m27[0m  [2mup to date[0m
-    guards      [2mg2 · hooks · sudo-docker (+2)[0m
+    guards      [2m5 installed (see: carter guard status)[0m
 
 → restart OpenCode from a clean terminal

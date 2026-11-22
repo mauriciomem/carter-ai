@@ -6,6 +6,6 @@ ok Installed
     skills           27  new
     knowledge files   4  new
     config.toml          created
-    guards               g2, hooks, sudo-docker (+2)
+    guards               5 installed (see: carter guard status)
 
 -> restart OpenCode from a clean terminal

@@ -98,7 +98,7 @@ def _checked(*args: str) -> str:
     proc = _file_git(*args)
     if proc.returncode != 0:
         raise GitError(
-            f"`git {' '.join(args[:3])} ...` failed ({proc.returncode}): {proc.stderr.strip()[:50]}"
+            f"`git {' '.join(args[:3])} ...` failed ({proc.returncode}): {proc.stderr.strip()[:70]}"
         )
     return proc.stdout
 

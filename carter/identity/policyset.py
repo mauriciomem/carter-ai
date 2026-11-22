@@ -23,7 +23,7 @@ from typing import Any
 
 HOME_PLACEHOLDER = "<home>"
 GH_GROUP = "g2"
-SHORT_MAX = 46  # one row of the install question: 4 + 16 (id) + 2 + 46 = 68 columns
+SHORT_MAX = 50  # one row of the install question: 4 + 16 (id) + 2 + 50 = 72 columns
 
 
 @dataclass(frozen=True)

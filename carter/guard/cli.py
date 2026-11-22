@@ -9,6 +9,7 @@ ends in one line; ``-v`` shows the rest.
 
 from __future__ import annotations
 
+import re
 import textwrap
 from collections.abc import Callable
 from pathlib import Path
@@ -66,13 +67,21 @@ def _common(f: Callable[..., Any], *, remove: bool = False) -> Callable[..., Any
     )(f)
 
 
+def _wrap_code(text: str, width: int) -> list[str]:
+    """``text`` wrapped for the help; a `code span` stays on one line."""
+    keep = "\x00"
+    spans = re.sub(r"`[^`]*`", lambda m: m.group(0).replace(" ", keep), text)
+    rows = textwrap.wrap(spans, width, break_on_hyphens=False, break_long_words=False)
+    return [row.replace(keep, " ") for row in rows]
+
+
 def guards_help() -> str:
     """The help epilog of the guard commands: one block per group (its ``short`` row, then what
     it does), built from the data file so the text cannot drift from the question."""
     lines = ["\b", "Guards (asked once, in one question; undo: carter guard remove):"]
     for group in consent_groups():
         lines.append(f"  {group.id:<16}  {group.short}")
-        lines += [" " * 20 + row for row in textwrap.wrap(group.effect, 58)]
+        lines += [" " * 20 + row for row in _wrap_code(group.effect, 58)]
     lines += ["", "Without a terminal nothing is installed unless you pass --yes."]
     return "\n".join(lines)
 
@@ -169,8 +178,8 @@ def status_cmd(base_dir: Path | None, reset_b: bool) -> None:
         elif problems:
             ui.warn(f"guards: {problems} problem(s)", "run `carter guard install` again")
         else:
-            names = groups.split(", ") if groups != "none" else []
-            ui.ok("guards", ui.short_list(names, 3, " · ") if names else "none accepted")
+            count = 0 if groups == "none" else len(groups.split(", "))
+            ui.ok("guards", f"{count} installed" if count else "none accepted")
         return 0
 
     _guarded(run)

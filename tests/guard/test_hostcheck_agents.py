@@ -60,7 +60,7 @@ class TestAgentDenies:
         dropped = [i for i in got if "dropped" in i.text]
         assert dropped and "agent build" in dropped[0].text and dropped[0].level == "red"
         assert "fix or remove" in dropped[0].fix
-        assert "agents.build" in dropped[0].fix
+        assert "agents.build" in dropped[0].fix and "/h/opencode.jsonc" in dropped[0].fix
 
     def test_the_config_file_check_stays_separate(self) -> None:
         from carter.hostcheck import _policies  # the file-level check still exists
@@ -116,10 +116,7 @@ class TestVersionBands:
         (item,) = g2.version_items(version, None)
         assert item.level == level
         if level == "warn":
-            assert (
-                "E-OPENCODE-VERSION" in item.text
-                and "relying on the plugin's own check" in item.text
-            )
+            assert "E-OPENCODE-VERSION" in item.text and "guards untested" in item.text
 
     def test_old_git_is_a_warn_with_the_registered_text(self) -> None:
         (item,) = g2.version_items(None, (2, 39))

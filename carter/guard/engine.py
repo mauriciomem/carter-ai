@@ -49,7 +49,7 @@ Echo = Callable[[str], None]
 Confirm = Callable[..., bool]
 
 GLOBAL_REMOVED = "✓ old global OpenCode policies removed"
-INTERIM_NOTE = "no plugin: the denies are literal matches only (see: carter guard install)"
+INTERIM_NOTE = "no plugin: denies are literal matches only (see: carter guard install)"
 GIT_NOT_NEEDED = "include.path: not needed (no Carter git keys are enabled)"
 PAT_KEPT = "kept ~/.carter/secrets/gh-read.token: revoke the token if unused"
 # Extra files Carter may have written; removal deletes them only if recorded and unchanged.
@@ -70,7 +70,7 @@ def describe_error(exc: BaseException) -> tuple[str, str, str] | None:
     if isinstance(exc, IdentityError):
         entry = registry().get(exc.code)
         cause = str(exc)
-        if exc.detail:
+        if exc.detail and "\n" not in exc.detail:
             inline = f"{cause} ({exc.detail})"
             cause = inline if len(inline) <= ui.MAX - 2 else cause
         return cause, exc.fix or (entry.fix if entry else ""), exc.code
@@ -151,6 +151,14 @@ def _show_diff(res: policies.ApplyResult, echo: Echo) -> None:
         echo(f"  ⚠ {text}")
 
 
+def _echo_snippet(echo: Echo, snippet: str, indent: str = "  ") -> None:
+    """A snippet is prose, then the command on its own line: only the prose may wrap."""
+    first, *commands = snippet.splitlines()
+    echo(f"{indent}{first}")
+    for command in commands:
+        echo(ui.Raw(f"{indent}  {command.strip()}"))
+
+
 def _rerender(base_dir: Path | None, echo: Echo) -> None:
     """Write the global Carter agent files again: they carry G2's rules."""
     from carter.install import components
@@ -194,7 +202,8 @@ def _availability(echo: Echo) -> tuple[gitconfig.Mode | None, dict[str, str]]:
         why = f"git is not usable here: {exc}"
         return None, {"hooks": why, "repo_hooks": why}
     if mode == "no-config-hooks":
-        return mode, {"hooks": f"{E_GIT_OLD}: needs git 2.54 or newer"}
+        entry = registry()[E_GIT_OLD]
+        return mode, {"hooks": f"{entry.code}: {entry.message}"}
     return mode, {"repo_hooks": "not needed: this git has config hooks"}
 
 
@@ -264,8 +273,8 @@ def _repo_hooks_step(
                 echo(f"  repo hook present: {tilde(found.hook or '')}")
             else:
                 echo(f"⚠ {found.line()} ({event})")
-                for snippet_line in found.snippet.splitlines():
-                    echo(f"    {snippet_line.strip()}")
+                if found.snippet:
+                    _echo_snippet(echo, found.snippet, "    ")
 
 
 def _accepted_rev(state: GuardState, group: str) -> int:
@@ -293,7 +302,7 @@ def _git_step(
         plan = repohooks.plan_template(gitconfig.global_config_path(), base_dir)
         if plan.status == "kept-user-value":
             echo("⚠ unguarded: init.templateDir is yours (see: -v)")
-            echo(f"  {plan.snippet}")
+            _echo_snippet(echo, plan.snippet)
         else:
             template = plan.directory
     alias_set = False
@@ -302,7 +311,7 @@ def _git_step(
         alias_set = alias_plan.status != "kept-user-value"
         if not alias_set:
             echo("⚠ alias.ai-commit is yours: Carter kept it (see: -v)")
-            echo(f"  {alias_plan.snippet}")
+            _echo_snippet(echo, alias_plan.snippet)
     entries = gitconfig.carter_git_entries(
         [
             g
@@ -363,7 +372,8 @@ def _apply_entries(
         _warn_with_help(echo, res.include.note, gitconfig.SEE_INSTALL)
     if res.direct:
         for line in res.direct.manual:
-            echo(f"⚠ add by hand: {line}")
+            echo("⚠ add by hand (the config is not writable):")
+            echo(f"→ {line}")
         for key in res.direct.conflicts:
             echo(f"⚠ kept your value for {key}")
     for key in res.needs_repo_hooks:
@@ -408,10 +418,10 @@ def _offer_rows(offer: Sequence[str], state: GuardState) -> list[ui.Row]:
 
 
 def _show_offer(offer: Sequence[str], state: GuardState, again: Sequence[str]) -> None:
-    """The table above the one install question (what each group does: ``--help``)."""
+    """The table above the one install question; the heading points at what each group does."""
     if again:
         ui.warn(f"asked again: {', '.join(again)} (signed commits need it)")
-    ui.section("Guards to install", note="undo: carter guard remove")
+    ui.section("Guards to install", note="details: carter guard --help")
     ui.rows(_offer_rows(offer, state))
 
 

@@ -20,6 +20,7 @@ from carter.cli import main
 from carter.guard import gitconfig as gc
 from carter.guard import hooks
 from carter.guard.state import load
+from carter.identity.errors import E_GIT_OLD, registry
 from carter.install.paths import carter_gitconfig_path, guard_script_path, guard_state_path
 from guard.conftest import REAL_GIT
 from guard.helpers import debug_config, decline, install_old_git, verbose
@@ -129,7 +130,7 @@ class TestInstall:
         stack.fake()
         res = guard("install", input="y\n")
         question = res.output.split("Install?")[0]
-        assert "git hooks check agent commits, block pushes" in question
+        assert "agent commits checked, pushes blocked (all repos)" in question
 
     def test_remove_takes_back_the_script_the_file_and_the_line(self, stack) -> None:
         before = global_cfg().read_bytes()
@@ -334,7 +335,7 @@ class TestOldGit:
         self.old(stack)
         res = guard("install", "--yes")
         assert res.exit_code == 0, res.output
-        assert "needs git 2.54 or newer" in res.output
+        assert registry()[E_GIT_OLD].message in " ".join(res.output.split())
         state = load(guard_state_path(None))
         assert "hooks" not in state.consents
         assert not guard_script_path(None).exists() or "repo_hooks" in state.consents

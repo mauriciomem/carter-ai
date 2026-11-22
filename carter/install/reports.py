@@ -60,7 +60,9 @@ def render_install(report: InstallReport) -> None:
             Row("old backups", report.pruned, f"removed, older than {RETENTION_DAYS} days")
         )
     if report.guards:
-        table.append(Row("guards", None, ui.short_list(report.guards, 3, " · ")))
+        table.append(
+            Row("guards", None, f"{len(report.guards)} installed (see: carter guard status)")
+        )
     ui.section("Installed", "ok")
     ui.rows(table)
     if report.replaced:

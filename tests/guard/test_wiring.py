@@ -215,7 +215,7 @@ class TestUninstallRemovesGuards:
         assert res.exit_code == 0, res.output
         out = res.output
         assert "kept build:carter_push: edited since Carter wrote it" in out
-        assert f"kept {carter_file}: edited since Carter wrote it" in out
+        assert f"kept {carter_file}: edited since Carter wrote it" in " ".join(out.split())
         left = cfg(base_dir)
         assert "policies" not in left
         assert left["agents"]["build"]["permissions"] == [

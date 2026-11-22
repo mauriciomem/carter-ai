@@ -5,7 +5,7 @@ Carter install  v0.19.2
     agents        8  1 updated
     skills       27  2 updated
     old backups   2  removed, older than 15 days
-    guards           g2 · hooks · sudo-docker (+2)
+    guards           5 installed (see: carter guard status)
 
 ! Replaced 3 edited files  (copies in ~/.carter/backups/20261112T101500/)
 

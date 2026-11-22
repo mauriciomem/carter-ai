@@ -32,5 +32,5 @@ def plan_alias(global_config: Path) -> AliasPlan:
         return AliasPlan("set")
     if have.stdout.rstrip("\n") == ALIAS_VALUE:
         return AliasPlan("ours")
-    snippet = f"To use Carter's too, run `carter commit` or chain: {ALIAS_KEY} = {ALIAS_VALUE}"
+    snippet = f"To use Carter's too, run `carter commit` or chain:\n  {ALIAS_KEY} = {ALIAS_VALUE}"
     return AliasPlan("kept-user-value", snippet)

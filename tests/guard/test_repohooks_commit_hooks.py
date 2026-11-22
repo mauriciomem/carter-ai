@@ -125,5 +125,5 @@ class TestRemoval:
         edited.write_text(edited.read_text() + "# mine\n")
         res = guard("remove", "--yes")
         assert res.exit_code == 0, res.output
-        assert edited.exists() and f"kept {edited}" in res.output
+        assert edited.exists() and f"kept {edited}" in " ".join(res.output.split())
         assert not any(hook(repo, e).exists() for e in EVENTS if e != "post-commit")

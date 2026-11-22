@@ -87,6 +87,7 @@ class TestWhoMayRun:
         res = guard("install")
         assert res.exit_code == 0
         assert "guards not installed" in res.output and "no terminal" in res.output
+        assert "--yes" not in res.output  # the notice never advertises the consent bypass
         assert tree_hash(stack.home) == before
         assert not guard_state_path(None).exists() and not config_target(None).exists()
         assert not backups_dir(None).exists()
@@ -234,7 +235,8 @@ class TestInstall:
         assert "Install this group?" not in res.output
         head = res.output.split("Install?")[0]
         assert len([ln for ln in head.splitlines() if ln.strip()]) <= 6  # a short summary
-        assert "g2" in head and "plugin + command gate" in head and "sudo-docker" in head
+        assert "g2" in head and "isolates agent shells" in head and "sudo-docker" in head
+        assert "(details: carter guard --help)" in head and "(all repos)" in head
         state = load(guard_state_path(None))
         assert {"g2", "hooks", "sudo-docker", "read-edit-denies", "config-edit"} <= set(
             state.consents
