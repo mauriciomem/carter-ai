@@ -44,9 +44,7 @@ def _map(parent: dict[str, Any], key: str, what: str) -> dict[str, Any] | None:
     if value is None:
         return None
     if not isinstance(value, dict):
-        raise PolicyWriteError(
-            f"`{what}` in the OpenCode config is not an object; nothing was written"
-        )
+        raise PolicyWriteError(f"`{what}` in the OpenCode config is not an object")
     return value
 
 
@@ -107,15 +105,13 @@ def add_wanted(
 def _add(config: dict[str, Any], agent: str, tool: str) -> bool:
     agents = config.setdefault("agents", {})
     if not isinstance(agents, dict):
-        raise PolicyWriteError(
-            "`agents` in the OpenCode config is not an object; nothing was written"
-        )
+        raise PolicyWriteError("`agents` in the OpenCode config is not an object")
     entry = agents.setdefault(agent, {})
     if not isinstance(entry, dict):
-        raise PolicyWriteError(f"`agents.{agent}` is not an object; nothing was written")
+        raise PolicyWriteError(f"`agents.{agent}` is not an object")
     rules = entry.setdefault("permissions", [])
     if not isinstance(rules, list):
-        raise PolicyWriteError(f"`agents.{agent}.permissions` is not a list; nothing was written")
+        raise PolicyWriteError(f"`agents.{agent}.permissions` is not a list")
     if _rule(tool) in rules:
         return False
     rules.append(_rule(tool))

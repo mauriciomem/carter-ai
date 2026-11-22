@@ -23,7 +23,7 @@ from carter.identity.errors import E_STATE_INVALID
 from carter.install.paths import guard_state_path, isolation_path, plugin_dir
 from guard.helpers import debug_config, verbose
 
-PENDING = "need your confirmation"
+PENDING = "has new content"
 
 
 def guard(*args: str, **kw):
@@ -129,7 +129,7 @@ class TestNoSilentUpgrade:
         if args == ("install", "--yes"):
             assert PENDING in res.output
         if args == ("install",):
-            assert "no terminal and no --yes" in res.output
+            assert "no terminal: guards not installed" in res.output
 
     def test_a_yes_names_the_pending_step_and_still_exits_0(self, stack, human_tty) -> None:
         rev1(stack)
@@ -199,7 +199,7 @@ class TestExplanation:
             "carter guard remove --only plugin", "plugins/carter", "Restart the OpenCode server",
         ):  # fmt: skip
             assert fact in text, fact
-        assert len(g2.explain) <= 15
+        assert len(g2.explain) <= 18
 
 
 class TestStateSafety:

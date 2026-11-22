@@ -22,6 +22,7 @@ from pathlib import Path
 from typing import Any
 
 from carter.harness import DebugConfigError, policy_statements, provider_ids, read_debug_config
+from carter.home import tilde
 from carter.identity.errors import E_POLICIES_MISSING, IdentityError, registry
 from carter.identity.policyset import Statement
 from carter.install.atomic import atomic_write_bytes
@@ -76,7 +77,9 @@ def _writable(real: Path) -> bool:
 
 def _lost(message: str, items: list[str]) -> IdentityError:
     template = registry()[E_POLICIES_MISSING].message
-    shown = ", ".join(f"`{i}`" for i in items)
+    shown = ", ".join(f"`{i}`" for i in items[:2]) + (
+        f" (+{len(items) - 2})" if len(items) > 2 else ""
+    )
     return IdentityError(
         E_POLICIES_MISSING, template.replace("`<statement>`", shown), detail=message
     )
@@ -134,9 +137,7 @@ def transact(
     if original is not None:
         loaded = _load_jsonc(real)
         if not isinstance(loaded, dict):
-            raise PolicyWriteError(
-                f"cannot parse {target.name} (fix it first); nothing was written"
-            )
+            raise PolicyWriteError(f"cannot parse {target.name}: fix it first (nothing written)")
         data = loaded
     result.existed = original is not None
     edited = copy.deepcopy(data)
@@ -145,8 +146,7 @@ def transact(
     commented = original is not None and has_comments(original.decode(errors="replace"))
     if commented and result.changed:
         result.warnings.append(
-            f"{target.name} has comments and rewriting drops them (the original is kept as "
-            f"{target.name}{BACKUP_SUFFIX})"
+            f"{target.name} has comments: dropped on rewrite (kept as {target.name}{BACKUP_SUFFIX})"
         )
     if dry_run:
         return result
@@ -155,13 +155,11 @@ def transact(
         return result
 
     if not _writable(real):
-        raise PolicyWriteError(f"{target} is read-only; nothing was written")
+        raise PolicyWriteError(f"{tilde(target)} is read-only (nothing written)")
     try:
         providers_before = provider_ids(read())
     except DebugConfigError as exc:
-        raise PolicyWriteError(
-            f"cannot verify the OpenCode config ({exc}); nothing was written"
-        ) from exc
+        raise PolicyWriteError(f"cannot verify the OpenCode config: {exc}") from exc
 
     if original is not None:
         result.backup = backup_root / target.name
@@ -197,5 +195,5 @@ def _rollback(real: Path, original: bytes | None, backup: Path | None) -> None:
         else:
             atomic_write_bytes(real, original, follow_symlinks=True)
     except OSError as exc:
-        where = f" The original is at {backup}." if backup else ""
-        raise PolicyWriteError(f"ROLLBACK FAILED ({type(exc).__name__}).{where}") from exc
+        where = f" (original: {tilde(backup)})" if backup else ""
+        raise PolicyWriteError(f"ROLLBACK FAILED: {type(exc).__name__}{where}") from exc

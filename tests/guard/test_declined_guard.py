@@ -83,8 +83,8 @@ class TestTheInstallQuestion:
         assert res.output.count("Install?") == 1
         head = res.output.split("Install?")[0]
         assert "hooks" in head
-        why = [ln for ln in head.splitlines() if "declined" in ln]
-        assert len(why) == 1 and "signed agent commits" in why[0]
+        why = [ln for ln in head.splitlines() if "asked again" in ln]
+        assert len(why) == 1 and "signed commits" in why[0]
         assert load(guard_state_path(None)).consents["hooks"]["decision"] == "accepted"
 
     def test_without_t2_a_declined_group_is_left_alone(self, stack, human_tty) -> None:
@@ -103,7 +103,7 @@ class TestTheInstallQuestion:
         stack.fake()
         before = guard_state_path(None).read_bytes()
         res = guard("install", input="n\n")
-        assert "Nothing installed" in res.output
+        assert "nothing installed" in res.output
         assert guard_state_path(None).read_bytes() == before
 
     def test_only_hooks_asks_a_declined_group_again_with_one_question(

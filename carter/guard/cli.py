@@ -9,6 +9,7 @@ ends in one line; ``-v`` shows the rest.
 
 from __future__ import annotations
 
+import textwrap
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
@@ -20,6 +21,7 @@ from carter.broker import counter
 from carter.cliguard import guarded, verbose_option
 from carter.dotfiles_help import INSTALL_EPILOG, UNINSTALL_EPILOG
 from carter.guard import consent, engine, report, status
+from carter.identity.policyset import consent_groups
 from carter.install.paths import run_dir
 
 
@@ -64,12 +66,23 @@ def _common(f: Callable[..., Any], *, remove: bool = False) -> Callable[..., Any
     )(f)
 
 
-@click.group()
+def guards_help() -> str:
+    """The help epilog of the guard commands: one block per group (its ``short`` row, then what
+    it does), built from the data file so the text cannot drift from the question."""
+    lines = ["\b", "Guards (asked once, in one question; undo: carter guard remove):"]
+    for group in consent_groups():
+        lines.append(f"  {group.id:<16}  {group.short}")
+        lines += [" " * 20 + row for row in textwrap.wrap(group.effect, 58)]
+    lines += ["", "Without a terminal nothing is installed unless you pass --yes."]
+    return "\n".join(lines)
+
+
+@click.group(epilog=guards_help())
 def guard() -> None:
     """Install, inspect and remove Carter's guards."""
 
 
-@guard.command("install", epilog=INSTALL_EPILOG)
+@guard.command("install", epilog=guards_help() + "\n\n" + INSTALL_EPILOG)
 @_common
 @verbose_option
 def install_cmd(
@@ -86,7 +99,7 @@ def install_cmd(
             assume_yes=assume_yes,
             interactive=terminal.stdin_is_tty(),
             dry_run=dry_run,
-            echo=click.echo if dry_run else report.say,
+            echo=ui.line if dry_run else report.say,
             confirm=click.confirm,
         )
         if code == 0 and not dry_run:
@@ -111,10 +124,10 @@ def remove_cmd(
             base_dir=base_dir,
             only=only,
             dry_run=dry_run,
-            echo=click.echo if dry_run else report.say,
+            echo=ui.line if dry_run else report.say,
         )
         if code == 0 and not dry_run:
-            ui.ok("guards removed" if only is None else f"removed {', '.join(only)}")
+            ui.ok("guards removed" if only is None else f"removed {ui.short_list(only)}")
         return code
 
     _guarded(run)
@@ -140,7 +153,7 @@ def status_cmd(base_dir: Path | None, reset_b: bool) -> None:
         status.report(base_dir, lines.append)
         if ui.verbose():
             for line in lines:
-                click.echo(line)
+                ui.line(line)
             return 0
         problems = 0
         for before, line in zip(["", *lines], lines, strict=False):
@@ -152,11 +165,12 @@ def status_cmd(base_dir: Path | None, reset_b: bool) -> None:
         active = next((ln for ln in lines if ln.startswith("Active groups:")), "")
         groups = active.partition(": ")[2]
         if "absent" in lines[0]:
-            ui.info("no guards installed: run `carter guard install`")
+            ui.info("no guards installed (see: carter guard install)")
         elif problems:
             ui.warn(f"guards: {problems} problem(s)", "run `carter guard install` again")
         else:
-            ui.ok("guards", groups if groups != "none" else "none accepted")
+            names = groups.split(", ") if groups != "none" else []
+            ui.ok("guards", ui.short_list(names, 3, " · ") if names else "none accepted")
         return 0
 
     _guarded(run)

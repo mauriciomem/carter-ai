@@ -17,6 +17,7 @@ from carter.cli import main
 from carter.guard import gitconfig as gc
 from carter.guard import plugin
 from carter.guard.state import GuardState, load
+from carter.home import tilde
 from carter.identity import isolation
 from carter.identity.errors import E_FALSE_MISSING, IdentityError
 from carter.identity.isolation_schema import validate
@@ -94,7 +95,7 @@ class TestFiles:
     def test_the_restart_message_is_printed_when_the_plugin_changed(self, stack) -> None:
         stack.fake()
         res = guard("install", "--yes")
-        assert "plugin installed:" in res.output and "restart the OpenCode server" in res.output
+        assert "plugin installed:" in res.output and "restart OpenCode" in res.output
 
     def test_reinstall_is_a_byte_identical_no_op(self, stack) -> None:
         installed(stack)
@@ -115,7 +116,8 @@ class TestFiles:
         res = guard("install", "--yes")
         assert index.read_text().endswith("// mine\n")
         assert (
-            f"kept your edited {index}" in res.output and "agent shells are refused" in res.output
+            f"kept your edited {tilde(index)}" in res.output
+            and "agent shells are refused" in res.output
         )
 
     def test_the_plugin_dir_is_a_control_path_and_edit_denied(self) -> None:

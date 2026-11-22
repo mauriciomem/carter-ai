@@ -31,6 +31,7 @@ from typing import Literal
 
 from carter.guard import gitconfig, hooks
 from carter.guard.state import GuardState
+from carter.home import tilde
 from carter.install.atomic import atomic_write_bytes
 
 HOOK = "pre-push"
@@ -48,7 +49,7 @@ class RepoStatus:
 
     def line(self) -> str:
         what = "guarded" if self.state == "guarded" else f"unguarded: {self.reason or 'no hook'}"
-        return f"{self.repo}: {what}"
+        return f"{tilde(self.repo)}: {what}"
 
 
 def _git(args: Sequence[str], cwd: Path) -> subprocess.CompletedProcess[str]:
@@ -172,9 +173,9 @@ def plan_template(global_config: Path, base_dir: Path | None) -> TemplatePlan:
     if have.returncode == 0:
         theirs = have.stdout.strip()
         snippet = (
-            f"{TEMPLATE_KEY} is already set ({theirs}); Carter kept it. New clones are NOT "
-            f"guarded: copy {directory / 'hooks' / HOOK} into {theirs}/hooks/ "
-            f"(or chain: {chain_snippet(hooks.script_path(base_dir))})"
+            f"{TEMPLATE_KEY} is yours ({tilde(theirs)}): new clones are NOT guarded. "
+            f"Copy {tilde(directory / 'hooks' / HOOK)} into it, or chain: "
+            f"{chain_snippet(hooks.script_path(base_dir))}"
         )
         return TemplatePlan("kept-user-value", directory, snippet)
     return TemplatePlan("set", directory)

@@ -10,6 +10,9 @@ from __future__ import annotations
 
 # ``\b`` keeps click from re-wrapping the lines that follow it.
 INSTALL_EPILOG = """\b
+Guards (one question, `Install? [Y/n]`): carter guard --help
+
+\b
 Dotfile-managed ~/.gitconfig (a symlink or read-only file):
 Carter never edits it. Add this to your dotfiles once; it never changes, and Carter
 recognises it in any spelling (~/ or absolute path, or inside a file you include):
@@ -22,6 +25,9 @@ Until the line is there the git hooks are inactive; `carter guard status` says s
 """
 
 UNINSTALL_EPILOG = """\b
+Guards (one question, `Install? [Y/n]`): carter guard --help
+
+\b
 Dotfile-managed ~/.gitconfig (a symlink or read-only file):
 Carter does not edit it. If you added Carter's include line there, delete it from
 your dotfiles:

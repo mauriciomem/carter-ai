@@ -19,7 +19,6 @@ from carter.cli import main
 from carter.guard import gitconfig as gc
 from carter.guard import hooks, repohooks
 from carter.guard.state import GuardState, load
-from carter.identity.errors import E_GIT_OLD, registry
 from carter.install.paths import carter_gitconfig_path, guard_script_path, guard_state_path
 from guard.conftest import REAL_GIT
 from guard.helpers import debug_config, install_old_git, verbose
@@ -188,7 +187,7 @@ class TestTemplateDir:
         git("config", "--global", "init.templateDir", "/theirs")
         plan = repohooks.plan_template(cfg, None)
         assert plan.status == "kept-user-value" and "/theirs" in plan.snippet
-        assert "New clones are NOT guarded" in plan.snippet
+        assert "new clones are NOT guarded" in plan.snippet
         git("config", "--global", "init.templateDir", str(repohooks.template_dir(None)))
         assert repohooks.plan_template(cfg, None).status == "ours"
 
@@ -247,7 +246,7 @@ class TestInstallOnOldGit:
     ) -> None:
         res = guard("install", "--yes")
         assert res.exit_code == 0, res.output
-        assert registry()[E_GIT_OLD].message in res.output
+        assert "needs git 2.54 or newer" in res.output
         hook = repo / ".git" / "hooks" / "pre-push"
         state = load(guard_state_path(None))
         assert (
@@ -269,7 +268,7 @@ class TestInstallOnOldGit:
     ) -> None:
         human_tty(False)
         res = guard("install")
-        assert res.exit_code == 0 and "NOT installed" in res.output
+        assert res.exit_code == 0 and "guards not installed" in res.output
         assert (
             not (repo / ".git" / "hooks" / "pre-push").exists()
             and not guard_state_path(None).exists()
@@ -279,7 +278,7 @@ class TestInstallOnOldGit:
         human_tty(True)
         res = guard("install", input="\n")  # Enter is yes
         assert res.exit_code == 0, res.output
-        assert "git hooks in your repos check agent commits" in res.output.split("Install?")[0]
+        assert "per-repo git hooks" in res.output.split("Install?")[0]
         assert load(guard_state_path(None)).consents["repo_hooks"]["decision"] == "accepted"
         assert (repo / ".git" / "hooks" / "pre-push").exists()
 
@@ -331,7 +330,7 @@ class TestInstallOnOldGit:
         before = Path(os.environ["GIT_CONFIG_GLOBAL"]).read_bytes()
         res = guard("install", "--yes")
         assert res.exit_code == 0, res.output
-        assert "unguarded: templateDir" in res.output and "/theirs" in res.output
+        assert "unguarded: init.templateDir" in res.output and "/theirs" in res.output
         assert (
             Path(os.environ["GIT_CONFIG_GLOBAL"]).read_bytes() == before
         )  # no include line either
@@ -403,7 +402,7 @@ class TestMigration:
         stack.fake(before=debug_config(stack.live), after=debug_config(stack.live))
         res = guard("install", "--yes", "--only", "hooks")
         assert res.exit_code == 0, res.output
-        assert "removing the per-repo hooks Carter wrote earlier" in res.output
+        assert "removing per-repo hooks" in res.output
         assert not hook.exists() and load(guard_state_path(None)).repo_hooks == []
         done = git("hook", "list", "--show-scope", "pre-push", cwd=repo)
         assert done.stdout.split() == ["global", "carter-guard-pre-push"]
@@ -431,7 +430,7 @@ class TestMigration:
         stack.fake(before=debug_config(stack.live))
         monkeypatch.setenv("PATH", f"{os.environ['PATH']}:{older}")
         res = guard("install", "--yes", "--only", "hooks")
-        assert "an older git is also installed" in res.output and "2.39" in res.output
+        assert "older git also installed" in res.output and "2.39" in res.output
 
 
 class TestStep23MatrixOnARepoLocalInstall:

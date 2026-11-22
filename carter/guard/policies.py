@@ -71,9 +71,7 @@ class RemoveResult:
 def _policies_list(config: dict[str, Any]) -> list[dict[str, Any]]:
     block = config.get("policies", [])
     if not isinstance(block, list) or not all(isinstance(s, dict) for s in block):
-        raise PolicyWriteError(
-            "`policies` in the OpenCode config is not a list of statements; nothing was written"
-        )
+        raise PolicyWriteError("`policies` in the OpenCode config is not a list")
     return list(block)
 
 

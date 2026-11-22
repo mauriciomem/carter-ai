@@ -39,4 +39,4 @@ def installed(base_dir: Path | None) -> None:
     """The one line ``carter guard install`` ends with: what is accepted now."""
     done = accepted_groups(base_dir)
     if done:
-        ui.ok("guards installed", " · ".join(done))
+        ui.ok("guards installed", ui.short_list(done, 3, " · "))

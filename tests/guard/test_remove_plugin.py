@@ -16,6 +16,7 @@ from click.testing import CliRunner
 
 from carter.cli import main
 from carter.guard.state import load
+from carter.home import tilde
 from carter.install.mcp import config_target
 from carter.install.paths import (
     carter_gitconfig_path,
@@ -71,14 +72,14 @@ class TestRoundTrip:
         out = guard("remove", "--yes").output
         marks = [
             "- build:carter_push",
-            f"removed {plugin_dir(None) / 'index.ts'}",
+            f"removed {tilde(plugin_dir(None) / 'index.ts')}",
             "removed",
             "Removed guard state",
         ]
         positions = [out.index(m) for m in marks]
         assert positions == sorted(positions)
-        assert out.index(f"removed {isolation_path(None)}") < out.index(
-            f"removed {guard_script_path(None)}"
+        assert out.index(f"removed {tilde(isolation_path(None))}") < out.index(
+            f"removed {tilde(guard_script_path(None))}"
         )
 
     def test_the_pat_and_the_audit_dir_stay(self, stack, home: Path) -> None:
@@ -91,7 +92,7 @@ class TestRoundTrip:
         reload(stack, after=debug_config())
         out = guard("remove", "--yes").output
         assert token_path(None).exists() and (audit / "x.jsonl").exists()
-        assert "gh-read.token` kept" in out and "not-a-real-token" not in out
+        assert "gh-read.token: revoke" in out and "not-a-real-token" not in out
 
 
 class TestOnlyPlugin:
@@ -103,7 +104,7 @@ class TestOnlyPlugin:
         res = guard("remove", "--yes", "--only", "plugin")
         assert res.exit_code == 0, res.output
         assert not any(p.exists() for p in plugin_files()) and not run_dir(None).exists()
-        assert "OpenCode unloads it within seconds" in res.output
+        assert "plugin removed (restart OpenCode" in res.output
         state = load(guard_state_path(None))
         assert state.consents["g2"]["decision"] == "accepted" and state.consents["g2"]["rev"] == 1
         assert state.opencode_policies == before.opencode_policies  # the denies stay
@@ -121,7 +122,7 @@ class TestOnlyPlugin:
         guard("remove", "--yes", "--only", "plugin")
         reload(stack)
         res = guard("install", "--yes")
-        assert not isolation_path(None).exists() and "need your confirmation" in res.output
+        assert not isolation_path(None).exists() and "has new content" in res.output
         reload(stack)
         assert guard("install", "--yes", "--only", "g2").exit_code == 0
         assert all(p.exists() for p in plugin_files())
@@ -150,7 +151,7 @@ class TestOnlyPlugin:
     def test_install_does_not_accept_it(self, stack) -> None:
         stack.fake()
         res = guard("install", "--yes", "--only", "plugin")
-        assert res.exit_code == 2 and "use `--only g2`" in res.output
+        assert res.exit_code == 2 and "use --only g2" in res.output
 
     def test_plugin_can_be_combined_with_groups(self, stack) -> None:
         install(stack)
@@ -174,7 +175,7 @@ class TestEdited:
         index.write_text(index.read_text() + "// mine\n")
         reload(stack)
         out = guard("remove", "--yes", "--only", "plugin").output
-        assert index.exists() and f"kept {index}" in out and f"rm {index}" in out
+        assert index.exists() and f"kept {tilde(index)}" in out
         assert not isolation_path(None).exists()  # the unchanged ones still go
 
     def test_an_edited_isolation_json_gitconfig_and_script_are_kept(self, stack) -> None:
@@ -185,7 +186,7 @@ class TestEdited:
         reload(stack, after=debug_config())
         out = guard("remove", "--yes").output
         for path in edited:
-            assert path.exists() and f"kept {path}" in out, path
+            assert path.exists() and f"kept {tilde(path)}" in out, path
 
     def test_a_user_edit_of_a_recorded_deny_is_kept(self, stack) -> None:
         install(stack)
