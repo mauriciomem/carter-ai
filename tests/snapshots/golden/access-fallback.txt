@@ -1,0 +1,19 @@
+Access level: strict  (config invalid)
+! config.toml [access]: unknown key 'gitcommit'
+! access config invalid: using strict
+    Workspace edits   [workspace_edit]    allowed  preset
+    Run commands      [run_commands]      allowed  preset
+    Git commit        [git_commit]        allowed  preset
+    GitHub reads      [github_read]       allowed  preset
+    PR writes         [pr_write]          ask      preset
+    Issue writes      [issue_write]       denied   preset
+    Destructive       [destructive]       denied   preset
+    Infra apply       [infra_apply]       denied   preset
+    OpenCode config   [opencode_config]   denied   preset
+    Push from shell   [push]              never
+    GitHub API        [gh_api]            never
+    GitHub decisions  [github_admin]      never
+    Root              [sudo]              never
+    Secrets           [secrets]           never
+    Carter internals  [carter_internals]  never
+see: carter access --help

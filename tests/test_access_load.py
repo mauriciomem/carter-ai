@@ -14,7 +14,7 @@ from carter.cli import main
 from carter.config import generate_default_config, with_user_access
 from carter.install.paths import guard_state_path
 
-STRICT_NOTICE = "access level is now strict (see: carter update --help)"
+STRICT_NOTICE = "access level is now strict (see: carter access --help)"
 
 
 def _write(base: Path, text: str, name: str = "config.toml") -> None:

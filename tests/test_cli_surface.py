@@ -1,4 +1,4 @@
-"""The CLI surface is locked: 14 top-level commands, 24 leaf commands, 61 visible long flags.
+"""The CLI surface is locked: 15 top-level commands, 25 leaf commands, 62 visible long flags.
 
 Growing it is a user decision, not a side effect of a feature. Commands are
 resolved through ``list_commands``/``get_command`` so the test keeps working once groups load
@@ -12,7 +12,8 @@ import click
 
 from carter.cli import main
 
-TOP_LEVEL, LEAVES, LONG_FLAGS = 14, 24, 61
+# `access`, a read-only view the user approved: +1 command, +1 leaf, +1 flag (its `-v`).
+TOP_LEVEL, LEAVES, LONG_FLAGS = 15, 25, 62
 
 
 def _leaves(group: click.Group, ctx: click.Context) -> list[click.Command]:

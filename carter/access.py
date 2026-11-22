@@ -16,7 +16,7 @@ id of user, workspace and role wins (``allowed < ask < denied``). Any error in t
 
 from __future__ import annotations
 
-from collections.abc import Iterable, Mapping
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any
 
@@ -44,16 +44,17 @@ CAPABILITIES: tuple[Capability, ...] = (
     Capability("run_commands", "Run commands", ("allowed", "allowed", "allowed"), "allowed"),
     Capability("git_commit", "Git commit", ("allowed", "allowed", "allowed"), "allowed"),
     Capability("github_read", "GitHub reads", ("allowed", "allowed", "allowed"), "allowed"),
-    Capability("pr_write", "PRs open/comment", ("ask", "allowed", "allowed"), "allowed"),
-    Capability("issue_write", "Issues open/comment", ("denied", "ask", "allowed"), "allowed"),
-    Capability("destructive", "Destructive commands", ("denied", "ask", "ask"), "ask"),
+    Capability("pr_write", "PR writes", ("ask", "allowed", "allowed"), "allowed"),
+    Capability("issue_write", "Issue writes", ("denied", "ask", "allowed"), "allowed"),
+    Capability("destructive", "Destructive", ("denied", "ask", "ask"), "ask"),
     Capability("infra_apply", "Infra apply", ("denied", "ask", "ask"), "ask"),
-    Capability("opencode_config", "Project OpenCode conf", ("denied",) * 3, "denied"),
+    Capability("opencode_config", "OpenCode config", ("denied",) * 3, "denied"),
 )
 
 # The floor: shown as `never`; no level, override or workspace opens them.
+# Labels stay <= 16 chars so a plain row fits 60 columns (see `carter.access_cli`).
 FLOOR: tuple[tuple[str, str], ...] = (
-    ("push", "Push from the shell"),
+    ("push", "Push from shell"),
     ("gh_api", "GitHub API"),
     ("github_admin", "GitHub decisions"),
     ("sudo", "Root"),
@@ -64,6 +65,65 @@ FLOOR: tuple[tuple[str, str], ...] = (
 CAPABILITY_IDS = tuple(c.id for c in CAPABILITIES)
 FLOOR_IDS = tuple(floor_id for floor_id, _label in FLOOR)
 _BY_ID = {c.id: c for c in CAPABILITIES}
+
+# What enforces each row and how strongly, for `carter access -v`:
+# id -> (layer, strength). One entry per id; a test pins the keys to the schema. Keep
+# layer + strength <= 50 chars so the `-v` line stays under 70.
+_DENIES_AND_GATE = ("OpenCode denies, gate", "medium tools, weak shell")
+ENFORCED: dict[str, tuple[str, str]] = {
+    "workspace_edit": ("OpenCode edit permission", "medium"),
+    "run_commands": ("OpenCode shell permission", "medium"),
+    "git_commit": ("command gate, git hooks, tier check", "weak"),
+    "github_read": ("token scopes, gate", "strong if token is read-only"),
+    "pr_write": ("gate flags, ask", "weak; strong if token lacks write"),
+    "issue_write": ("gate flags, ask", "weak; strong if token lacks write"),
+    "destructive": ("OpenCode command globs", "weak"),
+    "infra_apply": ("command globs", "weak; cloud credentials limit it"),
+    "opencode_config": ("OpenCode edit deny", "medium; not shell writes"),
+    "push": ("no SSH agent, hook", "strong vs token, weak vs keys"),
+    "gh_api": ("command gate", "weak"),
+    "github_admin": ("command gate", "weak; strong if token lacks scope"),
+    "sudo": _DENIES_AND_GATE,
+    "secrets": _DENIES_AND_GATE,
+    "carter_internals": _DENIES_AND_GATE,
+}
+
+# Consent groups whose rules hold floor items up: group -> the floor ids that are open while
+# it is missing. `g2` holds `carter_internals` through the human-only verbs and the env
+# overrides; its control paths come from `config-edit`, which has its own line below, as do
+# `hooks` (or `repo_hooks`).
+GROUP_FLOORS: dict[str, tuple[str, ...]] = {
+    "g2": ("push", "gh_api", "github_admin", "carter_internals"),
+    "sudo-docker": ("sudo",),
+    "read-edit-denies": ("secrets",),
+}
+_COMMIT_HOOKS = frozenset({"hooks", "repo_hooks"})  # either one does the job (git version)
+_CONFIG_EDIT = "config-edit"
+
+
+def missing_group_lines(accepted: Iterable[str]) -> tuple[str, ...]:
+    """One ``!`` line (<= 60 chars) per consent group that is off: ``! g2 off: <ids>`` names
+    the floor rows that are therefore not denied. ``accepted`` is what the guard state records."""
+    have = set(accepted)
+    lines = [
+        f"! {group} off: {', '.join(ids)}"
+        for group, ids in GROUP_FLOORS.items()
+        if group not in have
+    ]
+    if not have & _COMMIT_HOOKS:
+        lines.append("! hooks off: agent commits are not checked")
+    if _CONFIG_EDIT not in have:
+        lines.append("! config-edit off: agents can edit this level")
+    return tuple(lines)
+
+
+def missing_groups_summary(lines: Sequence[str]) -> str:
+    """The one line ``carter check`` prints for ``missing_group_lines``; empty when none."""
+    count = len(lines)
+    if not count:
+        return ""
+    return f"! {count} guard group{'s' if count != 1 else ''} missing (see: carter access)"
+
 
 # Roles (D6). Kept here, not imported from `carter.config`, so the renderer can import
 # this module; a test pins both sets to `AGENT_ALLOWLIST`.
@@ -267,18 +327,14 @@ def resolve_config(config: Mapping[str, Any], role: str | None = None) -> Access
     return resolve(user.table, config.get("access"), level, role, user_error=user.error)
 
 
-def warnings(
-    access: Access, *, config_edit: bool, token_writes: Iterable[str] = ()
-) -> tuple[str, ...]:
-    """Facts the user should see next to the table (the table's `!` lines): one line each, as data.
+def warnings(access: Access, *, token_writes: Iterable[str] = ()) -> tuple[str, ...]:
+    """Token facts the user should see next to the table: one `!` line each, as data.
 
-    ``config_edit`` is whether the ``config-edit`` group is installed; ``token_writes`` the
-    write scopes of the agent token (``SCOPE_*``). The resolver does not print them.
+    ``token_writes`` are the write scopes of the agent token (``SCOPE_*``). Missing consent
+    groups have their own lines (``missing_group_lines``). The resolver does not print them.
     """
     scopes = set(token_writes)
     lines = []
-    if not config_edit:
-        lines.append("! config-edit off: agents can edit this level")
     if SCOPE_PULL_REQUESTS in scopes:
         lines.append("! token can approve PRs: github_admin is text-gated")
     if SCOPE_ISSUES in scopes and access.values["issue_write"] != "allowed":

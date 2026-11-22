@@ -96,6 +96,15 @@ problem). The first `carter update` after the upgrade says so once. Global and w
 the same level. A workspace can only tighten it: `access:` in `.carter/carter.yaml` takes the same
 keys, and `policy.level` there is a deprecated alias; a looser value is ignored with one line.
 
+### What can agents do here?
+
+Run `carter access`. It prints the level and one row per capability, each with its value and where
+the value comes from (`preset`, `override`, `workspace` or `opt-out`). The rows at the bottom read
+`never`: that is the floor, and no level opens it. `carter access -v` adds what enforces each row
+and how strongly. A line such as `! g2 off: push, gh_api` means a guard group is not installed, so
+the rows it lists are not denied; run `carter guard install`. The command only reads: edit `~/.carter/config.toml` to change a value. The
+ids are listed in [Configuration](../reference/configuration.md#access).
+
 ## Know the limits
 
 > [!WARNING]

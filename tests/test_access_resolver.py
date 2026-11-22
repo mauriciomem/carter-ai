@@ -4,7 +4,16 @@ from __future__ import annotations
 
 import pytest
 
-from carter.access import CAPABILITY_IDS, FLOOR_IDS, LEVELS, resolve, warnings
+from carter.access import (
+    CAPABILITY_IDS,
+    FLOOR_IDS,
+    GROUP_FLOORS,
+    LEVELS,
+    missing_group_lines,
+    missing_groups_summary,
+    resolve,
+    warnings,
+)
 from test_access_schema import RFC_TABLE
 
 MAX_LINE = 80
@@ -249,29 +258,65 @@ class TestRoles:
 
 class TestWarnings:
     def test_nothing_to_say_when_all_is_fine(self):
-        assert warnings(resolve(None), config_edit=True) == ()
-
-    def test_config_edit_off(self):
-        assert warnings(resolve(None), config_edit=False) == (
-            "! config-edit off: agents can edit this level",
-        )
+        assert warnings(resolve(None)) == ()
 
     def test_a_token_that_can_write_pull_requests_can_approve(self):
-        assert warnings(resolve(None), config_edit=True, token_writes={"pull_requests"}) == (
+        assert warnings(resolve(None), token_writes={"pull_requests"}) == (
             "! token can approve PRs: github_admin is text-gated",
         )
 
     def test_issues_write_scope_warns_unless_the_level_allows_issue_writes(self):
-        lines = warnings(resolve({"level": "guarded"}), config_edit=True, token_writes={"issues"})
+        lines = warnings(resolve({"level": "guarded"}), token_writes={"issues"})
         assert lines == ("! token has Issues: write: issue_write is text-gated",)
         relaxed = resolve({"level": "relaxed"})
-        assert warnings(relaxed, config_edit=True, token_writes={"issues"}) == ()
+        assert warnings(relaxed, token_writes={"issues"}) == ()
 
     def test_order_and_length(self):
-        lines = warnings(resolve(None), config_edit=False, token_writes={"issues", "pull_requests"})
-        assert len(lines) == 3
-        assert lines[0].startswith("! config-edit")
+        lines = warnings(resolve(None), token_writes={"issues", "pull_requests"})
+        assert len(lines) == 2
+        assert lines[0].startswith("! token can approve")
         assert all(len(line) <= 60 for line in lines)
+
+
+class TestMissingGroupLines:
+    ALL = ("g2", "hooks", "sudo-docker", "read-edit-denies", "config-edit")
+
+    def test_every_group_present_means_no_line(self):
+        assert missing_group_lines(self.ALL) == ()
+
+    def test_one_line_per_missing_group_in_a_fixed_order_each_short(self):
+        lines = missing_group_lines(())
+        assert [ln.split()[1] for ln in lines] == [
+            "g2",
+            "sudo-docker",
+            "read-edit-denies",
+            "hooks",
+            "config-edit",
+        ]
+        assert all(ln.startswith("! ") and len(ln) <= 60 for ln in lines)
+
+    def test_a_line_names_the_floor_ids_that_are_not_denied(self):
+        (line,) = missing_group_lines([g for g in self.ALL if g != "g2"])
+        assert line == "! g2 off: push, gh_api, github_admin, carter_internals"
+
+    def test_either_commit_hook_group_covers_the_commit_checks(self):
+        have = [g for g in self.ALL if g != "hooks"]
+        assert missing_group_lines(have) == ("! hooks off: agent commits are not checked",)
+        assert missing_group_lines([*have, "repo_hooks"]) == ()
+
+    def test_every_floor_id_is_named_by_the_group_that_backs_it(self):
+        named = {i for ids in GROUP_FLOORS.values() for i in ids}
+        assert named == set(FLOOR_IDS)  # carter_internals rides on g2 (verbs, env overrides)
+
+    def test_check_gets_one_short_line_for_all_of_them(self):
+        assert missing_groups_summary(missing_group_lines(self.ALL)) == ""
+        assert missing_groups_summary(missing_group_lines(())) == (
+            "! 5 guard groups missing (see: carter access)"
+        )
+        assert len(missing_groups_summary(missing_group_lines(()))) <= 60
+        assert missing_groups_summary(missing_group_lines(self.ALL[1:])).startswith(
+            "! 1 guard group "
+        )
 
 
 class TestEffectiveLevelAndUnreadableConfig:

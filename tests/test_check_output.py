@@ -8,6 +8,7 @@ from pathlib import Path
 import pytest
 from click.testing import CliRunner, Result
 
+from access_support import ALL_GROUPS, record_groups
 from carter.cli import main
 from carter.harness import UNAVAILABLE_FIX, HarnessResult
 
@@ -22,6 +23,8 @@ def ws(tmp_path: Path) -> Path:
     target = tmp_path / "ws"
     target.mkdir()
     assert CliRunner().invoke(main, ["init", str(target), "--no-git-state"]).exit_code == 0
+    record_groups(*ALL_GROUPS)  # a machine with its guards: `check` says nothing about groups
+    assert CliRunner().invoke(main, ["update", str(target)]).exit_code == 0
     return target
 
 

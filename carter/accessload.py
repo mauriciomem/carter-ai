@@ -17,14 +17,15 @@ from datetime import date
 from pathlib import Path
 
 from carter.access import UNREADABLE, UserAccess
-from carter.guard.state import load, save
+from carter.guard import consent, optout
+from carter.guard.state import load, load_or_empty_readonly, save
+from carter.identity import load_identity
 from carter.identity.config import ConfigError, read_document
 from carter.identity.errors import IdentityError
 from carter.install.paths import carter_config_path, guard_state_path
 from carter.terminal import is_agent_shell
 
-# TODO: point to `carter access --help` once that command exists.
-NOTICE = "! access level is now strict (see: carter update --help)"
+NOTICE = "! access level is now strict (see: carter access --help)"
 _KEY = "access_notice"
 
 
@@ -35,6 +36,26 @@ def load_user_access(base_dir: Path | None = None) -> UserAccess:
     except ConfigError:
         return UserAccess(error=UNREADABLE)
     return UserAccess(table=(doc or {}).get("access"))
+
+
+def accepted_groups(base_dir: Path | None = None) -> list[str]:
+    """The consent groups recorded as accepted; none when the state file is absent or broken."""
+    read = load_or_empty_readonly(guard_state_path(base_dir))
+    return consent.accepted_groups(read.state) if read.status == "ok" else []
+
+
+def project_config_open(workspace: Path, accepted: list[str], base_dir: Path | None = None) -> bool:
+    """True when ``config.toml`` opts this workspace out of the project-config edit deny.
+
+    The opt-out only exists while the ``config-edit`` group is accepted (as in
+    ``guard.agent_rules.current_rules``); a config that cannot be read opens nothing."""
+    if consent.CONFIG_EDIT not in accepted:
+        return False
+    try:
+        cfg = load_identity(carter_config_path(base_dir))
+    except ConfigError:
+        return False
+    return str(workspace.resolve()) in optout.active_optouts(cfg).workspaces
 
 
 def notice_due(base_dir: Path | None = None, user: UserAccess | None = None) -> bool:

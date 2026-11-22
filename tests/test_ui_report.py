@@ -179,3 +179,10 @@ def test_a_step_that_does_not_fit_puts_its_command_on_the_next_line(
     out = _tty(monkeypatch, columns=30)
     ui.steps([("last step", "uv tool uninstall carter-ai")])
     assert _text(out) == ["→ last step", "  uv tool uninstall carter-ai"]
+
+
+def test_a_more_line_sits_dim_under_its_row_before_the_fix(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    ui.rows([Row("agents", None, "new", more="why", fix="run it"), Row("skills")])
+    assert capsys.readouterr().out == ("    agents  new\n      why\n      → run it\n    skills\n")

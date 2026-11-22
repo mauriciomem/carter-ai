@@ -256,8 +256,63 @@ require_tier = "t2"       # pinned by `carter update`
 | `[github]` | `read_token_file`: where `carter github-token set` stored the GitHub token (a path only, never the token itself). `probe_repo`: optional `owner/name` that `github-token check` uses for its refused push attempt and its pull-request probe instead of a repository you own |
 | `[broker]` | Optional, for [`carter_push`](../guides/write-operations.md#letting-devops-ask-you-to-push). `min_dwell_ms`: the shortest an approval may take before it is refused as automatic; the effective value is never below 500 and never above 10000. It always uses the home in your system account entry (what OpenSSH reads) for its git and ssh calls and for the `~/.ssh/config` scan; there is no setting for it |
 | `[attribution]` | `footer`: appended to GitHub and Jira bodies |
-| `[access]` | What agents may do: `level` (`strict`, the default when absent, `guarded` or `relaxed`) and, optionally, one value per capability (`allowed`, `ask` or `denied`, up to the row's ceiling): `workspace_edit`, `run_commands`, `git_commit`, `github_read`, `pr_write`, `issue_write`, `destructive`, `infra_apply`, `opencode_config`. Carter keeps the table when it rewrites this file. Any error in it, or a file that does not parse, renders `strict` and `carter update` says why. See [Safety and permissions](../guides/safety-and-permissions.md#choose-a-level) |
+| `[access]` | What agents may do: `level` and one value per capability id. See [access](#access) |
 | `[workspaces."<path>"]` | `max_tier`, `role`, `require_tier`, `allow_project_opencode_edit`. The path is the resolved absolute path of the workspace |
+
+### access
+
+`carter access` prints one row per id below, with its value and where the value comes from. Each
+capability id is a key of `[access]`.
+
+```toml
+[access]
+level = "guarded"   # strict (the default when absent) | guarded | relaxed
+pr_write = "ask"    # any capability id, up to its ceiling
+```
+
+| Key | Description |
+|-----|-------------|
+| `level` | `strict`, `guarded` or `relaxed`. Each is a preset of the table below |
+| `<id>` | A capability id. Values: `allowed`, `ask`, `denied`. It replaces the preset, up to the ceiling |
+
+| Id | Label | strict | guarded | relaxed | Ceiling |
+|----|-------|--------|---------|---------|---------|
+| `workspace_edit` | Workspace edits | allowed | allowed | allowed | allowed |
+| `run_commands` | Run commands | allowed | allowed | allowed | allowed |
+| `git_commit` | Git commit | allowed | allowed | allowed | allowed |
+| `github_read` | GitHub reads | allowed | allowed | allowed | allowed |
+| `pr_write` | PR writes | ask | allowed | allowed | allowed |
+| `issue_write` | Issue writes | denied | ask | allowed | allowed |
+| `destructive` | Destructive | denied | ask | ask | ask |
+| `infra_apply` | Infra apply | denied | ask | ask | ask |
+| `opencode_config` | OpenCode config | denied | denied | denied | denied |
+
+`pr_write` and `issue_write` cover opening and commenting. `destructive` covers `rm -rf` and
+`git reset --hard`; `infra_apply` covers `terraform apply` and similar. `opencode_config` is edits
+of a project's OpenCode config.
+
+The ceiling is the loosest value a key may take; a looser value is an error. `opencode_config`
+opens only for a workspace that sets `allow_project_opencode_edit` (below). `carter access` then
+shows it as `allowed` with the source `opt-out`.
+
+The floor shows `never` at every level. Setting one of these ids is an error:
+
+| Id | Label | Value |
+|----|-------|-------|
+| `push` | Push from shell | never |
+| `gh_api` | GitHub API | never |
+| `github_admin` | GitHub decisions | never |
+| `sudo` | Root | never |
+| `secrets` | Secrets | never |
+| `carter_internals` | Carter internals | never |
+
+The source column is `preset` (from the level), `override` (your key), `workspace` (a stricter
+value from `carter.yaml`) or `opt-out`. A workspace takes the same ids under `access:` in
+`.carter/carter.yaml` and can only tighten them; `policy.level` there is a deprecated alias of
+`access.level`. Any error in `[access]`, or a file that does not parse, renders `strict`;
+`carter update` and `carter access` say why. Today Carter keeps this table whenever it rewrites the
+file; a later release makes `config.toml` human-only and Carter stops rewriting it. See
+[Safety and permissions](../guides/safety-and-permissions.md#choose-a-level).
 
 ### Letting agents edit a project's OpenCode config
 
