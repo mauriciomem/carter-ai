@@ -97,6 +97,18 @@ def short_list(names: Iterable[str], limit: int = 3, sep: str = ", ") -> str:
     return sep.join(items[:limit]) + more
 
 
+class Raw(str):
+    """A command or a snippet: printed whole, never wrapped (it has to paste). ``wrap`` is for
+    prose; anything the reader copies is a ``Raw`` line, or goes on its own ``→`` line."""
+
+
+def _rows(text: str, indent: int, hang: int = 2) -> list[str]:
+    """The lines of ``text``: wrapped prose, or the one whole line of a ``Raw``."""
+    if isinstance(text, Raw):
+        return [" " * indent + _visible(text)]
+    return wrap(text, indent=indent, hang=hang)
+
+
 def wrap(text: str, *, indent: int = 2, hang: int = 2, width: int = MAX) -> list[str]:
     """``text`` as lines of at most ``width`` columns: the first starts at ``indent``, the next
     at ``indent + hang``. For text that comes from outside (a path, git's own message) and cannot
@@ -161,19 +173,20 @@ def ok(text: str, detail: str = "", *, strong: bool = False) -> None:
 
 def info(text: str, *, indent: int = 0) -> None:
     """A plain line, dimmed on a terminal."""
-    _emit(sys.stdout, *([(line, "dim")] for line in wrap(text, indent=indent, hang=2)))
+    _emit(sys.stdout, *([(row, "dim")] for row in _rows(text, indent)))
 
 
 def line(text: str) -> None:
     """A plain line on stdout (not dimmed); a long one is wrapped under the line budget."""
     indent = len(text) - len(text.lstrip(" "))
-    _emit(sys.stdout, *([(row, "")] for row in wrap(text.lstrip(" "), indent=indent, hang=2)))
+    body = Raw(text.lstrip(" ")) if isinstance(text, Raw) else text.lstrip(" ")
+    _emit(sys.stdout, *([(row, "")] for row in _rows(body, indent)))
 
 
 def detail(text: str) -> None:
-    """A line shown only with ``-v``."""
+    """A line shown only with ``-v``; prose is wrapped under the line budget."""
     if _state["verbose"]:
-        _emit(sys.stdout, [(f"  {text}", "dim")])
+        _emit(sys.stdout, *([(row, "dim")] for row in _rows(text, 2)))
 
 
 def warn(text: str, fix: str = "") -> None:
@@ -209,7 +222,7 @@ def fail(cause: str, fix: str = "", code: str = "", *, inline: bool = False, why
     code_line: list[Sequence[tuple[str, str]]] = []
     if code and len(last) + 2 + len(code) > MAX:  # the code never pushes a line past the budget
         tail, code_line = [], [[(f"  {code}", "dim")]]
-    why_lines = [[(line, "dim")] for line in wrap(why)] if why else []
+    why_lines = [[(row, "dim")] for part in why.split("\n") for row in wrap(part)] if why else []
     if fix and inline:
         _emit(err, [*first, (f" {arrow} ", "cyan"), (fix, ""), *tail], *why_lines, *code_line)
     elif fix:

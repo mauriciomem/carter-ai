@@ -18,7 +18,7 @@ from carter.identity.rules import is_agent
 from carter.terminal import is_agent_shell, require_human_terminal
 
 REPO = Path(__file__).resolve().parents[1]
-SUFFIX = "restart the app from a clean terminal"  # in the fix line since
+SUFFIX = "restart the app"  # the false positive (a shell that inherited agent variables)
 
 
 @pytest.fixture
@@ -135,7 +135,7 @@ class TestRequireHumanTerminal:
 class TestMessage:
     def test_message_is_the_registry_text_and_the_fix_keeps_the_appendix_b_advice(self) -> None:
         message = registry()[E_HUMAN_TERMINAL].message
-        assert "clean terminal" not in registry()[E_HUMAN_TERMINAL].fix  # one short line
+        assert SUFFIX in registry()[E_HUMAN_TERMINAL].fix
         with pytest.raises(IdentityError) as exc:
             require_human_terminal("push", env={"AGENT": "x"})
         assert str(exc.value) == message

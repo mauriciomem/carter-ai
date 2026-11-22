@@ -30,7 +30,7 @@ from carter.aplus import rangecalc, repocfg, run, sigcheck, sshcfg
 from carter.aplus.findings import Finding, mask_userinfo
 from carter.guard.state import GuardState, load_or_empty_readonly
 from carter.identity import load_identity
-from carter.identity.errors import E_APLUS_ARGS, IdentityError
+from carter.identity.errors import E_APLUS_ARGS, E_PUSH_FETCH, IdentityError
 from carter.identity.schema import IdentityConfig
 from carter.install.paths import carter_config_path, guard_state_path
 
@@ -81,15 +81,30 @@ def _out(repo: Path, args: list[str]) -> str | None:
     return proc.stdout.strip() if proc.returncode == 0 else None
 
 
-def _fetch_target(repo: Path, branch: str) -> None:
+def clean_lines(text: str, limit: int = 300) -> str:
+    """git's own message with its line breaks kept (one per line, controls shown as ``?``)."""
+    rows = [clean(row.strip(), limit) for row in text.splitlines() if row.strip()]
+    return "\n".join(rows)[:limit]
+
+
+def fetch_hint(url: str) -> str:
+    """What to check when the fetch fails: it depends on how origin is reached."""
+    if host := ssh_host(url):
+        return f"check your ssh key: ssh -T git@{host}"
+    if url.startswith(("http://", "https://")):
+        return "check your credentials for the remote"
+    return "check that the path of origin exists"
+
+
+def _fetch_target(repo: Path, branch: str, url: str) -> None:
     refspec = f"+refs/heads/{branch}:refs/remotes/{REMOTE}/{branch}"
     proc = run.network_git(["fetch", "--no-tags", "--no-recurse-submodules", REMOTE, refspec], repo)
     if proc.returncode == 0 or "couldn't find remote ref" in proc.stderr:
         return  # the branch does not exist on origin yet: a new branch
-    raise _args(
-        "cannot fetch from origin",
-        mask_userinfo(clean(proc.stderr.strip(), 300)),
-        "check the remote and your ssh key: ssh -T git@github.com",
+    raise IdentityError(
+        E_PUSH_FETCH,
+        detail=mask_userinfo(clean_lines(proc.stderr)),
+        fix=fetch_hint(mask_userinfo(url)),
     )
 
 
@@ -144,6 +159,11 @@ def _local_checks(
     return cfg, findings
 
 
+def _see_v() -> str:
+    """The pointer to the detail, unless the detail is already on."""
+    return "" if ui.verbose() else " (see: carter push -v)"
+
+
 def vet_local(
     repo: Path, url: str, *, base_dir: Path | None, home: Path, dry_run: bool = False
 ) -> tuple[IdentityConfig, int | None]:
@@ -156,7 +176,7 @@ def vet_local(
     if not found:
         return cfg, None
     noun = "git setting" if len(found) == 1 else "git settings"
-    ui.warn(f"{len(found)} {noun} could run code on push (see: carter push -v)")
+    ui.warn(f"{len(found)} {noun} could run code on push{_see_v()}")
     for finding in found:
         ui.detail(finding.render())
     if dry_run:
@@ -185,7 +205,7 @@ def _flow(repo: Path, opts: Options, base_dir: Path | None, home: Path) -> int:
     cfg, stop = vet_local(repo, url, base_dir=base_dir, home=home, dry_run=opts.dry_run)
     if stop is not None:
         return stop
-    _fetch_target(repo, branch)
+    _fetch_target(repo, branch, url)
     rng = rangecalc.compute_range(repo)
     if not rng.new_branch and not rng.fast_forward:
         raise _args(
@@ -217,15 +237,19 @@ def _flow(repo: Path, opts: Options, base_dir: Path | None, home: Path) -> int:
 
 
 def _show_changes(rng: rangecalc.RangeInfo) -> None:
+    code_paths = {c.path for c in rng.sensitive}
     for change in rng.changes[:MAX_CHANGES_SHOWN]:
-        ui.detail(f"{change.status} {clean(change.path)}")
+        mark = "  (runs code)" if change.path in code_paths else ""
+        ui.detail(f"{change.status} {clean(change.path)}{mark}")
     if len(rng.changes) > MAX_CHANGES_SHOWN:
         ui.detail(f"... and {len(rng.changes) - MAX_CHANGES_SHOWN} more files")
     if rng.sensitive:
         noun = "file" if len(rng.sensitive) == 1 else "files"
-        ui.warn(f"{len(rng.sensitive)} changed {noun} can run code (see: carter push -v)")
-        for change in rng.sensitive:
-            ui.detail(f"{change.status} {clean(change.path)}")
+        ui.warn(f"{len(rng.sensitive)} changed {noun} can run code{_see_v()}")
+        listed = {c.path for c in rng.changes[:MAX_CHANGES_SHOWN]}
+        for change in rng.sensitive:  # the ones the list above cut off
+            if change.path not in listed:
+                ui.detail(f"{change.status} {clean(change.path)}  (runs code)")
 
 
 def _push(

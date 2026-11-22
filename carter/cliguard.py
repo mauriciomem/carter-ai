@@ -55,6 +55,11 @@ class CarterGroup(click.Group):
         except click.ClickException as exc:
             ui.fail(exc.format_message())
             raise SystemExit(exc.exit_code) from exc
+        except Exception as exc:  # a bad carter.yaml found while rendering: a line, not a traceback
+            if (type(exc).__module__, type(exc).__name__) != ("carter.config", "ConfigError"):
+                raise  # (by name: importing carter.config here would slow every --help)
+            ui.fail(str(exc))
+            raise SystemExit(1) from exc
 
 
 class LazyGroup(CarterGroup):

@@ -17,10 +17,17 @@ import pytest
 from click.testing import CliRunner, Result
 
 from aplus.helpers import commit_file, git
+from carter import ui
 from carter.aplus import push, run
 from carter.aplus.push import OWN_TERMINAL
 from carter.cli import main
-from carter.identity.errors import E_APLUS_ARGS, E_B_UNSIGNED, E_CONFIG, E_HUMAN_TERMINAL
+from carter.identity.errors import (
+    E_APLUS_ARGS,
+    E_B_UNSIGNED,
+    E_CONFIG,
+    E_HUMAN_TERMINAL,
+    E_PUSH_FETCH,
+)
 from sentinels import fine_grained, prefixed
 
 Calls = list[tuple[str, tuple[str, ...]]]
@@ -56,6 +63,7 @@ def work(with_origin: Path, monkeypatch: pytest.MonkeyPatch, human_tty: Callable
 
 
 def push_cli(*args: str, env: dict[str, str] | None = None) -> Result:
+    ui.configure(verbose=False)  # a -v of an earlier call in the same test must not stay on
     return CliRunner().invoke(main, ["push", *args], env=env)
 
 
@@ -286,7 +294,9 @@ class TestFindingsAreOneWarning:
         res = push_cli("-v")
         assert res.exit_code == 0, res.output  # a warning, not a question
         warning = [ln for ln in res.output.splitlines() if ln.startswith("!")]
-        assert warning == ["! 1 git setting could run code on push (see: carter push -v)"]
+        assert warning == ["! 1 git setting could run code on push"]  # -v is on: no pointer
+        quiet = [ln for ln in push_cli("--dry-run").output.splitlines() if ln.startswith("!")]
+        assert quiet == ["! 1 git setting could run code on push (see: carter push -v)"]
         assert "core.sshcommand" in res.output.lower()  # named under -v, one per line
         assert "touch" not in res.output  # the value is never printed
         assert net_calls(calls) == ["fetch", "push"]
@@ -321,8 +331,13 @@ class TestWhatYouAreShown:
         commit_file(work, ".github/workflows/ci.yml", "on: push\n")
         plain = push_cli("--dry-run", "-v")
         warning = [ln for ln in plain.output.splitlines() if "can run code" in ln]
-        assert warning == ["! 2 changed files can run code (see: carter push -v)"]
-        assert ".husky/pre-commit" in plain.output and ".github/workflows/ci.yml" in plain.output
+        assert warning == ["! 2 changed files can run code"]  # -v is on: no pointer
+        assert ".husky/pre-commit  (runs code)" in plain.output
+        assert (
+            plain.output.count("A .husky/pre-commit") == 1
+        )  # marked in the list, not listed twice
+        quiet = push_cli("--dry-run").output
+        assert "! 2 changed files can run code (see: carter push -v)" in quiet
         assert "\x1b[" not in plain.output  # piped output is plain text
 
     def test_ordinary_paths_do_not_trigger_the_sensitive_block(self, work: Path) -> None:
@@ -392,7 +407,11 @@ class TestPushFailures:
     def test_an_unreachable_origin_is_a_clear_error(self, work: Path) -> None:
         git("remote", "set-url", "origin", f"file://{work}/nope.git", cwd=work)
         res = push_cli()
-        assert res.exit_code == 1 and E_APLUS_ARGS in res.output
+        assert res.exit_code == 1 and E_PUSH_FETCH in res.output and E_APLUS_ARGS not in res.output
+        assert "cannot fetch from origin" in res.output
+        assert "?" not in res.output  # git's line breaks are lines, not question marks
+        assert all(len(ln) <= 80 for ln in res.output.splitlines() if "nope.git" not in ln)
+        assert "check that the path of origin exists" in res.output
 
 
 class TestSshHost:
@@ -453,3 +472,76 @@ class TestEnvironment:
 def test_the_unsigned_llm_commit_refusal_is_in_its_own_test_module() -> None:
     assert E_B_UNSIGNED  # see tests/aplus/test_push_integration.py (needs real ssh-keygen)
     assert os.name == "posix"
+
+
+class TestFetchFailure:
+    """A failed fetch is its own error (E-PUSH-FETCH), git's lines stay lines, and the hint says
+    what to check for the way origin is reached."""
+
+    @pytest.mark.parametrize(
+        ("url", "hint"),
+        [
+            ("git@github.com:o/r.git", "ssh -T git@github.com"),
+            ("ssh://git@git.example.org:2222/o/r.git", "ssh -T git@git.example.org"),
+            ("https://github.com/o/r.git", "check your credentials for the remote"),
+            ("/srv/git/r.git", "check that the path of origin exists"),
+        ],
+    )
+    def test_the_hint_follows_the_scheme_of_origin(self, url: str, hint: str) -> None:
+        assert hint in push.fetch_hint(url)
+
+    def test_git_newlines_are_separate_lines_and_nothing_is_a_question_mark(
+        self, work: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        real = run.network_git
+
+        def failing(args: list[str], cwd: Path, **kw: Any) -> Any:
+            done = real(args, cwd, **kw)
+            if args[0] == "fetch":
+                done.returncode = 128
+                done.stderr = (
+                    "fatal: unable to access 'https://user:URLSECRET@host/o/r.git/': "
+                    "Could not resolve host: host\nfatal: Could not read from remote repository.\n"
+                    "\nPlease make sure you have the correct access rights\nand the repository "
+                    "exists.\r\n"
+                )
+            return done
+
+        monkeypatch.setattr(run, "network_git", failing)
+        git("remote", "set-url", "origin", "https://user:URLSECRET@host/o/r.git", cwd=work)
+        res = push_cli()
+        assert res.exit_code == 1 and E_PUSH_FETCH in res.output
+        lines = res.output.splitlines()
+        assert "✗ cannot fetch from origin" in lines
+        assert any(
+            ln.strip() == "Please make sure you have the correct access rights" for ln in lines
+        )
+        assert "?" not in res.output and "URLSECRET" not in res.output
+        assert "→ check your credentials for the remote  E-PUSH-FETCH" in lines
+        assert all(len(ln) <= 80 for ln in lines)
+
+
+class TestOutputWidth:
+    """``carter push`` fits the output rule where it can say little: warnings and refusals."""
+
+    def test_a_risky_setting_warning_a_dry_run_and_its_v_page(self, work: Path) -> None:
+        git("config", "core.sshCommand", "sh -c 'touch /tmp/never'", cwd=work)
+        for args in ((), ("-v",), ("--dry-run",), ("--dry-run", "-v")):
+            res = push_cli(*args)
+            assert res.exit_code == 0, res.output
+            assert all(len(ln) <= 80 for ln in res.output.splitlines() if "origin.git" not in ln)
+        warnings = [ln for ln in push_cli().output.splitlines() if ln.startswith("!")]
+        assert warnings and all(len(ln) <= 60 for ln in warnings)
+
+    @pytest.mark.parametrize("scenario", ["detached", "no-remote", "diverged-arguments"])
+    def test_the_refusals_are_short(self, work: Path, scenario: str) -> None:
+        if scenario == "detached":
+            git("checkout", "-q", "--detach", cwd=work)
+            res = push_cli()
+        elif scenario == "no-remote":
+            git("remote", "remove", "origin", cwd=work)
+            res = push_cli()
+        else:
+            res = push_cli("origin", "feat/x")
+        assert res.exit_code == 1 and E_APLUS_ARGS in res.output
+        assert all(len(ln) <= 80 for ln in res.output.splitlines()), res.output
