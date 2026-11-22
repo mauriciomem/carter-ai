@@ -377,7 +377,7 @@ def uninstall(
         )
     except OSError as exc:  # nothing was removed yet
         why = f"{exc.strerror}: {tilde(exc.filename)}" if exc.strerror and exc.filename else exc
-        ui.fail(f"could not copy your edited agents to backups ({why}); nothing was removed")
+        ui.fail("could not back up your edited agents: nothing removed", why=str(why))
         report.code = 1
         return report
     guards_before = guard_state_path(base_dir).exists()

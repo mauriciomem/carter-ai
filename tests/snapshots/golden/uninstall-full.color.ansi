@@ -26,7 +26,8 @@
 [2m·[0m[1m Workspaces, not touched[0m[2m  (Carter files you can remove)[0m
     [2m~/src/[0mproj   [1;36mrm /home/u/src/proj/.opencode/agents/carter-*.md[0m
     [2m~/src/[0minfra  [2mno longer exists[0m
-[2m    also yours to delete: .carter/, AGENTS.md, .github/workflows/carter-review.yml[0m
+[2m    also yours to delete: .carter/, AGENTS.md,[0m
+[2m      .github/workflows/carter-review.yml[0m
 
 [32m✓[0m[1;32m Uninstalled[0m
 [36m→[0m last step, remove the command     [1;36muv tool uninstall carter-ai[0m

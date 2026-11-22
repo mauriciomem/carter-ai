@@ -151,8 +151,8 @@ def remove_retired_skills(base_dir: Path | None, previous: dict | None) -> int:
             # for one with a control character in it.
             rm = f": rm -r {shlex.quote(str(skill))}" if str(skill).isprintable() else ""
             log_warn(
-                f"{shown} (no longer shipped by Carter; edited or not recorded, kept)",
-                hint=f"remove it manually if unused{rm}",
+                f"{shown} (retired by Carter; yours to remove)",
+                hint=f"if unused{rm}",
             )
             continue
         shutil.rmtree(skill)
@@ -236,7 +236,7 @@ def install_opencode_rules(
     # A link into dotfiles is followed (people keep this file there). One that points at nothing
     # would make the write create its target, and one into Carter's own files must not be written.
     if dst.is_symlink() and (not dst.exists() or _control_target(dst)):
-        log_warn(f"{shown} (a symlink to nothing, or into Carter's own files; not written)")
+        log_warn(f"{shown} is a dangling or Carter-owned symlink: not written")
         return
     if not dst.exists():
         dst.write_text(_OPENCODE_AGENTS_MD, encoding="utf-8")
@@ -250,7 +250,7 @@ def install_opencode_rules(
         # User-modified — NEVER clobber.
         log_warn(
             f"{shown} (user-modified, skipping)",
-            hint="merge the Communication and Git & Language sections manually",
+            hint="merge the Communication and Git sections by hand",
         )
         manifest.setdefault("notes", []).append(
             f"{shown}: user-modified, current Carter rules not installed"

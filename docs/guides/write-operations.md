@@ -70,8 +70,8 @@ When a branch is ready, the agent stops at the commit and tells you what to run.
    or CI paths (`.husky/`, `.github/workflows/` and similar), and pushes only `HEAD` to the
    same-named branch on `origin` (the default branch too: nothing to type). Commits whose committer is the LLM must
    carry a valid LLM signature, or it refuses (`E-B-UNSIGNED`). Repository or SSH settings that
-   could run code with your credentials are named in one warning line and the push goes on. `-v`
-   lists the commits and files. There are no options for forcing, pushing tags, naming another
+   could run code with your credentials are counted in one warning line and the push goes on. `-v`
+   lists them, the commits and the files. There are no options for forcing, pushing tags, naming another
    remote or passing git flags.
 2. **The agent opens the pull request** with `gh pr create --head <branch>`, using the read-only
    GitHub token ([MCP servers](mcp-servers.md#the-github-token)). The token needs

@@ -70,7 +70,7 @@ class TestScreen:
     def test_refused_flags(self, args: list[str]) -> None:
         with pytest.raises(CommitRefused) as err:
             screen_args(args)
-        assert "does not accept" in str(err.value) and "git commit" in str(err.value)
+        assert "does not accept" in str(err.value) and "handles those itself" in str(err.value)
 
     @pytest.mark.parametrize(
         "flag",
@@ -126,7 +126,7 @@ class TestScreen:
         self, args: list[str], kept: list[str]
     ) -> None:
         got, notes = screen_args(args)
-        assert got == kept and len(notes) == 1 and "your key is never used" in notes[0]
+        assert got == kept and len(notes) == 1 and "your key is not used" in notes[0]
 
     def test_the_refused_list_is_the_frozen_one(self) -> None:
         assert REFUSED_FLAGS == (

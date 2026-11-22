@@ -31,7 +31,7 @@ from carter.identity.schema import tier_words
 from carter.terminal import stdin_is_tty
 
 OPENCODE_TERMINAL = "OPENCODE_TERMINAL"
-MANAGED = "Your signing key is managed by your password manager; there is nothing to {verb} here."
+MANAGED = "Your key is managed by your password manager: nothing to {verb}."
 
 
 def require_unlock_terminal(env: Mapping[str, str] | None = None, *, need_tty: bool = True) -> None:
@@ -72,7 +72,7 @@ def _setup() -> tuple[Setup, str]:
         return setup_from_config(cfg), cfg.identity.login
     except ValueError as exc:
         raise click.ClickException(
-            f"No LLM signing key is configured ({exc}). Run `carter identity add` first."
+            f"No LLM signing key ({exc}): run `carter identity add` first"
         ) from exc
 
 

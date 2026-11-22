@@ -17,7 +17,7 @@ from carter.install.uninstall import KeptRow, UninstallReport, Workspace
 from snapshots.term import Term
 
 VERSION = "v0.19.2"
-NEXT_STEP = "restart the OpenCode server from a clean terminal to load the agents and plugin"
+NEXT_STEP = "restart OpenCode from a clean terminal"
 GUARDS = ["g2", "hooks", "sudo-docker", "read-edit-denies", "config-edit"]
 HOME = Path("/home/u")
 BACKUP = HOME / ".carter/backups/20261112T101500"

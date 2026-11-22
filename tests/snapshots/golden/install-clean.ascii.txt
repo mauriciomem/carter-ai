@@ -6,6 +6,6 @@ ok Installed
     skills           27  new
     knowledge files   4  new
     config.toml          created
-    guards               g2, hooks, sudo-docker, read-edit-denies, config-edit
+    guards               g2, hooks, sudo-docker (+2)
 
--> restart the OpenCode server from a clean terminal to load the agents and plugin
+-> restart OpenCode from a clean terminal

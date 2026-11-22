@@ -53,7 +53,7 @@ def install_cmd(what: str, comment: bool, dry_run: bool, force: bool) -> None:
         except install.InstallError as exc:
             raise click.ClickException(str(exc)) from exc
         if not dry_run:
-            ui.info("→ next: commit and push it yourself, then add the provider key secret (-v)")
+            ui.info("→ next: commit, push, add the provider secret (-v)")
         return code
 
     guarded(run)

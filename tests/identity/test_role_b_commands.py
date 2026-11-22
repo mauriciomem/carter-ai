@@ -225,7 +225,7 @@ class TestShow:
     ) -> None:  # type: ignore[no-untyped-def]
         self.author(fake, home, key, str(real_ssh_agent.sock))
         done = run("show")
-        assert "role: author: the LLM is author and committer" in done.output
+        assert "role: author: the LLM authors" in done.output
         assert (
             "author, committer and signer are the LLM; trailer `Co-authored-by: <you>`"
             in done.output

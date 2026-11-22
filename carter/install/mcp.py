@@ -77,11 +77,8 @@ def _load_config(file_path: Path) -> dict | None:
         return {}
     loaded = _load_jsonc(file_path)
     if loaded is None:
-        log_err(f"Could not parse {file_path} — skipping to avoid data loss")
-        log_warn(
-            "The file may contain syntax errors. Fix them and re-run the installer.",
-            f"File: {file_path}",
-        )
+        log_err(f"cannot parse {tilde(file_path)}: skipped, nothing written")
+        log_warn("fix its syntax, then re-run the installer")
     return loaded
 
 
@@ -108,8 +105,7 @@ def merge_mcp_servers(
         if base_name in servers:
             log_warn(
                 f'Existing "{base_name}" server found in {file_path.name}',
-                f'Carter will install as "{name}" (separate entry). '
-                f'You may want to remove "{base_name}" to avoid duplicate tools.',
+                f'installed as "{name}"; remove "{base_name}" to avoid duplicates',
             )
         servers[name] = dict(entry)
     return _save_config(file_path, data)
@@ -188,8 +184,7 @@ def configure_mcp_servers(
     if entries and json_path.exists() and jsonc_path.exists():
         log_warn(
             "Both opencode.json and opencode.jsonc exist; OpenCode loads both",
-            "Carter uses opencode.jsonc (loaded last) and keeps its servers out of "
-            "opencode.json. Consider merging them into one file.",
+            "Carter keeps its servers in opencode.jsonc; consider one file",
         )
         stale = [k for k in entries if k in _carter_server_names(json_path)]
         if stale:

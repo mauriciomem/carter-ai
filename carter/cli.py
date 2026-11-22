@@ -131,7 +131,7 @@ def install(
         raise SystemExit(guard_code)
     if verbosity:
         ui.gap()
-        ui.next("restart the OpenCode server from a clean terminal to load the agents and plugin")
+        ui.next("restart OpenCode from a clean terminal")
 
 
 @main.command(epilog=UNINSTALL_EPILOG)
@@ -278,7 +278,7 @@ def _pin_identity_policy(target: Path, config: dict, *, dry_run: bool) -> None:
     for change in plan.changes:
         ui.detail(f"{change.field:<13} {change.old} -> {change.new}")
     if plan.max_tier:
-        ui.detail(f"max_tier      {plan.max_tier} (hand-edited in config.toml; not changed here)")
+        ui.detail(f"max_tier      {plan.max_tier} (set in config.toml; unchanged)")
     what = ", ".join(f"{c.field} {c.new}" for c in plan.changes)
     if dry_run:
         ui.info(f"would pin {what} (dry run: nothing written)")
@@ -388,7 +388,7 @@ def _refresh_agents(*, dry_run: bool) -> None:
         return
     if is_agent_shell():
         if guards or agent_file_state()[1]:  # say so only when there is something to refresh
-            ui.warn("global Carter agents not refreshed: agent shells never change them")
+            ui.warn("global Carter agents not refreshed (agent shell)")
         return
     try:
         stats = components.rerender_agents(None)

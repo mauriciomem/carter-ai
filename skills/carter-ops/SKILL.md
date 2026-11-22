@@ -160,9 +160,9 @@ Never run any of these (generated from `g2_rules.json`):
 | `E-HUMAN-TERMINAL` | `carter guard install\|remove`, `github-token set\|check`, `push` | This command is for you, not an agent: run it in your own terminal. | Open a terminal that OpenCode did not start and run the command there. |
 | `E-STATE-INVALID` | `carter guard *` | ~/.carter/guard-state.json is unreadable or from a newer Carter. | Run `carter guard status` to see the problem; fix or move the file yourself. Carter never rebuilds it. |
 | `E-OPENCODE-VERSION` | install / check | The guards are untested on OpenCode <v>; relying on the plugin's own check. | < 2.1: hard fail; 2.1.0–2.1.3 or above tested: warn. |
-| `E-GIT-OLD` | install / check | Global guards need git ≥ 2.54 (`brew upgrade git`); per-repo hooks offered. LLM signing needs git ≥ 2.40 (`-U` for `key::` literals). | Unguarded repo while LLM signing is on: FAIL in `check --host`. Below 2.40 `carter identity add` refuses and writes nothing. |
+| `E-GIT-OLD` | install / check | Global guards need git ≥ 2.54; per-repo hooks are offered instead. | LLM signing needs git ≥ 2.40 (`-U` for `key::` literals). Unguarded repo while LLM signing is on: FAIL in `check --host`. Below 2.40 `carter identity add` refuses and writes nothing. |
 | `E-PROBE-SCOPE` | `carter check --probe` | `carter check --probe` runs only inside an agent shell: ask your agent to run it. | `E-HUMAN-TERMINAL` means the opposite (a human-only command run by an agent), so it is not reused. |
-| `E-FALSE-MISSING` | `carter guard install` | no root-owned `false` found at /usr/bin/false or /bin/false; the guards cannot be installed | Nothing was written. The isolation block needs a `false` that the user cannot modify (never one found through the command search path). |
+| `E-FALSE-MISSING` | `carter guard install` | no root-owned `false` found in /usr/bin or /bin (guards not installed) | Nothing was written. The isolation block needs a `false` that the user cannot modify (never one found through the command search path). |
 <!-- errors:end -->
 
 ## When the gate or the isolation answers

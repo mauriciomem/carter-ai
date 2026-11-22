@@ -50,7 +50,7 @@ class TestRequireOpencode:
             (None, "not found"),
             ("opencode v2.0.9", "too old"),
             ("opencode v1.14.2", "too old"),
-            ("no version here", "Could not read"),
+            ("no version here", "cannot read"),
         ],
     )
     def test_unsupported_fails(self, fake_opencode, output, message: str) -> None:
@@ -90,7 +90,7 @@ class TestInstallGate:
         fake_opencode()
         result = _install(tmp_path / "home")
         assert result.exit_code == 0, result.output
-        assert result.stdout.splitlines()[-1].startswith("→ restart the OpenCode server")
+        assert result.stdout.splitlines()[-1].startswith("→ restart OpenCode")
         assert "→ restart" not in result.stderr
 
     def test_uninstall_flag_removed(self, fake_opencode, tmp_path: Path) -> None:

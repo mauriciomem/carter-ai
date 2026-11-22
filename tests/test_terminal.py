@@ -135,7 +135,7 @@ class TestRequireHumanTerminal:
 class TestMessage:
     def test_message_is_the_registry_text_and_the_fix_keeps_the_appendix_b_advice(self) -> None:
         message = registry()[E_HUMAN_TERMINAL].message
-        assert SUFFIX in registry()[E_HUMAN_TERMINAL].fix
+        assert "clean terminal" not in registry()[E_HUMAN_TERMINAL].fix  # one short line
         with pytest.raises(IdentityError) as exc:
             require_human_terminal("push", env={"AGENT": "x"})
         assert str(exc.value) == message

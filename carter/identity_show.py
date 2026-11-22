@@ -33,11 +33,8 @@ from carter.identity.schema import IdentityConfig, tier_words
 from carter.install.paths import carter_gitconfig_path, guard_state_path
 
 ROLE_TEXT = {
-    "co-author": "co-author: the human is the author, the LLM is credited with a trailer",
-    "author": (
-        "author: the LLM is author and committer, you are credited by a trailer "
-        "(only with LLM signing on)"
-    ),
+    "co-author": "co-author: you author, the LLM gets the trailer",
+    "author": "author: the LLM authors, you get the trailer",
 }
 SHAPES = {
     ("co-author", "t0"): "author and committer are you; trailer `Assisted-by: Carter`; unsigned",

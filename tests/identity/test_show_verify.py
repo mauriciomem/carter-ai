@@ -105,7 +105,7 @@ class TestShow:
         make_t1(home)
         out = run("show").output
         assert f"{LOGIN} (id {UID}, {EMAIL})" in out
-        assert "co-author: the human is the author" in out and "(source: default)" in out
+        assert "co-author: you author" in out and "(source: default)" in out
         assert (
             "configured: LLM identity, unsigned; cap: none; effective: LLM identity, unsigned"
             in out

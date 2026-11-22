@@ -200,7 +200,7 @@ def _local_key_checks(
     if not private:
         raise fail(
             E_IDENTITY_CHECK,
-            "a key:: literal needs --private-key PATH (or --agent-socket / --signing-program)",
+            "a key:: literal needs --private-key PATH (see: --help)",
         )
     problem, passphrase_free = agent_setup.key_file_problem(private, bin_dir, blob)
     if problem:
@@ -240,9 +240,7 @@ def plan_add(
         # A role-only change on an existing T2 identity needs no key arguments.
         role_only = bool(req.role) and has_old and not managed and not req.private_key
         if (has_old or managed or req.private_key) and not role_only:
-            raise fail(
-                E_IDENTITY_CHECK, "a signing key is configured; pass --ssh-public-key to change it"
-            )
+            raise fail(E_IDENTITY_CHECK, "a key is configured: pass --ssh-public-key to change it")
         if req.role == "author" and not has_old:
             raise IdentityError(E_ROLE_B_TIER)  # role author needs T2: nothing is written
         key = None
@@ -252,14 +250,10 @@ def plan_add(
     ident = current.identity
     base_url = github.api_base(env)
     api_notes = (
-        [f"GitHub API: {base_url} (not api.github.com; set by GITHUB_API_URL)"]
-        if base_url != github.DEFAULT_API
-        else []
+        [f"GitHub API: {base_url} (from GITHUB_API_URL)"] if base_url != github.DEFAULT_API else []
     )
     if ident.login and ident.login.lower() != user.login.lower():
-        raise fail(
-            E_IDENTITY_CHECK, "another LLM identity is configured; `carter identity remove` first"
-        )
+        raise fail(E_IDENTITY_CHECK, "another LLM identity is configured: remove it first")
     if ident.id and ident.id != user.id:
         raise fail(E_IDENTITY_CHECK, "the GitHub id differs from the configured one")
     email = f"{user.id}+{user.login}@users.noreply.github.com"
@@ -300,13 +294,13 @@ def plan_add(
         raise fail(
             E_IDENTITY_CHECK,
             "not registered as an SSH signing key on the account",
-            "on GitHub: Settings → SSH and GPG keys → New SSH key → Key type: Signing Key",
+            "add it: GitHub Settings → SSH keys → Key type: Signing Key",
         )
     if blob in _github(github.get_auth_keys, user.login, env):
         raise fail(
             E_IDENTITY_CHECK,
-            "registered as an authentication key; register a signing-only key",
-            "remove it from the account's authentication keys and add it as a Signing Key",
+            "the key is registered as an authentication key",
+            "re-add it as a Signing Key only",
         )
     notes = list(api_notes)
     previous = tuple(

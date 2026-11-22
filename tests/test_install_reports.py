@@ -58,7 +58,7 @@ def test_install_over_an_edited_file_names_the_backup_folder_on_stderr(
     assert re.search(r"^ +skills +\d+  1 updated$", got.out, re.MULTILINE)
     [line] = [x for x in got.err.splitlines() if x.startswith("! Replaced")]
     stamp = next(paths.backups_dir(installed).iterdir()).name
-    assert line.startswith("! Replaced 1 file you had edited  (copies in ")
+    assert line.startswith("! Replaced 1 edited file  (copies in ")
     assert line.endswith(f"/backups/{stamp}/)")  # one line, the folder; not each file
 
 

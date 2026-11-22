@@ -183,8 +183,8 @@ def test_a_failed_copy_says_why_and_removes_nothing(
     got = capsys.readouterr()
     assert report.code == 1 and tree_diff(before, tree_snapshot(installed)) == ""
     assert agent.exists() and paths.manifest_path(installed).exists()
-    assert "could not copy your edited agents to backups" in got.err
-    assert "nothing was removed" in got.err and "Traceback" not in got.err + got.out
+    assert "could not back up your edited agents" in got.err
+    assert "nothing removed" in got.err and "Traceback" not in got.err + got.out
 
 
 def test_a_forged_manifest_entry_for_a_file_carter_does_not_ship_is_never_deleted(

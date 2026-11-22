@@ -104,7 +104,7 @@ carter check ~/my-project
 ```
 
 ```text
-Pinned models: anthropic/claude-opus-5-5, anthropic/claude-sonnet-5-5. Carter cannot verify your provider has them.
+2 models pinned, not verifiable (see: carter check -v)
 ✓ Workspace OK  8 agents · loaded by OpenCode
 ```
 

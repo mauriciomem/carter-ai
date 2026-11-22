@@ -74,10 +74,7 @@ def require_opencode() -> tuple[int, int, int]:
     output = _cmd_version("opencode", "--version")
     version = parse_opencode_version(output or "")
     if version is None:
-        raise PrerequisiteError(
-            f"Could not read the OpenCode version from `opencode --version` "
-            f"(got {output!r}). {hint}"
-        )
+        raise PrerequisiteError(f"cannot read the OpenCode version (got {output!r}). {hint}")
     if version[:2] < MIN_OPENCODE:
         shown = ".".join(map(str, version))
         raise PrerequisiteError(f"OpenCode {shown} is too old. {hint}")
@@ -85,8 +82,7 @@ def require_opencode() -> tuple[int, int, int]:
     if version_band(version) in ("untested-low", "above"):
         log_warn(
             "opencode",
-            f"the guards are untested on {shown}; relying on the plugin's own check "
-            f"({E_OPENCODE_VERSION})",
+            f"guards untested on {shown} ({E_OPENCODE_VERSION})",
         )
     else:
         log_ok("opencode", shown)
@@ -140,7 +136,7 @@ def check_credentials(base_dir: Path | None = None) -> None:
     else:
         log_warn(
             "GitHub read-only token not found",
-            "Run `carter github-token set` in your own terminal (a read-only fine-grained token).",
+            "Run `carter github-token set` in your own terminal.",
         )
     for var in REQUIRED_ENV_VARS:
         if os.environ.get(var):

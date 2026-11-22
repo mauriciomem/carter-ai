@@ -100,7 +100,7 @@ The full list is in the [CLI reference](../reference/cli.md#carter-install).
 
 Right after the agents, `carter install` offers the guards. It is the same as running
 `carter guard install` yourself. In a terminal it asks **one** question, `Install? [Y/n]`,
-under a summary of three or four lines. Your yes covers every group below; Enter is yes. A Carter
+under a table of one short row per group (`carter guard --help` says what each does). Your yes covers every group below; Enter is yes. A Carter
 upgrade that adds guard content is asked again in this same question, never separately.
 Without a terminal (a script, CI) and without `--yes`, the guards are skipped with a notice;
 `carter install --yes` installs them without asking.
@@ -221,7 +221,7 @@ after an install from the git URL, see the migration note in [step 1](#1-install
 Re-running `carter install` is safe. It updates the agents and skills (the report says `up to date`
 or `2 updated`), copies a file you edited before replacing it (at its own path under
 `~/.carter/backups/<timestamp>/`; Carter's own previous output is not copied) and says so in one line
-(`! Replaced 3 files you had edited  (copies in ~/.carter/backups/<timestamp>/)`), deletes backup
+(`! Replaced 3 edited files  (copies in ~/.carter/backups/<timestamp>/)`), deletes backup
 directories older than 15 days (an `old backups` row), and never overwrites your
 knowledge files or an `AGENTS.md` you edited. Skills that Carter no longer ships are removed unless you changed them. If your global
 `AGENTS.md` has your edits, `carter install` says it is user-modified and leaves it alone.

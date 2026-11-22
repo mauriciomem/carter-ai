@@ -23,7 +23,7 @@ from datetime import UTC, datetime
 from typing import Any
 from urllib.parse import urlsplit
 
-from carter.identity.errors import E_CONFIG, MSG_CONFIG, IdentityError
+from carter.identity.errors import E_CONFIG, IdentityError
 
 DEFAULT_API = "https://api.github.com"
 DEFAULT_WEB = "https://github.com"
@@ -58,8 +58,7 @@ def api_base(env: Mapping[str, str] | None = None) -> str:
     if not ok or not parts.hostname or parts.username or parts.password or parts.query:
         raise IdentityError(
             E_CONFIG,
-            MSG_CONFIG,
-            "GITHUB_API_URL must be https (or http on loopback), no credentials",
+            "GITHUB_API_URL must be https (http: loopback only)",
         )
     return url
 

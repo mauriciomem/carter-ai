@@ -17,6 +17,7 @@ from carter.identity.policyset import (
     agent_permission_exempt,
     gh_allowlist,
 )
+from carter.ui import short_list
 
 # `identity` is optional policy (role, require_tier), not a required key: a workspace
 # with no policy has no block at all.
@@ -126,10 +127,7 @@ def _validate_identity(identity: Any) -> None:
     if not isinstance(identity, dict):
         raise ConfigError(f"Invalid identity block: {identity!r} (must be a mapping)")
     if "allow_project_opencode_edit" in identity:
-        raise ConfigError(
-            "identity.allow_project_opencode_edit is not accepted in carter.yaml: "
-            "loosening a control is set only in ~/.carter/config.toml."
-        )
+        raise ConfigError("identity.allow_project_opencode_edit: set it in config.toml")
     for key, allowed in (("role", IDENTITY_ROLES), ("require_tier", IDENTITY_TIERS)):
         value = identity.get(key)
         if value is not None and not (isinstance(value, str) and value in allowed):
@@ -142,17 +140,14 @@ def _validate_agent_suffix(suffix: Any) -> None:
     """Validate ``agent_suffix``: a lowercase alphanumeric/hyphen string or empty."""
     if not isinstance(suffix, str) or not _AGENT_SUFFIX_RE.match(suffix):
         raise ConfigError(
-            f"Invalid agent_suffix: {suffix!r}. "
-            "Must be a lowercase alphanumeric/hyphen string (or empty)."
+            f"Invalid agent_suffix {suffix!r}: use lowercase letters, digits, hyphens"
         )
 
 
 def _validate_docs_language(tag: Any) -> None:
     """Validate ``docs_language``: a simple language tag such as ``en`` or ``pt-BR``."""
     if not isinstance(tag, str) or not _LANGUAGE_TAG_RE.match(tag):
-        raise ConfigError(
-            f"Invalid docs_language: {tag!r}. Must be a language tag such as 'en', 'es' or 'pt-BR'."
-        )
+        raise ConfigError(f"Invalid docs_language {tag!r}: use a language tag like 'en' or 'pt-BR'")
 
 
 def _validate_profile(profile: Any) -> None:
@@ -226,8 +221,7 @@ def _validate_allowlist(allowlist: Any, agents: list[str]) -> None:
     for agent, cats in allowlist.items():
         if agent not in agents:
             raise ConfigError(
-                f"Invalid policy.allowlist agent {agent!r}. "
-                f"Must be one of the configured agents: {', '.join(agents)}."
+                f"Invalid policy.allowlist agent {agent!r} (configured: {short_list(agents)})"
             )
         if not isinstance(cats, dict):
             raise ConfigError(f"Invalid policy.allowlist.{agent}: {cats!r} (must be a mapping)")

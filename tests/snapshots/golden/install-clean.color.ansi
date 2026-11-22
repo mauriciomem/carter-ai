@@ -6,6 +6,6 @@
     skills           [1m27[0m  [2mnew[0m
     knowledge files  [1m 4[0m  [2mnew[0m
     config.toml          [2mcreated[0m
-    guards               [2mg2 · hooks · sudo-docker · read-edit-denies · config-edit[0m
+    guards               [2mg2 · hooks · sudo-docker (+2)[0m
 
-[36m→[0m restart the OpenCode server from a clean terminal to load the agents and plugin
+[36m→[0m restart OpenCode from a clean terminal

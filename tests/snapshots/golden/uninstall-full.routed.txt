@@ -26,7 +26,8 @@ out |
 out | · Workspaces, not touched  (Carter files you can remove)
 out |     ~/src/proj   rm /home/u/src/proj/.opencode/agents/carter-*.md
 out |     ~/src/infra  no longer exists
-out |     also yours to delete: .carter/, AGENTS.md, .github/workflows/carter-review.yml
+out |     also yours to delete: .carter/, AGENTS.md,
+out |       .github/workflows/carter-review.yml
 out |
 out | ✓ Uninstalled
 out | → last step, remove the command     uv tool uninstall carter-ai

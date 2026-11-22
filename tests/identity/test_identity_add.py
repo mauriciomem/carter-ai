@@ -384,9 +384,7 @@ class TestChecksWriteNothing:
     ) -> None:
         register(fake, key.blob)
         identity_add.apply_add(identity_add.plan_add(request(key)))
-        self.refused(
-            home, identity_add.AddRequest(LOGIN), E_IDENTITY_CHECK, "signing key is configured"
-        )
+        self.refused(home, identity_add.AddRequest(LOGIN), E_IDENTITY_CHECK, "a key is configured")
 
     def test_git_below_2_40_and_old_openssh_refuse_before_any_network_call_for_the_key(
         self, fake: FakeGitHub, home: Path, key: KeyPair, monkeypatch: pytest.MonkeyPatch
@@ -397,7 +395,7 @@ class TestChecksWriteNothing:
             raise IdentityError(E_GIT_OLD, detail="found (2, 39)")
 
         monkeypatch.setattr(shim, "check_git", too_old)
-        self.refused(home, request(key), E_GIT_OLD, "2.40")
+        self.refused(home, request(key), E_GIT_OLD, "2.54")
         assert fake.requests == []
 
     def test_every_local_refusal_is_made_before_any_network_call(
@@ -560,7 +558,10 @@ class TestCommand:
         lines = done.output.splitlines()
         assert done.exit_code == 1 and len(lines) == 2, done.output
         assert lines[0] == "✗ not registered as an SSH signing key on the account"
-        assert lines[1].startswith("→ on GitHub: Settings") and lines[1].endswith(E_IDENTITY_CHECK)
+        assert lines[1].startswith("→ add it: GitHub Settings") and lines[1].endswith(
+            E_IDENTITY_CHECK
+        )
+
         assert not (home / ".carter" / "config.toml").exists()
 
     def test_the_two_password_manager_options_exclude_each_other(self) -> None:
