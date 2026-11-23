@@ -6,6 +6,7 @@ Exit code 1 only if something is ``red``. Items carry names and counts, never va
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from dataclasses import dataclass
 from typing import Literal
 
@@ -23,6 +24,13 @@ class Item:
     def render(self) -> str:
         fix = f"\n      → {self.fix}" if self.fix else ""
         return f"  {self.level.upper():<5} {self.area}: {self.text}{fix}"
+
+
+def config_items(notes: Iterable[str]) -> list[Item]:
+    """One line per note of the config reader (the managed file was ignored, or lost a table)."""
+    from carter.identity.managed import IGNORED  # noqa: PLC0415 - keep the import light
+
+    return [Item("warn", "config", n, IGNORED.get(n, "")) for n in notes]
 
 
 def exit_code(items: list[Item]) -> int:

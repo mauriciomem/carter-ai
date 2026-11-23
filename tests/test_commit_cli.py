@@ -80,6 +80,19 @@ class TestRegistration:
         ]
 
 
+class TestAnIgnoredManagedFile:
+    def test_the_reason_is_one_warning_and_the_commit_goes_on(self, repo: Path) -> None:
+        managed = Path(os.environ["HOME"]) / ".carter" / "config-managed.toml"
+        managed.write_text('[github]\nread_token_file = "/t"\n')
+        managed.chmod(0o666)  # unsafe: ignored, while the identity kept in config.toml still loads
+        stage(repo)
+        done = carter("-m", "x")
+        assert done.exit_code == 0, done.output
+        lines = [x for x in done.output.splitlines() if "ignored: unsafe" in x]
+        assert len(lines) == 1 and len(lines[0]) <= 80
+        assert "chmod 600" in done.output and COAUTHOR in last(repo)
+
+
 class TestFidelity:
     def test_arguments_arrive_as_typed_including_spaces_double_dash_and_empty_strings(
         self, repo: Path

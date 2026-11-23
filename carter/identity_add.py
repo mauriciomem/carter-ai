@@ -24,6 +24,7 @@ from typing import NamedTuple
 from carter.guard import gitconfig, mirror_io
 from carter.guard.state import GuardState, load_or_empty_readonly, save
 from carter.identity import agent_paths, agent_setup, github, shim
+from carter.identity.anchor import anchor_line
 from carter.identity.config import ConfigError, load_identity
 from carter.identity.errors import (
     E_CONFIG,
@@ -35,7 +36,7 @@ from carter.identity.errors import (
     registry,
 )
 from carter.identity.isolation import resolve_false
-from carter.identity.managed import anchor_line, managed_path
+from carter.identity.managed import managed_path
 from carter.identity.payload import fingerprint_of, public_blob, shim_path
 from carter.identity.schema import IdentityConfig, Signing
 from carter.identity.writer import write_managed

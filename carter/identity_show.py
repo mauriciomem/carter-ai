@@ -16,7 +16,7 @@ from collections.abc import Mapping
 from pathlib import Path
 
 from carter import hostcheck, hostcheck_g2
-from carter.checkitems import Item
+from carter.checkitems import Item, config_items
 from carter.guard import consent, repohooks
 from carter.guard.configwrite import Reader
 from carter.guard.state import load_or_empty_readonly
@@ -212,6 +212,7 @@ def show_items(
     res = resolve(cfg, workspace=workspace, env=env)
     ident = cfg.identity
     items = [
+        *config_items(cfg.notes),  # the managed file was ignored: say why before "none configured"
         Item("info", "identity", f"{ident.login} (id {ident.id}, {ident.email})")
         if ident.login
         else Item(

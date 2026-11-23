@@ -61,7 +61,7 @@ def write_config(cfg: IdentityConfig, path: Path, **_ignored: Any) -> bool:
 def write_signers(folder: Path, cfg: IdentityConfig) -> None:
     """The ``hooks/allowed_signers`` that ``identity add`` writes for ``cfg``: what the managed
     file's signing values are checked against."""
-    from carter.identity.managed import SIGNERS, anchor_line
+    from carter.identity.anchor import SIGNERS, anchor_line
 
     s = cfg.signing
     keys = [k for k in (s.public_key, *s.previous_public_keys) if k]

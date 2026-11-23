@@ -491,8 +491,39 @@ class TestManagedFile:
         managed = home / ".carter" / "config-managed.toml"
         managed.chmod(0o644)
         out = self.host(tmp_path)
-        assert "config-managed.toml unsafe (owner/mode/link): identity off" in out
-        assert load_identity().identity.login == ""
+        assert "config-managed.toml ignored: unsafe (owner, mode or link)" in out
+        assert "chmod 600" in out and load_identity().identity.login == ""
+
+    def test_identity_show_and_commit_say_why_there_is_no_identity(
+        self, home: Path, fake: FakeGitHub, key: KeyPair, tmp_path: Path, monkeypatch
+    ) -> None:
+        from click.testing import CliRunner
+
+        from carter.cli import main
+
+        make(fake, key)
+        (home / ".carter" / "config-managed.toml").chmod(0o644)
+        monkeypatch.chdir(tmp_path)
+        shown = CliRunner().invoke(main, ["identity", "show"]).output
+        lines = [ln for ln in shown.splitlines() if "ignored: unsafe" in ln]
+        assert len(lines) == 1 and shown.index(lines[0]) < shown.index("none configured")
+
+    def test_an_identity_kept_in_config_toml_still_shows_and_the_note_is_not_identity_off(
+        self, home: Path, fake: FakeGitHub, key: KeyPair, tmp_path: Path, monkeypatch
+    ) -> None:
+        from click.testing import CliRunner
+
+        from carter.cli import main
+
+        make(fake, key)
+        managed = home / ".carter" / "config-managed.toml"
+        (home / ".carter" / "config.toml").write_text(managed.read_text().split("\n", 1)[1])
+        managed.write_text("not [toml")  # a second, broken managed file beside the legacy values
+        managed.chmod(0o600)
+        monkeypatch.chdir(tmp_path)
+        shown = CliRunner().invoke(main, ["identity", "show"]).output
+        assert "octocat" in shown and "ignored: unreadable or invalid" in shown
+        assert "identity off" not in shown
 
     def test_a_table_in_both_files_says_config_toml_wins(
         self, home: Path, fake: FakeGitHub, key: KeyPair, tmp_path: Path

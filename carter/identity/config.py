@@ -22,8 +22,9 @@ from pathlib import Path
 from typing import Any, TypeVar, get_type_hints
 
 from carter.home import carter_home
+from carter.identity.anchor import read_checked
 from carter.identity.errors import E_CONFIG, MSG_CONFIG, IdentityError
-from carter.identity.managed import merge, read_checked
+from carter.identity.managed import merge
 from carter.identity.schema import (
     KEY_SCHEMA,
     SCHEMA_VERSION,
