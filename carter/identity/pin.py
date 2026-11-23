@@ -15,7 +15,7 @@ from pathlib import Path
 
 from carter.identity.config import default_path
 from carter.identity.errors import E_ROLE_B_TIER
-from carter.identity.schema import TIERS, IdentityConfig, Workspace
+from carter.identity.schema import TIERS, IdentityConfig, Workspace, inherit_caps
 from carter.identity.writer import write_managed
 
 UNSET = "(unset)"
@@ -50,7 +50,7 @@ def plan_pin(cfg: IdentityConfig, key: str, *, role: str, require_tier: str) -> 
         if old != new
     )
     refusal = ""
-    cap = current.max_tier
+    cap = inherit_caps({**cfg.workspaces, key: current})[key].max_tier  # a parent's cap counts
     if cap and role == "author":  # role author needs T2 and every cap is below it; never downgraded
         refusal = f"{E_ROLE_B_TIER}: max_tier {cap} caps role author; remove the cap"
     elif cap and require_tier and TIERS.index(cap) < TIERS.index(require_tier):

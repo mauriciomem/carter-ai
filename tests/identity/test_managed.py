@@ -244,3 +244,77 @@ def test_every_note_fits_the_output_budget(cfg_path):
     )
     notes = [*load_identity(cfg_path).notes, UNSAFE, UNREADABLE]
     assert notes and all(len(n) <= ui.MAX - 8 for n in notes)
+
+
+class TestANestedEntryNeverLiftsAParentCap:
+    """``/repo`` is capped by hand; a pin for ``/repo/sub`` (managed or legacy) must not hide it."""
+
+    def cfg(self, cfg_path, human: str, pins: str = "") -> IdentityConfig:
+        cfg_path.write_text(human)
+        if pins:
+            put_managed(cfg_path, pins)
+        return load_identity(cfg_path)
+
+    CAP = '[workspaces."/repo"]\nmax_tier = "t1"\n'
+
+    def test_a_managed_pin_below_a_capped_parent_keeps_the_cap(self, cfg_path):
+        cfg = self.cfg(cfg_path, self.CAP, '[pins."/repo/sub"]\nrole = "co-author"\n')
+        assert cfg.workspaces["/repo/sub"].max_tier == "t1"
+        assert cfg.workspaces["/repo/sub"].role == "co-author"
+
+    def test_a_legacy_pin_in_config_toml_keeps_it_too(self, cfg_path):
+        cfg = self.cfg(cfg_path, self.CAP + '[workspaces."/repo/sub"]\nrole = "co-author"\n')
+        assert cfg.workspaces["/repo/sub"].max_tier == "t1"
+
+    def test_the_resolved_tier_under_the_nested_workspace_is_capped(self, cfg_path):
+        from carter.identity.env import workspace_for
+        from carter.identity.resolve import resolve
+
+        cfg = self.cfg(
+            cfg_path,
+            self.CAP,
+            '[identity]\nlogin = "b"\nid = 1\nemail = "1+b@users.noreply.github.com"\n'
+            '[pins."/repo/sub"]\nrole = "co-author"\n',
+        )
+        assert workspace_for(cfg, "/repo/sub") == "/repo/sub"
+        assert resolve(cfg, workspace="/repo/sub", env={}).tier == "t1" and cfg.identity.login
+
+    def test_the_strictest_of_every_ancestor_wins_whichever_is_nested(self, cfg_path):
+        parent_t0 = (
+            '[workspaces."/repo"]\nmax_tier = "t0"\n[workspaces."/repo/sub"]\nmax_tier = "t1"\n'
+        )
+        parent_t1 = (
+            '[workspaces."/repo"]\nmax_tier = "t1"\n[workspaces."/repo/sub"]\nmax_tier = "t0"\n'
+        )
+        assert self.cfg(cfg_path, parent_t0).workspaces["/repo/sub"].max_tier == "t0"
+        assert self.cfg(cfg_path, parent_t1).workspaces["/repo/sub"].max_tier == "t0"
+        assert self.cfg(cfg_path, parent_t1).workspaces["/repo"].max_tier == "t1"  # not the child's
+
+    def test_it_reaches_every_depth_and_only_real_children(self, cfg_path):
+        cfg = self.cfg(
+            cfg_path,
+            self.CAP,
+            '[pins."/repo/a/b/c"]\nrole = "author"\n[pins."/repo-x"]\nrole = "author"\n'
+            '[pins."/other"]\nrole = "author"\n',
+        )
+        assert cfg.workspaces["/repo/a/b/c"].max_tier == "t1"
+        assert cfg.workspaces["/repo-x"].max_tier == "" and cfg.workspaces["/other"].max_tier == ""
+
+    def test_a_pin_cannot_be_written_under_a_cap_that_forbids_it(self, cfg_path):
+        from carter.identity.pin import plan_pin
+
+        cfg = self.cfg(cfg_path, self.CAP)
+        plan = plan_pin(cfg, "/repo/sub", role="author", require_tier="")
+        assert "max_tier t1 caps role author" in plan.refusal
+
+    def test_an_opt_out_is_per_path_and_a_nested_pin_does_not_remove_it(self, cfg_path, tmp_path):
+        from carter.guard.optout import active_optouts
+
+        repo = tmp_path / "repo"
+        (repo / "sub").mkdir(parents=True)
+        cfg = self.cfg(
+            cfg_path,
+            f'[workspaces."{repo}"]\nallow_project_opencode_edit = true\n',
+            f'[pins."{repo}/sub"]\nrole = "co-author"\n',
+        )
+        assert active_optouts(cfg).workspaces == [str(repo.resolve())]

@@ -286,7 +286,7 @@ require_tier = "t2"
 | `[broker]` | Optional, for [`carter_push`](../guides/write-operations.md#letting-devops-ask-you-to-push). `min_dwell_ms`: the shortest an approval may take before it is refused as automatic; the effective value is never below 500 and never above 10000. It always uses the home in your system account entry (what OpenSSH reads) for its git and ssh calls and for the `~/.ssh/config` scan; there is no setting for it |
 | `[attribution]` | `footer`: appended to GitHub and Jira bodies |
 | `[access]` | What agents may do: `level` and one value per capability id. See [access](#access) |
-| `[workspaces."<path>"]` | `max_tier`, `allow_project_opencode_edit` (yours). `role` and `require_tier` are pins in `[pins."<path>"]` of the managed file; an older `config.toml` may still hold them here. The path is the resolved absolute path of the workspace |
+| `[workspaces."<path>"]` | `max_tier`, `allow_project_opencode_edit` (yours). A workspace inside a capped one has the strictest `max_tier` of every entry above it, so a pin for `/repo/sub` never lifts the cap of `/repo`; an opt-out applies to its exact path only. `role` and `require_tier` are pins in `[pins."<path>"]` of the managed file; an older `config.toml` may still hold them here. The path is the resolved absolute path of the workspace |
 
 ### access
 

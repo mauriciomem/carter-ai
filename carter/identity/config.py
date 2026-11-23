@@ -33,6 +33,7 @@ from carter.identity.schema import (
     Attribution,
     IdentityConfig,
     Workspace,
+    inherit_caps,
 )
 
 DEFAULT_FOOTER = Attribution().footer
@@ -219,7 +220,7 @@ def parse_identity(doc: dict[str, Any] | None) -> IdentityConfig:
     }
     return IdentityConfig(
         **parts,
-        workspaces=workspaces,
+        workspaces=inherit_caps(workspaces),
         access=_access_table(doc)[0],
         state="current",
         unknown_keys=unknown_keys(doc),

@@ -10,7 +10,7 @@ Stdlib-only. Pure data: nothing here reads a file.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field, fields
+from dataclasses import dataclass, field, fields, replace
 from typing import Any, Literal
 
 SCHEMA_VERSION = 2
@@ -152,6 +152,22 @@ class IdentityConfig:
     state: State = "absent"
     unknown_keys: tuple[str, ...] = ()  # dotted paths the schema does not model
     notes: tuple[str, ...] = ()  # one line each: what the managed file lost or could not give
+
+
+def inherit_caps(workspaces: dict[str, Workspace]) -> dict[str, Workspace]:
+    """Every entry carries the strictest ``max_tier`` of itself and of each entry above it, so a
+    nested entry (a pin for ``/repo/sub``) never lifts the cap of ``/repo``. An opt-out
+    (``allow_project_opencode_edit``) is per exact path and is not inherited."""
+
+    def above(parent: str, key: str) -> bool:
+        return key == parent or key.startswith(parent.rstrip("/") + "/")
+
+    out: dict[str, Workspace] = {}
+    for key, ws in workspaces.items():
+        caps = [w.max_tier for parent, w in workspaces.items() if w.max_tier and above(parent, key)]
+        cap = min(caps, key=CAP_TIERS.index) if caps else ""
+        out[key] = replace(ws, max_tier=cap) if cap != ws.max_tier else ws
+    return out
 
 
 def schema_names() -> dict[str, tuple[str, ...]]:
