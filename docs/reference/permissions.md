@@ -38,6 +38,20 @@ OpenCode applies the **last matching rule**, so later rules refine earlier ones
 Anything not listed (MCP tools, `websearch`, other tools) falls back to rule 1 and
 asks.
 
+## Carter's own files
+
+The `config-edit` group (on by default; revision 2) denies the edit tool on Carter's control files:
+`~/.carter/config.toml` (yours), `~/.carter/config-managed.toml` (the identity and signing key
+Carter derives: it decides which key signs, so it has its own rule, `deny-edit-carter-managed`),
+the hooks, the plugin, `isolation.json` and `guard-state.json`. The command gate also refuses shell
+writes to every control path (`>`, `tee`, `sed -i`, `cp`, `mv`, `rm`, `ln`, `chmod`). Both lists
+come from `g2_rules.json`. If you had `config-edit` at revision 1, the next `carter install` shows
+one `new:` row for it.
+
+Honest scope: a shell command that writes these files through a program the gate does not parse
+stays possible until the sandbox (plan 012). Turning `config-edit` off is allowed; `carter access -v`
+warns about it.
+
 ## Risky commands
 
 | Category | Commands |

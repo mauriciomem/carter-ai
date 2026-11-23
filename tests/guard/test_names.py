@@ -36,6 +36,7 @@ IDS_BY_GROUP = {
         "deny-edit-gitconfig",
         "deny-edit-git-xdg",
         "deny-edit-carter-config",
+        "deny-edit-carter-managed",
         "deny-edit-carter-bin",
         "deny-edit-carter-hooks",
         "deny-edit-carter-run",
@@ -382,7 +383,7 @@ CONSENT_REVS = {
     "hooks": 2,
     "sudo-docker": 1,
     "read-edit-denies": 1,
-    "config-edit": 1,
+    "config-edit": 2,
     "alias": 1,
     "repo_hooks": 2,
 }

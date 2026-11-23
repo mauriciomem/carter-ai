@@ -276,6 +276,12 @@ class TestControlFiles:
             == "control-files"
         )
         assert (
+            rule_of("node -e \"require('fs').writeFileSync('/h/.carter/config-managed.toml','x')\"")
+            == "control-files"
+        )
+        assert rule_of("echo x > ~/.carter/config-managed.toml") == "control-files"
+        assert rule_of("cat ~/.carter/config-managed.toml") is None  # reads pass
+        assert (
             rule_of('ruby -e \'File.write("/h/.config/opencode/plugin/x.ts", "")\'')
             == "control-files"
         )

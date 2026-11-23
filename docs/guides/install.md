@@ -111,7 +111,7 @@ Without a terminal (a script, CI) and without `--yes`, the guards are skipped wi
 | `repo_hooks` | Git older than 2.54 only: the same hooks as files in your repositories. A hook or `core.hooksPath` that you or your tools own (husky, pre-commit) is never edited: Carter reports the repository as unguarded and prints a line to chain. |
 | `sudo-docker` | Agents can't run `sudo` or `docker`. Packer docker builds must be typed in your terminal. |
 | `read-edit-denies` | Agents can't read SSH keys, `gh`/git credentials or the GitHub token, and can't edit `~/.ssh`. |
-| `config-edit` | Agents can't edit OpenCode config, git hooks and config, or Carter's own config and control files. |
+| `config-edit` | Agents can't edit OpenCode config, git hooks and config, or Carter's own config and control files (`config-managed.toml` too). |
 | `alias` | **Optional.** Adds the git alias `git ai-commit` (`carter commit`), unless you already have an `alias.ai-commit`. Never part of the one question or of `--yes`: use `carter guard install --only alias`. |
 
 A group you decline stays declined. `carter guard status` and `carter check --host` list it, with

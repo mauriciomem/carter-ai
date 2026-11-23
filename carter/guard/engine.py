@@ -385,6 +385,7 @@ def _apply_entries(
 NEWS = {  # what a revision adds, for a group accepted earlier (a row of the question)
     ("g2", 2): "new: plugin isolates agent shells",
     ("g2", 3): "new: carter_push for devops (you approve)",
+    ("config-edit", 2): "new: config-managed.toml is protected",
     ("hooks", 2): "new: agent commits are checked",
     ("repo_hooks", 2): "new: commit hooks next to pre-push",
 }
