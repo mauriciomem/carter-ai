@@ -18,6 +18,7 @@ from carter import harness
 from carter.checkitems import Item, Level
 from carter.guard import consent, gitconfig, hooks, plugin, repohooks
 from carter.guard.state import GuardState
+from carter.home import tilde
 from carter.identity.errors import E_GIT_OLD, E_OPENCODE_VERSION, registry
 from carter.identity.rules import pollution_hits
 from carter.install import prereqs
@@ -25,15 +26,8 @@ from carter.install.paths import carter_gitconfig_path, isolation_path, plugin_d
 
 BAKED = re.compile(r'ISOLATION_SHA256\s*=\s*"([0-9a-f]{64})"')
 RESTART = "restart the OpenCode server"
-DROPPED_HINT = (
-    "OpenCode drops an agent's whole config entry when one of its rules is invalid; fix or "
-    "remove `agents.{name}` in {config}, then rerun `carter guard install`"
-)
-LIMITS = (
-    "a shell command can still write the global OpenCode config, ~/.gitconfig, ~/.config/git, "
-    "a repo's .opencode/, opencode.json, .git/hooks and .git/config; only the edit tool is "
-    "blocked there"
-)
+DROPPED_HINT = "fix or remove `agents.{name}` in {config}"
+LIMITS = "shells can still write OpenCode/git/repo config"
 
 
 def gitconfig_first(base_dir: Path | None) -> tuple[list[Item], bool]:
@@ -44,9 +38,7 @@ def gitconfig_first(base_dir: Path | None) -> tuple[list[Item], bool]:
     try:
         parsed = gitconfig.parses(path)
     except gitconfig.GitError:
-        return [
-            Item("warn", "git", "git is not available; Carter's gitconfig was not checked")
-        ], False
+        return [Item("warn", "git", "git is not available: gitconfig not checked")], False
     if parsed:
         return [], True
     text = f"git cannot parse {path}: every git command fails while it is included"
@@ -63,8 +55,8 @@ def include_items(state: GuardState, base_dir: Path | None) -> list[Item]:
     have = gitconfig.manual_include_state(base_dir)
     if have == "present":
         return [Item("ok", "git", "include.path present (added by you, not by Carter)")]
-    text = "include.path for Carter's gitconfig is missing: the git hooks are inactive"
-    return [Item("warn", "git", text + " (dotfile-managed config: add this line there)", line)]
+    text = "include.path for Carter's gitconfig is missing: hooks inactive"
+    return [Item("warn", "git", text, line)]
 
 
 def hook_scope_items(state: GuardState, cwd: Path) -> list[Item]:
@@ -76,7 +68,7 @@ def hook_scope_items(state: GuardState, cwd: Path) -> list[Item]:
         name = hooks.hook_name(event)
         scope = gitconfig.hook_scopes(cwd, event).get(name)
         if scope == "global":
-            out.append(Item("ok", "git", f"{event} hook {name} is active (scope global)"))
+            out.append(Item("ok", "git", f"{name} is active (global)"))
             continue
         text = f"{event} hook {name} is not listed by `git hook list` as global"
         out.append(Item("warn", "git", text + (f" (it is {scope})" if scope else "")))
@@ -100,9 +92,7 @@ def file_items(state: GuardState, base_dir: Path | None) -> list[Item]:
 
         actual = sha256_hex(iso.read_bytes())
         if baked is None or baked.group(1) != actual:
-            text = (
-                "isolation.json is not the one the plugin was built for: agent shells are refused"
-            )
+            text = "isolation.json is not the plugin's: agent shells are refused"
             out.append(Item("red", "plugin", text, "Run `carter guard install`."))
         else:
             out.append(Item("ok", "plugin", "plugin and isolation.json match"))
@@ -137,7 +127,7 @@ def g2_items(state: GuardState, base_dir: Path | None) -> list[Item]:
         except (ValueError, KeyError, TypeError):
             return out
         if listed != sorted(consent.declined_groups(state)):
-            text = "isolation.json and guard-state.json disagree on the declined groups"
+            text = "isolation.json and guard-state.json disagree on declined groups"
             out.append(Item("warn", "consent", text, "Run `carter guard install`."))
     return out
 
@@ -170,7 +160,7 @@ def status_items(
         if _alive(pid):
             live.append((path, doc))
     if not live:
-        text = "not loaded yet: start OpenCode and run an agent command"
+        text = "not loaded yet: run an agent command in OpenCode"
         return [Item("warn", "plugin", text)]
     out: list[Item] = []
     index = plugin_dir(base_dir) / "index.ts"
@@ -182,10 +172,7 @@ def status_items(
             out.append(Item("ok", "plugin", f"{label}: working"))
         elif st == "failed":
             why = doc.get("failed_reason")
-            text = (
-                f"{label}: the plugin's own check failed ({why}); "
-                "every shell there is treated as an agent shell"
-            )
+            text = f"{label}: plugin self-check failed ({why}); shells count as agent"
             out.append(Item("red", "plugin", text, f"See {E_OPENCODE_VERSION}; {RESTART}."))
         else:
             out.append(Item("warn", "plugin", f"{label}: waiting for the first agent command"))
@@ -257,10 +244,7 @@ def pollution_items(
         hits = pollution_hits(env, home=home)
         tokens = [n for n in ("GH_TOKEN", "GITHUB_TOKEN") if n in env]
         if hits:
-            text = (
-                f"server {pid} was started with variables that break shell isolation "
-                f"(names only): {', '.join(hits)}"
-            )
+            text = f"server {pid} has variables that break isolation: {', '.join(hits)}"
             out.append(
                 Item("warn", "server environment", text, "Restart OpenCode from a clean terminal.")
             )
@@ -298,7 +282,7 @@ def agent_items(
     if isinstance(known, Mapping):
         for rec in state.owned_permissions():
             if rec["agent"] not in known:
-                hint = DROPPED_HINT.format(name=rec["agent"], config=config_path)
+                hint = DROPPED_HINT.format(name=rec["agent"], config=tilde(config_path))
                 text = f"agent {rec['agent']}: OpenCode dropped its config entry"
                 out.append(Item("red", "agent permissions", text, hint))
     if not out:
@@ -322,10 +306,7 @@ def version_items(opencode: tuple[int, int, int] | None, git: tuple[int, int] | 
                 Item("red", "opencode", f"{shown} is older than 2.1: Carter needs 2.1 or newer")
             )
         elif band in ("untested-low", "above"):
-            text = (
-                f"{E_OPENCODE_VERSION}: the guards are untested on OpenCode {shown}; "
-                "relying on the plugin's own check"
-            )
+            text = f"{E_OPENCODE_VERSION}: guards untested on OpenCode {shown}"
             out.append(Item("warn", "opencode", text))
         else:
             out.append(Item("ok", "opencode", f"{shown} (tested)"))

@@ -183,7 +183,7 @@ class TestValidateAgents:
         assert result.status == "fail"
         assert runner.calls == harness.DEFAULT_ATTEMPTS
         assert any("carter-pm-local" in e and "description" in e for e in result.errors)
-        assert any("stale" in e and "re-run" in e for e in result.errors)
+        assert any("stale" in e and "again" in e for e in result.errors)
 
     def test_missing_only_has_no_stale_hint(self):
         out = json.dumps([_agent("carter-pm-local")])
@@ -337,7 +337,7 @@ class TestCheckCli:
         fake_opencode(None)
         result = CliRunner().invoke(main, ["check", str(ws)])
         assert result.exit_code == 0, result.output
-        assert "skipping" in result.output.lower() and "Workspace OK" in result.output
+        assert "skipped" in result.output.lower() and "Workspace OK" in result.output
 
     def test_missing_opencode_other_errors_still_fail(self, tmp_path, fake_opencode):
         ws = _init(tmp_path)
@@ -345,7 +345,7 @@ class TestCheckCli:
         fake_opencode(None)
         result = CliRunner().invoke(main, ["check", str(ws)])
         assert result.exit_code == 1
-        assert "skipping" in result.output.lower() and "AGENTS.md" in result.output
+        assert "skipped" in result.output.lower() and "AGENTS.md" in result.output
 
     def test_no_harness_flag_skips(self, tmp_path, fake_opencode):
         ws = _init(tmp_path)

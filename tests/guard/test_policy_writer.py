@@ -379,7 +379,7 @@ class TestVerifyAndRollback:
         write_cfg(cfg, {"providers": PROVIDERS})
         original = cfg.read_bytes()
         fake_opencode(config_output="boom", config_exit=1)
-        with pytest.raises(policies.PolicyWriteError, match="nothing was written"):
+        with pytest.raises(policies.PolicyWriteError, match="cannot verify"):
             run_apply(tmp_path, [A])
         assert (
             cfg.read_bytes() == original and not cfg.with_name(cfg.name + ".carter-backup").exists()

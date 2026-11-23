@@ -211,3 +211,22 @@ def test_next_has_no_escape_codes_without_colour(monkeypatch: pytest.MonkeyPatch
     monkeypatch.setenv("NO_COLOR", "1")
     ui.next("plain")
     assert "\x1b[" not in stream.getvalue()
+
+
+def test_raw_is_never_wrapped_and_prose_is_(capsys: pytest.CaptureFixture[str]) -> None:
+    ui.configure(verbose=True)
+    command = "git config --global --add include.path " + "x" * 80
+    ui.detail(ui.Raw(command))
+    ui.detail("word " * 40)
+    ui.line(ui.Raw("  " + command))
+    lines = capsys.readouterr().out.splitlines()
+    assert lines[0] == "  " + command and lines[-1] == "  " + command  # whole, to paste
+    prose = lines[1:-1]
+    assert len(prose) > 1 and all(len(ln) <= ui.MAX for ln in prose)
+
+
+def test_a_failure_shows_the_lines_of_the_text_under_it(capsys: pytest.CaptureFixture[str]) -> None:
+    ui.fail("cannot fetch", "check it", "E-X", why="fatal: first\nfatal: second\n" + "word " * 30)
+    err = capsys.readouterr().err.splitlines()
+    assert err[0] == "✗ cannot fetch" and err[1] == "  fatal: first" and err[2] == "  fatal: second"
+    assert all(len(ln) <= ui.MAX for ln in err) and err[-1].startswith("→ check it")

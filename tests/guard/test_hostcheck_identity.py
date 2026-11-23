@@ -218,7 +218,7 @@ class TestFragmentsAndWorktrees:
             len(items) == 1
             and items[0].level == "warn"
             and str((ws / "wt").resolve()) in items[0].text
-            and "does NOT apply" in items[0].text
+            and "no cap there" in items[0].text
         )
 
 
@@ -334,7 +334,7 @@ class TestHygiene:
         make(fake, key)
         register(fake, throwaway_key("ed25519").blob)
         item = find(
-            run(tmp_path, fetch=hostcheck_id.live_fetch), "key on GitHub", "not an SSH signing key"
+            run(tmp_path, fetch=hostcheck_id.live_fetch), "key on GitHub", "not a signing key"
         )
         assert item and item.level == "warn"
 
@@ -395,7 +395,7 @@ class TestGuardsAndGroups:
         state.consent("hooks", "accepted", "2026-11-04", 2)
         save(state, guard_state_path(None))
         items = run(tmp_path, git=(2, 39))
-        assert find(items, "guards", "cannot be signed").level == "info"  # type: ignore[union-attr]
+        assert find(items, "guards", "unsignable agent commit fails").level == "info"  # type: ignore[union-attr]
         assert find(items, "git", "E-GIT-OLD").level == "red"  # type: ignore[union-attr]
 
     def test_the_alias_consent_is_listed(
@@ -461,8 +461,7 @@ class TestTheCommand:
         assert before == after
         assert (
             code == 1
-            and "RED   guards: signed agent commits are on but the commit hooks are not installed"
-            in out
+            and "RED   guards: signed agent commits are on, commit hooks are not installed" in out
         )
         assert SENTINEL not in out and key.blob not in out and str(key.pub_path) not in out
         assert "OK    key on GitHub: the key is absent from the account's login keys" in out

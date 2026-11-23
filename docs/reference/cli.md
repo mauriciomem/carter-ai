@@ -9,7 +9,9 @@ carter [--version] [-v] [--no-color] [--help] COMMAND [ARGS]
 
 Most commands end in one to three lines: `✓ result`, or `✗ cause` followed by `→ fix` with
 the error code dimmed at the end. `install` and `uninstall` print a short report instead (below).
-`-v` shows the lines a normal run leaves out. Colour is off when the output is not a terminal, with
+`-v` shows the lines a normal run leaves out. A line targets 60 columns and never passes 80: a
+message is short and points at the help (`(see: carter push -v)`), and the detail lives in `-v`, in
+`--help` and here. Colour is off when the output is not a terminal, with
 `NO_COLOR` set, or with `--no-color`; bold and dim stay, and the text is the same as when piped. On a
 terminal that cannot show Unicode, `✓ ! ✗ → ·` become `ok ! x -> -`. Warnings and errors go to
 stderr, the rest to stdout.
@@ -67,7 +69,7 @@ Carter install  v0.19.2
 
 On a re-run the notes read `up to date` or `1 updated`. `old backups` appears when copies older than
 15 days were removed. If the install replaced files you had edited, one line on stderr names the
-folder with their copies (`! Replaced 3 files you had edited  (copies in ~/.carter/backups/<timestamp>/)`).
+folder with their copies (`! Replaced 3 edited files  (copies in ~/.carter/backups/<timestamp>/)`).
 A row that does not fit the terminal width is split over two lines; nothing is cut. `-v` also lists
 every file. Safe to re-run. It also
 creates `~/.carter/config.toml` on a first install; an existing file is never rewritten. A key in it
@@ -208,7 +210,8 @@ Carter plugin (`~/.config/opencode/plugins/carter/`, found by OpenCode without a
 `~/.carter/isolation.json` and `~/.carter/run/`, and records what it owns in
 `~/.carter/guard-state.json`.
 
-It asks **one** question: a summary of three or four lines and `Install? [Y/n]` (Enter is yes). That
+It asks **one** question: a table with one short row per group (what each does: `carter guard --help`)
+and `Install? [Y/n]` (Enter is yes). That
 yes is the consent for every group it lists; a no installs nothing. `--yes` skips the question.
 Groups you declined earlier stay declined and are not asked again, with one exception: while the
 LLM signing is on and no commit-hook group is installed, a declined `hooks` (or
@@ -531,8 +534,9 @@ other options and no arguments: no force, no tags, no other remote or refspec.
 | `-u`, `--set-upstream` | Set `origin/<branch>` as the upstream |
 | `-v`, `--verbose` | List the commits, the files and git's own output |
 
-In order: repository and SSH settings that could run code with your credentials are named in
-one warning line (and the push goes on); the target ref is fetched; the commits are counted and
+In order: repository and SSH settings that could run code with your credentials are counted in
+one warning line, `! 8 git settings could run code on push (see: carter push -v)` (the push goes on;
+`-v` lists them one per line); the target ref is fetched; the commits are counted and
 the files and hook or CI paths checked; signatures of LLM-committed commits must verify
 (`E-B-UNSIGNED`, the one refusal that follows from the commits). Then it pushes and prints
 `✓ main → origin · 1 commit (signed)`. Repository hooks are not run. See

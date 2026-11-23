@@ -23,6 +23,7 @@ from typing import Any
 
 HOME_PLACEHOLDER = "<home>"
 GH_GROUP = "g2"
+SHORT_MAX = 50  # one row of the install question: 4 + 16 (id) + 2 + 50 = 72 columns
 
 
 @dataclass(frozen=True)
@@ -41,6 +42,7 @@ class ConsentGroup:
     rev: int = 1  # bumped when a group gains content that needs a fresh yes
     explain: tuple[str, ...] = ()  # printed before the question when this revision is offered
     optional: bool = False  # never accepted by a bare --yes, only by --only <id> or a TTY yes
+    short: str = ""  # the row of the install question and of the dry run (<= SHORT_MAX chars)
 
 
 @dataclass(frozen=True)
@@ -68,6 +70,7 @@ def consent_groups() -> tuple[ConsentGroup, ...]:
             g.get("rev", 1),
             tuple(g.get("explain", ())),
             g.get("optional", False),
+            g.get("short", g["effect"][:SHORT_MAX]),
         )  # fmt: skip
         for g in _data()["consent_groups"]
     )

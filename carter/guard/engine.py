@@ -24,7 +24,7 @@ from collections.abc import Callable, Sequence
 from datetime import UTC, datetime
 from pathlib import Path
 
-from carter import harness
+from carter import harness, ui
 from carter.guard import (
     alias,
     configwrite,
@@ -38,7 +38,7 @@ from carter.guard import (
     repohooks,
 )
 from carter.guard.state import GuardState, load_or_empty_readonly, quarantine_corrupt, save
-from carter.home import STAMP_FORMAT
+from carter.home import STAMP_FORMAT, tilde
 from carter.identity import ConfigError, load_identity
 from carter.identity.errors import E_GIT_OLD, E_STATE_INVALID, IdentityError, registry
 from carter.identity.policyset import Statement, consent_groups
@@ -48,18 +48,10 @@ from carter.install.paths import backups_dir, carter_gitconfig_path, guard_state
 Echo = Callable[[str], None]
 Confirm = Callable[..., bool]
 
-GLOBAL_REMOVED = (
-    "✓ the guards now apply only to Carter agents and Carter workspaces; "
-    "global OpenCode policies removed."
-)
-INTERIM_NOTE = (
-    "The plugin and isolation are not installed: the denies are literal matches only, a speed "
-    "bump, not a boundary. `carter guard install` asks again."
-)
+GLOBAL_REMOVED = "✓ old global OpenCode policies removed"
+INTERIM_NOTE = "no plugin: denies are literal matches only (see: carter guard install)"
 GIT_NOT_NEEDED = "include.path: not needed (no Carter git keys are enabled)"
-PAT_KEPT = (
-    "`~/.carter/secrets/gh-read.token` kept; delete it and revoke the token on GitHub if unused"
-)
+PAT_KEPT = "kept ~/.carter/secrets/gh-read.token: revoke the token if unused"
 # Extra files Carter may have written; removal deletes them only if recorded and unchanged.
 KNOWN_EXTRA_FILES = ("opencode-headless.json",)
 
@@ -71,12 +63,17 @@ class GuardAbort(Exception):
 def describe_error(exc: BaseException) -> tuple[str, str, str] | None:
     """``(cause, fix, code)`` for the failures commands expect; ``None`` otherwise.
 
-    The cause is the registry message plus the technical detail when there is one; the fix is the
-    registry's one-line ``fix`` (empty when the cause already says what to do)."""
+    The cause is the registry message, plus the technical detail in parentheses while the line
+    stays under the budget; a longer detail is shown under the cause (``cliguard.report`` passes
+    it as ``why``, wrapped). The fix is the registry's one-line ``fix`` (empty when the cause is
+    enough)."""
     if isinstance(exc, IdentityError):
         entry = registry().get(exc.code)
-        extra = f" ({exc.detail})" if exc.detail else ""
-        return f"{exc}{extra}", exc.fix or (entry.fix if entry else ""), exc.code
+        cause = str(exc)
+        if exc.detail and "\n" not in exc.detail:
+            inline = f"{cause} ({exc.detail})"
+            cause = inline if len(inline) <= ui.MAX - 2 else cause
+        return cause, exc.fix or (entry.fix if entry else ""), exc.code
     expected = (
         policies.PolicyWriteError,
         GuardAbort,
@@ -117,11 +114,12 @@ def _load_state(base_dir: Path | None, *, dry_run: bool, echo: Echo) -> GuardSta
     if read.status == "newer":
         raise IdentityError(E_STATE_INVALID, detail=read.detail)
     if read.status == "corrupt":
-        echo(f"⚠ guard state {path} is unreadable ({read.detail}).")
+        echo(f"⚠ guard state is unreadable: {tilde(path)}")
+        echo(f"  {read.detail}")
         if dry_run:
-            echo("A real install would move it aside and start fresh (nothing is written now).")
+            echo("a real run moves it aside and starts fresh")
         else:  # moved, not deleted: nothing to ask
-            echo(f"Moved to {quarantine_corrupt(path, now=_stamp())}")
+            echo(f"moved to {tilde(quarantine_corrupt(path, now=_stamp()) or '')}")
     return read.state
 
 
@@ -151,6 +149,14 @@ def _show_diff(res: policies.ApplyResult, echo: Echo) -> None:
         echo(f"  - per-agent deny {label}")
     for text in res.warnings:
         echo(f"  ⚠ {text}")
+
+
+def _echo_snippet(echo: Echo, snippet: str, indent: str = "  ") -> None:
+    """A snippet is prose, then the command on its own line: only the prose may wrap."""
+    first, *commands = snippet.splitlines()
+    echo(f"{indent}{first}")
+    for command in commands:
+        echo(ui.Raw(f"{indent}  {command.strip()}"))
 
 
 def _rerender(base_dir: Path | None, echo: Echo) -> None:
@@ -193,23 +199,21 @@ def _availability(echo: Echo) -> tuple[gitconfig.Mode | None, dict[str, str]]:
     try:
         mode = gitconfig.probe_scope()
     except gitconfig.GitError as exc:
-        why = f"git is not usable here ({exc}); no hook was installed"
+        why = f"git is not usable here: {exc}"
         return None, {"hooks": why, "repo_hooks": why}
     if mode == "no-config-hooks":
         entry = registry()[E_GIT_OLD]
         return mode, {"hooks": f"{entry.code}: {entry.message}"}
-    return mode, {
-        "repo_hooks": "not needed: this git runs the config hook of `hooks` in every repo"
-    }
+    return mode, {"repo_hooks": "not needed: this git has config hooks"}
 
 
 def _remove_script(base_dir: Path | None, state: GuardState, echo: Echo) -> None:
     path = hooks.script_path(base_dir)
     if state.owned_unchanged(path):
         path.unlink()
-        echo(f"  removed {path}")
+        echo(f"  removed {tilde(path)}")
     elif path.exists():
-        echo(f"  kept {path}: edited since Carter wrote it, or not recorded as Carter's")
+        echo(f"  kept {tilde(path)}: edited, or not Carter's")
     state.forget_file(path)
 
 
@@ -233,17 +237,17 @@ def _remove_git(base_dir: Path | None, state: GuardState, echo: Echo) -> None:
     elif git.include is not None and git.include.status == "absent":
         echo(f"  {git.include.note}")
     for name in git.files.removed:
-        echo(f"  removed {name}")
+        echo(f"  removed {tilde(name)}")
     for name in git.files.kept:
-        echo(f"  kept {name}: edited since Carter wrote it")
+        echo(f"  kept {tilde(name)}: edited since Carter wrote it")
 
 
 def _remove_repo_hooks(state: GuardState, echo: Echo) -> None:
     rem = repohooks.remove_owned(state)
     for name in rem.removed:
-        echo(f"  removed repo hook {name}")
+        echo(f"  removed repo hook {tilde(name)}")
     for name in rem.kept:
-        echo(f"  kept {name}: changed since Carter wrote it")
+        echo(f"  kept {tilde(name)}: changed since Carter wrote it")
 
 
 def _workspaces() -> list[str]:
@@ -262,15 +266,15 @@ def _repo_hooks_step(
             found = repohooks.inspect(repo, state, base_dir, event)
             if found.state == "installable" and not dry:
                 found = repohooks.install(repo, state, base_dir, event)
-                echo(f"  repo hook installed: {found.hook}")
+                echo(f"  repo hook installed: {tilde(found.hook or '')}")
             elif found.state == "installable":
-                echo(f"  would install a repo hook: {found.hook}")
+                echo(f"  would install a repo hook: {tilde(found.hook or '')}")
             elif found.state == "guarded":
-                echo(f"  repo hook present: {found.hook}")
+                echo(f"  repo hook present: {tilde(found.hook or '')}")
             else:
                 echo(f"⚠ {found.line()} ({event})")
                 if found.snippet:
-                    echo(f"    {found.snippet}")
+                    _echo_snippet(echo, found.snippet, "    ")
 
 
 def _accepted_rev(state: GuardState, group: str) -> int:
@@ -297,7 +301,8 @@ def _git_step(
     if want_repo:
         plan = repohooks.plan_template(gitconfig.global_config_path(), base_dir)
         if plan.status == "kept-user-value":
-            echo(f"⚠ unguarded: templateDir. {plan.snippet}")
+            echo("⚠ unguarded: init.templateDir is yours (see: -v)")
+            _echo_snippet(echo, plan.snippet)
         else:
             template = plan.directory
     alias_set = False
@@ -305,7 +310,8 @@ def _git_step(
         alias_plan = alias.plan_alias(gitconfig.global_config_path())
         alias_set = alias_plan.status != "kept-user-value"
         if not alias_set:
-            echo(f"⚠ {alias_plan.snippet}")
+            echo("⚠ alias.ai-commit is yours: Carter kept it (see: -v)")
+            _echo_snippet(echo, alias_plan.snippet)
     entries = gitconfig.carter_git_entries(
         [
             g
@@ -319,11 +325,9 @@ def _git_step(
     )
     if want_hooks or want_repo:
         script = hooks.script_path(base_dir)
-        echo(f"guard script: {script}" + (" (would be written)" if dry_run else ""))
+        echo(f"guard script: {tilde(script)}" + (" (would be written)" if dry_run else ""))
         if not dry_run and hooks.install_script(base_dir, state) == "edited-kept":
-            echo(
-                f"⚠ kept your edited {script}; delete it and run `carter guard install` to restore"
-            )
+            echo(f"⚠ kept your edited {tilde(script)} (delete it to restore)")
     if entries and not dry_run and template is not None:
         repohooks.install_template(base_dir, state, repo_events)
     if not entries:
@@ -346,16 +350,11 @@ def _git_step(
     if want_repo:
         _repo_hooks_step(base_dir, state, echo, dry=dry_run, events=repo_events)
     if on_new_git and "hooks" in accepted and state.repo_hooks and not dry_run:
-        echo(
-            "git >= 2.54 is available: the config hook now covers every repo; removing the "
-            "per-repo hooks Carter wrote earlier"
-        )
+        echo("git 2.54+: removing per-repo hooks (config hook covers all)")
         _remove_repo_hooks(state, echo)
         for old, version in repohooks.other_old_gits():
-            echo(
-                f"⚠ an older git is also installed ({old}, {version}): repos reached through it "
-                "have no guard; `carter guard install --only repo_hooks` there"
-            )
+            echo(f"⚠ older git also installed ({old}, {version}): its repos have no guard")
+            echo("→ there, run: carter guard install --only repo_hooks")
 
 
 def _apply_entries(
@@ -368,35 +367,24 @@ def _apply_entries(
 ) -> None:
     res = gitconfig.apply_keys(entries, mode=mode, base_dir=base_dir, state=state)
     if res.file == "edited-kept":
-        echo(f"⚠ kept your edited {carter_gitconfig_path(base_dir)}; it is not rewritten")
+        echo(f"⚠ kept your edited {tilde(carter_gitconfig_path(base_dir))} (not rewritten)")
     if res.include and res.include.status == "manual":
         _warn_with_help(echo, res.include.note, gitconfig.SEE_INSTALL)
     if res.direct:
         for line in res.direct.manual:
-            echo(f"⚠ add by hand: {line}")
+            echo("⚠ add by hand (the config is not writable):")
+            echo(f"→ {line}")
         for key in res.direct.conflicts:
             echo(f"⚠ kept your value for {key}")
     for key in res.needs_repo_hooks:
-        echo(f"⚠ {key}: git < 2.54 needs the per-repo fallback (`repo_hooks`)")
+        echo(f"⚠ {key}: git before 2.54 needs the `repo_hooks` group")
 
 
-SUMMARY = {
-    "g2": "a plugin and command gate isolate agent shells; devops asks you to approve a push",
-    "hooks": "git hooks check agent commits and block agent pushes in every repo, not yours",
-    "repo_hooks": "git hooks in your repos check agent commits and block agent pushes",
-}
-DENIES = {
-    "sudo-docker": "sudo and docker",
-    "read-edit-denies": "reading SSH keys and tokens",
-    "config-edit": "editing OpenCode, git and Carter config",
-}
-
-
-NEWS = {
-    ("g2", 2): "the Carter plugin isolates every agent shell (no SSH agent, no push)",
-    ("g2", 3): "carter_push for devops (you approve each use)",
-    ("hooks", 2): "agent commits are checked (identity, signature, trailer) in every repo",
-    ("repo_hooks", 2): "the commit hooks, next to pre-push, where Carter owns the hook files",
+NEWS = {  # what a revision adds, for a group accepted earlier (a row of the question)
+    ("g2", 2): "new: plugin isolates agent shells",
+    ("g2", 3): "new: carter_push for devops (you approve)",
+    ("hooks", 2): "new: agent commits are checked",
+    ("repo_hooks", 2): "new: commit hooks next to pre-push",
 }
 
 
@@ -413,30 +401,28 @@ def _needed_groups(state: GuardState, unavailable: dict[str, str]) -> list[str]:
     return consent.declined_commit_guards(state, unavailable) if t2 else []
 
 
-def _summary(offer: Sequence[str], state: GuardState, again: Sequence[str] = ()) -> list[str]:
-    """The 3-4 lines above the one install question. A group accepted earlier at an
-    older revision says what the new revision adds: the yes is the consent for it."""
+def _offer_rows(offer: Sequence[str], state: GuardState) -> list[ui.Row]:
+    """One row per group: its ``short`` text. A group accepted earlier at an older revision
+    says what the new revision adds instead: the yes is the consent for it."""
     revs = {g.id: g.rev for g in consent_groups()}
-    head = ", ".join(offer)
-    lines = [f"Carter will set up: {head}"]
-    if again:
-        lines.append(
-            f"  asked again: you declined {', '.join(again)}, but signed agent commits need it"
-        )
-    news = []
+    shorts = {g.id: g.short for g in consent_groups()}
+    rows = []
     for name in offer:
         rec = state.consents.get(name)
-        if rec and rec.get("decision") == "accepted":  # an upgrade: say what the revision adds
+        news: list[str] = []
+        if rec and rec.get("decision") == "accepted":  # an upgrade
             old = int(rec.get("rev", 1))
-            news += [t for (g, rev), t in NEWS.items() if g == name and old < rev <= revs[name]]
-    if news:
-        lines.append(f"  new: {'; '.join(news)}")
-    denied = [DENIES[g] for g in offer if g in DENIES]
-    if denied:
-        lines.append(f"  agents can't push, write to GitHub, or use {' / '.join(denied)}")
-    lines += [f"  {SUMMARY[g]}" for g in offer if g in SUMMARY and not news]
-    lines.append("  undo: carter guard remove")
-    return lines
+            news = [t for (g, rev), t in NEWS.items() if g == name and old < rev <= revs[name]]
+        rows.append(ui.Row(name, None, "; ".join(news) or shorts[name]))
+    return rows
+
+
+def _show_offer(offer: Sequence[str], state: GuardState, again: Sequence[str]) -> None:
+    """The table above the one install question; the heading points at what each group does."""
+    if again:
+        ui.warn(f"asked again: {', '.join(again)} (signed commits need it)")
+    ui.section("Guards to install", note="details: carter guard --help")
+    ui.rows(_offer_rows(offer, state))
 
 
 def _remember_refusals(
@@ -486,10 +472,10 @@ def install(
                 if groups_by_id[name].rev > 1:  # what a revision adds, in full, with -v
                     for line in groups_by_id[name].explain:
                         echo(line)
-            question = "\n".join([*_summary(offer, state, again), "Install?"])
-            if not confirm(question, default=True):
+            _show_offer(offer, state, again)
+            if not confirm("Install?", default=True):
                 _remember_refusals(state, offer, only, base_dir)
-                echo("Nothing installed.")
+                ui.info("· nothing installed")
                 return 0
             # the one yes is the consent for every group it listed, revisions included
             assume_yes = True
@@ -508,14 +494,10 @@ def install(
                     echo(line)
     consent.record(state, plan, today=today)
     for name in plan.declined:
-        if groups[name].optional:
-            echo(
-                f"Declined: {name} (optional; `carter guard install --only {name}` adds it later)."
-            )
-        else:
-            echo(f"Declined: {name} (`carter guard install --only {name}` asks again).")
+        kind = " (optional)" if groups[name].optional else ""
+        echo(f"Declined: {name}{kind} (see: carter guard install --help)")
     for name in plan.refused_offers:
-        echo(f"Not confirmed: {name} (denies stay; `carter guard install --only {name}`)")
+        echo(f"Not confirmed: {name} (old denies stay)")
     if consent.plugin_wanted(state):
         plugin.plan(base_dir, state)  # preflight: E-FALSE-MISSING, bad paths... before any write
     optouts = _active_optouts(state, echo=echo)
@@ -530,7 +512,9 @@ def install(
         backup_root=backups_dir(base_dir) / _stamp(), reader=reader,
     )  # fmt: skip
     try:
-        echo(f"OpenCode config: {res.target}" + ("" if res.changed else " (already up to date)"))
+        echo(
+            f"OpenCode config: {tilde(res.target or '')}" + ("" if res.changed else " (up to date)")
+        )
         _show_diff(res, echo)
         if res.removed:  # an earlier Carter's global statements were taken out
             echo(GLOBAL_REMOVED)
@@ -573,21 +557,21 @@ def _dry_run(
         group = groups[name]
         prior = state.consents.get(name, {}).get("decision")
         if name in unavailable:
-            echo(f"  {name:<18} not on this machine: {unavailable[name]}")
+            echo(f"  {name:<16} not on this machine: {unavailable[name]}")
             continue
         if prior == "declined" and not (only and name in only):
-            echo(f"  {name:<18} declined earlier (stays declined)")
+            echo(f"  {name:<16} declined earlier (stays declined)")
             continue
         if group.optional and prior is None and not (only and name in only):
-            echo(f"  {name:<18} optional, not part of --yes: `--only {name}` or a terminal yes")
+            echo(f"  {name:<16} optional: --only {name}, or a terminal yes")
             continue
         rec_rev = int(state.consents.get(name, {}).get("rev", 1))
         if prior == "accepted" and rec_rev < group.rev and not (only and name in only):
-            echo(f"  {name:<18} accepted earlier: {group.effect}")
-            echo(f"  {'':<18} needs your confirmation again: new content (plugin not installed)")
+            echo(f"  {name:<16} accepted earlier: {group.short}")
+            echo(f"  {'':<16} needs your confirmation again: new content")
             continue
         status = prior or "would ask"
-        echo(f"  {name:<18} {status}: {group.effect}")
+        echo(f"  {name:<16} {status}: {group.short}")
         preview.consent(name, "accepted", today, group.rev)
     optouts = (
         optout.active_optouts(load_identity()).statements()
@@ -603,21 +587,21 @@ def _dry_run(
     res = policies.apply(
         base_dir, preview, [], agents=agents, backup_root=backups_dir(base_dir), dry_run=True
     )
-    echo(f"OpenCode config: {res.target}" + ("" if res.changed else " (already up to date)"))
+    echo(f"OpenCode config: {tilde(res.target or '')}" + ("" if res.changed else " (up to date)"))
     _show_diff(res, echo)
     echo(f"  Carter agents would carry {len(wanted)} guard rule(s)")
     if agents:
-        echo(f"  per-agent denies for built-in agents: {', '.join(agents)}")
+        echo(f"  per-agent denies for built-in agents: {ui.short_list(agents)}")
     _git_step(base_dir, preview, echo, dry_run=True, mode=mode)
     if consent.plugin_wanted(preview):
         try:
             for item in plugin.plan(base_dir, preview):
-                echo(f"  would write {item.path}")
-            echo(f"  would create {plugin.run_dir(base_dir)}/gh-empty (0700)")
+                echo(f"  would write {tilde(item.path)}")
+            echo(f"  would create {tilde(plugin.run_dir(base_dir))}/gh-empty (0700)")
         except (plugin.PluginInstallError, IdentityError) as exc:
             echo(f"  ⚠ the plugin could not be planned: {exc}")
     verb = "updated" if state.consents else "created"
-    echo(f"Guard state: {guard_state_path(base_dir)} (would be {verb})")
+    echo(f"Guard state: {tilde(guard_state_path(base_dir))} (would be {verb})")
     if not consent.plugin_wanted(preview):
         echo(INTERIM_NOTE)
     return 0
@@ -631,13 +615,13 @@ def _only_plugin(base_dir: Path | None, state: GuardState, echo: Echo, *, dry_ru
     and the PAT stay. ``g2`` goes back to revision 1 so a bare ``--yes`` never brings it back."""
     if dry_run:
         for item in (plugin.isolation_path(base_dir), plugin.plugin_dir(base_dir)):
-            echo(f"  would remove {item}")
+            echo(f"  would remove {tilde(item)}")
         echo("  g2 would keep only the denies")
         return
     plugin.remove(base_dir, state, echo)
     if state.consents.get("g2", {}).get("decision") == "accepted":
         state.consent("g2", "accepted", datetime.now(UTC).date().isoformat(), 1)
-    echo("plugin removed; OpenCode unloads it within seconds (restart the server to be sure)")
+    echo("plugin removed (restart OpenCode to be sure it is unloaded)")
 
 
 def _only_broker(base_dir: Path | None, state: GuardState, echo: Echo, *, dry_run: bool) -> None:
@@ -648,7 +632,7 @@ def _only_broker(base_dir: Path | None, state: GuardState, echo: Echo, *, dry_ru
     removed, and the revision-3 offer is recorded as declined so nothing asks again."""
     if dry_run:
         echo("  the push tool would go off; the rest of the plugin stays")
-        echo(f"  would remove {plugin.headless_profile_path(base_dir)}")
+        echo(f"  would remove {tilde(plugin.headless_profile_path(base_dir))}")
         return
     day = datetime.now(UTC).date().isoformat()
     if state.consents.get("g2", {}).get("decision") == "accepted":
@@ -657,13 +641,13 @@ def _only_broker(base_dir: Path | None, state: GuardState, echo: Echo, *, dry_ru
     profile = plugin.headless_profile_path(base_dir)
     if state.owned_unchanged(profile):
         profile.unlink()
-        echo(f"  removed {profile}")
+        echo(f"  removed {tilde(profile)}")
     elif profile.exists():
-        echo(f"  kept {profile}: changed since Carter wrote it")
+        echo(f"  kept {tilde(profile)}: changed since Carter wrote it")
     state.forget_file(profile)
     if consent.plugin_wanted(state):
         plugin.install(base_dir, state, echo)  # re-render isolation.json and the plugin together
-    echo("The push tool is off; OpenCode needs a restart to drop the tools")
+    echo("push tool off (restart OpenCode to drop it)")
 
 
 def _known_extra_files(
@@ -676,16 +660,16 @@ def _known_extra_files(
     for rel in KNOWN_EXTRA_FILES:
         path = root / rel
         if path.exists() and not state.owned_unchanged(path):
-            echo(f"  kept {path}: not recorded as Carter's, or changed since")
+            echo(f"  kept {tilde(path)}: changed, or not Carter's")
     for rec in list(state.files):
         path = Path(rec["path"])
         if rec["path"] in keep:
             continue
         if state.owned_unchanged(path):
             path.unlink()
-            echo(f"  removed {path}")
+            echo(f"  removed {tilde(path)}")
         elif path.exists():
-            echo(f"  kept {path}: changed since Carter wrote it")
+            echo(f"  kept {tilde(path)}: changed since Carter wrote it")
         state.forget_file(path)
 
 
@@ -729,7 +713,7 @@ def remove(
                 dry_run=dry_run,
                 reader=reader,
             )
-            echo(f"OpenCode config: {res.target}")
+            echo(f"OpenCode config: {tilde(res.target or '')}")
             _show_diff(res, echo)
         if consent.PLUGIN in (only or []):
             _only_plugin(base_dir, target, echo, dry_run=dry_run)
@@ -739,7 +723,7 @@ def remove(
             plugin.remove(base_dir, target, echo)  # the plugin belongs to g2
         hook_groups = [g for g in (only or []) if g in ("hooks", "repo_hooks", "alias")]
         if hook_groups and dry_run:
-            echo(f"  (the git keys and files of {', '.join(hook_groups)} would be removed too)")
+            echo(f"  (the git keys of {ui.short_list(hook_groups)} would go too)")
         elif hook_groups:
             # what stays accepted keeps its keys: only the withdrawn group's entries go
             mode, _ = _availability(echo)
@@ -758,7 +742,7 @@ def remove(
     for ident in rem.kept_edited + rem.perms.kept_edited:
         echo(f"  kept {ident}: edited since Carter wrote it")
     if dry_run:
-        echo("  (git config, Carter's files and the guard state would be removed too)")
+        echo("  (git config, files and guard state would go too)")
         return 0
     plugin.remove(base_dir, state, echo)
     _remove_git(base_dir, state, echo)
@@ -771,7 +755,7 @@ def remove(
         left = GuardState()
         left.files = [f for f in state.files if f["path"] in identity]
         save(left, path)
-        echo("Kept the identity files and their records (`carter identity remove` takes them).")
+        echo("kept the identity files (carter identity remove takes them)")
         _rerender(base_dir, echo)
         return 0
     path.unlink(missing_ok=True)

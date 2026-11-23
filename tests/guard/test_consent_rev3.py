@@ -25,7 +25,7 @@ from carter.install.paths import (
 )
 from guard.helpers import debug_config, verbose
 
-PENDING = "need your confirmation"
+PENDING = "has new content"
 
 
 def guard(*args: str, **kw):
@@ -81,7 +81,7 @@ class TestRevisionTwoUserKeepsB_Off:
         assert (isolation_path(None).read_bytes(), state_g2()) == before
         assert iso_plugin()["b_enabled"] is False and not headless_profile_path(None).exists()
         if args == ("install", "--yes"):
-            assert PENDING in res.output and "push tool" in res.output
+            assert PENDING in res.output
 
     def test_a_yes_in_a_terminal_without_the_group_named_still_waits(
         self, stack, human_tty
@@ -120,9 +120,9 @@ class TestConfirming:
         )
         assert plugin_hash_matches(), "isolation.json and the plugin are re-rendered together"
         assert (plugin_dir(None) / "broker.ts").exists() and headless_profile_path(None).exists()
-        assert "restart the OpenCode server" in res.output
+        assert "restart OpenCode" in res.output
         assert "convenience, not a security boundary" in res.output
-        assert "push tool: carter_push is enabled for devops" in res.output
+        assert "push tool: carter_push on for devops" in res.output
 
     def test_a_tty_yes_shows_what_b_is_before_the_question(self, stack, human_tty) -> None:
         rev2(stack)
@@ -183,7 +183,7 @@ class TestUndo:
         assert state_g2()["rev"] == 2
         assert iso_plugin()["b_enabled"] is False and plugin_hash_matches()
         assert (plugin_dir(None) / "index.ts").exists() and isolation_path(None).exists()
-        assert not headless_profile_path(None).exists() and "The push tool is off" in res.output
+        assert not headless_profile_path(None).exists() and "push tool off" in res.output
         offer = load(guard_state_path(None)).extra["consent_offers"]["g2"]
         assert offer["rev"] == 3 and offer["decision"] == "declined"
 
@@ -238,7 +238,7 @@ class TestNoGit:
         stack.fake(before=debug_config(stack.live), after=debug_config(stack.live))
         res = guard("install", "--yes", "--only", "g2")
         assert res.exit_code == 0 and iso_plugin()["b_enabled"] is False
-        assert "push tool not enabled: no git found" in res.output
+        assert "push tool off: no git" in res.output
         assert not headless_profile_path(None).exists()
 
 

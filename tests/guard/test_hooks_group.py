@@ -123,15 +123,14 @@ class TestInstall:
         assert not guard_script_path(None).exists() and not carter_gitconfig_path(None).exists()
         assert "include" not in global_cfg().read_text()
         out = guard("status").output
-        assert "hooks" in out and "declined" in out and "asks again" in out
+        assert "hooks" in out and "declined" in out and "see: carter guard install --help" in out
 
     def test_the_consent_prompt_shows_the_effect_line(self, stack, human_tty) -> None:
         human_tty(True)
         stack.fake()
         res = guard("install", input="y\n")
         question = res.output.split("Install?")[0]
-        assert "git hooks check agent commits and block agent pushes in every repo" in question
-        assert "not yours" in question
+        assert "agent commits checked, pushes blocked (all repos)" in question
 
     def test_remove_takes_back_the_script_the_file_and_the_line(self, stack) -> None:
         before = global_cfg().read_bytes()
@@ -268,7 +267,7 @@ class TestMalformedAndEdited:
         monkeypatch.setattr(gc, "render_gitconfig", lambda entries: "[hook\n\tbroken =\n")
         stack.fake()
         res = guard("install", "--yes")
-        assert res.exit_code == 1 and "not valid git config" in res.output
+        assert res.exit_code == 1 and "is not valid" in res.output
         assert (
             not carter_gitconfig_path(None).exists() and "include" not in global_cfg().read_text()
         )
@@ -336,7 +335,7 @@ class TestOldGit:
         self.old(stack)
         res = guard("install", "--yes")
         assert res.exit_code == 0, res.output
-        assert registry()[E_GIT_OLD].message in res.output
+        assert registry()[E_GIT_OLD].message in " ".join(res.output.split())
         state = load(guard_state_path(None))
         assert "hooks" not in state.consents
         assert not guard_script_path(None).exists() or "repo_hooks" in state.consents
@@ -344,4 +343,4 @@ class TestOldGit:
     def test_the_hook_group_is_listed_as_not_on_this_machine_in_a_dry_run(self, stack) -> None:
         self.old(stack)
         out = guard("install", "--dry-run").output
-        assert "hooks              not on this machine: E-GIT-OLD" in out
+        assert "hooks            not on this machine: E-GIT-OLD" in out

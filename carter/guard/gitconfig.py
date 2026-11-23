@@ -98,7 +98,7 @@ def _checked(*args: str) -> str:
     proc = _file_git(*args)
     if proc.returncode != 0:
         raise GitError(
-            f"`git {' '.join(args[:3])} ...` failed ({proc.returncode}): {proc.stderr.strip()}"
+            f"`git {' '.join(args[:3])} ...` failed ({proc.returncode}): {proc.stderr.strip()[:70]}"
         )
     return proc.stdout
 
@@ -262,7 +262,7 @@ def remove_include(path: Path, value: str) -> IncludeResult:
     """Unset exactly our line (``--fixed-value``); a line the user changed or removed is left."""
     value = _absolute(value)
     if not path.exists() or not has_include_line(path, value):
-        return IncludeResult("absent", note=f"include line not found in {path}; nothing changed")
+        return IncludeResult("absent", note=f"include line not found in {tilde(path)}")
     if (why := manual_reason(path)) is not None:
         return IncludeResult("manual", f"{why}: remove Carter's include line")
     _checked(str(path), "--fixed-value", "--unset-all", INCLUDE_KEY, value)
@@ -316,7 +316,7 @@ def validate_content(content: str) -> None:
         probe = scratch / "gitconfig"
         probe.write_text(content, encoding="utf-8")
         if not parses(probe):
-            raise GitError("the rendered Carter gitconfig is not valid git config; nothing written")
+            raise GitError("the rendered Carter gitconfig is not valid; nothing written")
     finally:
         shutil.rmtree(scratch, ignore_errors=True)
 
@@ -365,7 +365,7 @@ def remove_files(base_dir: Path | None, state: GuardState) -> FileRemoval:
     if mirror := carried_mirror(base_dir):  # `identity remove` owns the mirror, not `guard remove`
         if state.owned_unchanged(main):
             install_file(main, render_gitconfig(mirror), state)
-            out.removed.append(f"{main} (hook and alias entries; the hook tier stays)")
+            out.removed.append(f"{tilde(main)} (Carter's entries)")
         else:
             out.kept.append(str(main))
         return out

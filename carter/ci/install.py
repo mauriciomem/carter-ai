@@ -42,34 +42,29 @@ def _refuse_links(root: Path, target: Path) -> None:
     for part in target.relative_to(root).parts:
         current = current / part
         if current.is_symlink():
-            raise InstallError(
-                f"{current.relative_to(root)} is a symlink; refusing to write through it"
-            )
+            raise InstallError(f"{current.relative_to(root)} is a symlink: not written through")
 
 
 def _advice(echo: Echo, comment: bool) -> None:
     version = tpl.render().split("carter-ai==", 1)[1].split('"', 1)[0]
     if re.search(r"dev|rc|a\d|b\d|\+", version):
         echo("")
-        echo(f"  Note: the workflow installs carter-ai=={version}, which looks like a pre-release")
-        echo("  that may not be on PyPI. Edit the pin to a released version before you push.")
+        echo(f"  Note: the workflow pins carter-ai=={version} (a pre-release)")
+        echo("  It may not be on PyPI: pin a release before you push.")
     echo("")
     echo("What to do next (Carter changes nothing on GitHub):")
-    echo(f"  1. Review the file, commit it and push it yourself ({WORKFLOW_REL}).")
-    echo(
-        f"  2. On GitHub create the environment `{ENVIRONMENT}` and add the secret `{SECRET}` to it"
-    )
-    echo("     (a throwaway or budget-limited provider key). Optional repository variables:")
-    echo("     CARTER_CI_MODEL (provider/model) and CARTER_CI_KEY_ENV (default ANTHROPIC_API_KEY).")
-    echo(
-        "  3. Protect the workflows: add `/.github/workflows/ @your-team` to CODEOWNERS and require"
-    )
-    echo("     review for it, because a workflow is executable config.")
-    echo("  Fork pull requests are skipped, not failed. The job has `contents: read` only.")
+    echo("  1. Review the file, commit it and push it yourself.")
+    echo(f"  2. On GitHub create the environment `{ENVIRONMENT}`")
+    echo(f"     and add the secret `{SECRET}` to it (a throwaway key).")
+    echo("     Optional variables: CARTER_CI_MODEL (provider/model),")
+    echo("     CARTER_CI_KEY_ENV (default ANTHROPIC_API_KEY).")
+    echo("  3. In CODEOWNERS add `/.github/workflows/ @your-team`")
+    echo("     and require review (it is executable config).")
+    echo("  Fork pull requests are skipped (`contents: read` only).")
     if comment:
         echo("")
-        echo("  --comment WIDENS the scope: a second job gets `pull-requests: write` (only that)")
-        echo("  to post the review as one comment. It has no checkout and no model.")
+        echo("  --comment WIDENS the scope: a second job gets")
+        echo("  `pull-requests: write` (only that) to post the review.")
 
 
 def install_review(cwd: Path, *, comment: bool, dry_run: bool, force: bool, echo: Echo) -> int:
@@ -84,13 +79,12 @@ def install_review(cwd: Path, *, comment: bool, dry_run: bool, force: bool, echo
     _refuse_links(root, target)
     existing = target.read_text(encoding="utf-8") if target.is_file() else None
     if existing == text:
-        echo(f"{WORKFLOW_REL} is up to date; nothing changed.")
+        echo(f"{WORKFLOW_REL} is up to date; nothing changed.")  # shown as one ✓ line
         _advice(echo, comment)
         return 0
     if existing is not None and not force and not tpl.is_unedited(existing):
         raise InstallError(
-            f"{WORKFLOW_REL} was edited (or was not written by Carter); not overwriting it. "
-            "Review the difference with `carter ci install review --dry-run`, or pass --force."
+            f"{Path(WORKFLOW_REL).name} was edited: compare with --dry-run or use --force"
         )
     target.parent.mkdir(parents=True, exist_ok=True)
     _refuse_links(root, target)

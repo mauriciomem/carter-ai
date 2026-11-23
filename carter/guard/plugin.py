@@ -31,6 +31,7 @@ import carter
 from carter.broker import DEVOPS_AGENT
 from carter.guard import consent, gitconfig
 from carter.guard.state import GuardState
+from carter.home import tilde
 from carter.identity import isolation
 from carter.install.paths import (
     headless_profile_path,
@@ -61,7 +62,7 @@ PLUGIN_FILES = ("core.ts", "broker.ts")  # installed byte-identical next to the 
 TOOL_DIRS = ("/usr/bin", "/bin", "/usr/local/bin", "/opt/homebrew/bin")  # never PATH at runtime
 PLACEHOLDERS = ("__CARTER_ISOLATION_SHA256__", "__CARTER_VERSION__")
 TEMP_ROOTS = ("/tmp", "/var/tmp", "/private/tmp", "/private/var/folders", "/var/folders")
-RESTART = "restart the OpenCode server so it loads the plugin"
+RESTART = "restart OpenCode to load it"
 BROKER_AGENT = DEVOPS_AGENT  # the only agent that can use the push tool
 
 
@@ -85,8 +86,7 @@ def find_paths(*, allow_temp: bool = False) -> tuple[str, str]:
             raise PluginInstallError(f"cannot find an executable {label} for the plugin ({path!r})")
         if not allow_temp and is_temporary(path):
             raise PluginInstallError(
-                f"the {label} path {path} is in a temporary directory; install Carter "
-                "(`uv tool install carter-ai`) and run `carter guard install` from it"
+                f"the {label} is in a temporary directory: `uv tool install carter-ai`"
             )
     return python, carter_bin
 
@@ -198,22 +198,18 @@ def install(
         out.statuses[str(item.path)] = status
         if status == "edited-kept":
             out.kept.append(str(item.path))
-            echo(f"⚠ kept your edited {item.path}; delete it and run `carter guard install`")
+            echo(f"⚠ kept your edited {tilde(item.path)} (delete it to restore)")
     if out.kept:
-        echo(
-            "⚠ the plugin and isolation.json no longer match: agent shells are refused until fixed"
-        )
+        echo("⚠ plugin and isolation.json differ: agent shells are refused")
     if out.changed:
-        echo(f"plugin installed: {plugin_dir(base_dir)} ({RESTART})")
+        echo(f"plugin installed: {tilde(plugin_dir(base_dir))}")
+        echo(f"  {RESTART}")
     else:
-        echo(f"plugin up to date: {plugin_dir(base_dir)}")
+        echo(f"plugin up to date: {tilde(plugin_dir(base_dir))}")
     if broker_enabled(state):
-        echo("push tool: carter_push is enabled for devops (every use asks you).")
+        echo("push tool: carter_push on for devops (you approve each use)")
     elif consent.broker_wanted(state):
-        echo(
-            "⚠ push tool not enabled: no git found in /usr/bin, /bin, /usr/local/bin or "
-            "/opt/homebrew/bin"
-        )
+        echo("⚠ push tool off: no git in the standard directories")
     return out
 
 
@@ -227,9 +223,9 @@ def remove(base_dir: Path | None, state: GuardState, echo: Echo) -> None:
     for path in ours:
         if state.owned_unchanged(path):
             path.unlink()
-            echo(f"  removed {path}")
+            echo(f"  removed {tilde(path)}")
         elif path.exists():
-            echo(f"  kept {path}: changed since Carter wrote it; remove it yourself: rm {path}")
+            echo(f"  kept {tilde(path)}: changed since Carter wrote it")
         state.forget_file(path)
     run = run_dir(base_dir)
     status = run / "plugin-status"

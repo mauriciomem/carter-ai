@@ -60,12 +60,14 @@ def render_install(report: InstallReport) -> None:
             Row("old backups", report.pruned, f"removed, older than {RETENTION_DAYS} days")
         )
     if report.guards:
-        table.append(Row("guards", None, " · ".join(report.guards)))
+        table.append(
+            Row("guards", None, f"{len(report.guards)} installed (see: carter guard status)")
+        )
     ui.section("Installed", "ok")
     ui.rows(table)
     if report.replaced:
         n = report.replaced
-        title = f"Replaced {n} file{'s' if n != 1 else ''} you had edited"
+        title = f"Replaced {n} edited file{'s' if n != 1 else ''}"
         ui.section(title, "warn", f"copies in {tilde(report.backup_dir)}/")
 
 

@@ -108,7 +108,7 @@ class TestIncludeAndHook:
     def test_present_and_global(self, stack) -> None:
         installed(stack)
         items = check(cwd=Path.home())
-        assert find(items, "pre-push hook carter-guard-pre-push is active (scope global)", "ok")
+        assert find(items, "carter-guard-pre-push is active (global)", "ok")
         assert find(items, "include.path for", "ok")
 
     def test_missing_is_red_with_the_exact_line(self, stack) -> None:
@@ -130,8 +130,8 @@ class TestIncludeAndHook:
         cfg.symlink_to(real)
         assert guard("install", "--yes").exit_code == 0
         items = check()
-        (item,) = find(items, "git hooks are inactive", "warn")
-        assert "add this line there" in item.text and "include.path" in item.fix
+        (item,) = find(items, "hooks inactive", "warn")
+        assert "include.path" in item.fix
 
 
 class TestHashes:
@@ -163,7 +163,7 @@ class TestHashes:
         state = load(guard_state_path(None))
         state.record_file(iso, iso.read_bytes())  # recorded, so only the baked hash can tell
         save(state, guard_state_path(None))
-        (item,) = find(check(), "is not the one the plugin was built for", "red")
+        (item,) = find(check(), "is not the plugin's", "red")
         assert "agent shells are refused" in item.text
 
     def test_the_script_and_gitconfig_are_compared_too(self, stack) -> None:
@@ -175,7 +175,7 @@ class TestHashes:
 WORDS = {
     "unproven": "waiting for the first agent command",
     "passed": "working",
-    "failed": "own check failed",
+    "failed": "self-check failed",
 }
 
 
@@ -224,7 +224,7 @@ class TestStatus:
             )
         )
         items = check()
-        assert find(items, "working", "ok") and find(items, "own check failed", "red")
+        assert find(items, "working", "ok") and find(items, "self-check failed", "red")
 
 
 class TestG2States:
@@ -249,12 +249,12 @@ class TestG2States:
         stack.fake(before=debug_config(stack.live))
         items = check()
         assert find(items, "sudo-docker: not installed", "info")
-        assert not find(items, "disagree on the declined groups")
+        assert not find(items, "disagree on declined groups")
         iso = isolation_path(None)
         doc = json.loads(iso.read_bytes())
         doc["plugin"]["declined_groups"] = []
         iso.write_bytes(isolation.canonical_bytes(doc))
-        assert find(check(), "disagree on the declined groups", "warn")
+        assert find(check(), "disagree on declined groups", "warn")
 
 
 class TestPlugins:

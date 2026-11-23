@@ -450,7 +450,7 @@ class TestPreflight:
         assert shim.MIN_GIT_SIGNING == (2, 40)
         with pytest.raises(IdentityError) as err:
             shim.check_git(run=lambda argv: "git version 2.39.5")
-        assert err.value.code == E_GIT_OLD and "2.40" in str(err.value)
+        assert err.value.code == E_GIT_OLD and "2.54" in str(err.value)
         assert shim.check_git(run=lambda argv: "git version 2.40.0") == (2, 40)
         assert shim.check_git(run=lambda argv: "git version 2.51.0 (Apple Git-150)") == (2, 51)
 

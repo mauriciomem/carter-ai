@@ -279,7 +279,7 @@ class TestCarterUpdate:
         write_toml(env.home, {str(env.ws): True})
         monkeypatch.setenv("AGENT", "x")
         code, out = env.update("--yes")
-        assert code == 0 and "agent shells never change them" in out
+        assert code == 0 and "global Carter agents not refreshed" in out
 
     def test_dry_run_writes_nothing(self, env: UpdateEnv) -> None:
         env.install_base()

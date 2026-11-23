@@ -102,13 +102,13 @@ class TestResolve:
             GuardState(), only=None, assume_yes=False, interactive=False
         )
         assert plan.skipped and not plan.accepted and not plan.declined and not plan.asked
-        assert any("NOT installed" in n for n in plan.notices())
+        assert any("guards not installed" in n for n in plan.notices())
 
     def test_yes_accepts_every_live_group(self) -> None:
         plan = consent.resolve_consents(GuardState(), only=None, assume_yes=True, interactive=False)
         assert plan.accepted == BARE_YES and plan.declined == [] and plan.asked == BARE_YES
         assert plan.optional_skipped == ["alias"]
-        assert any("`alias` is optional" in n for n in plan.notices())
+        assert any("alias is optional" in n for n in plan.notices())
 
     def test_tty_prompts_per_group_with_its_effect(self) -> None:
         ask, asked = self.ask_all(True)
@@ -161,7 +161,7 @@ class TestResolve:
         )
         assert asked == ["g2", "sudo-docker", "read-edit-denies", "config-edit", "alias"]
         assert plan.unavailable == why and "hooks" not in plan.accepted + plan.declined
-        assert "`hooks`: E-GIT-OLD: old" in plan.notices()
+        assert "hooks: E-GIT-OLD: old" in plan.notices()
         explicit = consent.resolve_consents(
             GuardState(), only=["hooks"], assume_yes=True, interactive=False, unavailable=why
         )  # even a named group with --yes
@@ -219,7 +219,7 @@ class TestOnlyParsing:
     def test_unknown_group_names_the_valid_ones(self) -> None:
         with pytest.raises(ValueError, match="nope") as exc:
             consent.parse_only("g2,nope")
-        assert "valid groups: g2, hooks, sudo-docker" in str(exc.value)
+        assert "see: carter guard --help" in str(exc.value)
 
     def test_empty_is_an_error(self) -> None:
         with pytest.raises(ValueError):

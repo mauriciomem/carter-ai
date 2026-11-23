@@ -22,6 +22,7 @@ from carter.checkitems import render as render_items
 from carter.guard import agent_rules, consent, gitconfig, optout, permissions, repohooks
 from carter.guard.configwrite import Reader, target_path
 from carter.guard.state import GuardState, load_or_empty_readonly
+from carter.home import tilde
 from carter.identity import ConfigError, load_identity
 from carter.identity.errors import E_CONFIG, E_STATE_INVALID
 from carter.identity.policyset import consent_groups
@@ -30,17 +31,14 @@ from carter.install.jsonc import _load_jsonc
 from carter.install.mcp import config_target
 from carter.install.paths import guard_state_path
 
-STATE_HINT = "Carter does not rebuild it: fix or move the file, then run `carter guard install`."
-CARTER_KEYS_NA = "the tier values the hooks read (carter.tier and the cap): not applicable"
+STATE_HINT = "Carter never rebuilds it: fix or move the file."
+CARTER_KEYS_NA = "the hook tier values (carter.tier, cap): not applicable"
 HOOK_MODES = {
-    "include": "hooks from an included file are reported `global` here",
-    "direct": "hooks work but not via include: the direct-write fallback would be used",
-    "no-config-hooks": "no config-based hooks (git < 2.54): per-repo fallback (`repo_hooks`)",
+    "include": "hooks from an included file show as `global`",
+    "direct": "hooks work, not via include: direct-write fallback",
+    "no-config-hooks": "no config hooks (git before 2.54): `repo_hooks` fallback",
 }
-PLUGIN_ABSENT = (
-    "plugin not installed: gate, isolation and signing guards are inactive; "
-    "the Carter agents carry literal denies only"
-)
+PLUGIN_ABSENT = "plugin not installed: gate and isolation are off (literal denies only)"
 
 
 __all__ = ["exit_code", "render", "run_host_checks"]
@@ -58,17 +56,13 @@ def _policies(state: GuardState, reader: Reader | None, base_dir: Path | None) -
     items: list[Item] = []
     accepted = consent.accepted_groups(state)
     if state.opencode_policies:
-        text = (
-            f"{len(state.opencode_policies)} global policy statement(s) from an earlier Carter "
-            "are still in your OpenCode config and bind every agent"
-        )
+        text = f"{len(state.opencode_policies)} old global policies bind every agent"
         items.append(
             Item(
                 "warn",
                 "agent files",
                 text,
-                "Run `carter guard install`: the guards now apply only to Carter agents "
-                "and Carter workspaces.",
+                "Run `carter guard install` to remove them.",
             )
         )
     current, drifted = agent_rules.agent_file_state(base_dir)
@@ -76,7 +70,7 @@ def _policies(state: GuardState, reader: Reader | None, base_dir: Path | None) -
         text = f"{name}: its permissions differ from what Carter writes"
         items.append(Item("red", "agent files", text, "Run `carter guard install`."))
     if current and not drifted and accepted:
-        text = f"{len(current)} Carter agent file(s) carry the guard rules ({', '.join(accepted)})"
+        text = f"{len(current)} Carter agent file(s) carry the guard rules"
         items.append(Item("ok", "agent files", text))
     try:
         loaded = (reader or harness.read_debug_config)()
@@ -103,7 +97,7 @@ def _files(state: GuardState) -> list[Item]:
     for rec in state.files:
         path = Path(rec["path"])
         if state.owned_unchanged(path):
-            items.append(Item("ok", "guard files", f"{path} matches guard-state.json"))
+            items.append(Item("ok", "guard files", f"{tilde(path)} is unchanged"))
         else:
             what = "was changed since Carter wrote it" if path.exists() else "is missing"
             items.append(
@@ -129,7 +123,7 @@ def _git(state: GuardState) -> list[Item]:
                 Item("red", "git", f"include.path for {value} is missing from {cfg}", line)
             )
         if Path(value).exists() and not gitconfig.parses(Path(value)):
-            text = f"{value} is not valid git config: every git command fails while it is included"
+            text = f"{tilde(value)} is not valid git config (git fails while included)"
             items.append(Item("red", "git", text, "Fix the file or run `carter guard remove`."))
     for r in state.git_config:
         items.append(
@@ -142,12 +136,12 @@ def _git(state: GuardState) -> list[Item]:
     else:
         text = HOOK_MODES[mode]
         hooked = "hooks" in consent.accepted_groups(state)
-        lead = "pre-push config hook installed" if hooked else "no pre-push hook installed"
+        lead = "pre-push config hook on" if hooked else "no pre-push hook installed"
         items.append(Item("info", "git", f"{lead}; {text}"))
         for hook in state.repo_hooks:
             path = Path(hook["path"])
             if state.repo_hook_unchanged(path):
-                items.append(Item("ok", "git", f"repo hook {path} matches guard-state.json"))
+                items.append(Item("ok", "git", f"repo hook {tilde(path)} is unchanged"))
             else:
                 what = "was changed since Carter wrote it" if path.exists() else "is missing"
                 items.append(
@@ -246,7 +240,7 @@ def _mcp_token(base_dir: Path | None) -> list[Item]:
     if value == MCP_FILE_TOKEN:
         return [Item("ok", "mcp token", "carter-github reads the token from gh-read.token")]
     if isinstance(value, str) and value.startswith("{env:"):
-        text = "carter-github still reads its token from an environment variable"
+        text = "carter-github reads its token from an environment variable"
         return [Item("warn", "mcp token", text, "Run `carter install` to switch it to the file.")]
     if isinstance(value, str) and value:
         text = "carter-github has a literal token in the OpenCode config"

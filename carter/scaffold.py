@@ -81,16 +81,10 @@ def _validate_agents(agent_names: list[str], templates_dir: Path) -> None:
     for name in agent_names:
         if not name or not _AGENT_NAME_RE.match(name):
             raise ConfigError(
-                f"Invalid agent name: '{name}'. "
-                f"Names must be lowercase alphanumeric with hyphens. "
-                f"Available agents: {', '.join(available)}"
+                f"Invalid agent name '{name}': use a-z, 0-9, hyphens (see: carter update --help)"
             )
         if name not in available:
-            raise ConfigError(
-                f"Unknown agent: '{name}'. "
-                f"No template found at templates/agents/carter-{name}.md.j2. "
-                f"Available agents: {', '.join(available)}"
-            )
+            raise ConfigError(f"Unknown agent '{name}' (see: carter update --help)")
 
 
 def _suffix_token(config: dict[str, Any]) -> str:
@@ -132,8 +126,9 @@ def model_advisory(config: dict[str, Any]) -> str:
     OpenCode ignores a pinned model your provider lacks, so the pins are named (each model
     once; ``-v`` adds the role behind each) and the caveat stays: Carter cannot verify them.
     """
-    models = ", ".join(dict.fromkeys(model for _, model in model_pins(config)))
-    return f"Pinned models: {models}. Carter cannot verify your provider has them."
+    count = len({model for _, model in model_pins(config)})
+    noun = "model" if count == 1 else "models"
+    return f"{count} {noun} pinned, not verifiable (see: carter check -v)"
 
 
 # ──────────────────────────────────────────────────────────────────────────────

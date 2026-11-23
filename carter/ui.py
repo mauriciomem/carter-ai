@@ -24,6 +24,11 @@ from typing import Any, NamedTuple, TextIO
 
 _state: dict[str, bool] = {"verbose": False, "color": True}
 
+# The output rule: a printed line targets TARGET columns and never passes MAX. Say little and
+# point at the help (``(see: carter push -v)``); details go to ``-v``, ``--help`` and the docs.
+TARGET = 60
+MAX = 80
+
 GLYPHS = {"ok": "✓", "warn": "!", "fail": "✗", "fix": "→", "info": "·"}
 ASCII = {"ok": "ok", "warn": "!", "fail": "x", "fix": "->", "info": "-"}
 
@@ -85,6 +90,42 @@ def _visible(text: str) -> str:
     return "".join(c if c.isprintable() else c.encode("unicode_escape").decode() for c in text)
 
 
+def short_list(names: Iterable[str], limit: int = 3, sep: str = ", ") -> str:
+    """``a, b, c (+2)``: the first ``limit`` names and how many more there are."""
+    items = list(names)
+    more = f" (+{len(items) - limit})" if len(items) > limit else ""
+    return sep.join(items[:limit]) + more
+
+
+class Raw(str):
+    """A command or a snippet: printed whole, never wrapped (it has to paste). ``wrap`` is for
+    prose; anything the reader copies is a ``Raw`` line, or goes on its own ``→`` line."""
+
+
+def _rows(text: str, indent: int, hang: int = 2) -> list[str]:
+    """The lines of ``text``: wrapped prose, or the one whole line of a ``Raw``."""
+    if isinstance(text, Raw):
+        return [" " * indent + _visible(text)]
+    return wrap(text, indent=indent, hang=hang)
+
+
+def wrap(text: str, *, indent: int = 2, hang: int = 2, width: int = MAX) -> list[str]:
+    """``text`` as lines of at most ``width`` columns: the first starts at ``indent``, the next
+    at ``indent + hang``. For text that comes from outside (a path, git's own message) and cannot
+    be written short; a word longer than a line (a path) stays whole, never cut."""
+    import textwrap
+
+    lines = textwrap.wrap(
+        _visible(text),  # first: textwrap would turn a newline in a file name into a space
+        width=width,
+        initial_indent=" " * indent,
+        subsequent_indent=" " * (indent + hang),
+        break_long_words=False,
+        break_on_hyphens=False,
+    )
+    return lines or [""]
+
+
 def _console(stream: TextIO) -> Any:
     from rich.console import Console
 
@@ -132,13 +173,20 @@ def ok(text: str, detail: str = "", *, strong: bool = False) -> None:
 
 def info(text: str, *, indent: int = 0) -> None:
     """A plain line, dimmed on a terminal."""
-    _emit(sys.stdout, [(" " * indent + text, "dim")])
+    _emit(sys.stdout, *([(row, "dim")] for row in _rows(text, indent)))
+
+
+def line(text: str) -> None:
+    """A plain line on stdout (not dimmed); a long one is wrapped under the line budget."""
+    indent = len(text) - len(text.lstrip(" "))
+    body = Raw(text.lstrip(" ")) if isinstance(text, Raw) else text.lstrip(" ")
+    _emit(sys.stdout, *([(row, "")] for row in _rows(body, indent)))
 
 
 def detail(text: str) -> None:
-    """A line shown only with ``-v``."""
+    """A line shown only with ``-v``; prose is wrapped under the line budget."""
     if _state["verbose"]:
-        _emit(sys.stdout, [(f"  {text}", "dim")])
+        _emit(sys.stdout, *([(row, "dim")] for row in _rows(text, 2)))
 
 
 def warn(text: str, fix: str = "") -> None:
@@ -158,19 +206,29 @@ def fix(text: str) -> None:
     _emit(err, _fix_line(err, text))
 
 
-def fail(cause: str, fix: str = "", code: str = "", *, inline: bool = False) -> None:
+def fail(cause: str, fix: str = "", code: str = "", *, inline: bool = False, why: str = "") -> None:
     """``✗ cause`` / ``→ fix`` with the error code dimmed at the end, on stderr.
 
-    ``inline`` puts the fix on the cause's line: ``✗ cause → fix``."""
+    ``inline`` puts the fix on the cause's line: ``✗ cause → fix``. ``why`` is text that comes
+    from outside (another program's message): shown wrapped and dimmed under the cause."""
     err = sys.stderr
-    tail = [(f"  {code}", "dim")] if code else []
-    first = [(_glyph("fail", err), "red bold"), (f" {cause}", "")]
+    arrow, cross = _glyph("fix", err), _glyph("fail", err)
+    first = [(cross, "red bold"), (f" {cause}", "")]
     if fix and inline:
-        _emit(err, [*first, (f" {_glyph('fix', err)} ", "cyan"), (fix, ""), *tail])
-    elif fix:
-        _emit(err, [*first], [(_glyph("fix", err), "cyan"), (f" {fix}", ""), *tail])
+        last = f"{cross} {cause} {arrow} {fix}"
     else:
-        _emit(err, [*first, *tail])
+        last = f"{arrow} {fix}" if fix else f"{cross} {cause}"
+    tail = [(f"  {code}", "dim")] if code else []
+    code_line: list[Sequence[tuple[str, str]]] = []
+    if code and len(last) + 2 + len(code) > MAX:  # the code never pushes a line past the budget
+        tail, code_line = [], [[(f"  {code}", "dim")]]
+    why_lines = [[(row, "dim")] for part in why.split("\n") for row in wrap(part)] if why else []
+    if fix and inline:
+        _emit(err, [*first, (f" {arrow} ", "cyan"), (fix, ""), *tail], *why_lines, *code_line)
+    elif fix:
+        _emit(err, first, *why_lines, [(arrow, "cyan"), (f" {fix}", ""), *tail], *code_line)
+    else:
+        _emit(err, [*first, *tail], *why_lines, *code_line)
 
 
 def next(text: str) -> None:

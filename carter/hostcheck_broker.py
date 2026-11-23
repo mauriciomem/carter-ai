@@ -62,15 +62,13 @@ def consent_items(state: GuardState, plugin: dict | None) -> list[Item]:
     if wanted and enabled:
         return [Item("ok", "push tool", "enabled for devops only (isolation.json)")]
     if wanted:
-        text = "the push tool is confirmed but isolation.json has it off (no git found?)"
+        text = "push tool confirmed but off in isolation.json (no git?)"
         return [Item("warn", "push tool", text, INSTALL_HINT)]
     if enabled:
-        text = "isolation.json enables the push tool but guard state does not have it confirmed"
+        text = "isolation.json enables the push tool, guard state does not"
         return [Item("red", "push tool", text, INSTALL_HINT)]
     if consent.plugin_wanted(state):
-        return [
-            Item("info", "push tool", "off: confirm it with `carter guard install` (devops only)")
-        ]
+        return [Item("info", "push tool", "off: confirm it with carter guard install")]
     return []
 
 
@@ -79,7 +77,7 @@ def profile_items(state: GuardState, base_dir: Path | None) -> list[Item]:
         return []
     path = headless_profile_path(base_dir)
     if state.owned_unchanged(path):
-        text = "the profile for headless runs is present (`opencode run --standalone`)"
+        text = "the headless-run profile is present"
         return [Item("ok", "push tool profile", text)]
     what = "was changed since Carter wrote it" if path.exists() else "is missing"
     return [Item("warn", "push tool profile", f"{path.name} {what}", INSTALL_HINT)]
@@ -148,12 +146,9 @@ def autoaccept_items(base_dir: Path | None, auto_pids: Callable[[], list[int]]) 
         mode = json.loads(config.read_text(encoding="utf-8")).get("session", {}).get("permissions")
     except (OSError, ValueError, AttributeError):
         mode = None
-    hint = 'Set `session.permissions` back to "prompt" (names only: the file is not shown).'
+    hint = 'Set `session.permissions` back to "prompt".'
     if mode == "autoaccept":
-        text = (
-            "OpenCode is set to auto-accept permissions (session.permissions); "
-            f"`carter_push` is refused ({E_B_DWELL})"
-        )
+        text = f"OpenCode auto-accepts permissions: `carter_push` is refused ({E_B_DWELL})"
         out.append(Item("warn", "push approvals", text, hint))
     pids = auto_pids()
     if pids:
@@ -216,10 +211,7 @@ def origin_items(cwd: Path) -> list[Item]:
         return []
     url = done.stdout.strip().lower()
     if done.returncode == 0 and url.startswith(("https://", "http://")):
-        text = (
-            f"origin of this repository is HTTPS; `carter_push` pushes over SSH only "
-            f"({E_B_HTTPS}): use `carter push`"
-        )
+        text = f"origin is HTTPS: `carter_push` needs SSH ({E_B_HTTPS}); use `carter push`"
         return [Item("warn", "push tool origin", text)]
     return []
 
@@ -243,11 +235,9 @@ def ownership_items(plugin: dict | None) -> list[Item]:
         checks["ssh_bin_dir"] = ssh
     loose = [name for name, path in checks.items() if path and _unsafe(path)]
     if loose:
-        text = (
-            f"not root-owned, or writable by others: {', '.join(loose)} "
-            "(the push tool runs them with your credentials)"
-        )
-        return [Item("warn", "push tool", text, "Use the system tools, or accept the risk.")]
+        text = f"not root-owned, or writable by others: {', '.join(loose)}"
+        fix = "Use the system tools (the push tool runs them with your credentials)."
+        return [Item("warn", "push tool", text, fix)]
     return []
 
 

@@ -17,6 +17,7 @@ from carter import hostcheck
 from carter.cli import main
 from carter.guard import gitconfig as gc
 from carter.guard.state import load, save
+from carter.home import tilde
 from carter.identity.errors import E_STATE_INVALID
 from carter.install.mcp import config_target
 from carter.install.paths import carter_gitconfig_path, guard_state_path
@@ -63,7 +64,7 @@ class TestHealthyInstall:
         assert "RED" not in found
         assert any("carry the guard rules" in t for t in found["OK"])
         warns = " ".join(found["WARN"])
-        assert "not loaded yet: start OpenCode" in warns  # installed, no server has loaded it
+        assert "not loaded yet: run an agent command" in warns  # installed, no server has loaded it
         assert "not provisioned" in warns  # no token yet: a WARN, never a failure
         assert "plugin and isolation.json match" in " ".join(found["OK"])
         assert res.output.rstrip().endswith("✓ host  2 warnings")
@@ -77,7 +78,7 @@ class TestHealthyInstall:
         stack.fake(before=debug_config(stack.live))
         found = levels(host().output)
         warns = " ".join(found["WARN"])
-        assert "plugin not installed: gate, isolation and signing guards are inactive" in warns
+        assert "plugin not installed: gate and isolation are off" in warns
         assert "literal denies only" in warns
         assert any("g2 update pending" in t for t in found["INFO"])
 
@@ -85,7 +86,7 @@ class TestHealthyInstall:
         installed(stack)
         stack.fake(before=debug_config(stack.live))
         out = host().output
-        assert "pre-push config hook installed" in out and "include.path for" in out
+        assert "pre-push config hook on" in out and "include.path for" in out
         assert "not applicable" in out
 
     def test_the_env_item_says_when_no_server_runs(self, stack) -> None:
@@ -176,7 +177,7 @@ class TestRedItems:
         state.record_file(f, b"{}")
         save(state, guard_state_path(None))
         stack.fake(before=debug_config(stack.live))
-        assert "OK" in levels(host().output) and f"{f} matches guard-state.json" in host().output
+        assert "OK" in levels(host().output) and f"{tilde(f)} is unchanged" in host().output
         f.write_text("{tampered}")
         stack.fake(before=debug_config(stack.live))
         res = host()

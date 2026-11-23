@@ -51,7 +51,7 @@ class TestInstallCallsGuard:
         assert state.opencode_policies == [] and "policies" not in cfg(base_dir)
         agent = (base_dir / "opencode" / "agents" / "carter-engineer.md").read_text()
         assert "git send-pack *" in agent  # the deny set lives in the Carter agents
-        assert "plugin installed:" in res.output and "restart the OpenCode server" in res.output
+        assert "plugin installed:" in res.output and "restart OpenCode" in res.output
 
     def test_without_a_terminal_and_without_yes_the_guards_are_skipped_with_a_notice(
         self, stack, base_dir: Path, human_tty
@@ -61,7 +61,7 @@ class TestInstallCallsGuard:
         res = carter(base_dir, "install")
         assert res.exit_code == 0, res.output
         assert agents_installed(base_dir)  # installed exactly as before
-        assert "NOT installed" in res.output
+        assert "guards not installed" in res.output
         assert not guard_state_path(base_dir).exists()
         assert not config_target(base_dir).exists()
 
@@ -215,7 +215,7 @@ class TestUninstallRemovesGuards:
         assert res.exit_code == 0, res.output
         out = res.output
         assert "kept build:carter_push: edited since Carter wrote it" in out
-        assert f"kept {carter_file}: edited since Carter wrote it" in out
+        assert f"kept {carter_file}: edited since Carter wrote it" in " ".join(out.split())
         left = cfg(base_dir)
         assert "policies" not in left
         assert left["agents"]["build"]["permissions"] == [

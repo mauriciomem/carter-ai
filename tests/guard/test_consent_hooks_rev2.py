@@ -18,7 +18,7 @@ from carter.guard.state import GuardState, load, save
 from carter.install.paths import carter_gitconfig_path, guard_state_path
 from guard.helpers import debug_config, verbose
 
-PENDING = "the commit checks need your confirmation"
+PENDING = "hooks has new content"
 FOUR = {"pre-push", "prepare-commit-msg", "commit-msg", "post-commit"}
 
 
@@ -93,7 +93,7 @@ class TestUpgradeFromRevision1:
         stack.fake(before=debug_config(stack.live))
         res = guard("install", "--yes")
         assert res.exit_code == 0 and PENDING in res.output
-        assert "carter guard install --yes --only hooks" in res.output
+        assert "run carter guard install" in res.output
         assert (
             written_events() == {"pre-push"}
             and load(guard_state_path(None)).consents["hooks"]["rev"] == 1
@@ -107,9 +107,9 @@ class TestUpgradeFromRevision1:
         res = guard("install", input="y\n")
         assert res.exit_code == 0, res.output
         out = res.output
-        assert out.index(
-            "hooks blocks pushes by Carter agent shells and checks their commits"
-        ) < out.index("Install?")
+        assert out.index("hooks blocks agent pushes and checks agent commits") < out.index(
+            "Install?"
+        )
         assert (
             written_events() == FOUR and load(guard_state_path(None)).consents["hooks"]["rev"] == 2
         )
@@ -121,7 +121,7 @@ class TestUpgradeFromRevision1:
         res = guard("install", "--yes", "--only", "hooks")
         assert res.exit_code == 0, res.output
         assert (
-            "hooks blocks pushes by Carter agent shells and checks their commits" in res.output
+            "hooks blocks agent pushes and checks agent commits" in res.output
         )  # explained even unasked
         assert written_events() == FOUR
 

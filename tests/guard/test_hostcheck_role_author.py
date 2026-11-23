@@ -59,7 +59,7 @@ class TestRoleItems:
         items = run(tmp_path)  # no reader: nothing leaves the machine
         assert find(items, "human identity", "usable").level == "ok"  # type: ignore[union-attr]
         link = find(items, "co-author link")
-        assert link and link.level == "warn" and "only credit" in link.text
+        assert link and link.level == "warn" and "trailer only" in link.text
         assert all(HUMAN[1] not in i.text and HUMAN[0] not in i.text for i in items)
         assert fake.requests == []
 
@@ -204,7 +204,7 @@ class TestRoleItems:
         assert find(run(repo / "sub"), "dco") is None  # role a: not for DCO to worry about here
         set_role(home, "author")
         item = find(run(repo / "sub"), "dco")
-        assert item and item.level == "warn" and name in item.text and "sign-off" in item.text
+        assert item and item.level == "warn" and name in item.text and "DCO" in item.text
 
     def test_a_dco_file_above_the_repository_root_is_not_looked_at(
         self, home: Path, fake: FakeGitHub, key: KeyPair, tmp_path: Path
@@ -225,10 +225,10 @@ class TestRoleItems:
         script = hooks.script_path(None)
         script.parent.mkdir(parents=True, exist_ok=True)
         script.write_text(hooks.render_script().replace("2.1.0", "2.0.0") + "\n# old\n")
-        item = find(run(tmp_path), "guards", "older Carter")
+        item = find(run(tmp_path), "guards", "predates role author")
         assert item and item.level == "red" and "guard install" in item.fix
         script.write_text(hooks.render_script())
-        assert find(run(tmp_path), "guards", "older Carter") is None
+        assert find(run(tmp_path), "guards", "predates role author") is None
 
     def test_the_command_is_names_only_and_exits_1_on_a_red_role_item(
         self, home: Path, fake: FakeGitHub, key: KeyPair, tmp_path: Path

@@ -412,7 +412,7 @@ class TestWorkspaceLevelNoteOnly:
 
         out = update(ws, "--yes").output
 
-        assert "not rewritten" in out and OWN_TERMINAL in out
+        assert "not rewritten" in out and OWN_TERMINAL in " ".join(out.split())
         assert "- **Pushing**" in out and "- **Commits**" not in out  # only what is missing
         assert agents.read_text() == "# Mine\n- **Commits**: use the coauthor_trailer.\n"
 

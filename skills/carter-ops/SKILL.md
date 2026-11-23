@@ -150,19 +150,20 @@ Never run any of these (generated from `g2_rules.json`):
 | `E-B-ARGS` | `carter_push` | Only fast-forward of the current non-default branch to `origin` is allowed. | — |
 | `E-B-REJECTED` | `carter_push` | `carter_push` refused: 3 rejections in this session family. Start a new session or run `carter guard status --reset-b`. | — |
 | `E-CONFIG` | any identity command | config.toml is invalid; agent commits are disabled until fixed. | Never falls back to defaults. |
-| `E-HUMAN-IDENTITY` | plugin / `carter ops config --emit` / prepare-commit-msg, role `author` | Role `author` needs your git identity (`user.name` and `user.email`): empty, the LLM's or a Carter fallback; refusing (no downgrade). | Set `user.name` and `user.email` in your own git config (a workspace `includeIf` override counts), then ask the agent to retry. |
+| `E-HUMAN-IDENTITY` | plugin / `carter ops config --emit` / prepare-commit-msg, role `author` | Role `author` needs your own git `user.name` and `user.email`; refusing. | They are empty, the LLM's or a Carter fallback. Set `user.name` and `user.email` in your own git config (a workspace `includeIf` override counts), then ask the agent to retry. |
 | `E-CI-REVIEW` | `carter commit` / plugin / `identity env` / `carter ops config --emit`, mode `review` (CI context E) | This is a review run: report findings and make no commits. | Context E is review-only by design (no commits, `contents: read`). Commits in CI (contexts C and D) are not built. |
 | `E-ROLE-B-TIER` | role author without LLM signing | Role `author` needs a signing key; refusing (no downgrade). | — |
 | `E-TIER-CAPPED` | plugin / `carter commit` / commit-msg | This workspace caps what the LLM may do with `max_tier = <t>`: agent commits are unsigned human/human with the `<t>` trailer. | A hook tier that is out of date in either direction rejects the agent commit with "run `carter update`". |
 | `E-TIER-REQUIRED` | plugin (agent commit blocked) / `carter commit`, below the pinned `require_tier` | This workspace requires `require_tier = <t>`; configure the LLM identity. | — |
-| `E-POLICIES-MISSING` | `carter check --host`, `carter guard install` (verify and rollback) | Policy `<statement>` not loaded — a broken OpenCode config drops all of them and your providers. | — |
+| `E-POLICIES-MISSING` | `carter check --host`, `carter guard install` (verify and rollback) | Policy `<statement>` not loaded: a broken config drops them all. | — |
 | `E-APLUS-ARGS` | `carter push` | `carter push` pushes only the current branch to `origin`. | Check out the branch you want to push; there are no flags for force, tags or other remotes. |
+| `E-PUSH-FETCH` | `carter push` | cannot fetch from origin | Check the remote and your credentials (`ssh -T git@<host>` for an SSH origin); `carter push` is for the human. |
 | `E-HUMAN-TERMINAL` | `carter guard install\|remove`, `github-token set\|check`, `push` | This command is for you, not an agent: run it in your own terminal. | Open a terminal that OpenCode did not start and run the command there. |
 | `E-STATE-INVALID` | `carter guard *` | ~/.carter/guard-state.json is unreadable or from a newer Carter. | Run `carter guard status` to see the problem; fix or move the file yourself. Carter never rebuilds it. |
 | `E-OPENCODE-VERSION` | install / check | The guards are untested on OpenCode <v>; relying on the plugin's own check. | < 2.1: hard fail; 2.1.0–2.1.3 or above tested: warn. |
-| `E-GIT-OLD` | install / check | Global guards need git ≥ 2.54 (`brew upgrade git`); per-repo hooks offered. LLM signing needs git ≥ 2.40 (`-U` for `key::` literals). | Unguarded repo while LLM signing is on: FAIL in `check --host`. Below 2.40 `carter identity add` refuses and writes nothing. |
-| `E-PROBE-SCOPE` | `carter check --probe` | `carter check --probe` runs only inside an agent shell: ask your agent to run it. | `E-HUMAN-TERMINAL` means the opposite (a human-only command run by an agent), so it is not reused. |
-| `E-FALSE-MISSING` | `carter guard install` | no root-owned `false` found at /usr/bin/false or /bin/false; the guards cannot be installed | Nothing was written. The isolation block needs a `false` that the user cannot modify (never one found through the command search path). |
+| `E-GIT-OLD` | install / check | Global guards need git ≥ 2.54; per-repo hooks are offered instead. | LLM signing needs git ≥ 2.40 (`-U` for `key::` literals). Unguarded repo while LLM signing is on: FAIL in `check --host`. Below 2.40 `carter identity add` refuses and writes nothing. |
+| `E-PROBE-SCOPE` | `carter check --probe` | `carter check --probe` runs only in an agent shell: ask your agent. | `E-HUMAN-TERMINAL` means the opposite (a human-only command run by an agent), so it is not reused. |
+| `E-FALSE-MISSING` | `carter guard install` | no root-owned `false` found in /usr/bin or /bin (guards not installed) | Nothing was written. The isolation block needs a `false` that the user cannot modify (never one found through the command search path). |
 <!-- errors:end -->
 
 ## When the gate or the isolation answers

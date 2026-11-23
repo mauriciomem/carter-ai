@@ -20,6 +20,7 @@ from click.testing import CliRunner
 from carter.cli import main
 from carter.guard import gitconfig as gc
 from carter.guard.state import load
+from carter.home import tilde
 from carter.install.mcp import config_target
 from carter.install.paths import carter_gitconfig_path, guard_state_path
 from guard.helpers import debug_config, verbose
@@ -81,7 +82,7 @@ class TestDamagedInstallLeavesGitAlone:
         human_commit_and_push(repo, "a")
         installed_with_git_key.fake(before=debug_config(installed_with_git_key.live))
         out = guard("status").output
-        assert "MISSING" in out and str(carter_gitconfig_path(None)) in out
+        assert "MISSING" in out and tilde(carter_gitconfig_path(None)) in out
         assert "include.path: present" in out
 
     def test_a_corrupt_guard_state(self, installed_with_git_key, repo: Path) -> None:
@@ -122,13 +123,13 @@ class TestDamagedInstallLeavesGitAlone:
         carter_file.write_text("[carter\n\ttier = ")
         assert git("status", cwd=repo).returncode != 0  # the hazard, stated honestly
         out = guard("status").output
-        assert f"INVALID {carter_file}" in out and "carter guard remove" in out
+        assert f"INVALID {tilde(carter_file)}" in out and "carter guard remove" in out
         installed_with_git_key.fake(
             before=debug_config(installed_with_git_key.live), after=debug_config()
         )
         res = guard("remove", "--yes")
         assert res.exit_code == 0, res.output
-        assert carter_file.exists() and f"kept {carter_file}" in res.output
+        assert carter_file.exists() and f"kept {tilde(carter_file)}" in res.output
         assert str(carter_file) not in Path(os.environ["GIT_CONFIG_GLOBAL"]).read_text()
         human_commit_and_push(repo, "i")
 

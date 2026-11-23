@@ -20,7 +20,9 @@ from carter.terminal import require_human_terminal
 def no_arguments(command: str, extra: tuple[str, ...]) -> None:
     if extra:  # names only: an argument could be a mistyped secret
         raise IdentityError(
-            E_APLUS_ARGS, detail=f"{command} takes no arguments ({len(extra)} given)"
+            E_APLUS_ARGS,
+            f"{command} takes no arguments ({len(extra)} given)",
+            fix="it pushes the current branch (see: carter push --help)",
         )
 
 

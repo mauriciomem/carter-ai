@@ -45,7 +45,7 @@ class TestConsent:
         stack.fake()
         res = guard("install", "--yes")
         assert res.exit_code == 0, res.output
-        assert "`alias` is optional and was not installed" in res.output
+        assert "alias is optional and not installed" in res.output
         assert ALIAS_KEY not in carter_entries()
         assert "alias" not in load(guard_state_path(None)).consents  # undecided, not declined
 
@@ -64,7 +64,7 @@ class TestConsent:
         human_tty(True)
         stack.fake()
         res = guard("install", "--only", "alias", input="n\n")  # Y/n, and no is no
-        assert "Install? [Y/n]" in res.output and "Nothing installed" in res.output
+        assert "Install? [Y/n]" in res.output and "nothing installed" in res.output
         assert ALIAS_KEY not in carter_entries()
         assert (
             "alias" not in load(guard_state_path(None)).consents
@@ -84,7 +84,7 @@ class TestConsent:
     def test_the_dry_run_says_it_is_optional(self, stack) -> None:
         stack.fake()
         out = guard("install", "--dry-run").output
-        assert "alias              optional, not part of --yes" in out
+        assert "alias            optional: --only alias" in out
 
 
 class TestValue:
@@ -118,7 +118,7 @@ class TestUserOwnedAlias:
         stack.fake()
         res = guard("install", "--yes", "--only", "alias")
         assert res.exit_code == 0, res.output
-        assert "alias.ai-commit is already set in your git config; Carter kept it" in res.output
+        assert "alias.ai-commit is yours: Carter kept it" in res.output
         assert (
             git("config", "--global", "--includes", "--get", ALIAS_KEY).stdout.strip()
             == "!echo mine"

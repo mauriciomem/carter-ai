@@ -80,11 +80,11 @@ class TestPaths:
         agent_paths.check_length(Path("/" + "m" * 102), "darwin")
         with pytest.raises(IdentityError) as err:
             agent_paths.check_length(mac_limit, "darwin")
-        assert err.value.code == E_UNLOCK_PATH and "104" in err.value.detail
+        assert err.value.code == E_UNLOCK_PATH and "104" in err.value.fix
         agent_paths.check_length(Path("/" + "l" * 106), "linux")  # 107 bytes
         with pytest.raises(IdentityError) as err:
             agent_paths.check_length(Path("/" + "l" * 107), "linux")
-        assert "108" in err.value.detail
+        assert "108" in err.value.fix
 
     def test_the_typical_macos_tmpdir_fits_computed_here_run_on_a_mac_in_step_33(self) -> None:
         tmpdir = "/var/folders/ab/" + "x" * 30 + "/T/"  # 49 bytes with the slash
@@ -431,9 +431,7 @@ class TestUnlock:
         )
         with pytest.raises(IdentityError) as err:
             agent.unlock(long_setup, ctx.runner)
-        assert (
-            err.value.code == E_UNLOCK_PATH and str(agent_paths.socket_limit()) in err.value.detail
-        )
+        assert err.value.code == E_UNLOCK_PATH and str(agent_paths.socket_limit()) in err.value.fix
         assert not (ctx.rig.root / ("d" * 120)).exists()
 
     def test_two_concurrent_unlocks_make_one_agent_and_load_one_key(self, ctx: Ctx) -> None:

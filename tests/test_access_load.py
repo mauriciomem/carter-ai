@@ -214,7 +214,7 @@ class TestGlobalAgentsFollowTheLevel:
         before = installed.read_text()
         _home_config('schema = 2\n[access]\nlevel = "relaxed"\n')
         out = _update(ws, env=agent).output
-        assert "global Carter agents not refreshed: agent shells never change them" in out
+        assert "global Carter agents not refreshed (agent shell)" in out
         assert installed.read_text() == before
 
     def test_without_a_manifest_update_creates_nothing(self, ws):

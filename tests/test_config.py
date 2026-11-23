@@ -513,7 +513,7 @@ class TestDocsLanguage:
             main, ["init", str(tmp_path), "--no-git-state", "--docs-language", "pt_BR"]
         )
         assert result.exit_code != 0
-        assert "docs_language" in result.output
+        assert "docs-language" in result.output
         assert not (tmp_path / ".carter").exists()
 
 

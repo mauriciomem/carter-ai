@@ -52,7 +52,7 @@ def test_install_prints_only_ascii(fake_opencode, tmp_path: Path) -> None:
     fake_opencode()
     result = _run("install", "--base-dir", str(tmp_path / "home"))
     assert result.exit_code == 0, result.output
-    assert result.stdout.splitlines()[-1].startswith("-> restart the OpenCode server")
+    assert result.stdout.splitlines()[-1].startswith("-> restart OpenCode")
     _assert_ascii(result)
 
 

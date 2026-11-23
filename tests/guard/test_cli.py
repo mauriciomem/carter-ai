@@ -20,6 +20,7 @@ from carter.guard import gitconfig as gc
 from carter.guard import hooks
 from carter.guard.alias import ALIAS_KEY
 from carter.guard.state import load
+from carter.home import tilde
 from carter.identity.errors import E_HUMAN_TERMINAL, E_POLICIES_MISSING, E_STATE_INVALID, registry
 from carter.identity.policyset import policy_statements
 from carter.install.mcp import config_target
@@ -28,9 +29,7 @@ from guard.conftest import REAL_GIT
 from guard.helpers import STAND_IN, agents_json, debug_config, decline, tree_hash, verbose
 
 BUILTINS = ["build", "plan", "general", "explore"]
-PAT_MESSAGE = (
-    "`~/.carter/secrets/gh-read.token` kept; delete it and revoke the token on GitHub if unused"
-)
+PAT_MESSAGE = "kept ~/.carter/secrets/gh-read.token: revoke the token if unused"
 
 
 def _raises(exc: Exception):
@@ -87,7 +86,8 @@ class TestWhoMayRun:
         before = tree_hash(stack.home)
         res = guard("install")
         assert res.exit_code == 0
-        assert "NOT installed" in res.output and "--yes" not in res.output.replace("no --yes", "")
+        assert "guards not installed" in res.output and "no terminal" in res.output
+        assert "--yes" not in res.output  # the notice never advertises the consent bypass
         assert tree_hash(stack.home) == before
         assert not guard_state_path(None).exists() and not config_target(None).exists()
         assert not backups_dir(None).exists()
@@ -119,12 +119,12 @@ class TestDryRun:
         out = res.output
         assert "dry run" in out
         for group in ("g2", "hooks", "sudo-docker", "read-edit-denies", "config-edit"):
-            assert f"{group:<18} would ask" in out
-        assert f"{'alias':<18} optional, not part of --yes" in out
-        assert f"{'repo_hooks':<18} not on this machine: not needed" in out  # git >= 2.54 here
+            assert f"{group:<16} would ask" in out
+        assert f"{'alias':<16} optional: --only alias" in out
+        assert f"{'repo_hooks':<16} not on this machine: not needed" in out  # git >= 2.54 here
         assert "Carter agents would carry" in out and "guard rule(s)" in out
         assert "+ deny-git-push" not in out  # no global policies any more
-        assert "per-agent denies for built-in agents: build, plan, general, explore" in out
+        assert "per-agent denies for built-in agents: build, plan, general (+1)" in out
         assert "carter-engineer" not in out
         assert "guard script:" in out and "(would be written)" in out
         assert "would write" in out and "isolation.json" in out and "plugins/carter/index.ts" in out
@@ -155,7 +155,7 @@ class TestDryRun:
         res = guard("install", "--dry-run")
         assert res.exit_code == 0
         assert "  + per-agent deny build:carter_push" in res.output
-        assert "has comments and rewriting drops them" in res.output
+        assert "has comments: dropped on rewrite" in res.output
         assert target.read_bytes() == before
         assert not target.with_name(target.name + ".carter-backup").exists()
 
@@ -163,7 +163,7 @@ class TestDryRun:
         install_all(stack)
         stack.fake(before=debug_config(stack.live))
         out = guard("install", "--dry-run").output
-        assert "already up to date" in out and "  + " not in out
+        assert "up to date" in out and "  + " not in out
 
     def test_agents_that_cannot_be_listed_only_warn(self, stack, fake_opencode) -> None:
         fake_opencode(agents_output="boom", agents_exit=1)
@@ -192,7 +192,7 @@ class TestInstall:
             "opencode-headless.json",
         ]  # fmt: skip
         assert stat.S_IMODE(guard_state_path(None).stat().st_mode) == 0o600
-        assert "plugin installed:" in res.output and "restart the OpenCode server" in res.output
+        assert "plugin installed:" in res.output and "restart OpenCode" in res.output
         assert "git config: 8 key(s), mode include" in res.output
 
     def test_the_hooks_group_writes_the_script_the_gitconfig_and_one_include_line(
@@ -223,7 +223,7 @@ class TestInstall:
         files = (config_target(None).read_bytes(), guard_state_path(None).read_bytes())
         stack.fake(before=debug_config(stack.live))
         res = guard("install", "--yes")
-        assert res.exit_code == 0 and "already up to date" in res.output
+        assert res.exit_code == 0 and "up to date" in res.output
         assert (config_target(None).read_bytes(), guard_state_path(None).read_bytes()) == files
 
     def test_a_tty_gets_one_question_with_a_short_summary(self, stack, human_tty) -> None:
@@ -235,7 +235,8 @@ class TestInstall:
         assert "Install this group?" not in res.output
         head = res.output.split("Install?")[0]
         assert len([ln for ln in head.splitlines() if ln.strip()]) <= 6  # a short summary
-        assert "Carter will set up: g2, hooks, sudo-docker" in head
+        assert "g2" in head and "isolates agent shells" in head and "sudo-docker" in head
+        assert "(details: carter guard --help)" in head and "(all repos)" in head
         state = load(guard_state_path(None))
         assert {"g2", "hooks", "sudo-docker", "read-edit-denies", "config-edit"} <= set(
             state.consents
@@ -249,7 +250,7 @@ class TestInstall:
         stack.fake()
         before = tree_hash(stack.home)
         no = guard("install", input="n\n")
-        assert no.exit_code == 0 and "Nothing installed" in no.output
+        assert no.exit_code == 0 and "nothing installed" in no.output
         assert tree_hash(stack.home) == before and not guard_state_path(None).exists()
         assert guard("install", input="\n").exit_code == 0
         assert load(guard_state_path(None)).consents
@@ -268,7 +269,7 @@ class TestInstall:
         assert res.exit_code == 0, res.output
         state = load(guard_state_path(None))
         assert state.consents["sudo-docker"]["decision"] == "declined"
-        assert "sudo-docker" not in res.output.split("Install?")[0].split("up: ")[1].split("\n")[0]
+        assert "sudo-docker" not in res.output.split("Install?")[0]
 
     def test_only_installs_just_those_groups(self, stack) -> None:
         stack.fake()
@@ -281,13 +282,13 @@ class TestInstall:
     def test_an_unknown_group_is_a_usage_error_naming_the_valid_ones(self, stack) -> None:
         res = guard("install", "--yes", "--only", "g2,nope")
         assert res.exit_code == 2
-        assert "nope" in res.output and "valid groups: g2, hooks, sudo-docker" in res.output
+        assert "nope" in res.output and "see: carter guard --help" in res.output
 
     def test_unavailable_groups_are_noted_and_never_recorded(self, stack) -> None:
         stack.fake()
         res = guard("install", "--yes", "--only", "repo_hooks")
         assert res.exit_code == 0
-        assert "`repo_hooks`: not needed" in res.output  # git >= 2.54 on the test host
+        assert "repo_hooks: not needed" in res.output  # git >= 2.54 on the test host
         assert not guard_state_path(None).exists() and not config_target(None).exists()
 
     def test_the_optional_alias_is_installed_only_by_name(self, stack) -> None:
@@ -494,8 +495,7 @@ class TestStatus:
         out = res.output
         assert res.exit_code == 0
         assert (
-            "g2                 accepted" in out
-            and "alias              optional, not installed" in out
+            "g2               accepted" in out and "alias            optional, not installed" in out
         )
         assert "no global policies" in out and "MISSING" not in out
         assert "Agents with `carter_push` denied: build, explore, general, plan" in out
@@ -507,7 +507,9 @@ class TestStatus:
         decline("sudo-docker")
         guard("install", "--yes")
         out = guard("status").output
-        assert "sudo-docker" in out and "declined" in out and "asks again" in out
+        assert (
+            "sudo-docker" in out and "declined" in out and "see: carter guard install --help" in out
+        )
 
     def test_a_corrupt_state_is_reported_without_writing(self, stack) -> None:
         path = guard_state_path(None)
@@ -515,7 +517,7 @@ class TestStatus:
         path.write_text("{broken")
         before = tree_hash(stack.home)
         res = guard("status")
-        assert res.exit_code == 0 and "CORRUPT" in res.output and "does not rebuild" in res.output
+        assert res.exit_code == 0 and "CORRUPT" in res.output and "never rebuilds" in res.output
         assert tree_hash(stack.home) == before
 
     def test_a_newer_schema_is_reported(self, stack) -> None:
@@ -534,11 +536,11 @@ class TestStatus:
 
         save(state, guard_state_path(None))
         stack.fake(before=debug_config(stack.live))
-        assert f"ok      {f}" in guard("status").output
+        assert f"ok      {tilde(f)}" in guard("status").output
         f.write_text("{changed}")
-        assert f"CHANGED {f}" in guard("status").output
+        assert f"CHANGED {tilde(f)}" in guard("status").output
         f.unlink()
-        assert f"MISSING {f}" in guard("status").output
+        assert f"MISSING {tilde(f)}" in guard("status").output
 
 
 class TestRemove:
@@ -655,7 +657,10 @@ class TestRemove:
         stack.fake(before=debug_config(stack.live), after=debug_config())
         out = guard("remove", "--yes").output
         assert kept.exists() and not ours.exists()
-        assert f"kept {kept}: changed since Carter wrote it" in out and f"removed {ours}" in out
+        assert (
+            f"kept {tilde(kept)}: changed since Carter wrote it" in out
+            and f"removed {tilde(ours)}" in out
+        )
 
     def test_git_config_is_undone_in_teardown_order(self, stack, monkeypatch) -> None:
         monkeypatch.setattr(gc, "carter_git_entries", STAND_IN)
@@ -675,7 +680,7 @@ class TestRemove:
         carter.write_text(carter.read_text() + "[user]\n\tname = mine\n")
         stack.fake(before=debug_config(stack.live), after=debug_config())
         out = guard("remove", "--yes").output
-        assert carter.exists() and f"kept {carter}: edited since Carter wrote it" in out
+        assert carter.exists() and f"kept {tilde(carter)}: edited since Carter wrote it" in out
 
 
 def test_guard_help_lists_the_three_commands() -> None:

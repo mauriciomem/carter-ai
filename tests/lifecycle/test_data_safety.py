@@ -10,6 +10,7 @@ from pathlib import Path
 from click.testing import CliRunner
 
 from carter.cli import main
+from carter.home import tilde
 from carter.install import orchestrator, paths
 from carter.install.console import set_verbosity
 from carter.install.uninstall import uninstall
@@ -85,8 +86,9 @@ def test_dash_v_lists_every_file_removed_and_kept(installed: Path) -> None:
     kept.write_text(kept.read_text() + "\nmine\n")
     args = ["uninstall", "--base-dir", str(installed)]
     out = CliRunner().invoke(main, [*args, "-v"]).output
-    assert f"Removed {oc / 'agents' / 'carter-pm.md'}" in out
-    assert f"Kept {kept}: edited since install" in out
+    flat = " ".join(out.split())  # a long path wraps under the line budget
+    assert f"Removed {oc / 'agents' / 'carter-pm.md'}" in flat
+    assert f"Kept {tilde(kept)}: edited since install" in flat
 
 
 def test_an_edited_global_agent_is_removed_with_a_copy_at_its_mirrored_path(

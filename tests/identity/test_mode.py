@@ -83,7 +83,7 @@ class TestPrecedence:
 class TestRefusedModes:
     def test_interactive_in_ci_is_refused_that_is_context_c(self) -> None:
         got = mode.resolve_mode("", {**CI, "CARTER_IDENTITY_MODE": "interactive"})
-        assert got.error and "context C" in got.error and "not built" in got.error
+        assert got.error and "in CI" in got.error and "not built" in got.error
 
     def test_config_interactive_in_ci_is_refused_too(self) -> None:
         assert mode.resolve_mode("interactive", CI).error

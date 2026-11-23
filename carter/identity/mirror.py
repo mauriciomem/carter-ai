@@ -76,8 +76,7 @@ def check_caps(cfg: IdentityConfig) -> None:
     role_b = [key for key, ws in cfg.workspaces.items() if ws.max_tier and ws.role == "author"]
     if role_b:
         raise MirrorError(
-            f"{E_ROLE_B_TIER}: role `author` is pinned together with a max_tier cap, and it "
-            "needs LLM signing on (no downgrade): " + ", ".join(role_b)
+            f"{E_ROLE_B_TIER}: role `author` cannot have a max_tier cap: " + ", ".join(role_b)
         )
     bad = [
         key

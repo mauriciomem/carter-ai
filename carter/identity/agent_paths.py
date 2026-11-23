@@ -81,8 +81,7 @@ def check_length(sock: Path, platform: str | None = None) -> None:
     if size >= limit:
         raise IdentityError(
             E_UNLOCK_PATH,
-            detail=f"the socket path is {size} bytes; AF_UNIX allows fewer than {limit}. "
-            "Shorten HOME or TMPDIR (or set XDG_RUNTIME_DIR to a short directory).",
+            fix=f"shorten HOME or XDG_RUNTIME_DIR ({size} bytes, limit {limit})",
         )
 
 

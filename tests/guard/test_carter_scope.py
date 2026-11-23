@@ -23,10 +23,7 @@ from carter.install.mcp import config_target
 from carter.install.paths import guard_state_path
 from guard.helpers import decline, verbose
 
-NOTICE = (
-    "✓ the guards now apply only to Carter agents and Carter workspaces; "
-    "global OpenCode policies removed."
-)
+NOTICE = "✓ old global OpenCode policies removed"
 BUILTINS = ["build", "plan", "general", "explore"]
 
 

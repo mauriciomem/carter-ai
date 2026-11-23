@@ -14,6 +14,7 @@ from pathlib import Path
 import click
 
 from carter import terminal, ui
+from carter.cliguard import show_detail
 from carter.guard import engine, report
 from carter.install.paths import guard_state_path
 
@@ -29,7 +30,8 @@ def _run(fn, what: str) -> int:  # type: ignore[no-untyped-def]
         if found is None:
             raise
         cause, fix, code = found
-        ui.fail(f"guards: {what} failed: {cause}", fix, code)
+        ui.warn(f"guards: {what} failed")
+        ui.fail(cause, fix, code, why=show_detail(exc, cause))
         return 1
 
 

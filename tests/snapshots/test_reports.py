@@ -78,10 +78,29 @@ def test_only_the_warning_sections_and_notices_go_to_stderr() -> None:
     replaced = play("install-edited", "pipe")
     assert replaced.text("err") == (
         "! gh CLI not found (optional)\n"
-        "\n! Replaced 3 files you had edited  (copies in ~/.carter/backups/20261112T101500/)\n"
+        "\n! Replaced 3 edited files  (copies in ~/.carter/backups/20261112T101500/)\n"
     )
     assert "Kept" in edited.text("out") and "Replaced" not in replaced.text("out")
 
 
 def test_the_order_of_both_streams_is_the_order_a_terminal_shows(update_golden: bool) -> None:
     _check("uninstall-full.routed.txt", play("uninstall-full", "pipe").routed(), update_golden)
+
+
+def test_no_line_of_a_report_passes_the_hard_max() -> None:
+    """The output rule: 80 columns at most (escapes removed). The rows of a table that lists
+    paths and the ``copy:`` line under one are data (a path is as long as it is); a terminal
+    stacks them at its own width (the 60-column files)."""
+    from carter import ui
+
+    def is_data(line: str) -> bool:
+        return line.startswith("    ") or "copy:" in line
+
+    long = [
+        f"{path.name}: {line}"
+        for path in sorted(GOLDEN.glob("install-*")) + sorted(GOLDEN.glob("uninstall-*"))
+        if "routed" not in path.name
+        for line in ANSI.sub("", path.read_text(encoding="utf-8")).splitlines()
+        if len(line) > ui.MAX and not is_data(line)
+    ]
+    assert not long, "\n".join(long)

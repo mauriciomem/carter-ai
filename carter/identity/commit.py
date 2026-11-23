@@ -59,7 +59,7 @@ VALUE_LONG = frozenset({
     "--squash", "--date", "--cleanup", "--trailer", "--pathspec-from-file",
 })  # fmt: skip
 LONG_REFUSED = ("--no-verify", "--no-gpg-sign", "--signoff", "--author")
-BARE_S = "dropped a bare -S/--gpg-sign: the LLM signs by itself, and your key is never used"
+BARE_S = "dropped a bare -S: the LLM signs by itself, your key is not used"
 
 
 class CommitRefused(Exception):
@@ -107,10 +107,7 @@ def _screen(args: Sequence[str]) -> tuple[list[str], list[str], int]:
             kept.append(tok)
     if bad:
         names = ", ".join(dict.fromkeys(bad))
-        raise CommitRefused(
-            f"carter commit does not accept {names}: it signs, verifies and attributes the "
-            "commit itself. Use `git commit` yourself for those."
-        )
+        raise CommitRefused(f"carter commit does not accept {names}: it handles those itself")
     return kept, notes, len(kept) if sep < 0 else sep
 
 

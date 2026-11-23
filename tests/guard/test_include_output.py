@@ -114,7 +114,7 @@ class TestStatus:
         guard("install", "--yes")
         stack.fake(before=debug_config(stack.live))
         res = guard("status")
-        assert "! include.path: NOT in your global git config: hooks inactive" in res.output
+        assert "! include.path: NOT in ~/.gitconfig: hooks inactive" in res.output
         assert "  → see: carter install --help" in res.output
         one_line_each(res.output)
 

@@ -32,8 +32,5 @@ def plan_alias(global_config: Path) -> AliasPlan:
         return AliasPlan("set")
     if have.stdout.rstrip("\n") == ALIAS_VALUE:
         return AliasPlan("ours")
-    snippet = (
-        f"{ALIAS_KEY} is already set in your git config; Carter kept it. To use Carter's too, "
-        f"run `carter commit` directly or chain: {ALIAS_KEY} = {ALIAS_VALUE}"
-    )
+    snippet = f"To use Carter's too, run `carter commit` or chain:\n  {ALIAS_KEY} = {ALIAS_VALUE}"
     return AliasPlan("kept-user-value", snippet)

@@ -35,8 +35,7 @@ def data_dir() -> Path:
         return repo_root
 
     raise FileNotFoundError(
-        "Could not locate Carter data files. Expected either "
-        f"{packaged} (installed) or {repo_root}/templates (development checkout)."
+        f"Could not locate Carter data files (looked in {packaged} and {repo_root}/templates)"
     )
 
 

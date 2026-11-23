@@ -18,7 +18,7 @@ from carter.identity.rules import is_agent
 from carter.terminal import is_agent_shell, require_human_terminal
 
 REPO = Path(__file__).resolve().parents[1]
-SUFFIX = "restart the app from a clean terminal"  # in the fix line since
+SUFFIX = "restart the app"  # the false positive (a shell that inherited agent variables)
 
 
 @pytest.fixture

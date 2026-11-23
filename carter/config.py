@@ -126,10 +126,7 @@ def _validate_identity(identity: Any) -> None:
     if not isinstance(identity, dict):
         raise ConfigError(f"Invalid identity block: {identity!r} (must be a mapping)")
     if "allow_project_opencode_edit" in identity:
-        raise ConfigError(
-            "identity.allow_project_opencode_edit is not accepted in carter.yaml: "
-            "loosening a control is set only in ~/.carter/config.toml."
-        )
+        raise ConfigError("identity.allow_project_opencode_edit: set it in config.toml")
     for key, allowed in (("role", IDENTITY_ROLES), ("require_tier", IDENTITY_TIERS)):
         value = identity.get(key)
         if value is not None and not (isinstance(value, str) and value in allowed):
@@ -142,17 +139,14 @@ def _validate_agent_suffix(suffix: Any) -> None:
     """Validate ``agent_suffix``: a lowercase alphanumeric/hyphen string or empty."""
     if not isinstance(suffix, str) or not _AGENT_SUFFIX_RE.match(suffix):
         raise ConfigError(
-            f"Invalid agent_suffix: {suffix!r}. "
-            "Must be a lowercase alphanumeric/hyphen string (or empty)."
+            f"Invalid agent_suffix {suffix!r}: use lowercase letters, digits, hyphens"
         )
 
 
 def _validate_docs_language(tag: Any) -> None:
     """Validate ``docs_language``: a simple language tag such as ``en`` or ``pt-BR``."""
     if not isinstance(tag, str) or not _LANGUAGE_TAG_RE.match(tag):
-        raise ConfigError(
-            f"Invalid docs_language: {tag!r}. Must be a language tag such as 'en', 'es' or 'pt-BR'."
-        )
+        raise ConfigError(f"Invalid docs_language {tag!r}: use a language tag like 'en' or 'pt-BR'")
 
 
 def _validate_profile(profile: Any) -> None:
@@ -180,7 +174,7 @@ def _validate_models(models: Any) -> None:
     """Validate the ``models`` block: every tier/override is a V2 model string."""
     if not isinstance(models, dict):
         raise ConfigError(f"Invalid models block: {models!r} (must be a mapping)")
-    hint = "Must be a single 'provider/model[#variant]' string, e.g. 'anthropic/claude-opus-5-5'."
+    hint = "Use 'provider/model[#variant]', e.g. 'anthropic/claude-opus-5-5'."
     entries = [(f"models.{k}", v) for k, v in models.items() if k != "overrides"]
     overrides = models.get("overrides") or {}
     if not isinstance(overrides, dict):
@@ -226,8 +220,7 @@ def _validate_allowlist(allowlist: Any, agents: list[str]) -> None:
     for agent, cats in allowlist.items():
         if agent not in agents:
             raise ConfigError(
-                f"Invalid policy.allowlist agent {agent!r}. "
-                f"Must be one of the configured agents: {', '.join(agents)}."
+                f"Invalid policy.allowlist agent {agent!r} (see: carter update --help)"
             )
         if not isinstance(cats, dict):
             raise ConfigError(f"Invalid policy.allowlist.{agent}: {cats!r} (must be a mapping)")
@@ -252,8 +245,13 @@ def load_config(config_path: Path) -> dict[str, Any]:
     if not config_path.exists():
         raise ConfigError(f"Config file not found: {config_path}")
 
-    with open(config_path, encoding="utf-8") as f:
-        config = _yaml.load(f)
+    try:
+        with open(config_path, encoding="utf-8") as f:
+            config = _yaml.load(f)
+    except yaml.YAMLError as exc:  # a line, not a traceback
+        mark = getattr(exc, "problem_mark", None)
+        where = f" (line {mark.line + 1})" if mark is not None else ""
+        raise ConfigError(f"{config_path.name} is not valid YAML{where}") from exc
 
     if not isinstance(config, dict):
         raise ConfigError(f"Invalid config format in {config_path}")

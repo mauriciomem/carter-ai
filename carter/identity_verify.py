@@ -219,7 +219,7 @@ def verify_local(
                     "red",
                     "verify",
                     f"{E_HUMAN_IDENTITY}: role author needs a usable git user.name and user.email",
-                    "Set them in your own git config, then run `carter identity verify` again.",
+                    "Set them in your git config, then run `carter identity verify`.",
                 ),
             ]
         if not block.get("signing"):

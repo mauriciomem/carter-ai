@@ -291,10 +291,7 @@ def _validate_plan_dir(
 
     # An active plan must declare at least one must_haves entry
     if status == "active" and mh_count == 0:
-        errors.append(
-            f"{name}/README.md: an 'active' plan must declare at least one "
-            f"must_haves entry (truths/artifacts/key_links)"
-        )
+        errors.append(f"{name}/README.md: an 'active' plan needs a must_haves entry")
 
     # README size budget
     readme_lines = len(text.split("\n"))
@@ -357,13 +354,12 @@ def _check_bucket_status(name: str, status: Any, bucket: str) -> list[str]:
         return []  # missing/invalid status already reported by _validate_plan_dir
     if bucket == "active" and status in TERMINAL_STATUS:
         return [
-            f"{name}/README.md: status {status!r} is terminal but the plan is in "
-            f"active/ (move it to completed/)"
+            f"{name}/README.md: status {status!r} is terminal: move it from active/ to completed/"
         ]
     if bucket == "completed" and status not in TERMINAL_STATUS:
         return [
-            f"{name}/README.md: status {status!r} is not terminal but the plan is in "
-            f"completed/ (move it to active/)"
+            f"{name}/README.md: status {status!r} is not terminal: "
+            "move it from completed/ to active/"
         ]
     return []
 
@@ -406,10 +402,7 @@ def validate_checkpoint(checkpoint_file: Path, plans_root: Path | None = None) -
         # missing pointers and ".."-traversal that escapes the bucket.
         is_contained = candidate == active_dir or active_dir in candidate.parents
         if not (candidate.is_dir() and is_contained):
-            errors.append(
-                f"{rel}: active_plan {active_plan!r} does not resolve to a plan under "
-                f"active/ (dangling pointer)"
-            )
+            errors.append(f"{rel}: active_plan {active_plan!r} points at no plan in active/")
 
     next_step = fm.get("next_step")
     # bool is a subclass of int, but `next_step: true` is not a step index.

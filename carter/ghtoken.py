@@ -65,15 +65,16 @@ def validate_token(raw: str) -> str:
     if _PAT_RE.fullmatch(token):
         return token
     if token.startswith(_WRONG_TYPE_PREFIXES):
-        found = f"it starts with `{token[:4]}`, a classic or app token"
+        found = f"`{token[:4]}` is a classic or app token"
     elif token.startswith(PAT_PREFIX):
-        found = "the value is not a well-formed `github_pat_` token"
+        found = "not a well-formed `github_pat_` token"
     else:
-        found = "the value does not look like a GitHub token"
+        found = "not a GitHub token"
     raise IdentityError(
         E_PAT_TYPE,
-        f"Only fine-grained `{PAT_PREFIX}` tokens are accepted ({found}).",
-        "create one at github.com/settings/personal-access-tokens (read-only, selected repos)",
+        f"Only `{PAT_PREFIX}` tokens are accepted ({found})",
+        "",
+        "create one: github.com/settings/personal-access-tokens",
     )
 
 
@@ -148,7 +149,7 @@ def _record(path: Path, base_dir: Path | None) -> tuple[bool, str]:
     except (ConfigError, WriterError, OSError):
         return (
             False,
-            "config.toml was left unchanged (unreadable or has keys Carter does not model)",
+            "config.toml left unchanged (unreadable or unknown keys)",
         )
     return True, ""
 
@@ -178,7 +179,7 @@ def api_base() -> str:
         return url
     raise IdentityError(
         E_CONFIG,
-        "GITHUB_API_URL must be https (or http on loopback); refusing to send the token there.",
+        "GITHUB_API_URL must be https (or http on loopback)",
         f"scheme={parts.scheme or '?'} host={parts.hostname or '?'}",
     )
 
@@ -298,10 +299,7 @@ def _owned_repo(base: str, token: str, login: str) -> tuple[str | None, Item | N
             and _valid_repo(name)
         ):
             return str(name), None
-    text = (
-        "skipped: no repository owned by the token's user is visible to it, so no write was "
-        'attempted; set `[github] probe_repo = "owner/name"` in config.toml to choose one'
-    )
+    text = "skipped: no repo you own is visible (set [github] probe_repo)"
     return None, Item("info", "write probe", text)
 
 
@@ -315,7 +313,7 @@ def _configured_probe_repo(base_dir: Path | None) -> tuple[str, list[Item]]:
         return "", []
     if _valid_repo(value):
         return value, []
-    text = "ignored: [github] probe_repo is not owner/name; using a repository you own instead"
+    text = "ignored: [github] probe_repo is not owner/name"
     return "", [Item("info", "write probe", text)]
 
 
@@ -334,10 +332,7 @@ def _probe(base: str, token: str, login: str, base_dir: Path | None) -> list[Ite
             "ok", "write probe", f"GitHub refused a write to {which}: the token is read-only"
         )
     elif verdict == "writable":
-        fix = (
-            "revoke it and create a token with Contents: read and Pull requests: write, "
-            "then run `carter github-token set`"
-        )
+        fix = "revoke it, then run `carter github-token set` with a read-only token"
         item = Item(
             "red", "write probe", f"token is WRITABLE on {which} (HTTP {reply.status})", fix
         )
@@ -370,10 +365,10 @@ def _pull_request_item(base: str, token: str, repo: str) -> Item:
 def _file_items(path: Path, required: bool) -> tuple[list[Item], str | None]:
     """The static checks. Returns the items and the token (``None`` if checking must stop)."""
     if not path.is_symlink() and not path.exists():
-        how = "run `carter github-token set` in your own terminal"
+        how = "Run `carter github-token set` in your own terminal."
         if required:
-            return [Item("red", "file", f"no token file; {how}")], None
-        return [Item("warn", "file", f"not provisioned ({how})")], None
+            return [Item("red", "file", "no token file", how)], None
+        return [Item("warn", "file", "not provisioned", how)], None
     if problem := location_problem(path, creating=False):
         return [Item("red", "file", f"{E_PAT_PERM}: {problem}")], None
     try:
@@ -439,9 +434,7 @@ def check_token(
         Item(
             "info",
             "repository selection",
-            "Prefer selecting only the repositories Carter works on; 'All repositories' lets "
-            "agents read every repo the token covers (accepted, but wider than needed). GitHub "
-            "does not show the selection to the token, so Carter cannot check it",
+            "prefer only the repos Carter works on (not checkable here)",
         )
     )
     return items

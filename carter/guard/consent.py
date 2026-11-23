@@ -27,6 +27,7 @@ from datetime import UTC, datetime
 
 from carter.guard.state import GuardState
 from carter.identity.policyset import ConsentGroup, Statement, consent_groups, policy_statements
+from carter.ui import short_list as ui_list
 
 CONFIG_EDIT = "config-edit"
 PLUGIN = "plugin"  # a component, not a group: accepted only by `guard remove --only`
@@ -35,20 +36,9 @@ BROKER = (
 )
 PLUGIN_REV = 2  # the plugin and isolation.json belong to g2 from this revision on
 BROKER_REV = 3  # the push tool (carter_push) needs g2 at this revision
-PENDING_TEXT = {
-    "g2": "the plugin and isolation, and the push tool (carter_push) for devops, "
-    "need your confirmation",
-    "hooks": "the commit checks need your confirmation",
-    "repo_hooks": "the commit hooks need your confirmation",
-}
-PENDING_NOTICE = (
-    "{what}: run `carter guard install` in your terminal, "
-    "or `carter guard install --yes --only {group}`"
-)
-OPTIONAL_NOTICE = (
-    "`{group}` is optional and was not installed: `carter guard install --only {group}` "
-    "(or answer yes in a terminal)"
-)
+PENDING_NOTICE = "⚠ {group} has new content: run carter guard install"
+OPTIONAL_NOTICE = "{group} is optional and not installed (see: carter guard install --help)"
+SKIPPED_NOTICE = "⚠ no terminal: guards not installed (see: carter guard --help)"
 
 
 def group_names() -> tuple[str, ...]:
@@ -65,17 +55,13 @@ def parse_only(csv: str | None, *, allow_plugin: bool = False) -> list[str] | No
     components = (PLUGIN, BROKER)
     for component in components:
         if component in names and not allow_plugin:
-            raise ValueError(
-                f"`{component}` is not a group for install: use `--only g2` to confirm it"
-            )
+            raise ValueError(f"{component} is not a group: use --only g2")
     unknown = [
         n for n in names if n not in group_names() and not (allow_plugin and n in components)
     ]
     if unknown or not names:
-        extra = f", {PLUGIN}, {BROKER}" if allow_plugin else ""
         raise ValueError(
-            f"unknown group(s): {', '.join(unknown) or '(none given)'}; "
-            f"valid groups: {', '.join(group_names())}{extra}"
+            f"unknown group: {ui_list(unknown) or '(none given)'} (see: carter guard --help)"
         )
     return list(dict.fromkeys(names))
 
@@ -92,20 +78,11 @@ class ConsentPlan:
     skipped: bool = False  # no TTY and no --yes: nothing decided, nothing to write
 
     def notices(self) -> list[str]:
-        out = [f"`{g}`: {why}" for g, why in self.unavailable.items()]
-        out += [
-            PENDING_NOTICE.format(
-                what=PENDING_TEXT.get(g, f"`{g}` has new content that needs your confirmation"),
-                group=g,
-            )
-            for g in self.pending
-        ]
+        out = [f"{g}: {why}" for g, why in self.unavailable.items()]
+        out += [PENDING_NOTICE.format(group=g) for g in self.pending]
         out += [OPTIONAL_NOTICE.format(group=g) for g in self.optional_skipped]
         if self.skipped:
-            out.append(
-                "no terminal and no --yes: the agent rules, per-agent permissions and Carter's git "
-                "config were NOT installed; run `carter guard install` in your own terminal"
-            )
+            out.append(SKIPPED_NOTICE)
         return out
 
 
