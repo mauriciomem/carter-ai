@@ -151,3 +151,5 @@ Find your symptom, then apply the fix. If nothing here helps, open an
 |---------|-----|
 | `carter uninstall` kept the guards | You passed `--keep-guards`. Run `carter guard remove` to take them out |
 | `carter uninstall` left files behind | By design. Files you edited are kept (those edited since the last install are listed as `⚠ Kept …`), and memories, `config.toml` and `audit.log` are never removed. Delete them by hand if you don't need them |
+| `Identity kept in ~/.carter/config-managed.toml` | `carter uninstall` keeps the LLM identity so a reinstall does not lose it. To remove it, run `carter identity remove` (before you remove the command) |
+| `carter update` printed `require_tier lowered: not applied` | A lower `require_tier` in `carter.yaml` needs your yes. Run `carter update` in your own terminal and answer the question |

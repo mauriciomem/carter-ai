@@ -58,6 +58,15 @@ def plan_pin(cfg: IdentityConfig, key: str, *, role: str, require_tier: str) -> 
     return PinPlan(key, role, require_tier, changes, cap, refusal)
 
 
+def lowers_tier(plan: PinPlan) -> bool:
+    """True if the pin would lower ``require_tier`` (an unset one counts as ``t0``)."""
+
+    def rank(value: str) -> int:
+        return TIERS.index(value) if value in TIERS else 0
+
+    return any(c.field == "require_tier" and rank(c.new) < rank(c.old) for c in plan.changes)
+
+
 def apply_pin(cfg: IdentityConfig, plan: PinPlan, path: Path | None = None) -> bool:
     """Write the pin. Returns ``False`` if the file already holds it. An entry left
     with nothing set is dropped. Raises what ``write_managed`` raises."""

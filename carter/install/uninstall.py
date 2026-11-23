@@ -21,6 +21,7 @@ from typing import Literal
 from carter import __version__, ui
 from carter.home import MAX_WORKSPACES_BYTES, WORKSPACES_FILE, tilde
 from carter.identity import ConfigError, load_identity
+from carter.identity.managed import managed_path
 from carter.install.backups import BackupRoot
 from carter.install.components import (
     _render_opencode_agents,
@@ -96,6 +97,7 @@ class UninstallReport:
     kept_files: list[Path] = field(default_factory=list)  # may hold edits: skills, AGENTS.md...
     mcp_servers: int = 0
     config_removed: bool = False  # config.toml held only defaults
+    identity_kept: str = ""  # where the LLM identity stays (empty: there is none)
     kept: list[KeptRow] = field(default_factory=list)
     workspaces: list[Workspace] = field(default_factory=list)  # empty: no section to print
     manager: str = ""  # the command that removes the program itself
@@ -199,6 +201,16 @@ def _is_default_config(path: Path) -> bool:
         return path.read_text(encoding="utf-8") == _OLD_DEFAULT
     except (OSError, ValueError):
         return False
+
+
+def _identity_kept(base_dir: Path | None) -> str:
+    """The managed file, as ``~/...``, if it holds an LLM identity; else an empty string."""
+    config = carter_config_path(base_dir)
+    try:
+        has = bool(load_identity(config).identity.login)
+    except ConfigError:
+        has = managed_path(config).exists()  # config.toml is broken: say it stays, to be safe
+    return tilde(managed_path(config)) if has else ""
 
 
 def _shipped_files(base_dir: Path | None) -> dict[Path, str]:
@@ -387,12 +399,11 @@ def uninstall(
         return report
     guards_before = guard_state_path(base_dir).exists()
     plugin_before = plugin_dir(base_dir).exists()
-    identity_removed = False
     if not keep_guards:
-        from carter.guard.wiring import uninstall_guards, uninstall_identity
+        from carter.guard.wiring import uninstall_guards
 
         report.code = uninstall_guards(base_dir, assume_yes=assume_yes)
-        identity_removed = uninstall_identity(base_dir, assume_yes=assume_yes)  # independent
+    report.identity_kept = _identity_kept(base_dir)  # `carter identity remove` takes it away
     manifest = read_manifest(base_dir)  # the guard step re-wrote it
 
     if manifest:
@@ -427,7 +438,6 @@ def uninstall(
             for kind, gone in (
                 ("guards", guards_before and not guard_state_path(base_dir).exists()),
                 ("plugin", plugin_before and not plugin_dir(base_dir).exists()),
-                ("identity", identity_removed),
             )
             if gone
         }

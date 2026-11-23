@@ -266,3 +266,30 @@ def test_nothing_outside_the_fake_home_was_touched(life: Life, real_home: Path) 
     life.uninstall()
     assert tree_snapshot(life.outside) == life.outside_before  # the working directory
     assert not changed(life.real_before, digest_host(real_home))  # the developer's real files
+
+
+def test_uninstall_keeps_the_identity_and_says_where(life: Life) -> None:
+    from carter.identity.schema import Identity, IdentityConfig
+    from carter.identity.writer import write_managed
+
+    config = life.carter / "config.toml"
+    write_managed(IdentityConfig(state="current", identity=Identity(login="llm-bot", id=7)), config)
+    managed = life.carter / "config-managed.toml"
+    before = managed.read_bytes()
+
+    report = life.uninstall()
+
+    line = "Identity kept in ~/.carter/config-managed.toml"
+    assert line in report.splitlines() and len(line) <= 80
+    assert managed.read_bytes() == before and not config.exists()
+    again = life.uninstall()  # a second run keeps it and still says so
+    assert line in again.splitlines() and managed.read_bytes() == before
+
+
+def test_uninstall_without_an_identity_says_nothing_about_one(life: Life) -> None:
+    assert "Identity kept" not in life.uninstall()
+
+
+def test_uninstall_help_says_how_to_remove_the_identity() -> None:
+    out = CliRunner().invoke(main, ["uninstall", "--help"]).output
+    assert "carter identity remove" in out and "config-managed.toml" in out

@@ -28,6 +28,12 @@ Until the line is there the git hooks are inactive;
 # `carter install --help` points at the guards; `guard install --help` prints them above.
 INSTALL_POINTER = "\b\nGuards (one question, `Install? [Y/n]`): carter guard --help\n\n"
 
+UNINSTALL_IDENTITY = """\b
+The LLM identity stays, in ~/.carter/config-managed.toml.
+To remove it: carter identity remove
+
+"""
+
 UNINSTALL_EPILOG = """\b
 Dotfile-managed ~/.gitconfig (a symlink or read-only file):
 Carter does not edit it. If you added Carter's include line there,

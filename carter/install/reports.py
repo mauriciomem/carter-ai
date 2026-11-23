@@ -71,7 +71,6 @@ def render_install(report: InstallReport) -> None:
 # The Removed section: (key in ``report.removed``, label, whether it shows a count).
 _REMOVED = (
     ("guards", "guards", False),
-    ("identity", "LLM identity", False),
     ("agents", "agents", True),
     ("skills", "skills", True),
     ("plugin", "plugin", False),
@@ -139,6 +138,8 @@ def render_uninstall(report: UninstallReport) -> None:
     if kept:
         ui.section("Kept, because they are yours")
         ui.rows(kept, paths=True)
+    if report.identity_kept:
+        ui.info(f"Identity kept in {report.identity_kept}")
     if report.workspaces:
         ui.section("Workspaces, not touched", note="Carter files you can remove")
         ui.rows(_workspace_rows(report), paths=True)

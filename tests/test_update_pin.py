@@ -50,9 +50,10 @@ def set_policy(ws: Path, **identity) -> None:
     yml.write_text(yaml.dump(data))
 
 
-def update(ws: Path, *args: str, env: dict[str, str] | None = None):
-    """``carter update`` asks nothing (); ``-v`` shows the details these tests read."""
-    return CliRunner().invoke(main, ["update", "-v", str(ws), *args], env=env)
+def update(ws: Path, *args: str, env: dict[str, str] | None = None, input: str | None = None):
+    """``carter update`` asks only before it lowers ``require_tier``; ``-v`` shows the details
+    these tests read."""
+    return CliRunner().invoke(main, ["update", "-v", str(ws), *args], env=env, input=input)
 
 
 def plain_update(ws: Path, *args: str):
@@ -163,23 +164,25 @@ class TestPinning:
         set_policy(ws, role="author")  # the same value: nothing to write
         assert "already pinned" in update(ws, "--yes").output.lower()
 
-    def test_removing_the_policy_from_yaml_unpins_after_confirmation(self, ws, cfg_path):
+    def test_removing_the_policy_from_yaml_unpins_after_confirmation(self, ws, cfg_path, human_tty):
         set_policy(ws, role="author", require_tier="t2")
         update(ws, "--yes")
         set_policy(ws)
+        human_tty(True)
 
-        out = update(ws, "--yes").output
+        out = update(ws, input="y\n").output
 
         assert "author -> (unset)" in out
         assert pinned(cfg_path, ws) == {}  # the empty entry is dropped
 
-    def test_unpin_keeps_a_hand_edited_cap(self, ws, cfg_path):
+    def test_unpin_keeps_a_hand_edited_cap(self, ws, cfg_path, human_tty):
         set_policy(ws, role="author", require_tier="t2")
         update(ws, "--yes")
         cap = f'[workspaces."{ws.resolve()}"]\nmax_tier = "t0"\n'
         cfg_path.write_text(cap)
         set_policy(ws)
-        update(ws, "--yes")
+        human_tty(True)
+        update(ws, input="y\n")
         assert pinned(cfg_path, ws) == {} and cfg_path.read_text() == cap
         assert load_identity(cfg_path).workspaces[str(ws.resolve())].max_tier == "t0"
 
@@ -187,6 +190,76 @@ class TestPinning:
         set_policy(ws, role="author")
         update(ws, "--yes")
         assert (managed_of(cfg_path).stat().st_mode & 0o777) == 0o600
+
+
+class TestLoweringRequireTierAsksAHuman:
+    """D4: a lower `identity.require_tier` in carter.yaml is not copied silently."""
+
+    def pinned_at(self, ws, cfg_path, tier: str) -> None:
+        set_policy(ws, require_tier=tier)
+        assert update(ws).exit_code == 0 and pinned(cfg_path, ws)["require_tier"] == tier
+
+    def test_raising_is_applied_without_a_question(self, ws, cfg_path):
+        self.pinned_at(ws, cfg_path, "t1")
+        set_policy(ws, require_tier="t2")  # no terminal, no flag
+        result = update(ws)
+        assert result.exit_code == 0 and "[y/N]" not in result.output
+        assert pinned(cfg_path, ws)["require_tier"] == "t2"
+
+    def test_setting_it_for_the_first_time_is_a_raise(self, ws, cfg_path):
+        set_policy(ws, require_tier="t1")
+        assert update(ws).exit_code == 0 and pinned(cfg_path, ws)["require_tier"] == "t1"
+
+    def test_a_human_is_asked_and_a_yes_lowers_it(self, ws, cfg_path, human_tty):
+        self.pinned_at(ws, cfg_path, "t2")
+        set_policy(ws, require_tier="t1")
+        human_tty(True)
+        result = update(ws, input="y\n")
+        assert "Lower require_tier from t2 to t1?" in result.output
+        assert pinned(cfg_path, ws)["require_tier"] == "t1"
+
+    def test_a_no_keeps_the_old_pin(self, ws, cfg_path, human_tty):
+        self.pinned_at(ws, cfg_path, "t2")
+        set_policy(ws, require_tier="t0")
+        human_tty(True)
+        result = update(ws, input="n\n")
+        assert result.exit_code == 0 and "require_tier not lowered" in result.output
+        assert pinned(cfg_path, ws)["require_tier"] == "t2"
+
+    def test_dropping_the_key_is_a_lowering_too(self, ws, cfg_path, human_tty):
+        self.pinned_at(ws, cfg_path, "t1")
+        set_policy(ws)
+        human_tty(True)
+        assert "Lower require_tier from t1 to (unset)?" in update(ws, input="n\n").output
+        assert pinned(cfg_path, ws)["require_tier"] == "t1"
+
+    @pytest.mark.parametrize("args", [(), ("--yes",)], ids=["plain", "yes-flag"])
+    def test_without_a_terminal_it_refuses_in_one_line_even_with_yes(
+        self, ws, cfg_path, human_tty, args
+    ):
+        self.pinned_at(ws, cfg_path, "t2")
+        before = snap(managed_of(cfg_path))
+        set_policy(ws, require_tier="t0")
+        human_tty(False)
+        result = update(ws, *args)
+        assert result.exit_code == 0
+        line = [x for x in result.output.splitlines() if "not applied" in x]
+        assert len(line) == 1 and len(line[0]) <= 80 and "[y/N]" not in result.output
+        assert snap(managed_of(cfg_path)) == before
+
+    def test_an_agent_shell_never_lowers_it(self, ws, cfg_path, human_tty):
+        self.pinned_at(ws, cfg_path, "t2")
+        set_policy(ws, require_tier="t0")
+        human_tty(True)
+        result = update(ws, env={"AGENT": "1"}, input="y\n")
+        assert "agent shells never pin" in result.output
+        assert pinned(cfg_path, ws)["require_tier"] == "t2"
+
+    def test_a_role_change_alone_asks_nothing(self, ws, cfg_path):
+        self.pinned_at(ws, cfg_path, "t1")
+        set_policy(ws, role="co-author", require_tier="t1")
+        result = update(ws)
+        assert result.exit_code == 0 and pinned(cfg_path, ws)["role"] == "co-author"
 
 
 class TestCarterYamlIsInertUntilUpdate:

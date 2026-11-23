@@ -155,26 +155,34 @@ class TestRoundTrip:
         assert (stack.home / ".carter" / "bin" / "carter-ssh-sign").exists()
         assert "carter.tier" in dict(mirror_io.read_entries(carter_gitconfig_path(None)))
 
-    def test_uninstall_runs_both_removals(self, stack, identity: KeyPair, human_tty) -> None:  # type: ignore[no-untyped-def]
+    def test_uninstall_keeps_the_identity_and_identity_remove_takes_it_away(
+        self, stack, identity: KeyPair, human_tty
+    ) -> None:  # type: ignore[no-untyped-def]
         install_guards(stack)
         stack.fake(before=debug_config(stack.live), after=debug_config())
+        shim = stack.home / ".carter" / "bin" / "carter-ssh-sign"
+        managed = stack.home / ".carter" / "config-managed.toml"
         done = CliRunner().invoke(main, ["uninstall", "--yes"], catch_exceptions=False)
         assert done.exit_code == 0, done.output
-        assert "carter identity remove" in done.output
-        assert not (stack.home / ".carter" / "bin" / "carter-ssh-sign").exists()
+        assert "Identity kept in ~/.carter/config-managed.toml" in done.output
+        assert shim.exists() and managed.exists()
+        assert "carter.tier" in dict(mirror_io.read_entries(carter_gitconfig_path(None)))
+        removed = CliRunner().invoke(main, ["identity", "remove"], catch_exceptions=False)
+        assert removed.exit_code == 0, removed.output
+        assert not shim.exists() and not managed.exists()
         assert not carter_gitconfig_path(None).exists()
 
-    def test_uninstall_asks_nothing_but_an_agent_shell_keeps_the_identity(
+    def test_an_agent_shell_keeps_the_identity_too(
         self, stack, identity: KeyPair, human_tty, monkeypatch
     ) -> None:  # type: ignore[no-untyped-def]
         human_tty(False)
         shim = stack.home / ".carter" / "bin" / "carter-ssh-sign"
         monkeypatch.setenv("AGENT", "1")
         agent = CliRunner().invoke(main, ["uninstall"], catch_exceptions=False)
-        assert "LLM identity kept: agent shell" in agent.output and shim.exists()
+        assert "Identity kept in" in agent.output and shim.exists()
         monkeypatch.delenv("AGENT")
         done = CliRunner().invoke(main, ["uninstall"], catch_exceptions=False)
-        assert done.exit_code == 0 and not shim.exists()
+        assert done.exit_code == 0 and shim.exists()  # a human's uninstall keeps it as well
 
 
 def human_ok(repo: Path, name: str) -> None:

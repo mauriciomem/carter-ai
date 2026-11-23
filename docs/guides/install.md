@@ -274,10 +274,12 @@ Run them in this order: once the command is gone, nothing is left to remove what
   `~/.carter/backups/<timestamp>/`) and skills, the global `AGENTS.md` Carter wrote, untouched
   knowledge files, the MCP servers Carter ships (`carter-github`, `carter-terraform`, `carter-atlassian`) in
   `opencode.json` and `opencode.jsonc`, the guards
-  (`carter guard remove`), the LLM identity files (the signing shim, `allowed_signers`, the tier
-  mirror, the identity part of `config.toml`, with a backup) and `~/.carter/manifest.json`.
-- **Kept:** `~/.carter/memories/`, a `config.toml` where you set anything, the audit log, the GitHub
-  token file, backups, and any skill, rule or knowledge file you edited.
+  (`carter guard remove`) and `~/.carter/manifest.json`.
+- **Kept:** the LLM identity (`~/.carter/config-managed.toml`, the signing shim, `allowed_signers`
+  and the tier mirror; the report says `Identity kept in ~/.carter/config-managed.toml`, and
+  `carter identity remove` takes it away), `~/.carter/memories/`, a `config.toml` where you set
+  anything, the audit log, the GitHub token file, backups, and any skill, rule or knowledge file you
+  edited.
 
 It prints what it did, in sections (empty ones are left out):
 

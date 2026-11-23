@@ -69,20 +69,3 @@ def uninstall_guards(base_dir: Path | None, *, assume_yes: bool) -> int:
         return engine.remove(base_dir=base_dir, only=None, dry_run=False, echo=report.say)
 
     return _run(run, "removal")
-
-
-def uninstall_identity(base_dir: Path | None, *, assume_yes: bool) -> bool:
-    """The identity step of ``carter uninstall``: ``carter identity remove``; an agent shell
-    keeps everything. Nothing is asked. True if something was removed (the report says so)."""
-    del assume_yes
-    from carter import identity_remove
-
-    if terminal.is_agent_shell():
-        ui.warn("LLM identity kept: agent shell", "run `carter identity remove` yourself")
-        return False
-    report_ = identity_remove.remove_identity(base_dir)
-    for line in report_.removed:
-        ui.detail(f"removed {line}")
-    for line in report_.kept:
-        ui.warn(f"kept {line}")
-    return bool(report_.removed)

@@ -78,13 +78,13 @@ defaults, so you only write what you change; lists (`agents`,
 Optional: `carter init` does not write it, and a file without it is valid.
 
 Policy only. Nothing here changes attribution while agents run: `carter update` shows
-these two values and pins them in `~/.carter/config.toml` (see
+these two values and pins them in `~/.carter/config-managed.toml` (see
 [User config](#user-config-carterconfigtoml)).
 
 | Key | Default | Description |
 |-----|---------|-------------|
 | `role` | not set | `co-author` (the default role) or `author`. `author` makes the LLM the author and credits you by a trailer. It needs LLM signing on (a signing key); without it, or under a `max_tier` cap, commits are refused, never downgraded, and `carter update` refuses to pin it next to a cap |
-| `require_tier` | not set | The lowest tier this workspace accepts: `t0`, `t1` or `t2` |
+| `require_tier` | not set | The lowest tier this workspace accepts: `t0`, `t1` or `t2`. Raising it is pinned by the next `carter update`; lowering it (or removing it) asks you to confirm in a terminal, and is refused without one or in an agent shell |
 
 `allow_project_opencode_edit` and other settings that loosen a control are not accepted
 here. Edit-denied settings live only in `~/.carter/config.toml`.
