@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import ast
 import os
+import re
 import stat
 import tomllib
 from dataclasses import replace
@@ -221,6 +222,108 @@ def test_no_carter_writer_opens_config_toml_for_writing():
     assert not [
         n for n in ast.walk(tree) if isinstance(n, ast.Constant) and n.value == "config.toml"
     ]
+
+
+MARKERS = ("config.toml", "default_path", "carter_config_path")
+WRITES = {
+    "write_text", "write_bytes", "unlink", "rename", "replace", "chmod", "touch", "truncate",
+    "open", "atomic_write_bytes", "_atomic_write",
+}  # fmt: skip
+# the only place Carter deletes a config.toml: the exact two lines an older install wrote
+ALLOWED = {("install/uninstall.py", "_clean_carter_home", "unlink")}
+
+
+def _tainted(fn: ast.AST) -> set[str]:
+    """Names in ``fn`` that hold (or are built from) the path of config.toml."""
+    names: set[str] = set()
+    changed = True
+    while changed:
+        changed = False
+        for node in ast.walk(fn):
+            if isinstance(node, ast.Assign) and not isinstance(node.value, ast.Constant):
+                text = ast.unparse(node.value)
+                hit = any(m in text for m in MARKERS) or bool(set(re.findall(r"\w+", text)) & names)
+                for target in node.targets:
+                    if hit and "managed_path(" not in text and isinstance(target, ast.Name):
+                        changed |= target.id not in names
+                        names.add(target.id)
+    return names
+
+
+def _targets(call: ast.Call) -> list[ast.expr]:
+    """What a write-capable call writes to: the receiver of a path method, the path arguments of
+    ``os.replace``/``os.rename``, the first argument of ``open`` and the atomic writers."""
+    func = call.func
+    if isinstance(func, ast.Attribute):
+        if isinstance(func.value, ast.Name) and func.value.id == "os":
+            return call.args[:2]
+        return [func.value]
+    return call.args[:1]
+
+
+def writes_to_config(fn: ast.AST) -> list[str]:
+    tainted = _tainted(fn)
+    hits = []
+    for call in (n for n in ast.walk(fn) if isinstance(n, ast.Call)):
+        name = getattr(call.func, "attr", getattr(call.func, "id", ""))
+        if name not in WRITES:
+            continue
+        if isinstance(call.func, ast.Name) and name in ("replace", "rename"):
+            continue  # dataclasses.replace and friends
+        for expr in _targets(call):
+            text = ast.unparse(expr)
+            if "managed_path(" not in text and (
+                any(m in text for m in MARKERS) or set(re.findall(r"\w+", text)) & tainted
+            ):
+                hits.append(name)
+    return hits
+
+
+def test_no_carter_code_opens_config_toml_for_writing():
+    """Every module under carter/: a write-capable call whose target is config.toml (its literal,
+    default_path(), carter_config_path() or a name built from them) is a failure, apart from
+    ALLOWED. The managed path (``managed_path(...)``) is the one writers take."""
+    found: list[tuple[str, str, str]] = []
+    for src in sorted((REPO / "carter").rglob("*.py")):
+        rel = src.relative_to(REPO / "carter").as_posix()
+        tree = ast.parse(src.read_text(encoding="utf-8"))
+        for fn in ast.walk(tree):
+            if isinstance(fn, ast.FunctionDef | ast.AsyncFunctionDef):
+                found += [(rel, fn.name, name) for name in writes_to_config(fn)]
+    assert not [f for f in found if f not in ALLOWED], found
+    assert set(ALLOWED) <= set(found)  # the exception is still needed, or it goes
+
+
+def test_the_check_would_catch_a_writer_of_config_toml():
+    bad = ast.parse(
+        "def f():\n    path = default_path()\n    path.write_text('x')\n"
+        "def g(base):\n    cfg = carter_config_path(base)\n    os.replace('t', cfg)\n"
+        "def h():\n    with open(Path.home() / '.carter' / 'config.toml', 'w'):\n        pass\n"
+        "def ok(base):\n    t = managed_path(carter_config_path(base))\n    t.write_text('x')\n"
+    )
+    assert [writes_to_config(fn) for fn in bad.body] == [["write_text"], ["replace"], ["open"], []]
+
+
+def test_a_link_swapped_in_after_the_checks_is_not_followed_by_chmod(tmp_path):
+    from carter.identity.writer import _private
+
+    real = tmp_path / "real"
+    real.write_text("x")
+    real.chmod(0o644)
+    link = tmp_path / "link"
+    link.symlink_to(real)
+    with pytest.raises(OSError):
+        _private(link)
+    assert stat.S_IMODE(real.stat().st_mode) == 0o644
+
+
+def test_the_refusal_says_what_to_do_in_one_short_line(cfg_path):
+    cfg_path.write_text(human_dumps(DERIVED))
+    cfg = load_identity(cfg_path)
+    with pytest.raises(WriterError) as err:
+        write_managed(replace(cfg, identity=Identity(login="other")), cfg_path)
+    assert str(err.value) == "config.toml sets [identity]: delete it there and rerun"
+    assert len(str(err.value)) <= 80
 
 
 def test_no_module_still_calls_the_old_config_writer():

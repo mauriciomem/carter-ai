@@ -196,8 +196,8 @@ next `update`. It ends with the unknown-key report (each unknown key once, with 
 | `-v`, `--verbose` | Show each change and its source |
 
 `update` stops without pinning when `max_tier` in `config.toml` (set by hand) is below
-`require_tier`, when `config.toml` pins the workspace itself (an older install: edit it there; the
-command names the table), or when `config.toml` is invalid. Keys Carter doesn't manage never
+`require_tier`, when `config.toml` pins the workspace itself (an older install: delete that table and run
+`update` again; the command names it), or when `config.toml` is invalid. Keys Carter doesn't manage never
 block it.
 
 ## carter guard

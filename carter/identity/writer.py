@@ -119,6 +119,15 @@ def _atomic_write(path: Path, text: str) -> None:
         raise
 
 
+def _private(path: Path) -> None:
+    """Mode 0600 on the file itself: a link swapped in after the checks is refused, not followed."""
+    fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_CLOEXEC)
+    try:
+        os.fchmod(fd, 0o600)
+    finally:
+        os.close(fd)
+
+
 def _without_human_tables(
     new: dict[str, dict[str, Any]], old: dict[str, dict[str, Any]], human: dict[str, Any]
 ) -> dict[str, dict[str, Any]]:
@@ -132,7 +141,7 @@ def _without_human_tables(
         if held(theirs, keys):
             if new.get(name) != old.get(name):
                 where = "workspaces" if name.startswith(PINS) else name.split(".")[0]
-                raise WriterError(f"config.toml sets [{where}]: edit it there")
+                raise WriterError(f"config.toml sets [{where}]: delete it there and rerun")
             new.pop(name, None)
     return new
 
@@ -157,7 +166,7 @@ def write_managed(cfg: IdentityConfig, config_path: Path | None = None) -> bool:
     text = _checked(new)
     try:
         if target.read_text(encoding="utf-8") == text:
-            target.chmod(0o600)
+            _private(target)
             return False
     except (OSError, ValueError):
         pass

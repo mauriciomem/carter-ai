@@ -221,6 +221,11 @@ class TestFailClosed:
         monkeypatch.setattr(os, "geteuid", lambda: os.getuid() + 1)
         assert load_identity(cfg_path).notes == (UNSAFE,)
 
+    def test_a_hard_link_is_refused(self, tmp_path, cfg_path):
+        target = put_managed(cfg_path, self.GOOD)
+        (tmp_path / "elsewhere").hardlink_to(target)  # another name for the same file
+        assert load_identity(cfg_path).notes == (UNSAFE,)
+
     def test_a_directory_is_refused(self, cfg_path):
         cfg_path.with_name(MANAGED_NAME).mkdir()
         assert load_identity(cfg_path).notes in ((UNSAFE,), (UNREADABLE,))

@@ -77,7 +77,7 @@ def read_managed(path: Path) -> tuple[dict[str, Any] | None, str]:
         info = os.fstat(fd)
         if not stat.S_ISREG(info.st_mode) or info.st_uid != os.geteuid():
             return None, UNSAFE
-        if info.st_mode & 0o077 or path.parent.is_symlink():
+        if info.st_mode & 0o077 or info.st_nlink > 1 or path.parent.is_symlink():  # no hard link
             return None, UNSAFE
         with os.fdopen(fd, "rb", closefd=False) as fh:
             return tomllib.loads(fh.read().decode("utf-8")), ""
