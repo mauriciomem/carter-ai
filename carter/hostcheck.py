@@ -429,6 +429,11 @@ def _identity(
             )
         ]
     notes = config_items(cfg.notes)  # the managed file
+    from carter.identity.config import default_path, read_document  # noqa: PLC0415
+    from carter.identity.managed import LEGACY, legacy_tables  # noqa: PLC0415
+
+    if names := legacy_tables(read_document(default_path())):  # an older install's values
+        notes.append(Item("info", "config", LEGACY.format(", ".join(names))))
     return notes + hostcheck_id.identity_items(
         cfg, state, cwd=cwd, base_dir=base_dir, git=git_version, fetch=fetch,
         workspace=workspace_for(cfg, str(cwd)),

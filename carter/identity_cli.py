@@ -76,7 +76,14 @@ def _setup() -> tuple[Setup, str]:
         ) from exc
 
 
-@click.group("identity")
+_LEGACY_HELP = """\b
+An identity that an older Carter wrote into config.toml still loads.
+To let Carter manage it: delete [identity] and [identity.signing]
+from config.toml, then run carter identity add.
+"""
+
+
+@click.group("identity", epilog=_LEGACY_HELP)
 def identity() -> None:
     """The LLM identity: set it up, check it, unlock its key."""
 

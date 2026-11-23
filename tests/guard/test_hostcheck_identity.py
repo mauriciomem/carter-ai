@@ -533,3 +533,29 @@ class TestManagedFile:
         out = self.host(tmp_path)
         assert [x for x in out.splitlines() if "config.toml wins over" in x] != []
         assert len([x for x in out.splitlines() if "config.toml wins over" in x]) == 1
+
+    def test_values_read_from_config_toml_are_one_legacy_line(
+        self, home: Path, fake: FakeGitHub, key: KeyPair, tmp_path: Path
+    ) -> None:
+        make(fake, key)
+        managed = home / ".carter" / "config-managed.toml"
+        (home / ".carter" / "config.toml").write_text(managed.read_text().split("\n", 1)[1])
+        managed.unlink()
+        lines = [x for x in self.host(tmp_path).splitlines() if "legacy" in x]
+        assert len(lines) == 1 and "identity" in lines[0]
+        assert lines[0].endswith("from config.toml (legacy; see: carter identity --help)")
+
+    def test_no_legacy_line_when_the_managed_file_holds_them(
+        self, home: Path, fake: FakeGitHub, key: KeyPair, tmp_path: Path
+    ) -> None:
+        make(fake, key)
+        (home / ".carter" / "config.toml").write_text('[access]\nlevel = "guarded"\n')
+        assert "legacy" not in self.host(tmp_path)
+
+    def test_the_identity_help_says_how_to_migrate(self) -> None:
+        from click.testing import CliRunner
+
+        from carter.cli import main
+
+        out = CliRunner().invoke(main, ["identity", "--help"]).output
+        assert "delete [identity] and [identity.signing]" in " ".join(out.split())

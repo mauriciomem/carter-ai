@@ -169,3 +169,16 @@ def merge(
     if wins:
         notes.append(f"config.toml wins over config-managed.toml: {_more(sorted(set(wins)))}")
     return doc, notes
+
+
+LEGACY = "{} from config.toml (legacy; see: carter identity --help)"
+
+
+def legacy_tables(human: dict[str, Any] | None) -> list[str]:
+    """Tables where ``config.toml`` still holds keys that Carter derives (an older install)."""
+    doc = human or {}
+    names = [".".join(path) for path, keys in OWNED.items() if held(table(doc, path), keys)]
+    entries = table(doc, (WORKSPACES,)).values()
+    if any(isinstance(e, dict) and held(e, PIN_KEYS) for e in entries):
+        names.append(PINS)
+    return names
