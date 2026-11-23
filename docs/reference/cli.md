@@ -97,8 +97,11 @@ MCP servers stay.
 
 It asks nothing. Unless `--keep-guards` is given, uninstall first removes the policy guards it
 installed, only where it is unchanged since (anything you edited is kept and reported). An agent
-shell keeps them. The LLM identity **stays** (`~/.carter/config-managed.toml`, the signing shim and
-the hook tier): the report says `Identity kept in ~/.carter/config-managed.toml`. Remove it with
+shell keeps them. The LLM identity **data** stays (`~/.carter/config-managed.toml`, or `config.toml`
+for an older install; `allowed_signers` and the hook tier): the report says
+`Identity kept in ~/.carter/config-managed.toml`. The key does not stay usable: uninstall takes it
+out of Carter's own agent, stops that agent and removes the signing shim (`carter identity add`
+brings it back). A password manager's agent is not touched. Remove the rest with
 `carter identity remove` (`carter uninstall --help` says so too). A guard problem is printed and
 makes the exit code 1 but never stops the rest of the removal. Workspaces are never touched; the ones recorded by
 `carter init` and `carter update` in `~/.carter/workspaces` are listed with a ready-to-run `rm`

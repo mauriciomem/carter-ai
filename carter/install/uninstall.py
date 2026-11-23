@@ -21,7 +21,8 @@ from typing import Literal
 from carter import __version__, ui
 from carter.home import MAX_WORKSPACES_BYTES, WORKSPACES_FILE, tilde
 from carter.identity import ConfigError, load_identity
-from carter.identity.managed import managed_path
+from carter.identity.config import read_document
+from carter.identity.managed import managed_path, table
 from carter.install.backups import BackupRoot
 from carter.install.components import (
     _render_opencode_agents,
@@ -204,13 +205,29 @@ def _is_default_config(path: Path) -> bool:
 
 
 def _identity_kept(base_dir: Path | None) -> str:
-    """The managed file, as ``~/...``, if it holds an LLM identity; else an empty string."""
+    """The file that holds the LLM identity, as ``~/...`` (an older install keeps it in
+    ``config.toml``); an empty string if there is none."""
     config = carter_config_path(base_dir)
     try:
-        has = bool(load_identity(config).identity.login)
+        if not load_identity(config).identity.login:
+            return ""
+        legacy = table(read_document(config) or {}, ("identity",)).get("login")
     except ConfigError:
-        has = managed_path(config).exists()  # config.toml is broken: say it stays, to be safe
-    return tilde(managed_path(config)) if has else ""
+        return tilde(managed_path(config)) if managed_path(config).exists() else ""
+    return tilde(config if legacy else managed_path(config))
+
+
+def _lock_kept_identity(base_dir: Path | None) -> None:
+    """The identity stays, the key does not stay usable: lock it, stop Carter's agent, remove the
+    shim. One line if that fails; ``-v`` lists what was done."""
+    from carter import identity_remove, terminal
+
+    if terminal.is_agent_shell():
+        ui.warn("key not locked: agent shell (see: carter identity remove)")
+        return
+    for note in identity_remove.lock_identity(base_dir).notes:
+        failed = note.startswith(("could not", "agent not"))
+        (ui.warn if failed else ui.detail)(note)
 
 
 def _shipped_files(base_dir: Path | None) -> dict[Path, str]:
@@ -399,11 +416,13 @@ def uninstall(
         return report
     guards_before = guard_state_path(base_dir).exists()
     plugin_before = plugin_dir(base_dir).exists()
+    report.identity_kept = _identity_kept(base_dir)  # `carter identity remove` takes it away
+    if report.identity_kept:
+        _lock_kept_identity(base_dir)  # before the guards go: it needs their record of the shim
     if not keep_guards:
         from carter.guard.wiring import uninstall_guards
 
         report.code = uninstall_guards(base_dir, assume_yes=assume_yes)
-    report.identity_kept = _identity_kept(base_dir)  # `carter identity remove` takes it away
     manifest = read_manifest(base_dir)  # the guard step re-wrote it
 
     if manifest:

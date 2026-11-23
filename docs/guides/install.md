@@ -275,9 +275,10 @@ Run them in this order: once the command is gone, nothing is left to remove what
   knowledge files, the MCP servers Carter ships (`carter-github`, `carter-terraform`, `carter-atlassian`) in
   `opencode.json` and `opencode.jsonc`, the guards
   (`carter guard remove`) and `~/.carter/manifest.json`.
-- **Kept:** the LLM identity (`~/.carter/config-managed.toml`, the signing shim, `allowed_signers`
-  and the tier mirror; the report says `Identity kept in ~/.carter/config-managed.toml`, and
-  `carter identity remove` takes it away), `~/.carter/memories/`, a `config.toml` where you set
+- **Kept:** the LLM identity data (`~/.carter/config-managed.toml`, `allowed_signers` and the tier
+  mirror; the report says `Identity kept in ~/.carter/config-managed.toml`, and
+  `carter identity remove` takes it away). The key is locked, Carter's own ssh-agent stopped and the
+  signing shim removed; `carter identity add` brings the shim back. Also kept: `~/.carter/memories/`, a `config.toml` where you set
   anything, the audit log, the GitHub token file, backups, and any skill, rule or knowledge file you
   edited.
 

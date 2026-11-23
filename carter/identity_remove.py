@@ -117,6 +117,25 @@ def _config(
     report.removed.append(f"{target}: the identity and its signing key")
 
 
+def lock_identity(base_dir: Path | None = None) -> RemoveReport:
+    """What ``carter uninstall`` does with an identity it keeps: take the key out of Carter's
+    agent and stop it, remove the shim and the socket directory. The data stays (the managed
+    file, ``allowed_signers``, the hook tier); ``carter identity add`` brings the shim back."""
+    report = RemoveReport()
+    carter = mirror_io.carter_dir(base_dir)
+    read = load_or_empty_readonly(guard_state_path(base_dir))
+    try:
+        cfg: IdentityConfig | None = load_identity(carter / "config.toml")
+    except ConfigError:
+        cfg = None
+    _stop_key(cfg, base_dir, report, False)
+    _owned_file(carter / "bin" / "carter-ssh-sign", read.state, report, False)
+    _socket_dir(base_dir, report, False)
+    if read.status == "ok":
+        save(read.state, guard_state_path(base_dir))
+    return report
+
+
 def remove_identity(base_dir: Path | None = None, *, dry_run: bool = False) -> RemoveReport:
     report = RemoveReport(dry_run=dry_run)
     carter = mirror_io.carter_dir(base_dir)

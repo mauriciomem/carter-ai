@@ -29,8 +29,9 @@ Until the line is there the git hooks are inactive;
 INSTALL_POINTER = "\b\nGuards (one question, `Install? [Y/n]`): carter guard --help\n\n"
 
 UNINSTALL_IDENTITY = """\b
-The LLM identity stays, in ~/.carter/config-managed.toml.
-To remove it: carter identity remove
+The LLM identity data stays, in ~/.carter/config-managed.toml;
+its key is locked and the shim removed. To remove the rest:
+  carter identity remove
 
 """
 
