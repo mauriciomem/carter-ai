@@ -91,6 +91,8 @@ class Paths:
         r = rules()
         self.credential = r["credential"]
         self.control = [self.anchored(p) for p in r["control"]]
+        # directories that hold a control path: a file copied into one can take its name
+        self.holders = {os.path.dirname(path) for path, _ in self.control}
 
     def anchored(self, entry: str) -> tuple[str, bool]:
         """``(absolute path without trailing slash, is_directory)`` for a ``~/``-relative entry."""
@@ -160,13 +162,35 @@ class Paths:
                     return True
         return False
 
+    def holder_hit(self, form: str) -> bool:
+        """Is ``form`` a directory that holds a control path (or lies inside a control one)?"""
+        real = os.path.normpath(self.real_home + form[len(self.home) :])
+        homes = {form, real} if form.startswith(self.home) else {form}
+        return any(f in self.holders for f in homes) or self.control_hit(form, False)
+
+    def unresolved(self, token: str) -> bool:
+        """``~/.carter/$f`` or ``~/.carter/config-man*.toml``: the shell decides the file name
+        inside a directory that holds a control path, so it may be one."""
+        cut = re.search(r"[*?\[$`{]", token)
+        return cut is not None and self.holder_hit(os.path.dirname(token[: cut.start()]) or "/")
+
     def is_control_write(self, word: Word, recursive: bool = False) -> bool:
+        tokens = self.candidates(word)
+        if (word.dynamic or word.glob) and any(self.unresolved(t) for t in (*tokens, word.text)):
+            return True
         return any(
             self.control_hit(f, recursive)
-            for t in self.candidates(word)
+            for t in tokens
             for f in self.resolve(t)
             if f.startswith("/")
         )
+
+    def is_dest_write(self, word: Word) -> bool:
+        """A directory a command puts new files into: refused when a control file could result."""
+        tokens = self.candidates(word)
+        if (word.dynamic or word.glob) and any(self.unresolved(t) for t in (*tokens, word.text)):
+            return True
+        return any(self.holder_hit(f) for t in tokens for f in self.resolve(t) if f.startswith("/"))
 
     def code_mentions_control(self, text: str) -> bool:
         tails = [p[2:].rstrip("/") for p in rules()["control"]]
@@ -213,6 +237,44 @@ def write_targets(eff: Eff) -> list[tuple[Word, bool]]:
     if name == "dd":
         return [(Word(text=a.text[3:]), False) for a in args if a.text.startswith("of=")]
     return [(a, False) for a in pos]
+
+
+def _option_value(args: list[Word], short: str, long: str) -> list[Word]:
+    """Values of ``-X V``, ``-XV``, ``--long V`` and ``--long=V`` (``-X`` may end a bundle)."""
+    out: list[Word] = []
+    for i, a in enumerate(args):
+        t = a.text
+        if (long and t == long) or (
+            re.fullmatch(rf"-[A-Za-z]*{short}", t) and not t.startswith("--")
+        ):
+            out += args[i + 1 : i + 2]
+        elif long and t.startswith(long + "="):
+            out.append(Word(text=t[len(long) + 1 :], dynamic=a.dynamic, glob=a.glob))
+        elif t.startswith("-" + short) and len(t) > 2:
+            out.append(Word(text=t[2:], dynamic=a.dynamic, glob=a.glob))
+    return out
+
+
+def dest_targets(eff: Eff) -> list[Word]:
+    """The directories ``cp``, ``install``, ``ln``, ``tar -x`` and ``unzip`` write new files into
+    (``-t DIR``, ``-C DIR``, ``-d DIR``, the last argument, or the current directory)."""
+    argv = eff.argv
+    if not argv or not argv[0].static:
+        return []
+    name, args = base(argv[0]), argv[1:]
+    flags = [a.text for a in args if a.text.startswith("-")]
+    pos = [a for a in args if not a.text.startswith("-")]
+    if name in ("cp", "install", "ln"):
+        return _option_value(args, "t", "--target-directory") or pos[-1:]
+    if name in ("tar", "bsdtar"):
+        first = pos[0].text if pos else ""
+        bundle = [f for f in flags if not f.startswith("--")] + ([first] if first.isalpha() else [])
+        extract = any("x" in b for b in bundle) or "--extract" in flags or "--get" in flags
+        if extract:
+            return _option_value(args, "C", "--directory") or [Word(text=".")]
+    if name == "unzip" and not any(re.fullmatch(r"-[A-Za-z]*[lvtpZ]", f) for f in flags):
+        return _option_value(args, "d", "") or [Word(text=".")]
+    return []
 
 
 def interpreter_args(eff: Eff) -> list[Word]:

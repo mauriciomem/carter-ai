@@ -142,6 +142,9 @@ class Engine:
         for word, recursive in paths.write_targets(eff):
             if p.is_control_write(word, recursive):
                 self.deny("control-files")
+        for word in paths.dest_targets(eff):
+            if p.is_dest_write(word):
+                self.deny("control-files")
         for word in paths.interpreter_args(eff):
             if p.is_control_write(word):
                 self.deny("control-files")

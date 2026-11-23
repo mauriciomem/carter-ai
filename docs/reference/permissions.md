@@ -44,7 +44,10 @@ The `config-edit` group (on by default; revision 2) denies the edit tool on Cart
 `~/.carter/config.toml` (yours), `~/.carter/config-managed.toml` (the identity and signing key
 Carter derives: it decides which key signs, so it has its own rule, `deny-edit-carter-managed`),
 the hooks, the plugin, `isolation.json` and `guard-state.json`. The command gate also refuses shell
-writes to every control path (`>`, `tee`, `sed -i`, `cp`, `mv`, `rm`, `ln`, `chmod`). Both lists
+writes to every control path (`>`, `tee`, `sed -i`, `cp`, `mv`, `rm`, `ln`, `chmod`). It also
+refuses `cp`, `install`, `ln`, `rsync`, `tar -x` and `unzip` into a directory that holds a control
+file (`~/.carter/`: the copy could carry the file's name), and a name the shell decides there
+(`~/.carter/$f`, `~/.carter/config-man*.toml`). Both lists
 come from `g2_rules.json`. If you had `config-edit` at revision 1, the next `carter install` shows
 one `new:` row for it.
 
