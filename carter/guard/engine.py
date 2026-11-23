@@ -42,6 +42,7 @@ from carter.home import STAMP_FORMAT, tilde
 from carter.identity import ConfigError, load_identity
 from carter.identity.errors import E_GIT_OLD, E_STATE_INVALID, IdentityError, registry
 from carter.identity.policyset import Statement, consent_groups
+from carter.identity.writer import WriterError
 from carter.install.atomic import atomic_write_bytes
 from carter.install.paths import backups_dir, carter_gitconfig_path, guard_state_path
 
@@ -80,6 +81,7 @@ def describe_error(exc: BaseException) -> tuple[str, str, str] | None:
         gitconfig.GitError,
         harness.DebugConfigError,
         plugin.PluginInstallError,
+        WriterError,
     )
     return (str(exc), "", "") if isinstance(exc, expected) else None
 

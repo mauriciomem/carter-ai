@@ -1,4 +1,4 @@
-"""Read ``~/.carter/config.toml`` with ``tomllib``. Reads never write.
+"""Read ``config.toml`` and ``config-managed.toml`` with ``tomllib``. Reads never write.
 
 Two entry points with separate failure modes:
 
@@ -8,19 +8,22 @@ Two entry points with separate failure modes:
 * ``load_footer()`` is lenient. The footer is not identity, so a broken file yields the
   default footer plus a warning.
 
-A missing ``schema`` key is read as 2. Keys the model does not know are listed in
-``unknown_keys`` (``carter check --host`` reports them); they never fail the read.
+The managed file (``managed.py``) is merged in by its rules; a failed check reads as an empty
+file and leaves a note in ``IdentityConfig.notes``. A missing ``schema`` key is read as 2.
+Keys the model does not know are listed in ``unknown_keys`` (``carter check --host`` reports
+them); they never fail the read.
 """
 
 from __future__ import annotations
 
 import tomllib
-from dataclasses import dataclass, fields
+from dataclasses import dataclass, fields, replace
 from pathlib import Path
 from typing import Any, TypeVar, get_type_hints
 
 from carter.home import carter_home
 from carter.identity.errors import E_CONFIG, MSG_CONFIG, IdentityError
+from carter.identity.managed import UNREADABLE, managed_path, merge, read_managed
 from carter.identity.schema import (
     KEY_SCHEMA,
     SCHEMA_VERSION,
@@ -180,8 +183,23 @@ def unknown_keys(doc: dict[str, Any]) -> tuple[str, ...]:
 
 
 def load_identity(path: Path | None = None) -> IdentityConfig:
-    """Load the identity config. Raises ``ConfigError`` (E-CONFIG) on any defect."""
-    return parse_identity(read_document(path or default_path()))
+    """Load the identity config. Raises ``ConfigError`` (E-CONFIG) on any defect of
+    ``config.toml``; a defect of the managed file reads as an empty one (identity off)."""
+    path = path or default_path()
+    human = read_document(path)
+    managed, problem = read_managed(managed_path(path))
+    notes = [problem] if problem else []
+    if managed is not None:
+        try:
+            parse_identity(merge(None, managed)[0] or None)  # a bad value fails the whole file
+        except ConfigError:
+            managed, notes = None, [UNREADABLE]
+    doc = human
+    if managed is not None:
+        doc, more = merge(human, managed)
+        notes += more
+    cfg = parse_identity(doc)
+    return replace(cfg, notes=tuple(notes)) if notes else cfg
 
 
 def parse_identity(doc: dict[str, Any] | None) -> IdentityConfig:

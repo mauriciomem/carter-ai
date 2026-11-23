@@ -248,7 +248,7 @@ def init(
 
 
 def _pin_identity_policy(target: Path, config: dict, *, dry_run: bool) -> None:
-    """Copy ``identity.role``/``require_tier`` from carter.yaml into config.toml.
+    """Copy ``identity.role``/``require_tier`` from carter.yaml into config-managed.toml.
 
     Asks nothing; an agent shell never pins. Raises ``click.ClickException`` when
     pinning is wanted but refused (cap below ``require_tier``, unmodelled keys, a broken file).
@@ -256,7 +256,7 @@ def _pin_identity_policy(target: Path, config: dict, *, dry_run: bool) -> None:
     from carter.identity import ConfigError, load_identity
     from carter.identity.pin import apply_pin, plan_pin
     from carter.identity.workspace import workspace_key
-    from carter.identity.writer import UnmodelledKeysError, WriterError
+    from carter.identity.writer import WriterError
 
     identity = config.get("identity") or {}
     role, tier = identity.get("role") or "", identity.get("require_tier") or ""
@@ -295,9 +295,6 @@ def _pin_identity_policy(target: Path, config: dict, *, dry_run: bool) -> None:
     try:
         apply_pin(cfg, plan)
     except (WriterError, ConfigError) as exc:
-        if isinstance(exc, UnmodelledKeysError):
-            for line in exc.diff.splitlines():  # what a rewrite would drop, line by line
-                ui.detail(line)
         raise click.ClickException(str(exc)) from exc
     unpinned = all(c.new == "(unset)" for c in plan.changes)
     ui.ok("identity policy unpinned" if unpinned else "identity policy pinned", what)

@@ -16,7 +16,7 @@ from carter.guard import hooks
 from carter.identity import coauthor
 from carter.identity.config import load_identity
 from carter.identity.schema import Workspace
-from carter.identity.writer import write_config
+from config_files import write_config
 from gh_api import FakeGitHub, Reply
 from guard.test_hostcheck_identity import fake, find, home, key, levels, make, run  # noqa: F401 - fixtures
 from rows import check_host

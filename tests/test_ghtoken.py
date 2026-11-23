@@ -180,19 +180,22 @@ class TestStore:
             'schema = 2\n[identity]\nlogin = "llm"\nid = 7\n'
             'email = "7+llm@users.noreply.github.com"\n'
         )
+        before = cfg.read_bytes()
         res = ghtoken.store_token(TOKEN, tmp_path)
         assert res.recorded is True
         loaded = load_identity(cfg)
         assert loaded.github.read_token_file == str(token_path(tmp_path))
         assert loaded.identity.login == "llm"  # the rest of the file survives
+        assert cfg.read_bytes() == before  # config.toml is never opened for writing
 
-    def test_a_missing_config_is_created_with_schema_2(self, tmp_path: Path) -> None:
+    def test_a_missing_config_gets_a_managed_file_and_no_config_toml(self, tmp_path: Path) -> None:
         ghtoken.store_token(TOKEN, tmp_path)
-        cfg = tmp_path / "carter" / "config.toml"
-        assert cfg.exists() and "schema = 2" in cfg.read_text()
-        assert stat.S_IMODE(cfg.stat().st_mode) == 0o600
+        managed = tmp_path / "carter" / "config-managed.toml"
+        assert managed.read_text().startswith("# Written by Carter. Edit config.toml instead.")
+        assert stat.S_IMODE(managed.stat().st_mode) == 0o600
+        assert not (tmp_path / "carter" / "config.toml").exists()
 
-    def test_a_config_of_old_keys_is_left_alone_and_the_token_is_still_stored(
+    def test_a_config_of_old_keys_is_left_byte_for_byte_and_the_token_is_recorded(
         self, tmp_path: Path
     ) -> None:
         cfg = tmp_path / "carter" / "config.toml"
@@ -200,7 +203,7 @@ class TestStore:
         cfg.write_text('[git]\nsigning_key = "x"\n')
         before = cfg.read_bytes()
         res = ghtoken.store_token(TOKEN, tmp_path)
-        assert res.recorded is False and "left unchanged" in res.note
+        assert res.recorded is True
         assert cfg.read_bytes() == before and token_path(tmp_path).read_text() == TOKEN
 
     def test_a_broken_config_is_left_alone_too(self, tmp_path: Path) -> None:
@@ -213,7 +216,7 @@ class TestStore:
 
     def test_the_module_never_writes_the_token_into_the_config(self, tmp_path: Path) -> None:
         ghtoken.store_token(TOKEN, tmp_path)
-        assert TAIL not in (tmp_path / "carter" / "config.toml").read_text()
+        assert TAIL not in (tmp_path / "carter" / "config-managed.toml").read_text()
 
 
 class TestSetCommand:
@@ -696,8 +699,8 @@ class TestProbeRepository:
     def configure(self, base: Path, probe_repo: str) -> None:
         from carter.identity import load_identity
         from carter.identity.schema import Github
-        from carter.identity.writer import write_config
         from carter.install.paths import carter_config_path
+        from config_files import write_config
 
         path = carter_config_path(base)
         current = load_identity(path)

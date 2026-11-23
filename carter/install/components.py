@@ -15,12 +15,8 @@ from pathlib import Path
 
 from carter.aplus.push import OWN_TERMINAL
 from carter.home import tilde
-from carter.identity import ConfigError
-from carter.identity.config import read_document
-from carter.identity.schema import IdentityConfig
-from carter.identity.writer import dumps, write_config
 from carter.install.backups import BackupRoot
-from carter.install.console import log_err, log_ok, log_skip, log_step, log_warn
+from carter.install.console import log_ok, log_skip, log_step, log_warn
 from carter.install.files import (
     _control_target,
     _install_file,
@@ -310,42 +306,6 @@ def install_knowledge(
             count += 1
 
     return count
-
-
-def default_config_text() -> str:
-    """The exact text ``install`` writes to a missing ``config.toml``."""
-    return dumps(IdentityConfig(state="current"))
-
-
-def ensure_config(path: Path) -> bool:
-    """Write the schema-2 defaults if there is no file. Returns True if it wrote. An existing file
-    is never touched (``ConfigError`` if it does not parse)."""
-    if read_document(path) is not None:
-        return False
-    write_config(IdentityConfig(state="current"), path)
-    return True
-
-
-def install_ops(base_dir: Path | None, manifest: dict) -> bool:
-    """Create ``~/.carter/config.toml`` (schema 2) if it is missing. Returns True if created.
-
-    A missing file gets the defaults (T0: no identity, no signing key). An existing file is
-    never touched; a file that does not parse is reported and left alone, and the rest of the
-    install goes on (identity stays fail-closed).
-    """
-    log_step("Configuring carter-ops...")
-    config_path = _carter_base(base_dir) / "config.toml"
-    try:
-        created = ensure_config(config_path)
-    except ConfigError as exc:
-        log_err(f"{tilde(config_path)} not read: {exc} ({exc.detail})")
-        return False
-    if not created:
-        log_skip(f"{tilde(config_path)} (not touched)")
-        return False
-    log_ok(tilde(config_path), "created")
-    manifest["files"].append(str(config_path))
-    return True
 
 
 def write_manifest(manifest: dict, base_dir: Path | None) -> Path:

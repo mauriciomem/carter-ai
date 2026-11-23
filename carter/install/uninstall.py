@@ -24,7 +24,6 @@ from carter.identity import ConfigError, load_identity
 from carter.install.backups import BackupRoot
 from carter.install.components import (
     _render_opencode_agents,
-    default_config_text,
     read_manifest,
     write_manifest,
 )
@@ -186,12 +185,18 @@ def _copy_edited_agents(
     return copies
 
 
+_OLD_DEFAULT = (
+    "# Carter settings (schema 2). Only what you set is stored; "
+    "Carter commands rewrite this file and drop comments.\nschema = 2\n"
+)
+
+
 def _is_default_config(path: Path) -> bool:
-    """True if ``config.toml`` is exactly what ``install`` writes (the header and ``schema = 2``).
-    Compared as text: a comment the user added is theirs, and a fully written file from an older
-    Carter is kept too, which is the safe side. A missing or unreadable file is not default."""
+    """True if ``config.toml`` is exactly what an older ``install`` wrote (a header and
+    ``schema = 2``). Compared as text: a comment you added is yours, so it stays. A missing or
+    unreadable file is not default. This install never writes one."""
     try:
-        return path.read_text(encoding="utf-8") == default_config_text()
+        return path.read_text(encoding="utf-8") == _OLD_DEFAULT
     except (OSError, ValueError):
         return False
 

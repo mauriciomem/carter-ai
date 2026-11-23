@@ -61,7 +61,6 @@ Carter install  v0.19.2
     agents            8  new
     skills           27  new
     knowledge files   4  new
-    config.toml          created
     guards               g2 · hooks · sudo-docker · read-edit-denies · config-edit
 
 → restart the OpenCode server from a clean terminal to load the agents and plugin
@@ -71,8 +70,8 @@ On a re-run the notes read `up to date` or `1 updated`. `old backups` appears wh
 15 days were removed. If the install replaced files you had edited, one line on stderr names the
 folder with their copies (`! Replaced 3 edited files  (copies in ~/.carter/backups/<timestamp>/)`).
 A row that does not fit the terminal width is split over two lines; nothing is cut. `-v` also lists
-every file. Safe to re-run. It also
-creates `~/.carter/config.toml` on a first install; an existing file is never rewritten. A key in it
+every file. Safe to re-run. It never
+creates or rewrites `~/.carter/config.toml`: that file is yours. A key in it
 that Carter doesn't read is named at the end, once, with its file
 (``⚠ unknown key `x.y` in <path> → delete it``). If your global `AGENTS.md` has your own edits, it is
 left alone and reported as user-modified.
@@ -308,15 +307,14 @@ server problem).
 
 It asks nothing. On success it prints `✓ <login> · LLM signing on · SHA256:2hx1K1j22SYE…` (plus `· author`
 or `· no passphrase`, and `→ next: carter identity unlock` only when the key has a passphrase) and
-writes `config.toml` (the previous file is kept in
-`~/.carter/backups/`), the signing shim `~/.carter/bin/carter-ssh-sign`, `allowed_signers`, and the
+writes `~/.carter/config-managed.toml` (never your `config.toml`), the signing shim `~/.carter/bin/carter-ssh-sign`, `allowed_signers`, and the
 hook tier in `~/.carter/gitconfig`; every file is recorded with its hash and a failure puts them
 all back. Running `add` again with another key is a **rotation**: the old public key moves to
 `previous_public_keys`, so old commits still verify. It never writes your global git config.
-`--role` writes `[identity] role` in `config.toml` (your preference; a pinned workspace role or
-`CARTER_IDENTITY_ROLE` still wins). `--role author` needs LLM signing on: without a key (given now or already
-configured) it is `E-ROLE-B-TIER` and nothing is written. With LLM signing already on,
-`add --login <name> --role author` changes only the role. With role `author` it also reports
+`--role` checks a role and does not store it: `[identity] role` is your preference, so you set it in
+`config.toml` yourself (a pinned workspace role or `CARTER_IDENTITY_ROLE` still wins). `--role
+author` needs LLM signing on: without a key (given now or already configured) it is
+`E-ROLE-B-TIER` and nothing is written. With role `author` it also reports
 whether your git identity is usable and whether GitHub knows your address (asked of GitHub and `gh`
 only in your own terminal; a dry run caches nothing).
 
@@ -384,8 +382,9 @@ carter identity remove [--dry-run] [-v]
 Takes back what `add` wrote, and only what is still unchanged (each file is recorded with its hash;
 an edited one is kept and listed). In this order: the key leaves Carter's agent and the agent
 stops (never `ssh-agent -k`), the `[identity]` and `[identity.signing]` parts of
-`~/.carter/config.toml` (a copy goes to `~/.carter/backups/`; workspace pins and the footer stay;
-a file that held only the identity is removed), the shim, `allowed_signers`, the socket directory,
+`~/.carter/config-managed.toml` (pins stay; the file goes when nothing is left; your `config.toml`
+is never opened, so an identity an older install left there is listed as kept: delete it yourself),
+the shim, `allowed_signers`, the socket directory,
 and the hook tier with its workspace caps. It then prints **what stays**: the guards, hooks,
 policies and the `git ai-commit` alias (`carter guard remove` takes those), the read-only GitHub
 token, the account and the registered key on GitHub, and your private key file.

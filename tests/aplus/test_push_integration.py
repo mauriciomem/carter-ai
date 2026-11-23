@@ -19,8 +19,8 @@ from aplus.helpers import commit_file, git
 from carter.cli import main
 from carter.identity.errors import E_B_UNSIGNED
 from carter.identity.schema import Identity, IdentityConfig, Signing
-from carter.identity.writer import write_config
 from carter.install.paths import carter_config_path
+from config_files import write_config
 
 LLM_EMAIL = "4242+llm-bot@users.noreply.github.com"
 

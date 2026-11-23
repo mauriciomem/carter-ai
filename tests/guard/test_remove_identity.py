@@ -192,7 +192,7 @@ class TestNeverBlocksTheHuman:
         from dataclasses import replace
 
         from carter.identity.config import load_identity
-        from carter.identity.writer import write_config
+        from config_files import write_config
 
         cfg = load_identity()
         cfg = replace(cfg, workspaces={str(repo.parent): Workspace(max_tier="t1")})
@@ -211,7 +211,7 @@ class TestNeverBlocksTheHuman:
         from dataclasses import replace
 
         from carter.identity.config import load_identity
-        from carter.identity.writer import write_config
+        from config_files import write_config
 
         cfg = replace(load_identity(), workspaces={str(repo.parent): Workspace(max_tier="t1")})
         write_config(cfg, Path.home() / ".carter" / "config.toml")

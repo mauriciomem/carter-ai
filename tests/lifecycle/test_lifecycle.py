@@ -213,9 +213,14 @@ def test_the_workspace_is_untouched_and_listed_with_a_safe_rm_line(life: Life) -
     assert ".carter/" in report and "AGENTS.md" in report  # named, as the user's to delete
 
 
-def test_config_toml_goes_when_default_and_stays_when_it_holds_a_value(life: Life) -> None:
+def test_install_writes_no_config_toml_and_an_older_default_goes(life: Life) -> None:
     config = life.carter / "config.toml"
-    assert config.read_text(encoding="utf-8").count("\n") == 2  # a fresh one is two lines
+    assert not config.exists()  # this install writes none
+    config.write_text(  # what an older install wrote
+        "# Carter settings (schema 2). Only what you set is stored; "
+        "Carter commands rewrite this file and drop comments.\nschema = 2\n",
+        encoding="utf-8",
+    )
     life.uninstall()
     assert not config.exists()
 

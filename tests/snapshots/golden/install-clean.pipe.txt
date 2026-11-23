@@ -5,7 +5,6 @@ Carter install  v0.19.2
     agents            8  new
     skills           27  new
     knowledge files   4  new
-    config.toml          created
     guards               5 installed (see: carter guard status)
 
 → restart OpenCode from a clean terminal

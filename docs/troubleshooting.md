@@ -58,7 +58,9 @@ Find your symptom, then apply the fix. If nothing here helps, open an
 | `carter check --host` says your address is not known to be linked | In role `author` the `Co-authored-by` line is your only credit. Use your `<id>+<login>@users.noreply.github.com` address as `user.email`, or add your address to your GitHub account, then run `carter check --host` again in your own terminal |
 | `carter update` says the identity policy was not pinned | It ran in an agent shell, which never pins. Run `carter update` in your own terminal |
 | `carter install` says `AGENTS.md` is user-modified | Your global `AGENTS.md` has your edits, so Carter left it alone. Merge its Communication and Git & Language sections by hand |
-| ``⚠ unknown key `…` in <file> → delete it`` | Carter doesn't read that key. Nothing was changed and no command failed; delete the key from the file it names. `carter identity add` and `carter update` refuse to rewrite `config.toml` while an unknown key is in it |
+| ``⚠ unknown key `…` in <file> → delete it`` | Carter doesn't read that key. Nothing was changed and no command failed; delete the key from the file it names. No command refuses because of it |
+| `! config-managed.toml unsafe (owner/mode/link): identity off` | Carter reads `~/.carter/config-managed.toml` only if it is yours, mode `0600`, and neither it nor `~/.carter/` is a symlink. Fix with `chmod 600` or remove the link; until then there is no LLM identity (`carter check --host`) |
+| `! config.toml wins over config-managed.toml: identity` | A table is in both files. Yours wins. Delete it from `config.toml` to let `carter identity add` manage it again |
 
 ## Review-only CI
 

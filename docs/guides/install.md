@@ -75,7 +75,6 @@ Carter install  v0.19.2
     agents            8  new
     skills           27  new
     knowledge files   4  new
-    config.toml          created
     guards               g2 · hooks · sudo-docker · read-edit-denies · config-edit
 
 → restart the OpenCode server from a clean terminal to load the agents and plugin
@@ -226,7 +225,8 @@ directories older than 15 days (an `old backups` row), and never overwrites your
 knowledge files or an `AGENTS.md` you edited. Skills that Carter no longer ships are removed unless you changed them. If your global
 `AGENTS.md` has your edits, `carter install` says it is user-modified and leaves it alone.
 
-`~/.carter/config.toml` is created on a first install and never rewritten by `install`. A key Carter
+`~/.carter/config.toml` is yours: `install` neither creates nor rewrites it (Carter keeps what it
+derives in `~/.carter/config-managed.toml`). A key Carter
 doesn't read is reported once with its file, for example
 ``⚠ unknown key `x.y` in /home/you/.carter/config.toml → delete it``. Delete it yourself.
 

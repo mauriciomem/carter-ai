@@ -17,7 +17,6 @@ from carter.install.components import (
     install_knowledge,
     install_memories,
     install_opencode_rules,
-    install_ops,
     install_skills,
     read_manifest,
     remove_retired_skills,
@@ -106,7 +105,6 @@ def run(
     install_opencode_rules(base_dir, manifest, existing)
     knowledge_count = install_knowledge(base_dir, manifest, backup_root)
     memory_count = install_memories(base_dir, manifest)
-    ops_created = install_ops(base_dir, manifest)
 
     if mcp:
         mcp_count = configure_mcp_servers(base_dir, manifest, backup_root, servers=mcp_servers)
@@ -120,7 +118,6 @@ def run(
     if pruned:
         _log(f"pruned {pruned} old backups", level=2)
 
-    _log(f"Ops config: {'created' if ops_created else 'kept'}", level=2)
     _log(f"MCP servers: {mcp_count}", level=2)
     _log(f"Knowledge files: {knowledge_count} new · memory dirs: {memory_count} new", level=2)
     _log(f"Manifest: {tilde(manifest_path)}", level=2)
@@ -148,7 +145,6 @@ def run(
                 agents=agent_stats,
                 skills=skill_stats,
                 knowledge=knowledge_count,
-                config_created=ops_created,
                 pruned=pruned,
                 guards=accepted,
                 replaced=backup_root.copied,

@@ -26,7 +26,6 @@ class InstallReport:
     agents: dict[str, int]
     skills: dict[str, int]  # the statuses count files; "skills" counts directories
     knowledge: int = 0  # new knowledge files
-    config_created: bool = False
     pruned: int = 0  # old backup folders removed
     guards: list[str] = field(default_factory=list)  # accepted guard groups, none if skipped
     replaced: int = 0  # edited files copied to ``backup_dir`` before being overwritten
@@ -53,8 +52,6 @@ def render_install(report: InstallReport) -> None:
     ]
     if report.knowledge:
         table.append(Row("knowledge files", report.knowledge, "new"))
-    if report.config_created:
-        table.append(Row("config.toml", None, "created"))
     if report.pruned:
         table.append(
             Row("old backups", report.pruned, f"removed, older than {RETENTION_DAYS} days")

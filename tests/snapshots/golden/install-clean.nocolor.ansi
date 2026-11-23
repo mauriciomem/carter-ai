@@ -5,7 +5,6 @@
     agents           [1m 8[0m  [2mnew[0m
     skills           [1m27[0m  [2mnew[0m
     knowledge files  [1m 4[0m  [2mnew[0m
-    config.toml          [2mcreated[0m
     guards               [2m5 installed (see: carter guard status)[0m
 
 → restart OpenCode from a clean terminal

@@ -37,7 +37,8 @@ from carter.identity.errors import (
 )
 from carter.identity.payload import shim_path, shim_state
 from carter.identity.schema import Identity, IdentityConfig
-from carter.identity.writer import write_config
+from carter.identity.writer import WriterError
+from config_files import write_config
 from gh_api import RATE_HEADERS, FakeGitHub, Reply, fixture
 from ssh_rig import KeyPair, real_ssh
 
@@ -164,16 +165,37 @@ class TestT2:
         plan = identity_add.plan_add(request(key, ssh_public_key=f"key::{key.blob} laptop comment"))
         assert plan.cfg.signing.public_key == key.blob  # the comment is dropped
 
-    def test_an_existing_config_is_backed_up_and_kept_in_its_other_parts(
+    def test_an_existing_config_toml_is_never_touched(
         self, fake: FakeGitHub, home: Path, key: KeyPair
     ) -> None:
-        write_config(
-            IdentityConfig(identity=Identity(), state="current"), home / ".carter" / "config.toml"
-        )
+        config = home / ".carter" / "config.toml"
+        config.parent.mkdir(exist_ok=True)
+        text = '# mine\n[access]\nlevel = "guarded"\n[attribution]\nfooter = "f"\n[x]\ny = 1\n'
+        config.write_text(text)
         register(fake, key.blob)
         self.add(key, home)
-        backups = list((home / ".carter" / "backups").rglob("config.toml"))
-        assert len(backups) == 1 and "schema = 2" in backups[0].read_text()
+        assert config.read_bytes() == text.encode()
+        managed = load_identity(config)
+        assert managed.identity.login == LOGIN and managed.access == (("level", "guarded"),)
+        assert (home / ".carter" / "config-managed.toml").read_text().startswith("# Written by")
+
+    def test_an_identity_left_in_config_toml_is_refused_not_shadowed(
+        self, fake: FakeGitHub, home: Path, key: KeyPair
+    ) -> None:
+        config = home / ".carter" / "config.toml"
+        config.parent.mkdir(exist_ok=True)
+        config.write_text(f'[identity]\nlogin = "{LOGIN}"\nid = {UID}\n')
+        register(fake, key.blob)
+        with pytest.raises(WriterError, match="config.toml sets"):
+            self.add(key, home)
+        assert not (home / ".carter" / "config-managed.toml").exists()
+
+    def test_role_is_the_humans_key_and_add_says_so(
+        self, fake: FakeGitHub, home: Path, key: KeyPair
+    ) -> None:
+        register(fake, key.blob)
+        plan = identity_add.plan_add(request(key, role="author"))
+        assert any('set role = "author" in [identity]' in n for n in plan.notes)
 
     def test_a_repeated_identical_add_changes_nothing(
         self, fake: FakeGitHub, home: Path, key: KeyPair

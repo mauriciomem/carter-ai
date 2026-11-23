@@ -21,7 +21,7 @@ from carter.cli import main
 from carter.commit_cli import commit_cmd
 from carter.identity.errors import E_SIGN_AGENT_REFUSE, registry
 from carter.identity.schema import Identity, IdentityConfig
-from carter.identity.writer import write_config
+from config_files import write_config
 from identity.test_commit import COAUTHOR, EMAIL, HUMAN, LOGIN, UID, Lab, fake, lab  # noqa: F401
 from ssh_rig import real_ssh
 

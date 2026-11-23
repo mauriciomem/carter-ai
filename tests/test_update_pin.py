@@ -1,7 +1,8 @@
 """``carter update`` pins ``carter.yaml identity.role``/``require_tier``.
 
 Nothing in carter.yaml changes attribution at runtime: only a human-run ``update`` copies
-the policy into ``~/.carter/config.toml [workspaces."<abs path>"]``.
+the policy into ``config-managed.toml [pins."<abs path>"]``. ``config.toml`` is yours: no
+update opens it for writing.
 """
 
 from __future__ import annotations
@@ -16,6 +17,7 @@ import yaml
 from click.testing import CliRunner
 
 from carter.cli import main
+from carter.identity import load_identity
 from carter.ops.config import Config
 
 EMAIL = "12345+llm-bot@users.noreply.github.com"
@@ -61,9 +63,15 @@ def plain_update(ws: Path, *args: str):
     return CliRunner().invoke(main, ["update", str(ws), *args])
 
 
+def managed_of(cfg_path: Path) -> Path:
+    return cfg_path.with_name("config-managed.toml")
+
+
 def pinned(cfg_path: Path, ws: Path) -> dict:
-    doc = tomllib.loads(cfg_path.read_text(encoding="utf-8"))
-    return doc.get("workspaces", {}).get(str(ws.resolve()), {})
+    """What ``update`` wrote: ``[pins."<ws>"]`` in the managed file."""
+    managed = managed_of(cfg_path)
+    doc = tomllib.loads(managed.read_text(encoding="utf-8")) if managed.exists() else {}
+    return doc.get("pins", {}).get(str(ws.resolve()), {})
 
 
 def snap(path: Path) -> tuple[str, int]:
@@ -97,45 +105,63 @@ class TestPinning:
     def test_rerun_is_a_no_op(self, ws, cfg_path):
         set_policy(ws, role="author", require_tier="t2")
         update(ws, "--yes")
-        before = snap(cfg_path)
+        before = snap(managed_of(cfg_path))
 
         again = update(ws, "--yes")
 
         assert again.exit_code == 0
-        assert snap(cfg_path) == before
+        assert snap(managed_of(cfg_path)) == before
         assert "already pinned" in again.output.lower()
         assert sorted(p.name for p in cfg_path.parent.iterdir()) == [
-            "config.toml",
+            "config-managed.toml",
             "workspaces",
-        ]  # no backup
+        ]  # no backup, no config.toml
 
     def test_no_policy_and_no_pin_touches_nothing(self, ws, cfg_path):
         result = update(ws, "--yes")
         assert result.exit_code == 0
-        assert not cfg_path.exists()
+        assert not cfg_path.exists() and not managed_of(cfg_path).exists()
 
     def test_hand_edited_fields_survive_a_pin(self, ws, cfg_path):
         cfg_path.parent.mkdir(parents=True, exist_ok=True)
-        cfg_path.write_text(
-            T1 + f'[workspaces."{ws.resolve()}"]\nmax_tier = "t1"\n'
-            "allow_project_opencode_edit = true\n"
+        text = (
+            "# mine\n"
+            + T1
+            + f'[workspaces."{ws.resolve()}"]\nmax_tier = "t1"\n'
+            + "allow_project_opencode_edit = true\n"
         )
+        cfg_path.write_text(text)
         set_policy(ws, role="co-author", require_tier="t1")
 
         assert update(ws, "--yes").exit_code == 0
 
-        entry = pinned(cfg_path, ws)
-        assert entry["max_tier"] == "t1" and entry["allow_project_opencode_edit"] is True
-        assert (entry["role"], entry["require_tier"]) == ("co-author", "t1")
-        assert tomllib.loads(cfg_path.read_text())["identity"]["login"] == "llm-bot"
+        assert cfg_path.read_text() == text  # byte for byte: comments and all
+        assert pinned(cfg_path, ws) == {"role": "co-author", "require_tier": "t1"}
+        entry = load_identity(cfg_path).workspaces[str(ws.resolve())]
+        assert (entry.max_tier, entry.allow_project_opencode_edit) == ("t1", True)
+        assert (entry.role, entry.require_tier) == ("co-author", "t1")
 
     def test_other_workspaces_are_untouched(self, ws, cfg_path):
         cfg_path.parent.mkdir(parents=True, exist_ok=True)
-        cfg_path.write_text(T1 + '[workspaces."/somewhere/else"]\nrole = "author"\n')
+        text = T1 + '[workspaces."/somewhere/else"]\nrole = "author"\n'
+        cfg_path.write_text(text)
         set_policy(ws, role="co-author")
         update(ws, "--yes")
-        doc = tomllib.loads(cfg_path.read_text())
-        assert doc["workspaces"]["/somewhere/else"]["role"] == "author"
+        assert cfg_path.read_text() == text
+        assert load_identity(cfg_path).workspaces["/somewhere/else"].role == "author"
+
+    def test_a_pin_older_installs_left_in_config_toml_is_not_shadowed(self, ws, cfg_path):
+        cfg_path.parent.mkdir(parents=True, exist_ok=True)
+        text = T1 + f'[workspaces."{ws.resolve()}"]\nrole = "author"\n'
+        cfg_path.write_text(text)
+        set_policy(ws, role="co-author")
+
+        result = update(ws, "--yes")
+
+        assert result.exit_code == 1 and "config.toml sets [workspaces]" in result.output
+        assert cfg_path.read_text() == text and not managed_of(cfg_path).exists()
+        set_policy(ws, role="author")  # the same value: nothing to write
+        assert "already pinned" in update(ws, "--yes").output.lower()
 
     def test_removing_the_policy_from_yaml_unpins_after_confirmation(self, ws, cfg_path):
         set_policy(ws, role="author", require_tier="t2")
@@ -148,18 +174,19 @@ class TestPinning:
         assert pinned(cfg_path, ws) == {}  # the empty entry is dropped
 
     def test_unpin_keeps_a_hand_edited_cap(self, ws, cfg_path):
-        cfg_path.parent.mkdir(parents=True, exist_ok=True)
-        cfg_path.write_text(
-            T1 + f'[workspaces."{ws.resolve()}"]\nmax_tier = "t0"\nrole = "author"\n'
-        )
+        set_policy(ws, role="author", require_tier="t2")
+        update(ws, "--yes")
+        cap = f'[workspaces."{ws.resolve()}"]\nmax_tier = "t0"\n'
+        cfg_path.write_text(cap)
         set_policy(ws)
         update(ws, "--yes")
-        assert pinned(cfg_path, ws) == {"max_tier": "t0"}
+        assert pinned(cfg_path, ws) == {} and cfg_path.read_text() == cap
+        assert load_identity(cfg_path).workspaces[str(ws.resolve())].max_tier == "t0"
 
     def test_the_file_stays_0600(self, ws, cfg_path):
         set_policy(ws, role="author")
         update(ws, "--yes")
-        assert (cfg_path.stat().st_mode & 0o777) == 0o600
+        assert (managed_of(cfg_path).stat().st_mode & 0o777) == 0o600
 
 
 class TestCarterYamlIsInertUntilUpdate:
@@ -203,14 +230,14 @@ class TestConfirmation:
         result = update(ws, "--dry-run")
 
         assert result.exit_code == 0
-        assert not cfg_path.exists()
+        assert not cfg_path.exists() and not managed_of(cfg_path).exists()
         assert "would pin" in result.output.lower()
         assert "(unset) -> author" in result.output
 
     def test_dry_run_with_yes_still_writes_nothing(self, ws, cfg_path):
         set_policy(ws, role="author")
         update(ws, "--dry-run", "--yes")
-        assert not cfg_path.exists()
+        assert not cfg_path.exists() and not managed_of(cfg_path).exists()
 
     def test_it_asks_nothing_so_no_terminal_and_no_yes_are_needed(self, ws, cfg_path):
         set_policy(ws, role="author")
@@ -226,7 +253,7 @@ class TestConfirmation:
         set_policy(ws, role="author")
         result = update(ws, env={"AGENT": "1"})
         assert result.exit_code == 0
-        assert not cfg_path.exists() and "agent shells never pin" in result.output
+        assert not managed_of(cfg_path).exists() and "agent shells never pin" in result.output
 
     def test_nothing_is_asked_when_nothing_changes(self, ws, cfg_path):
         set_policy(ws, role="author")
@@ -266,9 +293,7 @@ class TestRefusals:
         cfg_path.write_text(T1)
         set_policy(ws, role="author")
         assert update(ws, "--yes").exit_code == 0
-        cfg_path.write_text(
-            cfg_path.read_text().replace('role = "author"', 'role = "author"\nmax_tier = "t1"')
-        )
+        cfg_path.write_text(T1 + f'[workspaces."{ws.resolve()}"]\nmax_tier = "t1"\n')
 
         result = update(ws, "--yes")
 
@@ -280,7 +305,7 @@ class TestRefusals:
         set_policy(ws, require_tier="t1")
         assert update(ws, "--yes").exit_code == 0
 
-    def test_unmodelled_keys_refuse_with_the_diff_and_never_overwrite(self, ws, cfg_path):
+    def test_unknown_keys_do_not_block_a_pin_and_are_never_rewritten(self, ws, cfg_path):
         cfg_path.parent.mkdir(parents=True, exist_ok=True)
         text = T1 + "[extra]\nprecious = 1\n"
         cfg_path.write_text(text)
@@ -288,9 +313,9 @@ class TestRefusals:
 
         result = update(ws, "--yes")
 
-        assert result.exit_code == 1
-        assert "precious" in result.output
+        assert result.exit_code == 0, result.output
         assert cfg_path.read_text() == text
+        assert pinned(cfg_path, ws) == {"role": "author"}
 
     def test_broken_config_refuses_to_pin(self, ws, cfg_path):
         cfg_path.parent.mkdir(parents=True, exist_ok=True)
@@ -306,26 +331,21 @@ class TestRefusals:
         cfg_path.write_text("schema = 2\n[identity\n")
         assert update(ws, "--yes").exit_code == 0
 
-    def test_a_config_with_old_keys_is_not_rewritten_and_the_keys_are_named(self, ws, cfg_path):
+    def test_a_config_with_old_keys_is_not_rewritten(self, ws, cfg_path):
         cfg_path.parent.mkdir(parents=True, exist_ok=True)
         legacy = '[attribution]\nname = "x"\n'
         cfg_path.write_text(legacy)
         set_policy(ws, role="author")
         result = update(ws, "--yes")
-        assert result.exit_code == 1
-        assert "config.toml has unknown keys: attribution.name (delete them)" in result.output
-        assert "\\n" not in result.output  # one line; the diff lines come with -v, one by one
-        assert "-name = " in result.output
-        plain = plain_update(ws, "--yes")
-        assert "-name = " not in plain.output and "has unknown keys" in plain.output
-        assert cfg_path.read_text() == legacy
+        assert result.exit_code == 0, result.output
+        assert cfg_path.read_text() == legacy and pinned(cfg_path, ws) == {"role": "author"}
 
     def test_invalid_yaml_policy_stops_update(self, ws, cfg_path):
         set_policy(ws, role="root")
         result = update(ws, "--yes")
         assert result.exit_code != 0
         assert "identity.role" in result.output
-        assert not cfg_path.exists()
+        assert not cfg_path.exists() and not managed_of(cfg_path).exists()
 
 
 class TestWorkspaceKey:
@@ -336,7 +356,8 @@ class TestWorkspaceKey:
 
         assert update(link, "--yes").exit_code == 0
 
-        assert list(tomllib.loads(cfg_path.read_text())["workspaces"]) == [str(ws.resolve())]
+        pins = tomllib.loads(managed_of(cfg_path).read_text())["pins"]
+        assert list(pins) == [str(ws.resolve())]
 
     def test_non_ascii_and_awkward_paths_round_trip(self, tmp_path, cfg_path):
         odd = tmp_path / 'ñandú "q" [x] #y \\z 日本'
@@ -424,16 +445,17 @@ class TestWorkspaceLevelNoteOnly:
         assert "not rewritten" not in update(ws, "--yes").output
 
 
-class TestPinBackup:
-    def test_a_pin_keeps_a_copy_of_the_file_it_rewrites(self, ws, cfg_path, home):
-        """The writer drops comments; the file as the user had it goes to backups/<stamp>/."""
+class TestConfigTomlIsNeverRewritten:
+    def test_a_pin_leaves_the_file_with_its_comments_and_makes_no_backup(self, ws, cfg_path, home):
         cfg_path.parent.mkdir(parents=True, exist_ok=True)
-        before = "# my notes\n" + T1
+        before = "# my notes\n" + T1 + "[extra]\nkeep = 1\n"
         cfg_path.write_text(before, encoding="utf-8")
+        stamp = cfg_path.stat().st_mtime_ns
         set_policy(ws, role="author", require_tier="t2")
 
         assert update(ws, "--yes").exit_code == 0
 
-        (copy,) = (home / ".carter" / "backups").glob("*/config.toml")
-        assert copy.read_text(encoding="utf-8") == before
-        assert "my notes" not in cfg_path.read_text(encoding="utf-8")
+        assert cfg_path.read_text(encoding="utf-8") == before
+        assert cfg_path.stat().st_mtime_ns == stamp
+        assert not list((home / ".carter" / "backups").glob("*/config.toml"))
+        assert pinned(cfg_path, ws) == {"role": "author", "require_tier": "t2"}

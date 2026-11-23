@@ -13,13 +13,16 @@ import pytest
 
 from carter.install import mcp, orchestrator, paths
 from carter.install import uninstall as uninstall_mod
-from carter.install.components import _OPENCODE_AGENTS_MD, default_config_text
+from carter.install.components import _OPENCODE_AGENTS_MD
 from carter.install.files import _sha256
 from carter.install.uninstall import KeptRow, Workspace, uninstall
 from lifecycle.helpers import tree_diff, tree_snapshot
 
 SEED = "patterns.md"
-DEFAULT_CONFIG = default_config_text()  # what a fresh install writes
+DEFAULT_CONFIG = (  # what an install of an older Carter wrote; this one writes no file
+    "# Carter settings (schema 2). Only what you set is stored; "
+    "Carter commands rewrite this file and drop comments.\nschema = 2\n"
+)
 
 
 @pytest.fixture
@@ -341,7 +344,7 @@ class TestIsDefaultConfig:
 
     def test_a_config_with_only_a_comment_added_is_kept_and_listed(self, installed: Path) -> None:
         config = paths.carter_config_path(installed)
-        config.write_text(config.read_text() + "# why I left this alone\n")
+        config.write_text(DEFAULT_CONFIG + "# why I left this alone\n")
         report = uninstall(installed)
         assert report.config_removed is False and "why I left" in config.read_text()
         assert KeptRow(config, "settings you changed", 1, dir=False) in report.kept
@@ -349,8 +352,11 @@ class TestIsDefaultConfig:
     def test_a_missing_file_is_not_default(self, tmp_path: Path) -> None:
         assert uninstall_mod._is_default_config(tmp_path / "config.toml") is False
 
-    def test_what_install_writes_is_default(self, installed: Path) -> None:
-        assert uninstall_mod._is_default_config(paths.carter_config_path(installed)) is True
+    def test_what_an_older_install_wrote_is_default(self, installed: Path) -> None:
+        config = paths.carter_config_path(installed)
+        assert not config.exists()  # this install writes none
+        config.write_text(DEFAULT_CONFIG)
+        assert uninstall_mod._is_default_config(config) is True
 
 
 class TestMcpRemoval:
@@ -494,6 +500,7 @@ class TestReport:
 class TestCleanup:
     def test_default_config_is_removed_and_a_changed_one_kept(self, installed: Path) -> None:
         config = paths.carter_config_path(installed)
+        config.write_text(DEFAULT_CONFIG)
         assert uninstall(installed).config_removed is True and not config.exists()
 
     def test_an_edited_config_is_kept_and_listed(self, installed: Path) -> None:

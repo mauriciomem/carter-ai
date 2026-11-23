@@ -23,8 +23,8 @@ from carter.guard.state import load, save
 from carter.identity.agent_probe import Probe
 from carter.identity.config import load_identity
 from carter.identity.schema import Workspace
-from carter.identity.writer import write_config
 from carter.install.paths import guard_state_path
+from config_files import write_config
 from gh_api import FakeGitHub, Reply
 from rows import check_host
 from ssh_rig import KeyPair, real_ssh
@@ -466,3 +466,27 @@ class TestTheCommand:
         assert SENTINEL not in out and key.blob not in out and str(key.pub_path) not in out
         assert "OK    key on GitHub: the key is absent from the account's login keys" in out
         assert fake.authorized_requests() == []
+
+
+class TestManagedFile:
+    def host(self, cwd: Path) -> str:
+        return check_host(str(cwd)).output
+
+    def test_a_loose_mode_is_one_line_and_the_identity_is_off(
+        self, home: Path, fake: FakeGitHub, key: KeyPair, tmp_path: Path
+    ) -> None:
+        make(fake, key)
+        managed = home / ".carter" / "config-managed.toml"
+        managed.chmod(0o644)
+        out = self.host(tmp_path)
+        assert "config-managed.toml unsafe (owner/mode/link): identity off" in out
+        assert load_identity().identity.login == ""
+
+    def test_a_table_in_both_files_says_config_toml_wins(
+        self, home: Path, fake: FakeGitHub, key: KeyPair, tmp_path: Path
+    ) -> None:
+        make(fake, key)
+        (home / ".carter" / "config.toml").write_text('[identity]\nlogin = "mine"\n')
+        out = self.host(tmp_path)
+        assert [x for x in out.splitlines() if "config.toml wins over" in x] != []
+        assert len([x for x in out.splitlines() if "config.toml wins over" in x]) == 1

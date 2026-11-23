@@ -150,7 +150,8 @@ class IdentityConfig:
     access: tuple[tuple[str, str | int | bool], ...] = ()
     schema: int = SCHEMA_VERSION
     state: State = "absent"
-    unknown_keys: tuple[str, ...] = ()  # dotted paths the writer does not model
+    unknown_keys: tuple[str, ...] = ()  # dotted paths the schema does not model
+    notes: tuple[str, ...] = ()  # one line each: what the managed file lost or could not give
 
 
 def schema_names() -> dict[str, tuple[str, ...]]:

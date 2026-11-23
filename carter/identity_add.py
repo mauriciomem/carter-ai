@@ -6,7 +6,7 @@ comes from a ``.pub`` file or a ``key::`` literal (only ``type blob`` is kept, t
 private key is stored as a *path* and is not opened. The checks are unauthenticated GitHub reads.
 
 ``plan_add`` does every check and every network call and writes nothing; ``apply_add`` writes
-(config.toml through the writer with a backup, the shim, ``allowed_signers``, the mirror) and
+(config-managed.toml through the writer, the shim, ``allowed_signers``, the mirror) and
 puts every file back if a write fails, so a failure leaves the tree as it was. Output names only the
 login, the id, the fingerprint and file names.
 """
@@ -18,13 +18,11 @@ import subprocess
 import tempfile
 from collections.abc import Mapping
 from dataclasses import dataclass, field, replace
-from datetime import UTC, datetime
 from pathlib import Path
 from typing import NamedTuple
 
 from carter.guard import gitconfig, mirror_io
 from carter.guard.state import GuardState, load_or_empty_readonly, save
-from carter.home import STAMP_FORMAT
 from carter.identity import agent_paths, agent_setup, github, shim
 from carter.identity.config import ConfigError, load_identity
 from carter.identity.errors import (
@@ -37,10 +35,11 @@ from carter.identity.errors import (
     registry,
 )
 from carter.identity.isolation import resolve_false
+from carter.identity.managed import managed_path
 from carter.identity.payload import fingerprint_of, public_blob, shim_path
 from carter.identity.schema import IdentityConfig, Signing
-from carter.identity.writer import dumps, write_config
-from carter.install.paths import backups_dir, guard_state_path
+from carter.identity.writer import write_managed
+from carter.install.paths import guard_state_path
 
 PRIVATE_MARK = b"-----BEGIN"
 MAX_PUB_BYTES = 16 * 1024
@@ -260,8 +259,10 @@ def plan_add(
     new_ident = replace(
         ident, login=user.login, id=user.id, email=email, name=ident.name or user.login
     )
-    if req.role:
+    if req.role:  # the checks below use it, but the role is yours: Carter never writes it
         new_ident = replace(new_ident, role=req.role)
+        if req.role != ident.role:
+            api_notes.append(f'role is yours: set role = "{req.role}" in [identity]')
     if key is None:
         if role_only:
             return _finish(
@@ -271,10 +272,7 @@ def plan_add(
                     user.id,
                     old.fingerprint,
                     "",
-                    notes=[
-                        *api_notes,
-                        f"role: {req.role} (config.toml only; the key is unchanged)",
-                    ],
+                    notes=api_notes,
                 ),
                 home,
             )
@@ -340,7 +338,7 @@ def plan_add(
 
 def _finish(plan: AddPlan, home: Path) -> AddPlan:
     cfg, carter = plan.cfg, home / ".carter"
-    plan.files = [str(carter / "config.toml")]
+    plan.files = [str(managed_path(carter / "config.toml"))]
     if cfg.signing.public_key:
         s = cfg.signing
         sock = s.agent_socket or ("" if s.program else str(agent_paths.socket_path(home)))
@@ -370,7 +368,7 @@ def apply_add(plan: AddPlan, *, home: Path | None = None) -> list[str]:
     home = home or Path.home()
     carter = home / ".carter"
     touched = [
-        carter / "config.toml",
+        managed_path(carter / "config.toml"),
         shim_path(home),
         shim.allowed_signers_path(home),
         carter / "gitconfig",
@@ -379,16 +377,11 @@ def apply_add(plan: AddPlan, *, home: Path | None = None) -> list[str]:
     snapshot = {p: p.read_bytes() if p.is_file() else None for p in touched}
     frag_dir = carter / "gitconfig.d"
     frags_before = {p: p.read_bytes() for p in frag_dir.glob("*")} if frag_dir.is_dir() else {}
-    stamp = datetime.now(UTC).strftime(STAMP_FORMAT)
     notices: list[str] = []
     try:
         read = load_or_empty_readonly(guard_state_path(None))
         state: GuardState = read.state
-        backup = backups_dir(None) / stamp / "config.toml"
-        existing = carter / "config.toml"
-        if existing.exists() and existing.read_text(encoding="utf-8") != dumps(plan.cfg):
-            backup.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
-        write_config(plan.cfg, existing, backup_to=backup)
+        write_managed(plan.cfg, carter / "config.toml")
         (carter / "run").mkdir(parents=True, exist_ok=True, mode=0o700)
         if plan.shim_data:
             shim.write(shim_path(home), plan.shim_data)

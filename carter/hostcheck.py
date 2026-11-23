@@ -428,7 +428,8 @@ def _identity(
                 "Fix config.toml; agent commits are off.",
             )
         ]
-    return hostcheck_id.identity_items(
+    notes = [Item("warn", "config", note) for note in cfg.notes]  # the managed file
+    return notes + hostcheck_id.identity_items(
         cfg, state, cwd=cwd, base_dir=base_dir, git=git_version, fetch=fetch,
         workspace=workspace_for(cfg, str(cwd)),
     )  # fmt: skip

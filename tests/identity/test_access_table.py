@@ -13,7 +13,8 @@ import pytest
 from carter import unknownkeys
 from carter.identity import load_identity
 from carter.identity.schema import Identity, IdentityConfig
-from carter.identity.writer import UnmodelledKeysError, dumps, write_config
+from carter.identity.writer import write_managed
+from config_files import dumps
 
 GUARDED = 'schema = 2\n\n[access]\nlevel = "guarded"\n'
 
@@ -71,24 +72,13 @@ def test_an_odd_key_is_quoted(tmp_path):
     assert '"a b" = "x"' in dumps(cfg)
 
 
-def test_any_write_keeps_the_table(tmp_path):
-    """A Carter command that rewrites config.toml (identity, signing, pins) keeps `[access]`."""
+def test_a_carter_write_leaves_the_table_and_the_file_alone(tmp_path):
+    """Carter writes the managed file only: `[access]` and `config.toml` stay byte for byte."""
     path = _file(tmp_path, GUARDED)
+    before = path.read_bytes()
     fresh = IdentityConfig(state="current", identity=Identity(login="bot"))
-    assert write_config(fresh, path) is True
+    assert write_managed(fresh, path) is True
     again = load_identity(path)
     assert again.access == (("level", "guarded"),)
     assert again.identity.login == "bot"
-
-
-def test_a_loaded_config_written_back_is_unchanged(tmp_path):
-    path = _file(tmp_path, dumps(load_identity(_file(tmp_path, GUARDED))))
-    assert write_config(load_identity(path), path) is False
-    assert load_identity(path).access == (("level", "guarded"),)
-
-
-def test_an_unwritable_access_entry_still_blocks_the_rewrite(tmp_path):
-    path = _file(tmp_path, "[access]\nlevel = ['a']\n")
-    with pytest.raises(UnmodelledKeysError) as exc:
-        write_config(IdentityConfig(state="current"), path)
-    assert exc.value.keys == ("access.level",)
+    assert path.read_bytes() == before
