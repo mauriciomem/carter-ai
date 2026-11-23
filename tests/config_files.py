@@ -56,3 +56,16 @@ def write_config(cfg: IdentityConfig, path: Path, **_ignored: Any) -> bool:
     path.write_text(text, encoding="utf-8")
     path.chmod(0o600)
     return True
+
+
+def write_signers(folder: Path, cfg: IdentityConfig) -> None:
+    """The ``hooks/allowed_signers`` that ``identity add`` writes for ``cfg``: what the managed
+    file's signing values are checked against."""
+    from carter.identity.managed import SIGNERS, anchor_line
+
+    s = cfg.signing
+    keys = [k for k in (s.public_key, *s.previous_public_keys) if k]
+    text = "".join(f'x namespaces="git" {k}\n' for k in keys) + anchor_line(s.private_key_path)
+    path = folder.joinpath(*SIGNERS)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(text, encoding="utf-8")

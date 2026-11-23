@@ -12,13 +12,15 @@ import pytest
 from carter import ui
 from carter.identity import load_identity
 from carter.identity.managed import (
+    FORGED,
     MANAGED_NAME,
     OWNED,
     PIN_KEYS,
     UNREADABLE,
     UNSAFE,
 )
-from carter.identity.schema import SECTIONS, IdentityConfig, Workspace
+from carter.identity.schema import SECTIONS, IdentityConfig, Signing, Workspace
+from config_files import write_signers
 
 
 @pytest.fixture
@@ -35,6 +37,10 @@ def put_managed(cfg_path: Path, text: str, mode: int = 0o600) -> Path:
 
 def sample(f: Any) -> Any:
     """A value for field ``f`` that differs from its default and is legal."""
+    if f.name == "public_key":
+        return "ssh-ed25519 PUB"
+    if f.name == "previous_public_keys":
+        return ("ssh-ed25519 P1", "ssh-ed25519 P2")
     choices = f.metadata.get("choices")
     if choices:
         return next((c for c in choices if c != f.default), None)
@@ -84,6 +90,16 @@ def test_every_key_has_one_owning_file_both_directions(cfg_path, attr, path, f):
     cfg_path.unlink()
 
     put_managed(cfg_path, text)  # in the managed file: read only if Carter owns it
+    write_signers(
+        cfg_path.parent,
+        IdentityConfig(
+            signing=Signing(
+                public_key="ssh-ed25519 PUB",
+                previous_public_keys=("ssh-ed25519 P1", "ssh-ed25519 P2"),
+                private_key_path="x",
+            )
+        ),
+    )  # `identity add` wrote the signing values this file may carry
     cfg = load_identity(cfg_path)
     got = getattr(getattr(cfg, attr), f.name)
     if owned_here:
@@ -318,3 +334,82 @@ class TestANestedEntryNeverLiftsAParentCap:
             f'[pins."{repo}/sub"]\nrole = "co-author"\n',
         )
         assert active_optouts(cfg).workspaces == [str(repo.resolve())]
+
+
+class TestPlantedSigningValuesAreNotTrusted:
+    """`identity add` writes the keys and the private path into `allowed_signers` (a control file
+    only human commands write); the managed file may only carry what that file says."""
+
+    REAL = IdentityConfig(
+        signing=Signing(
+            public_key="ssh-ed25519 REAL",
+            previous_public_keys=("ssh-ed25519 OLD",),
+            private_key_path="/home/u/.ssh/llm",
+        )
+    )
+    LOGIN = '[identity]\nlogin = "bot"\nid = 3\n'
+
+    def planted(self, cfg_path, signing_lines: str, signers: IdentityConfig | None = None):
+        cfg_path.write_text('[access]\nlevel = "guarded"\n')
+        put_managed(cfg_path, self.LOGIN + "[identity.signing]\n" + signing_lines)
+        if signers is not None:
+            write_signers(cfg_path.parent, signers)
+        return load_identity(cfg_path)
+
+    def test_what_identity_add_wrote_is_trusted(self, cfg_path):
+        cfg = self.planted(
+            cfg_path,
+            'public_key = "ssh-ed25519 REAL"\nprevious_public_keys = ["ssh-ed25519 OLD"]\n'
+            'private_key_path = "/home/u/.ssh/llm"\n',
+            self.REAL,
+        )
+        assert cfg.signing.private_key_path == "/home/u/.ssh/llm" and cfg.notes == ()
+
+    def test_a_private_key_path_that_identity_add_did_not_write_turns_the_file_off(self, cfg_path):
+        cfg = self.planted(
+            cfg_path,
+            'public_key = "ssh-ed25519 REAL"\nprivate_key_path = "/home/u/.ssh/id_ed25519"\n',
+            self.REAL,
+        )
+        assert cfg.identity.login == "" and cfg.signing.private_key_path == ""
+        assert cfg.notes == (FORGED,) and cfg.access == (("level", "guarded"),)
+
+    def test_an_extra_previous_key_turns_the_file_off(self, cfg_path):
+        cfg = self.planted(
+            cfg_path,
+            'public_key = "ssh-ed25519 REAL"\n'
+            'previous_public_keys = ["ssh-ed25519 OLD", "ssh-ed25519 EVIL"]\n',
+            self.REAL,
+        )
+        assert cfg.signing.previous_public_keys == () and cfg.notes == (FORGED,)
+
+    def test_another_public_key_turns_the_file_off(self, cfg_path):
+        cfg = self.planted(cfg_path, 'public_key = "ssh-ed25519 PERSONAL"\n', self.REAL)
+        assert cfg.signing.public_key == "" and cfg.notes == (FORGED,)
+
+    def test_no_allowed_signers_at_all_turns_the_file_off(self, cfg_path):
+        cfg = self.planted(cfg_path, 'private_key_path = "/home/u/.ssh/id_ed25519"\n')
+        assert cfg.identity.login == "" and cfg.notes == (FORGED,)
+
+    def test_a_forged_anchor_line_in_a_longer_key_name_does_not_match(self, cfg_path):
+        cfg = self.planted(
+            cfg_path,
+            'public_key = "ssh-ed25519 REAL"\nprivate_key_path = "/home/u/.ssh/llm2"\n',
+            self.REAL,
+        )
+        assert cfg.notes == (FORGED,)
+
+    def test_signing_kept_in_config_toml_is_the_humans_and_is_not_checked(self, cfg_path):
+        cfg_path.write_text(
+            '[identity.signing]\npublic_key = "ssh-ed25519 ANY"\nprivate_key_path = "/k"\n'
+        )
+        cfg = load_identity(cfg_path)  # no allowed_signers: an older install keeps working
+        assert cfg.signing.private_key_path == "/k" and cfg.notes == ()
+
+    def test_values_that_are_not_signing_need_no_anchor(self, cfg_path):
+        put_managed(cfg_path, self.LOGIN + '[github]\nread_token_file = "/t"\n')
+        cfg = load_identity(cfg_path)
+        assert cfg.identity.login == "bot" and cfg.notes == ()
+
+    def test_the_line_fits_the_output_budget(self):
+        assert len(FORGED) <= ui.MAX - 8

@@ -143,7 +143,10 @@ class TestT2:
             str(home / ".carter" / "gitconfig"),
         } <= recorded
         allowed = shim.allowed_signers_path(home)
-        assert allowed.read_text() == f'{EMAIL} namespaces="git" {key.blob}\n'
+        private = cfg.signing.private_key_path
+        assert allowed.read_text() == (
+            f'{EMAIL} namespaces="git" {key.blob}\n# private_key_path {json.dumps(private)}\n'
+        )  # the last line is the anchor the managed file is checked against
         assert (
             stat.S_IMODE(allowed.stat().st_mode) == 0o600
             and stat.S_IMODE(allowed.parent.stat().st_mode) == 0o700
@@ -227,10 +230,11 @@ class TestT2:
             key.blob,
         )
         lines = shim.allowed_signers_path(home).read_text().splitlines()
-        assert lines == [
+        assert lines[:2] == [
             f'{EMAIL} namespaces="git" {new.blob}',
             f'{EMAIL} namespaces="git" {key.blob}',
         ]
+        assert lines[2].startswith("# private_key_path ") and len(lines) == 3
         assert mirror_io.read_entries(home / ".carter" / "gitconfig")[2] == (
             "carter.llmFingerprint",
             new.fingerprint,

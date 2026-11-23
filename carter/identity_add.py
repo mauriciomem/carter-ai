@@ -35,7 +35,7 @@ from carter.identity.errors import (
     registry,
 )
 from carter.identity.isolation import resolve_false
-from carter.identity.managed import managed_path
+from carter.identity.managed import anchor_line, managed_path
 from carter.identity.payload import fingerprint_of, public_blob, shim_path
 from carter.identity.schema import IdentityConfig, Signing
 from carter.identity.writer import write_managed
@@ -355,6 +355,7 @@ def _finish(plan: AddPlan, home: Path) -> AddPlan:
         )
         keys = [public_blob(k) for k in (s.public_key, *s.previous_public_keys)]
         plan.allowed = "".join(f'{cfg.identity.email} namespaces="git" {k}\n' for k in keys if k)
+        plan.allowed += anchor_line(s.private_key_path)  # what the managed file is checked against
         plan.files += [str(shim_path(home)), str(shim.allowed_signers_path(home))]
     plan.files += [str(carter / "gitconfig")]
     return plan

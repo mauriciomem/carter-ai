@@ -22,6 +22,7 @@ from carter.guard import mirror_io
 from carter.guard.state import load, save
 from carter.identity.agent_probe import Probe
 from carter.identity.config import load_identity
+from carter.identity.managed import FORGED
 from carter.identity.schema import Workspace
 from carter.install.paths import guard_state_path
 from config_files import write_config
@@ -251,12 +252,23 @@ class TestShimAndAgent:
         )
         assert find(run(tmp_path), "signing helper", "another agent socket").level == "red"  # type: ignore[union-attr]
 
-    def test_a_missing_allowed_signers_is_a_warning(
+    def test_a_missing_allowed_signers_is_a_warning_for_signing_kept_in_config_toml(
+        self, home: Path, fake: FakeGitHub, key: KeyPair, tmp_path: Path
+    ) -> None:
+        make(fake, key)
+        managed = home / ".carter" / "config-managed.toml"
+        (home / ".carter" / "config.toml").write_text(managed.read_text())  # an older install
+        managed.unlink()
+        (home / ".carter" / "hooks" / "allowed_signers").unlink()
+        assert find(run(tmp_path), "allowed_signers").level == "warn"  # type: ignore[union-attr]
+
+    def test_a_missing_allowed_signers_turns_the_managed_signing_off_with_one_line(
         self, home: Path, fake: FakeGitHub, key: KeyPair, tmp_path: Path
     ) -> None:
         make(fake, key)
         (home / ".carter" / "hooks" / "allowed_signers").unlink()
-        assert find(run(tmp_path), "allowed_signers").level == "warn"  # type: ignore[union-attr]
+        cfg = load_identity()
+        assert cfg.signing.public_key == "" and cfg.notes == (FORGED,)
 
     @pytest.mark.parametrize(
         ("state", "level", "needle"),

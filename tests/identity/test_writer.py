@@ -17,6 +17,7 @@ from carter.identity.managed import HEADER, MANAGED_NAME, OWNED, PIN_KEYS
 from carter.identity.schema import Github, Identity, IdentityConfig, Signing, Workspace
 from carter.identity.writer import WriterError, owned, write_managed
 from config_files import dumps as human_dumps
+from config_files import write_signers
 
 REPO = Path(__file__).resolve().parents[2]
 
@@ -56,6 +57,7 @@ def test_the_file_starts_with_the_header_and_is_private(cfg_path):
 
 def test_what_is_written_is_read_back(cfg_path):
     write_managed(DERIVED, cfg_path)
+    write_signers(cfg_path.parent, DERIVED)  # what `identity add` writes beside it
     again = load_identity(cfg_path)
     assert owned(again) == owned(DERIVED)
     assert again.workspaces["/abs/path"].role == "author"

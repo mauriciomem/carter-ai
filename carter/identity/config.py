@@ -23,7 +23,7 @@ from typing import Any, TypeVar, get_type_hints
 
 from carter.home import carter_home
 from carter.identity.errors import E_CONFIG, MSG_CONFIG, IdentityError
-from carter.identity.managed import UNREADABLE, managed_path, merge, read_managed
+from carter.identity.managed import merge, read_checked
 from carter.identity.schema import (
     KEY_SCHEMA,
     SCHEMA_VERSION,
@@ -188,13 +188,7 @@ def load_identity(path: Path | None = None) -> IdentityConfig:
     ``config.toml``; a defect of the managed file reads as an empty one (identity off)."""
     path = path or default_path()
     human = read_document(path)
-    managed, problem = read_managed(managed_path(path))
-    notes = [problem] if problem else []
-    if managed is not None:
-        try:
-            parse_identity(merge(None, managed)[0] or None)  # a bad value fails the whole file
-        except ConfigError:
-            managed, notes = None, [UNREADABLE]
+    managed, notes = read_checked(path, human, parse_identity)
     doc = human
     if managed is not None:
         doc, more = merge(human, managed)

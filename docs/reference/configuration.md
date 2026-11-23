@@ -224,6 +224,11 @@ How the two are read:
 - A key of yours found in the managed file is ignored; `carter check --host` names it.
 - A table you also set in `config.toml` wins over the managed one; `check --host` says so in one
   line. `identity add` and `update` then refuse to change it: edit `config.toml` yourself.
+- The signing values in the managed file are used only if they match what `carter identity add`
+  wrote into `~/.carter/hooks/allowed_signers`: the public key, the previous keys and the
+  `private_key_path` (a comment line there). Otherwise the whole file is ignored and
+  `check --host` says `allowed_signers does not match`. Values kept in `config.toml` are yours and
+  are not checked.
 - The managed file is trusted only if it is a regular file owned by you with no group or other
   access, and neither it nor `~/.carter/` is a symlink. If a check fails, Carter reads it as empty:
   no LLM identity, and `check --host` says `config-managed.toml unsafe`. Carter writes it through
