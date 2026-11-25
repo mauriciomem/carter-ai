@@ -22,9 +22,10 @@ from carter.guard import mirror_io
 from carter.guard.state import load, save
 from carter.identity.agent_probe import Probe
 from carter.identity.config import load_identity
+from carter.identity.managed import FORGED
 from carter.identity.schema import Workspace
-from carter.identity.writer import write_config
 from carter.install.paths import guard_state_path
+from config_files import write_config
 from gh_api import FakeGitHub, Reply
 from rows import check_host
 from ssh_rig import KeyPair, real_ssh
@@ -251,12 +252,23 @@ class TestShimAndAgent:
         )
         assert find(run(tmp_path), "signing helper", "another agent socket").level == "red"  # type: ignore[union-attr]
 
-    def test_a_missing_allowed_signers_is_a_warning(
+    def test_a_missing_allowed_signers_is_a_warning_for_signing_kept_in_config_toml(
+        self, home: Path, fake: FakeGitHub, key: KeyPair, tmp_path: Path
+    ) -> None:
+        make(fake, key)
+        managed = home / ".carter" / "config-managed.toml"
+        (home / ".carter" / "config.toml").write_text(managed.read_text())  # an older install
+        managed.unlink()
+        (home / ".carter" / "hooks" / "allowed_signers").unlink()
+        assert find(run(tmp_path), "allowed_signers").level == "warn"  # type: ignore[union-attr]
+
+    def test_a_missing_allowed_signers_turns_the_managed_signing_off_with_one_line(
         self, home: Path, fake: FakeGitHub, key: KeyPair, tmp_path: Path
     ) -> None:
         make(fake, key)
         (home / ".carter" / "hooks" / "allowed_signers").unlink()
-        assert find(run(tmp_path), "allowed_signers").level == "warn"  # type: ignore[union-attr]
+        cfg = load_identity()
+        assert cfg.signing.public_key == "" and cfg.notes == (FORGED,)
 
     @pytest.mark.parametrize(
         ("state", "level", "needle"),
@@ -466,3 +478,84 @@ class TestTheCommand:
         assert SENTINEL not in out and key.blob not in out and str(key.pub_path) not in out
         assert "OK    key on GitHub: the key is absent from the account's login keys" in out
         assert fake.authorized_requests() == []
+
+
+class TestManagedFile:
+    def host(self, cwd: Path) -> str:
+        return check_host(str(cwd)).output
+
+    def test_a_loose_mode_is_one_line_and_the_identity_is_off(
+        self, home: Path, fake: FakeGitHub, key: KeyPair, tmp_path: Path
+    ) -> None:
+        make(fake, key)
+        managed = home / ".carter" / "config-managed.toml"
+        managed.chmod(0o644)
+        out = self.host(tmp_path)
+        assert "config-managed.toml ignored: unsafe (owner, mode or link)" in out
+        assert "chmod 600" in out and load_identity().identity.login == ""
+
+    def test_identity_show_and_commit_say_why_there_is_no_identity(
+        self, home: Path, fake: FakeGitHub, key: KeyPair, tmp_path: Path, monkeypatch
+    ) -> None:
+        from click.testing import CliRunner
+
+        from carter.cli import main
+
+        make(fake, key)
+        (home / ".carter" / "config-managed.toml").chmod(0o644)
+        monkeypatch.chdir(tmp_path)
+        shown = CliRunner().invoke(main, ["identity", "show"]).output
+        lines = [ln for ln in shown.splitlines() if "ignored: unsafe" in ln]
+        assert len(lines) == 1 and shown.index(lines[0]) < shown.index("none configured")
+
+    def test_an_identity_kept_in_config_toml_still_shows_and_the_note_is_not_identity_off(
+        self, home: Path, fake: FakeGitHub, key: KeyPair, tmp_path: Path, monkeypatch
+    ) -> None:
+        from click.testing import CliRunner
+
+        from carter.cli import main
+
+        make(fake, key)
+        managed = home / ".carter" / "config-managed.toml"
+        (home / ".carter" / "config.toml").write_text(managed.read_text().split("\n", 1)[1])
+        managed.write_text("not [toml")  # a second, broken managed file beside the legacy values
+        managed.chmod(0o600)
+        monkeypatch.chdir(tmp_path)
+        shown = CliRunner().invoke(main, ["identity", "show"]).output
+        assert "octocat" in shown and "ignored: unreadable or invalid" in shown
+        assert "identity off" not in shown
+
+    def test_a_table_in_both_files_says_config_toml_wins(
+        self, home: Path, fake: FakeGitHub, key: KeyPair, tmp_path: Path
+    ) -> None:
+        make(fake, key)
+        (home / ".carter" / "config.toml").write_text('[identity]\nlogin = "mine"\n')
+        out = self.host(tmp_path)
+        assert [x for x in out.splitlines() if "config.toml wins over" in x] != []
+        assert len([x for x in out.splitlines() if "config.toml wins over" in x]) == 1
+
+    def test_values_read_from_config_toml_are_one_legacy_line(
+        self, home: Path, fake: FakeGitHub, key: KeyPair, tmp_path: Path
+    ) -> None:
+        make(fake, key)
+        managed = home / ".carter" / "config-managed.toml"
+        (home / ".carter" / "config.toml").write_text(managed.read_text().split("\n", 1)[1])
+        managed.unlink()
+        lines = [x for x in self.host(tmp_path).splitlines() if "legacy" in x]
+        assert len(lines) == 1 and "identity" in lines[0]
+        assert lines[0].endswith("from config.toml (legacy; see: carter identity --help)")
+
+    def test_no_legacy_line_when_the_managed_file_holds_them(
+        self, home: Path, fake: FakeGitHub, key: KeyPair, tmp_path: Path
+    ) -> None:
+        make(fake, key)
+        (home / ".carter" / "config.toml").write_text('[access]\nlevel = "guarded"\n')
+        assert "legacy" not in self.host(tmp_path)
+
+    def test_the_identity_help_says_how_to_migrate(self) -> None:
+        from click.testing import CliRunner
+
+        from carter.cli import main
+
+        out = CliRunner().invoke(main, ["identity", "--help"]).output
+        assert "delete [identity] and [identity.signing]" in " ".join(out.split())

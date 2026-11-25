@@ -26,8 +26,8 @@ from carter.identity import shim
 from carter.identity.errors import registry
 from carter.identity.payload import fingerprint_of, shim_path, to_git_env
 from carter.identity.schema import Identity, IdentityConfig, Signing, Workspace
-from carter.identity.writer import write_config
 from carter.install.paths import guard_state_path
+from config_files import write_config
 from ssh_rig import KeyPair, real_ssh
 
 LOGIN, UID = "llm-bot", 4242

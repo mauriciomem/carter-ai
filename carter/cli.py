@@ -11,7 +11,12 @@ import click
 
 from carter import ui
 from carter.cliguard import LazyGroup, verbose_option
-from carter.dotfiles_help import INSTALL_EPILOG, INSTALL_POINTER, UNINSTALL_EPILOG
+from carter.dotfiles_help import (
+    INSTALL_EPILOG,
+    INSTALL_POINTER,
+    UNINSTALL_EPILOG,
+    UNINSTALL_IDENTITY,
+)
 
 if TYPE_CHECKING:
     from jinja2 import Environment
@@ -134,7 +139,7 @@ def install(
         ui.next("restart OpenCode from a clean terminal")
 
 
-@main.command(epilog=UNINSTALL_EPILOG)
+@main.command(epilog=UNINSTALL_IDENTITY + UNINSTALL_EPILOG)
 @click.option(
     "--base-dir",
     type=click.Path(file_okay=False, path_type=Path),
@@ -248,15 +253,15 @@ def init(
 
 
 def _pin_identity_policy(target: Path, config: dict, *, dry_run: bool) -> None:
-    """Copy ``identity.role``/``require_tier`` from carter.yaml into config.toml.
+    """Copy ``identity.role``/``require_tier`` from carter.yaml into config-managed.toml.
 
     Asks nothing; an agent shell never pins. Raises ``click.ClickException`` when
     pinning is wanted but refused (cap below ``require_tier``, unmodelled keys, a broken file).
     """
     from carter.identity import ConfigError, load_identity
-    from carter.identity.pin import apply_pin, plan_pin
+    from carter.identity.pin import apply_pin, lowers_tier, plan_pin
     from carter.identity.workspace import workspace_key
-    from carter.identity.writer import UnmodelledKeysError, WriterError
+    from carter.identity.writer import WriterError
 
     identity = config.get("identity") or {}
     role, tier = identity.get("role") or "", identity.get("require_tier") or ""
@@ -292,12 +297,19 @@ def _pin_identity_policy(target: Path, config: dict, *, dry_run: bool) -> None:
     if is_agent_shell():
         ui.warn("identity policy not pinned: agent shells never pin it", "run `carter update`")
         return
+    if lowers_tier(plan):  # raising is silent; lowering needs a human who says yes (D4)
+        from carter.terminal import stdin_is_tty
+
+        if not stdin_is_tty():
+            ui.warn("require_tier lowered: not applied (run it in your terminal)")
+            return
+        low = next(c for c in plan.changes if c.field == "require_tier")
+        if not click.confirm(f"Lower require_tier from {low.old} to {low.new}?", default=False):
+            ui.info("require_tier not lowered")
+            return
     try:
         apply_pin(cfg, plan)
     except (WriterError, ConfigError) as exc:
-        if isinstance(exc, UnmodelledKeysError):
-            for line in exc.diff.splitlines():  # what a rewrite would drop, line by line
-                ui.detail(line)
         raise click.ClickException(str(exc)) from exc
     unpinned = all(c.new == "(unset)" for c in plan.changes)
     ui.ok("identity policy unpinned" if unpinned else "identity policy pinned", what)

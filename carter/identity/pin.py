@@ -1,24 +1,22 @@
-"""Pin ``carter.yaml identity.role`` / ``require_tier`` into ``~/.carter/config.toml``.
+"""Pin ``carter.yaml identity.role`` / ``require_tier`` into ``config-managed.toml``.
 
 Only the human-run ``carter update`` calls this. ``carter.yaml`` is writable by an agent,
 so it never changes attribution at runtime; the pin is the explicit, displayed, confirmed
-copy under ``[workspaces."<abs path>"]`` (key: ``workspace.workspace_key``).
+copy under ``[pins."<abs path>"]`` (key: ``workspace.workspace_key``).
 
 ``plan_pin`` is pure (a diff and a refusal reason); ``apply_pin`` writes through the
-schema-only writer, which refuses to drop unmodelled keys.
+managed writer; ``config.toml`` is never written.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass, replace
-from datetime import UTC, datetime
 from pathlib import Path
 
-from carter.home import STAMP_FORMAT
 from carter.identity.config import default_path
 from carter.identity.errors import E_ROLE_B_TIER
-from carter.identity.schema import TIERS, IdentityConfig, Workspace
-from carter.identity.writer import write_config
+from carter.identity.schema import TIERS, IdentityConfig, Workspace, inherit_caps
+from carter.identity.writer import write_managed
 
 UNSET = "(unset)"
 
@@ -52,7 +50,7 @@ def plan_pin(cfg: IdentityConfig, key: str, *, role: str, require_tier: str) -> 
         if old != new
     )
     refusal = ""
-    cap = current.max_tier
+    cap = inherit_caps({**cfg.workspaces, key: current})[key].max_tier  # a parent's cap counts
     if cap and role == "author":  # role author needs T2 and every cap is below it; never downgraded
         refusal = f"{E_ROLE_B_TIER}: max_tier {cap} caps role author; remove the cap"
     elif cap and require_tier and TIERS.index(cap) < TIERS.index(require_tier):
@@ -60,17 +58,23 @@ def plan_pin(cfg: IdentityConfig, key: str, *, role: str, require_tier: str) -> 
     return PinPlan(key, role, require_tier, changes, cap, refusal)
 
 
+def lowers_tier(plan: PinPlan) -> bool:
+    """True if the pin would lower ``require_tier`` (an unset one counts as ``t0``)."""
+
+    def rank(value: str) -> int:
+        return TIERS.index(value) if value in TIERS else 0
+
+    return any(c.field == "require_tier" and rank(c.new) < rank(c.old) for c in plan.changes)
+
+
 def apply_pin(cfg: IdentityConfig, plan: PinPlan, path: Path | None = None) -> bool:
     """Write the pin. Returns ``False`` if the file already holds it. An entry left
-    with nothing set is dropped. Raises what ``write_config`` raises."""
+    with nothing set is dropped. Raises what ``write_managed`` raises."""
     entry = replace(
         cfg.workspaces.get(plan.key, Workspace()), role=plan.role, require_tier=plan.require_tier
     )
     workspaces = {k: v for k, v in cfg.workspaces.items() if k != plan.key}
     if entry != Workspace():
         workspaces[plan.key] = entry
-    path = path or default_path()
-    stamp = datetime.now(UTC).strftime(STAMP_FORMAT)
-    backup = path.parent / "backups" / stamp / path.name  # a rewrite drops the user's comments
     new = replace(cfg, workspaces=workspaces, state="current")
-    return write_config(new, path, backup_to=backup)
+    return write_managed(new, path or default_path())

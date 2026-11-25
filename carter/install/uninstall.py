@@ -21,10 +21,11 @@ from typing import Literal
 from carter import __version__, ui
 from carter.home import MAX_WORKSPACES_BYTES, WORKSPACES_FILE, tilde
 from carter.identity import ConfigError, load_identity
+from carter.identity.config import read_document
+from carter.identity.managed import managed_path, table
 from carter.install.backups import BackupRoot
 from carter.install.components import (
     _render_opencode_agents,
-    default_config_text,
     read_manifest,
     write_manifest,
 )
@@ -97,6 +98,7 @@ class UninstallReport:
     kept_files: list[Path] = field(default_factory=list)  # may hold edits: skills, AGENTS.md...
     mcp_servers: int = 0
     config_removed: bool = False  # config.toml held only defaults
+    identity_kept: str = ""  # where the LLM identity stays (empty: there is none)
     kept: list[KeptRow] = field(default_factory=list)
     workspaces: list[Workspace] = field(default_factory=list)  # empty: no section to print
     manager: str = ""  # the command that removes the program itself
@@ -186,14 +188,46 @@ def _copy_edited_agents(
     return copies
 
 
+_OLD_DEFAULT = (
+    "# Carter settings (schema 2). Only what you set is stored; "
+    "Carter commands rewrite this file and drop comments.\nschema = 2\n"
+)
+
+
 def _is_default_config(path: Path) -> bool:
-    """True if ``config.toml`` is exactly what ``install`` writes (the header and ``schema = 2``).
-    Compared as text: a comment the user added is theirs, and a fully written file from an older
-    Carter is kept too, which is the safe side. A missing or unreadable file is not default."""
+    """True if ``config.toml`` is exactly what an older ``install`` wrote (a header and
+    ``schema = 2``). Compared as text: a comment you added is yours, so it stays. A missing or
+    unreadable file is not default. This install never writes one."""
     try:
-        return path.read_text(encoding="utf-8") == default_config_text()
+        return path.read_text(encoding="utf-8") == _OLD_DEFAULT
     except (OSError, ValueError):
         return False
+
+
+def _identity_kept(base_dir: Path | None) -> str:
+    """The file that holds the LLM identity, as ``~/...`` (an older install keeps it in
+    ``config.toml``); an empty string if there is none."""
+    config = carter_config_path(base_dir)
+    try:
+        if not load_identity(config).identity.login:
+            return ""
+        legacy = table(read_document(config) or {}, ("identity",)).get("login")
+    except ConfigError:
+        return tilde(managed_path(config)) if managed_path(config).exists() else ""
+    return tilde(config if legacy else managed_path(config))
+
+
+def _lock_kept_identity(base_dir: Path | None) -> None:
+    """The identity stays, the key does not stay usable: lock it, stop Carter's agent, remove the
+    shim. One line if that fails; ``-v`` lists what was done."""
+    from carter import identity_remove, terminal
+
+    if terminal.is_agent_shell():
+        ui.warn("key not locked: agent shell (see: carter identity remove)")
+        return
+    for note in identity_remove.lock_identity(base_dir).notes:
+        failed = note.startswith(("could not", "agent not"))
+        (ui.warn if failed else ui.detail)(note)
 
 
 def _shipped_files(base_dir: Path | None) -> dict[Path, str]:
@@ -382,12 +416,13 @@ def uninstall(
         return report
     guards_before = guard_state_path(base_dir).exists()
     plugin_before = plugin_dir(base_dir).exists()
-    identity_removed = False
+    report.identity_kept = _identity_kept(base_dir)  # `carter identity remove` takes it away
+    if report.identity_kept:
+        _lock_kept_identity(base_dir)  # before the guards go: it needs their record of the shim
     if not keep_guards:
-        from carter.guard.wiring import uninstall_guards, uninstall_identity
+        from carter.guard.wiring import uninstall_guards
 
         report.code = uninstall_guards(base_dir, assume_yes=assume_yes)
-        identity_removed = uninstall_identity(base_dir, assume_yes=assume_yes)  # independent
     manifest = read_manifest(base_dir)  # the guard step re-wrote it
 
     if manifest:
@@ -422,7 +457,6 @@ def uninstall(
             for kind, gone in (
                 ("guards", guards_before and not guard_state_path(base_dir).exists()),
                 ("plugin", plugin_before and not plugin_dir(base_dir).exists()),
-                ("identity", identity_removed),
             )
             if gone
         }

@@ -155,26 +155,107 @@ class TestRoundTrip:
         assert (stack.home / ".carter" / "bin" / "carter-ssh-sign").exists()
         assert "carter.tier" in dict(mirror_io.read_entries(carter_gitconfig_path(None)))
 
-    def test_uninstall_runs_both_removals(self, stack, identity: KeyPair, human_tty) -> None:  # type: ignore[no-untyped-def]
+    def test_uninstall_keeps_the_identity_and_identity_remove_takes_it_away(
+        self, stack, identity: KeyPair, human_tty
+    ) -> None:  # type: ignore[no-untyped-def]
         install_guards(stack)
         stack.fake(before=debug_config(stack.live), after=debug_config())
+        shim = stack.home / ".carter" / "bin" / "carter-ssh-sign"
+        managed = stack.home / ".carter" / "config-managed.toml"
         done = CliRunner().invoke(main, ["uninstall", "--yes"], catch_exceptions=False)
         assert done.exit_code == 0, done.output
-        assert "carter identity remove" in done.output
-        assert not (stack.home / ".carter" / "bin" / "carter-ssh-sign").exists()
+        assert "Identity kept in ~/.carter/config-managed.toml" in done.output
+        assert managed.exists() and not shim.exists()  # the data stays, the shim does not
+        assert "carter.tier" in dict(mirror_io.read_entries(carter_gitconfig_path(None)))
+        removed = CliRunner().invoke(main, ["identity", "remove"], catch_exceptions=False)
+        assert removed.exit_code == 0, removed.output
+        assert not managed.exists()
         assert not carter_gitconfig_path(None).exists()
 
-    def test_uninstall_asks_nothing_but_an_agent_shell_keeps_the_identity(
+    def test_an_agent_shell_keeps_the_identity_too(
         self, stack, identity: KeyPair, human_tty, monkeypatch
     ) -> None:  # type: ignore[no-untyped-def]
         human_tty(False)
         shim = stack.home / ".carter" / "bin" / "carter-ssh-sign"
         monkeypatch.setenv("AGENT", "1")
         agent = CliRunner().invoke(main, ["uninstall"], catch_exceptions=False)
-        assert "LLM identity kept: agent shell" in agent.output and shim.exists()
+        assert "Identity kept in" in agent.output and shim.exists()
         monkeypatch.delenv("AGENT")
         done = CliRunner().invoke(main, ["uninstall"], catch_exceptions=False)
-        assert done.exit_code == 0 and not shim.exists()
+        assert done.exit_code == 0 and not shim.exists()  # a human's uninstall locks it
+
+
+class TestUninstallLocksAKeptIdentity:
+    """The identity data stays; the key does not stay usable (the guards are gone)."""
+
+    @pytest.fixture
+    def agent_identity(self, fake: FakeGitHub, throwaway_key) -> KeyPair:  # type: ignore[no-untyped-def]
+        key = throwaway_key("ed25519", True)  # a passphrase: Carter's own agent holds it
+        items = [{"id": 1, "key": key.blob, "title": "t", "created_at": "2026-01-01T00:00:00Z"}]
+        fake.on("GET", f"/users/{LOGIN}/ssh_signing_keys", Reply(200, json.dumps(items)))
+        fake.on("GET", f"/{LOGIN}.keys", Reply(200, "", content_type="text/plain"))
+        req = identity_add.AddRequest(LOGIN, str(key.pub_path), None, None, None)
+        identity_add.apply_add(identity_add.plan_add(req))
+        return key
+
+    def uninstall(self, *args: str, env: dict[str, str] | None = None):  # type: ignore[no-untyped-def]
+        return CliRunner().invoke(main, ["uninstall", *args], env=env, catch_exceptions=False)
+
+    def test_the_key_leaves_the_agent_and_the_shim_goes_but_the_data_stays(
+        self, stack, agent_identity: KeyPair, human_tty, monkeypatch
+    ) -> None:  # type: ignore[no-untyped-def]
+        from carter.identity import agent
+
+        calls: list[bool] = []
+
+        def fake_lock(_setup, *, stop_all=False):  # type: ignore[no-untyped-def]
+            calls.append(stop_all)
+            return agent.LockResult("locked", True)
+
+        monkeypatch.setattr(agent, "lock", fake_lock)
+        home = stack.home
+        done = self.uninstall("-v")
+        assert done.exit_code == 0, done.output
+        assert calls == [True]  # the key is out and Carter's agent is stopped
+        assert "key: locked; agent stopped" in done.output
+        assert not (home / ".carter" / "bin" / "carter-ssh-sign").exists()
+        assert (home / ".carter" / "config-managed.toml").exists()
+        assert (home / ".carter" / "hooks" / "allowed_signers").exists()
+        lines = [x for x in done.output.splitlines() if x.startswith("Identity kept")]
+        assert lines == ["Identity kept in ~/.carter/config-managed.toml"]
+
+    def test_a_failed_lock_is_one_warning_and_the_rest_goes_on(
+        self, stack, agent_identity: KeyPair, human_tty, monkeypatch
+    ) -> None:  # type: ignore[no-untyped-def]
+        from carter.identity import agent
+
+        def boom(_setup, *, stop_all=False):  # type: ignore[no-untyped-def]
+            raise OSError("no agent")
+
+        monkeypatch.setattr(agent, "lock", boom)
+        done = self.uninstall()
+        assert done.exit_code == 0 and "could not lock the key (OSError)" in done.output
+        assert "Identity kept in" in done.output
+
+    def test_an_agent_shell_locks_nothing_and_says_so(
+        self, stack, agent_identity: KeyPair, human_tty, monkeypatch
+    ) -> None:  # type: ignore[no-untyped-def]
+        from carter.identity import agent
+
+        monkeypatch.setattr(agent, "lock", lambda *_a, **_k: pytest.fail("agent shell locked"))
+        done = self.uninstall(env={"AGENT": "1"})
+        assert "key not locked: agent shell" in done.output
+        assert (stack.home / ".carter" / "bin" / "carter-ssh-sign").exists()
+
+    def test_an_identity_in_the_humans_file_is_named_there(
+        self, stack, identity: KeyPair, human_tty
+    ) -> None:  # type: ignore[no-untyped-def]
+        carter = stack.home / ".carter"
+        managed = carter / "config-managed.toml"
+        (carter / "config.toml").write_text(managed.read_text().split("\n", 1)[1])
+        managed.unlink()
+        done = self.uninstall()
+        assert "Identity kept in ~/.carter/config.toml" in done.output
 
 
 def human_ok(repo: Path, name: str) -> None:
@@ -192,7 +273,7 @@ class TestNeverBlocksTheHuman:
         from dataclasses import replace
 
         from carter.identity.config import load_identity
-        from carter.identity.writer import write_config
+        from config_files import write_config
 
         cfg = load_identity()
         cfg = replace(cfg, workspaces={str(repo.parent): Workspace(max_tier="t1")})
@@ -211,7 +292,7 @@ class TestNeverBlocksTheHuman:
         from dataclasses import replace
 
         from carter.identity.config import load_identity
-        from carter.identity.writer import write_config
+        from config_files import write_config
 
         cfg = replace(load_identity(), workspaces={str(repo.parent): Workspace(max_tier="t1")})
         write_config(cfg, Path.home() / ".carter" / "config.toml")

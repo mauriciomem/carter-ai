@@ -75,7 +75,6 @@ Carter install  v0.19.2
     agents            8  new
     skills           27  new
     knowledge files   4  new
-    config.toml          created
     guards               g2 · hooks · sudo-docker · read-edit-denies · config-edit
 
 → restart the OpenCode server from a clean terminal to load the agents and plugin
@@ -112,7 +111,7 @@ Without a terminal (a script, CI) and without `--yes`, the guards are skipped wi
 | `repo_hooks` | Git older than 2.54 only: the same hooks as files in your repositories. A hook or `core.hooksPath` that you or your tools own (husky, pre-commit) is never edited: Carter reports the repository as unguarded and prints a line to chain. |
 | `sudo-docker` | Agents can't run `sudo` or `docker`. Packer docker builds must be typed in your terminal. |
 | `read-edit-denies` | Agents can't read SSH keys, `gh`/git credentials or the GitHub token, and can't edit `~/.ssh`. |
-| `config-edit` | Agents can't edit OpenCode config, git hooks and config, or Carter's own config and control files. |
+| `config-edit` | Agents can't edit OpenCode config, git hooks and config, or Carter's own config and control files (`config-managed.toml` too). |
 | `alias` | **Optional.** Adds the git alias `git ai-commit` (`carter commit`), unless you already have an `alias.ai-commit`. Never part of the one question or of `--yes`: use `carter guard install --only alias`. |
 
 A group you decline stays declined. `carter guard status` and `carter check --host` list it, with
@@ -226,7 +225,8 @@ directories older than 15 days (an `old backups` row), and never overwrites your
 knowledge files or an `AGENTS.md` you edited. Skills that Carter no longer ships are removed unless you changed them. If your global
 `AGENTS.md` has your edits, `carter install` says it is user-modified and leaves it alone.
 
-`~/.carter/config.toml` is created on a first install and never rewritten by `install`. A key Carter
+`~/.carter/config.toml` is yours: `install` neither creates nor rewrites it (Carter keeps what it
+derives in `~/.carter/config-managed.toml`). A key Carter
 doesn't read is reported once with its file, for example
 ``⚠ unknown key `x.y` in /home/you/.carter/config.toml → delete it``. Delete it yourself.
 
@@ -274,10 +274,13 @@ Run them in this order: once the command is gone, nothing is left to remove what
   `~/.carter/backups/<timestamp>/`) and skills, the global `AGENTS.md` Carter wrote, untouched
   knowledge files, the MCP servers Carter ships (`carter-github`, `carter-terraform`, `carter-atlassian`) in
   `opencode.json` and `opencode.jsonc`, the guards
-  (`carter guard remove`), the LLM identity files (the signing shim, `allowed_signers`, the tier
-  mirror, the identity part of `config.toml`, with a backup) and `~/.carter/manifest.json`.
-- **Kept:** `~/.carter/memories/`, a `config.toml` where you set anything, the audit log, the GitHub
-  token file, backups, and any skill, rule or knowledge file you edited.
+  (`carter guard remove`) and `~/.carter/manifest.json`.
+- **Kept:** the LLM identity data (`~/.carter/config-managed.toml`, `allowed_signers` and the tier
+  mirror; the report says `Identity kept in ~/.carter/config-managed.toml`, and
+  `carter identity remove` takes it away). The key is locked, Carter's own ssh-agent stopped and the
+  signing shim removed; `carter identity add` brings the shim back. Also kept: `~/.carter/memories/`, a `config.toml` where you set
+  anything, the audit log, the GitHub token file, backups, and any skill, rule or knowledge file you
+  edited.
 
 It prints what it did, in sections (empty ones are left out):
 

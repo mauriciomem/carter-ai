@@ -21,6 +21,7 @@ from carter.cliguard import guarded
 from carter.identity import commit as core
 from carter.identity.config import ConfigError, default_path, load_identity
 from carter.identity.errors import E_CONFIG, IdentityError
+from carter.identity.managed import IGNORED
 
 
 class _PassThrough(click.Command):
@@ -46,6 +47,9 @@ def commit_cmd() -> None:
             cfg = load_identity(default_path())
         except ConfigError as exc:
             raise IdentityError(E_CONFIG, detail=exc.detail) from exc
+        for note in cfg.notes:  # the managed file was ignored: why there may be no identity
+            if note in IGNORED:
+                ui.warn(note, IGNORED[note])
         agent = terminal.is_agent_shell()
         try:
             plan = core.plan_commit(

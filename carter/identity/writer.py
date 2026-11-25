@@ -1,53 +1,47 @@
-"""Schema-only TOML writer. Only explicit commands call it (install,
-``carter update``); read paths never import it.
+"""The only config writer: ``config-managed.toml``. ``config.toml`` is never opened for writing.
 
-Serialises exactly the schema-2 model (basic strings, ints, bools, string lists, tables)
-and stores only the values that differ from the dataclass defaults, so a fresh file is two
-lines and the reader fills in the rest. It refuses to lose data
-(unmodelled keys, a file that does not parse) and
-re-reads its own output through the reader, so it cannot write what the reader rejects.
-Writes are atomic: temp file in the same directory, fsync, ``os.replace``, mode 0600.
+It stores the keys Carter derives (``managed.OWNED`` and the pins) when they differ from the
+defaults, and checks that the reader gives them back. A table that ``config.toml`` also sets
+is the human's: a change to it is refused, an equal one is skipped. Writes are atomic (temp
+file in the same directory, fsync, ``os.replace``, mode 0600) and refuse a symlink at the
+path or in its parent.
 """
 
 from __future__ import annotations
 
-import difflib
 import os
-import re
 import tempfile
 import tomllib
-from dataclasses import fields, replace
+from dataclasses import fields
 from pathlib import Path
 from typing import Any
 
-from carter.identity.config import ConfigError, default_path, load_identity, parse_identity
-from carter.identity.schema import (
-    SCHEMA_VERSION,
-    SECTIONS,
-    TABLE_ACCESS,
-    TABLE_WORKSPACES,
-    IdentityConfig,
+from carter.identity.config import (
+    ConfigError,
+    default_path,
+    load_identity,
+    parse_identity,
+    read_document,
 )
+from carter.identity.managed import (
+    HEADER,
+    OWNED,
+    PIN_KEYS,
+    PINS,
+    WORKSPACES,
+    held,
+    is_link,
+    managed_path,
+    merge,
+    table,
+)
+from carter.identity.schema import SECTIONS, IdentityConfig
 
-_BARE = re.compile(r"[A-Za-z0-9_-]+")
 _ESC = {"\\": "\\\\", '"': '\\"', "\b": "\\b", "\t": "\\t", "\n": "\\n", "\f": "\\f", "\r": "\\r"}
-_HEADER = (
-    "# Carter settings (schema 2). Only what you set is stored; "
-    "Carter commands rewrite this file and drop comments."
-)
 
 
 class WriterError(Exception):
-    """The config cannot be written safely; nothing was changed."""
-
-
-class UnmodelledKeysError(WriterError):
-    """The existing file holds data the writer would drop; ``diff`` shows the change."""
-
-    def __init__(self, keys: tuple[str, ...], diff: str) -> None:
-        more = f", +{len(keys) - 1} more" if len(keys) > 1 else ""
-        super().__init__(f"config.toml has unknown keys: {keys[0]}{more} (delete them)")
-        self.keys, self.diff = keys, diff
+    """The managed file cannot be written safely; nothing was changed."""
 
 
 def _str(value: str) -> str:
@@ -69,59 +63,46 @@ def _value(value: Any) -> str:
     return "[" + ", ".join(_str(v) for v in value) + "]"  # tuple[str, ...]
 
 
-def _body(obj: Any) -> list[str]:
-    """``key = value`` for the fields that differ from their default."""
-    return [
-        f"{f.name} = {_value(getattr(obj, f.name))}"
-        for f in fields(obj)
-        if getattr(obj, f.name) != f.default
-    ]
+def owned(cfg: IdentityConfig) -> dict[str, dict[str, Any]]:
+    """The values of ``cfg`` that Carter owns and that differ from the defaults, by dotted
+    table name (``identity.signing``) and, for pins, ``pins.<path>``."""
+    out: dict[str, dict[str, Any]] = {}
+    for attr, path, cls in SECTIONS:
+        obj = getattr(cfg, attr)
+        vals = {
+            f.name: getattr(obj, f.name)
+            for f in fields(cls)
+            if f.name in OWNED.get(path, ()) and getattr(obj, f.name) != f.default
+        }
+        if vals:
+            out[".".join(path)] = vals
+    for ws, w in cfg.workspaces.items():
+        pin = {k: getattr(w, k) for k in PIN_KEYS if getattr(w, k)}
+        if pin:
+            out[f"{PINS}.{ws}"] = pin
+    return out
 
 
-def dumps(cfg: IdentityConfig) -> str:
-    """Serialise ``cfg`` as schema-2 TOML: only what differs from the defaults is stored."""
-    out = [_HEADER, f"schema = {SCHEMA_VERSION}"]
-    for attr, path, _cls in SECTIONS:
-        body = _body(getattr(cfg, attr))
-        if body:  # a table with nothing set is not written
-            out += ["", "[" + ".".join(path) + "]", *body]
-    if cfg.access:
-        keys = [(k if _BARE.fullmatch(k) else _str(k), v) for k, v in cfg.access]
-        out += ["", f"[{TABLE_ACCESS}]", *(f"{k} = {_value(v)}" for k, v in keys)]
-    for ws_path, ws in cfg.workspaces.items():
-        out += ["", f"[{TABLE_WORKSPACES}.{_str(ws_path)}]", *_body(ws)]
+def dumps(doc: dict[str, dict[str, Any]]) -> str:
+    """``doc`` (the shape ``owned`` returns) as TOML, under the one-line header."""
+    out = [HEADER]
+    for name, vals in doc.items():
+        if name.startswith(f"{PINS}."):
+            name = f"{PINS}.{_str(name[len(PINS) + 1 :])}"
+        out += ["", f"[{name}]", *(f"{k} = {_value(v)}" for k, v in vals.items())]
     return "\n".join(out) + "\n"
 
 
-def _core(cfg: IdentityConfig) -> IdentityConfig:
-    """``cfg`` without read-time facts (state, unknown keys), for comparison."""
-    return replace(cfg, state="current", unknown_keys=())
-
-
-def _checked(cfg: IdentityConfig) -> str:
-    """``dumps`` plus proof that the reader gives ``cfg`` back."""
-    text = dumps(cfg)
+def _checked(doc: dict[str, Any]) -> str:
+    """``dumps`` plus proof that the reader gives ``doc`` back."""
+    text = dumps(doc)
     try:
-        again = parse_identity(tomllib.loads(text))
+        back = parse_identity(merge(None, tomllib.loads(text))[0] or None)
     except (ConfigError, tomllib.TOMLDecodeError) as exc:
-        detail = getattr(exc, "detail", "TOML error")
-        raise WriterError(f"refusing to write an invalid config ({detail})") from exc
-    if _core(again) != _core(cfg):
-        raise WriterError("refusing to write: the config does not survive a round trip")
+        raise WriterError("refusing to write an invalid config-managed.toml") from exc
+    if owned(back) != doc:
+        raise WriterError("refusing to write: config-managed.toml does not round trip")
     return text
-
-
-def _create_backup(source: Path, backup: Path) -> None:
-    """Copy ``source`` to ``backup`` (0600) unless it exists: a backup is never overwritten."""
-    backup.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
-    try:
-        fd = os.open(backup, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
-    except FileExistsError:
-        return
-    with os.fdopen(fd, "wb") as fh:
-        fh.write(source.read_bytes())
-        fh.flush()
-        os.fsync(fh.fileno())
 
 
 def _atomic_write(path: Path, text: str) -> None:
@@ -138,33 +119,59 @@ def _atomic_write(path: Path, text: str) -> None:
         raise
 
 
-def write_config(
-    cfg: IdentityConfig, path: Path | None = None, *, backup_to: Path | None = None
-) -> bool:
-    """Write ``cfg`` to ``path`` (default ``~/.carter/config.toml``).
+def _private(path: Path) -> None:
+    """Mode 0600 on the file itself: a link swapped in after the checks is refused, not followed."""
+    fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_CLOEXEC)
+    try:
+        os.fchmod(fd, 0o600)
+    finally:
+        os.close(fd)
 
-    Returns ``False`` when the file already holds exactly this content (nothing written,
-    no backup). ``backup_to`` receives a copy of the existing file first, once. Raises
-    ``ConfigError`` for an unreadable, malformed or unsupported-schema file and
-    ``UnmodelledKeysError`` for data that would be lost.
+
+def _without_human_tables(
+    new: dict[str, dict[str, Any]], old: dict[str, dict[str, Any]], human: dict[str, Any]
+) -> dict[str, dict[str, Any]]:
+    """``new`` minus the tables ``config.toml`` sets; a change to one of them is refused."""
+    new = dict(new)
+    names = [(".".join(path), table(human, path), keys) for path, keys in OWNED.items()]
+    names += [
+        (f"{PINS}.{ws}", entry, PIN_KEYS) for ws, entry in table(human, (WORKSPACES,)).items()
+    ]
+    for name, theirs, keys in names:
+        if held(theirs, keys):
+            if new.get(name) != old.get(name):
+                where = "workspaces" if name.startswith(PINS) else name.split(".")[0]
+                raise WriterError(f"config.toml sets [{where}]: delete it there and rerun")
+            new.pop(name, None)
+    return new
+
+
+def write_managed(cfg: IdentityConfig, config_path: Path | None = None) -> bool:
+    """Store the owned part of ``cfg`` next to ``config_path``. ``False`` if nothing changed.
+
+    Raises ``ConfigError`` for a broken ``config.toml``, ``WriterError`` for a symlink, or a
+    change to a table that ``config.toml`` sets.
     """
-    path = path or default_path()
-    old = path.read_text(encoding="utf-8") if path.exists() else None
-    existing = load_identity(path) if old is not None else None  # raises on a broken file
-    if existing is not None and not cfg.access:
-        cfg = replace(cfg, access=existing.access)  # the human's `[access]` survives any write
-    new = _checked(cfg)
-    if old is not None and existing is not None:
-        if existing.unknown_keys:
-            lines = difflib.unified_diff(
-                old.splitlines(), new.splitlines(), "config.toml", "(rewritten)", lineterm=""
-            )
-            raise UnmodelledKeysError(existing.unknown_keys, "\n".join(lines))
-        if old == new:
-            path.chmod(0o600)
+    config_path = config_path or default_path()
+    target = managed_path(config_path)
+    old = owned(load_identity(config_path))
+    new = _without_human_tables(owned(cfg), old, read_document(config_path) or {})
+    if is_link(target):
+        raise WriterError("config-managed.toml or its folder is a symlink")
+    if not new:
+        if not target.exists():
             return False
-    path.parent.mkdir(parents=True, exist_ok=True)
-    if old is not None and backup_to is not None:
-        _create_backup(path, backup_to)
-    _atomic_write(path, new)
+        target.unlink()
+        return True
+    text = _checked(new)
+    try:
+        if target.read_text(encoding="utf-8") == text:
+            _private(target)
+            return False
+    except (OSError, ValueError):
+        pass
+    target.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+    if is_link(target):
+        raise WriterError("config-managed.toml or its folder is a symlink")
+    _atomic_write(target, text)
     return True

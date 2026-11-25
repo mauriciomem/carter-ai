@@ -240,9 +240,79 @@ class TestControlFiles:
         for cmd in ("rm ~/.carter/memories/old.md", "rm -rf ~/.cache/opencode", "rm -rf ~/.cache"):
             assert rule_of(cmd) is None, cmd
         assert rule_of("rm -rf ~/.carter/memories") is None
-        assert (
-            rule_of("cp x ~/.carter") is None
-        )  # not recursive: cannot replace a directory's contents
+        # a copy into a directory that holds a control file may carry its name
+        assert rule_of("cp x ~/.carter") == "control-files"
+        assert rule_of("cp x ~/.carter/memories/") is None
+
+    HOLDERS = ("~/.carter", "~/.carter/", "~/.carter/state", "~/.config/opencode")
+
+    @pytest.mark.parametrize("dest", HOLDERS)
+    def test_a_copy_into_a_directory_that_holds_a_control_file_is_refused(self, dest: str) -> None:
+        """The file name may be a control file's (``cp /tmp/config-managed.toml ~/.carter/``)."""
+        for cmd in (
+            f"cp /tmp/config-managed.toml {dest}",
+            f"cp -t {dest} /tmp/x",
+            f"cp --target-directory {dest} /tmp/x",
+            f"cp --target-directory={dest} /tmp/x",
+            f"cp -t{dest} /tmp/x",
+            f"cp -at {dest} /tmp/x",
+            f"cp /tmp/d/* {dest}",
+            f"cp -r /tmp/d/. {dest}",
+            f"install /tmp/x {dest}",
+            f"install -t {dest} /tmp/x",
+            f"install -D -m 600 /tmp/x {dest}",
+            f"ln -s /tmp/x {dest}",
+            f"ln -sf -t {dest} /tmp/x",
+            f"rsync /tmp/x {dest}",
+            f"tar -xf a.tar -C {dest}",
+            f"tar xf a.tar -C {dest}",
+            f"tar -C {dest} -xzf a.tgz",
+            f"tar xf a.tar --directory {dest}",
+            f"tar xf a.tar --directory={dest}",
+            f"tar --extract -f a.tar -C{dest}",
+            f"unzip a.zip -d {dest}",
+            f"unzip -o -d {dest} a.zip",
+            f"unzip a.zip -d{dest}",
+            f"cd {dest} && cp /tmp/x .",
+            f"cd {dest} && tar xf /tmp/a.tar",
+            f"cd {dest} && unzip /tmp/a.zip",
+            f"cd {dest} && install /tmp/x .",
+        ):
+            assert rule_of(cmd) == "control-files", cmd
+
+    def test_a_name_the_shell_decides_inside_such_a_directory_is_refused(self) -> None:
+        for cmd in (
+            "cp a ~/.carter/config-man*.toml",
+            "cp a ~/.carter/config-m?naged.toml",
+            "cp a ~/.carter/config-[m]anaged.toml",
+            "f=config-managed.toml; cp a ~/.carter/$f",
+            'f=config-managed.toml; cp a "$HOME/.carter/$f"',
+            "f=config-managed.toml; echo x > ~/.carter/$f",
+            "f=config-managed.toml; tee ~/.carter/$f",
+            "cp a ~/.carter/config-{managed,x}.toml",
+            "cp a ~/.carter/$(echo config-managed.toml)",
+        ):
+            assert rule_of(cmd) == "control-files", cmd
+
+    def test_the_same_forms_elsewhere_still_pass(self) -> None:
+        for cmd in (
+            "cp a ~/.carter/memories/n.md",
+            "cp a ~/.carter/memories/n*.md",
+            "f=n.md; cp a ~/.carter/memories/$f",
+            "cp x ~/",
+            "cp -t /tmp/out /tmp/x",
+            "install -d /tmp/x",
+            "tar -xf a.tar -C /tmp/x",
+            "tar xf a.tar",
+            "tar czf /tmp/x.tgz ~/.carter/memories",
+            "tar -tf a.tar -C ~/.carter",
+            "unzip a.zip -d /tmp/x",
+            "unzip -l a.zip",
+            "unzip -p a.zip x",
+            "cd /tmp && unzip a.zip",
+            "cd /tmp && tar xf a.tar",
+        ):
+            assert rule_of(cmd) is None, cmd
 
     def test_state_and_memories_stay_editable(self) -> None:
         for p in ("~/.carter/memories/user/x.md", "~/.carter/state/plans/active/x.md"):
@@ -275,6 +345,12 @@ class TestControlFiles:
             rule_of("node -e \"require('fs').writeFileSync('/h/.carter/config.toml','x')\"")
             == "control-files"
         )
+        assert (
+            rule_of("node -e \"require('fs').writeFileSync('/h/.carter/config-managed.toml','x')\"")
+            == "control-files"
+        )
+        assert rule_of("echo x > ~/.carter/config-managed.toml") == "control-files"
+        assert rule_of("cat ~/.carter/config-managed.toml") is None  # reads pass
         assert (
             rule_of('ruby -e \'File.write("/h/.config/opencode/plugin/x.ts", "")\'')
             == "control-files"

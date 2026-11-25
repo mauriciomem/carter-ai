@@ -29,8 +29,8 @@ def world(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[World]:
     # the CLI reads config.toml and the guard state from HOME; point HOME at the world
     monkeypatch.setenv("HOME", str(tmp_path / "home-for-cli"))
     (tmp_path / "home-for-cli").mkdir()
-    from carter.identity.writer import write_config
     from carter.install.paths import carter_config_path
+    from config_files import write_config
 
     write_config(w.cfg, carter_config_path(None))
     w.base_dir = None

@@ -17,7 +17,7 @@ from typing import Any
 
 from carter import ghtoken, harness, serverenv, unknownkeys
 from carter import hostcheck_g2 as g2
-from carter.checkitems import Item, exit_code
+from carter.checkitems import Item, config_items, exit_code
 from carter.checkitems import render as render_items
 from carter.guard import agent_rules, consent, gitconfig, optout, permissions, repohooks
 from carter.guard.configwrite import Reader, target_path
@@ -428,7 +428,13 @@ def _identity(
                 "Fix config.toml; agent commits are off.",
             )
         ]
-    return hostcheck_id.identity_items(
+    notes = config_items(cfg.notes)  # the managed file
+    from carter.identity.config import default_path, read_document  # noqa: PLC0415
+    from carter.identity.managed import LEGACY, legacy_tables  # noqa: PLC0415
+
+    if names := legacy_tables(read_document(default_path())):  # an older install's values
+        notes.append(Item("info", "config", LEGACY.format(", ".join(names))))
+    return notes + hostcheck_id.identity_items(
         cfg, state, cwd=cwd, base_dir=base_dir, git=git_version, fetch=fetch,
         workspace=workspace_for(cfg, str(cwd)),
     )  # fmt: skip

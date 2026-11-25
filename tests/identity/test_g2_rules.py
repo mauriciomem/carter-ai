@@ -110,6 +110,7 @@ class TestValuesFollowTheRfc:
             "~/.carter/gitconfig",
             "~/.carter/gitconfig.d/",
             "~/.carter/config.toml",
+            "~/.carter/config-managed.toml",
             "~/.carter/guard-state.json",
             "~/.carter/state/audit/",  # the audit store
             "~/.carter/backups/",  # install and uninstall write copies there

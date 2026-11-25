@@ -36,7 +36,6 @@ INSTALL = {
         agents=_stats(created=8),
         skills=_stats(created=27, skills=27),
         knowledge=4,
-        config_created=True,
         guards=GUARDS,
     ),
     "install-rerun": InstallReport(

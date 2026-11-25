@@ -10,7 +10,6 @@ from __future__ import annotations
 import importlib
 import json
 import os
-import re
 from pathlib import Path
 
 import click
@@ -111,11 +110,11 @@ class TestSchemaIsAlwaysTwo:
 
 
 class TestInstallOps:
-    def test_a_missing_file_is_created_with_schema_2(self, fake_opencode, base_dir: Path) -> None:
+    def test_a_missing_file_stays_missing(self, fake_opencode, base_dir: Path) -> None:
         fake_opencode("opencode v2.1.4")
         res = CliRunner().invoke(main, ["install", "--base-dir", str(base_dir)])
         assert res.exit_code == 0, res.output
-        assert "schema = 2" in (base_dir / "carter" / "config.toml").read_text()
+        assert not (base_dir / "carter" / "config.toml").exists()
 
     def test_an_old_file_is_left_alone_and_nothing_is_backed_up(
         self, fake_opencode, base_dir: Path
@@ -361,11 +360,10 @@ class TestCommands:
         assert "SECRET-VALUE-123" not in res.output
 
 
-def test_the_writer_names_unknown_keys_and_still_refuses_to_lose_them(cfg_path: Path) -> None:
-    from carter.identity.schema import IdentityConfig
-    from carter.identity.writer import UnmodelledKeysError, write_config
+def test_a_writer_keeps_unknown_keys_because_it_never_opens_the_file(cfg_path: Path) -> None:
+    from carter.identity.schema import Identity, IdentityConfig
+    from carter.identity.writer import write_managed
 
     cfg_path.write_text('[attribution]\nname = "bot"\n')
-    with pytest.raises(UnmodelledKeysError, match=r"unknown keys: attribution.name"):
-        write_config(IdentityConfig(state="current"), cfg_path)
-    assert re.search(r'name = "bot"', cfg_path.read_text())
+    write_managed(IdentityConfig(state="current", identity=Identity(login="x")), cfg_path)
+    assert cfg_path.read_text() == '[attribution]\nname = "bot"\n'

@@ -24,7 +24,7 @@ from carter.guard.state import load
 from carter.identity.config import load_identity
 from carter.identity.errors import E_HUMAN_TERMINAL
 from carter.identity.schema import Workspace
-from carter.identity.writer import write_config
+from carter.identity.writer import write_managed
 from carter.install.paths import guard_state_path
 from gh_api import FakeGitHub, Reply
 from guard.helpers import replace_others
@@ -91,31 +91,48 @@ class TestRemoval:
         after = {k: v for k, v in tree(home).items() if not k.startswith(".carter/backups/")}
         assert after == before, sorted(set(after) ^ set(before))
         assert not report.kept
-        assert list(
-            (home / ".carter" / "backups").rglob("config.toml")
-        )  # the one documented exception
+        assert not (home / ".carter" / "config-managed.toml").exists()
         assert not (home / ".carter" / "bin").exists() or not any(
             (home / ".carter" / "bin").iterdir()
         )
 
-    def test_the_config_keeps_pins_and_the_footer_and_loses_the_identity(
+    def test_the_human_file_is_never_opened_and_the_identity_goes(
         self, home: Path, fake: FakeGitHub, key: KeyPair, tmp_path: Path
     ) -> None:
         t2(fake, key)
+        config = home / ".carter" / "config.toml"
+        text = f'# mine\n[workspaces."{tmp_path}"]\nmax_tier = "t1"\n[attribution]\nfooter = "f"\n'
+        config.write_text(text)
+        identity_remove.remove_identity()
+        left = load_identity(config)
+        assert left.identity.login == "" and left.signing.public_key == ""
+        assert left.workspaces[str(tmp_path)].max_tier == "t1"
+        assert config.read_text() == text
+        assert not (home / ".carter" / "config-managed.toml").exists()
+
+    def test_pins_stay_in_the_managed_file(
+        self, home: Path, fake: FakeGitHub, key: KeyPair
+    ) -> None:
+        t2(fake, key)
         cfg = load_identity(home / ".carter" / "config.toml")
-        write_config(
-            replace(cfg, workspaces={str(tmp_path): Workspace(max_tier="t1")}),
+        write_managed(
+            replace(cfg, workspaces={"/w": Workspace(role="author")}),
             home / ".carter" / "config.toml",
         )
         identity_remove.remove_identity()
         left = load_identity(home / ".carter" / "config.toml")
-        assert (
-            left.identity.login == ""
-            and left.signing.public_key == ""
-            and left.signing.fingerprint == ""
-        )
-        assert left.workspaces[str(tmp_path)].max_tier == "t1"
-        assert list((home / ".carter" / "backups").rglob("config.toml"))
+        assert left.identity.login == "" and left.workspaces["/w"].role == "author"
+
+    def test_an_identity_in_config_toml_is_kept_and_reported(
+        self, home: Path, fake: FakeGitHub, key: KeyPair
+    ) -> None:
+        t2(fake, key)
+        config = home / ".carter" / "config.toml"
+        config.write_text('[identity]\nlogin = "mauri-droid"\nid = 9\n')
+        report = identity_remove.remove_identity()
+        assert config.read_text().startswith("[identity]")
+        assert any("config.toml sets [identity]" in k for k in report.kept)
+        assert not (home / ".carter" / "bin" / "carter-ssh-sign").exists()
 
     def test_edited_files_are_kept_and_reported(
         self, home: Path, fake: FakeGitHub, key: KeyPair
@@ -139,9 +156,8 @@ class TestRemoval:
         ws = tmp_path / "ws"
         ws.mkdir()
         t2(fake, key)
-        cfg = load_identity(home / ".carter" / "config.toml")
-        cfg2 = replace(cfg, workspaces={str(ws): Workspace(max_tier="t1")})
-        write_config(cfg2, home / ".carter" / "config.toml")
+        (home / ".carter" / "config.toml").write_text(f'[workspaces."{ws}"]\nmax_tier = "t1"\n')
+        cfg2 = load_identity(home / ".carter" / "config.toml")
         state = load(guard_state_path(None))
         mirror_io.sync(None, state, cfg2)
         from carter.guard.state import save

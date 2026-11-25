@@ -58,7 +58,10 @@ Find your symptom, then apply the fix. If nothing here helps, open an
 | `carter check --host` says your address is not known to be linked | In role `author` the `Co-authored-by` line is your only credit. Use your `<id>+<login>@users.noreply.github.com` address as `user.email`, or add your address to your GitHub account, then run `carter check --host` again in your own terminal |
 | `carter update` says the identity policy was not pinned | It ran in an agent shell, which never pins. Run `carter update` in your own terminal |
 | `carter install` says `AGENTS.md` is user-modified | Your global `AGENTS.md` has your edits, so Carter left it alone. Merge its Communication and Git & Language sections by hand |
-| ``⚠ unknown key `…` in <file> → delete it`` | Carter doesn't read that key. Nothing was changed and no command failed; delete the key from the file it names. `carter identity add` and `carter update` refuse to rewrite `config.toml` while an unknown key is in it |
+| ``⚠ unknown key `…` in <file> → delete it`` | Carter doesn't read that key. Nothing was changed and no command failed; delete the key from the file it names. No command refuses because of it |
+| `! config-managed.toml ignored: unsafe (owner, mode or link)` | Carter reads `~/.carter/config-managed.toml` only if it is yours, mode `0600`, and neither it nor `~/.carter/` is a symlink (a dotfile manager that links `~/.carter` hits this). It is read as empty: a signing identity kept in the managed file is off, one kept in `config.toml` still works. `identity show`, `carter commit` and `carter check --host` say so. Fix with `chmod 600` or by removing the link, or run `carter identity add` |
+| `! config-managed.toml ignored: allowed_signers does not match` | The signing values in the managed file differ from what `carter identity add` wrote into `~/.carter/hooks/allowed_signers`, or that file is missing. Run `carter identity add` again |
+| `! config.toml wins over config-managed.toml: identity` | A table is in both files. Yours wins. Delete it from `config.toml` to let `carter identity add` manage it again |
 
 ## Review-only CI
 
@@ -149,3 +152,5 @@ Find your symptom, then apply the fix. If nothing here helps, open an
 |---------|-----|
 | `carter uninstall` kept the guards | You passed `--keep-guards`. Run `carter guard remove` to take them out |
 | `carter uninstall` left files behind | By design. Files you edited are kept (those edited since the last install are listed as `⚠ Kept …`), and memories, `config.toml` and `audit.log` are never removed. Delete them by hand if you don't need them |
+| `Identity kept in ~/.carter/config-managed.toml` | `carter uninstall` keeps the LLM identity so a reinstall does not lose it. To remove it, run `carter identity remove` (before you remove the command) |
+| `carter update` printed `require_tier lowered: not applied` | A lower `require_tier` in `carter.yaml` needs your yes. Run `carter update` in your own terminal and answer the question |

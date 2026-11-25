@@ -61,7 +61,6 @@ Carter install  v0.19.2
     agents            8  new
     skills           27  new
     knowledge files   4  new
-    config.toml          created
     guards               g2 · hooks · sudo-docker · read-edit-denies · config-edit
 
 → restart the OpenCode server from a clean terminal to load the agents and plugin
@@ -71,8 +70,8 @@ On a re-run the notes read `up to date` or `1 updated`. `old backups` appears wh
 15 days were removed. If the install replaced files you had edited, one line on stderr names the
 folder with their copies (`! Replaced 3 edited files  (copies in ~/.carter/backups/<timestamp>/)`).
 A row that does not fit the terminal width is split over two lines; nothing is cut. `-v` also lists
-every file. Safe to re-run. It also
-creates `~/.carter/config.toml` on a first install; an existing file is never rewritten. A key in it
+every file. Safe to re-run. It never
+creates or rewrites `~/.carter/config.toml`: that file is yours. A key in it
 that Carter doesn't read is named at the end, once, with its file
 (``⚠ unknown key `x.y` in <path> → delete it``). If your global `AGENTS.md` has your own edits, it is
 left alone and reported as user-modified.
@@ -97,9 +96,14 @@ MCP servers stay.
 | `-v`, `--verbose` | Show every file removed or kept |
 
 It asks nothing. Unless `--keep-guards` is given, uninstall first removes the policy guards it
-installed, only where it is unchanged since (anything you edited is kept and reported), then the
-LLM identity files. An agent shell keeps both. A guard problem is printed and makes the exit code 1
-but never stops the rest of the removal. Workspaces are never touched; the ones recorded by
+installed, only where it is unchanged since (anything you edited is kept and reported). An agent
+shell keeps them. The LLM identity **data** stays (`~/.carter/config-managed.toml`, or `config.toml`
+for an older install; `allowed_signers` and the hook tier): the report says
+`Identity kept in ~/.carter/config-managed.toml`. The key does not stay usable: uninstall takes it
+out of Carter's own agent, stops that agent and removes the signing shim (`carter identity add`
+brings it back). A password manager's agent is not touched. Remove the rest with
+`carter identity remove` (`carter uninstall --help` says so too). A guard problem is printed and
+makes the exit code 1 but never stops the rest of the removal. Workspaces are never touched; the ones recorded by
 `carter init` and `carter update` in `~/.carter/workspaces` are listed with a ready-to-run `rm`
 line for their `carter-*` agent files.
 
@@ -126,6 +130,7 @@ Carter uninstall  v0.19.2
     ~/.config/opencode/skills/carter-adr/SKILL.md          you edited it
     ~/.carter/memories/                                12  your notes
     ~/.carter/backups/                                  4  copies of files Carter replaced
+Identity kept in ~/.carter/config-managed.toml
 
 · Workspaces, not touched  (Carter files you can remove)
     ~/src/proj   rm /home/u/src/proj/.opencode/agents/carter-*.md
@@ -175,9 +180,13 @@ current rule without rewriting the file. `--dry-run` lists the files without wri
 
 `update` is also the only place that applies the `identity` policy of `carter.yaml`
 (`role` and `require_tier`, see [Configuration](configuration.md#identity)). It pins the
-values in `~/.carter/config.toml` under `[workspaces."<path>"]`, refreshes the hook tier and the
-`allow_project_opencode_edit` opt-outs (the agents' rules are re-rendered from `config.toml`), and
-asks nothing; with `-v` it shows each change and its source. An agent shell never pins, writes the
+values in `~/.carter/config-managed.toml` under `[pins."<path>"]` (never in your `config.toml`),
+refreshes the hook tier and the `allow_project_opencode_edit` opt-outs (the agents' rules are
+re-rendered from `config.toml`); with `-v` it shows each change and its source. It asks one
+question: a `require_tier` that is **lower** than the pinned one (or removed) is applied only after
+you say yes in a terminal; without a terminal, or with `--yes`, it prints
+`require_tier lowered: not applied (run it in your terminal)` and pins nothing. Raising it asks
+nothing. An agent shell never pins, writes the
 mirror or refreshes the global agent files. Editing `carter.yaml` alone changes nothing until the
 next `update`. It ends with the unknown-key report (each unknown key once, with its file).
 
@@ -187,9 +196,9 @@ next `update`. It ends with the unknown-key report (each unknown key once, with 
 | `-v`, `--verbose` | Show each change and its source |
 
 `update` stops without pinning when `max_tier` in `config.toml` (set by hand) is below
-`require_tier`, when `config.toml` holds keys Carter doesn't manage (it prints the
-difference and never overwrites the file; delete the key it names), or when `config.toml` is
-invalid.
+`require_tier`, when `config.toml` pins the workspace itself (an older install: delete that table and run
+`update` again; the command names it), or when `config.toml` is invalid. Keys Carter doesn't manage never
+block it.
 
 ## carter guard
 
@@ -308,15 +317,14 @@ server problem).
 
 It asks nothing. On success it prints `✓ <login> · LLM signing on · SHA256:2hx1K1j22SYE…` (plus `· author`
 or `· no passphrase`, and `→ next: carter identity unlock` only when the key has a passphrase) and
-writes `config.toml` (the previous file is kept in
-`~/.carter/backups/`), the signing shim `~/.carter/bin/carter-ssh-sign`, `allowed_signers`, and the
+writes `~/.carter/config-managed.toml` (never your `config.toml`), the signing shim `~/.carter/bin/carter-ssh-sign`, `allowed_signers`, and the
 hook tier in `~/.carter/gitconfig`; every file is recorded with its hash and a failure puts them
 all back. Running `add` again with another key is a **rotation**: the old public key moves to
 `previous_public_keys`, so old commits still verify. It never writes your global git config.
-`--role` writes `[identity] role` in `config.toml` (your preference; a pinned workspace role or
-`CARTER_IDENTITY_ROLE` still wins). `--role author` needs LLM signing on: without a key (given now or already
-configured) it is `E-ROLE-B-TIER` and nothing is written. With LLM signing already on,
-`add --login <name> --role author` changes only the role. With role `author` it also reports
+`--role` checks a role and does not store it: `[identity] role` is your preference, so you set it in
+`config.toml` yourself (a pinned workspace role or `CARTER_IDENTITY_ROLE` still wins). `--role
+author` needs LLM signing on: without a key (given now or already configured) it is
+`E-ROLE-B-TIER` and nothing is written. With role `author` it also reports
 whether your git identity is usable and whether GitHub knows your address (asked of GitHub and `gh`
 only in your own terminal; a dry run caches nothing).
 
@@ -384,14 +392,16 @@ carter identity remove [--dry-run] [-v]
 Takes back what `add` wrote, and only what is still unchanged (each file is recorded with its hash;
 an edited one is kept and listed). In this order: the key leaves Carter's agent and the agent
 stops (never `ssh-agent -k`), the `[identity]` and `[identity.signing]` parts of
-`~/.carter/config.toml` (a copy goes to `~/.carter/backups/`; workspace pins and the footer stay;
-a file that held only the identity is removed), the shim, `allowed_signers`, the socket directory,
+`~/.carter/config-managed.toml` (pins stay; the file goes when nothing is left; your `config.toml`
+is never opened, so an identity an older install left there is listed as kept: delete it yourself),
+the shim, `allowed_signers`, the socket directory,
 and the hook tier with its workspace caps. It then prints **what stays**: the guards, hooks,
 policies and the `git ai-commit` alias (`carter guard remove` takes those), the read-only GitHub
 token, the account and the registered key on GitHub, and your private key file.
 `carter guard remove` and `carter identity remove` are independent: either order works, and each
-leaves the other's files. `carter uninstall` runs both. It asks nothing and needs no terminal
-(the config is backed up first); it refuses in an agent shell (`E-HUMAN-TERMINAL`).
+leaves the other's files. `carter uninstall` runs only the guard removal and keeps the identity.
+`identity remove` asks nothing and needs no terminal; it refuses in an agent shell
+(`E-HUMAN-TERMINAL`).
 
 | Option | Meaning |
 |--------|---------|

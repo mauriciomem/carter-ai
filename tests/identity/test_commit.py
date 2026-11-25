@@ -33,7 +33,7 @@ from carter.identity.errors import (
     IdentityError,
 )
 from carter.identity.schema import Identity, IdentityConfig, Signing, Workspace
-from carter.identity.writer import write_config
+from carter.identity.writer import write_managed
 from gh_api import FakeGitHub, Reply
 from ssh_rig import KeyPair, real_ssh
 
@@ -406,12 +406,7 @@ class TestK1:
         """`carter commit` ignores the role; a polluted GIT_AUTHOR_* changes nothing."""
         assert lab.agent.add(lab.key) == 0  # type: ignore[attr-defined]
         cfg_file = lab.home / ".carter" / "config.toml"
-        text = cfg_file.read_text()
-        cfg_file.write_text(
-            text.replace('role = "co-author"', 'role = "author"')
-            if 'role = "co-author"' in text
-            else text.replace("[identity]\n", '[identity]\nrole = "author"\n', 1)
-        )
+        cfg_file.write_text('[identity]\nrole = "author"\n')  # the role is the human's key
         code, plan_ = lab.commit(
             "-m", "ignores the role", env={"GIT_AUTHOR_NAME": "evil", "GIT_AUTHOR_EMAIL": "evil@x"}
         )
@@ -548,7 +543,7 @@ class TestBelowT2WithDecoys:
     def test_t1_with_a_bare_dash_capital_s_and_the_humans_signing_config_is_unsigned_human_human(
         self, lab: Lab
     ) -> None:
-        write_config(
+        write_managed(
             IdentityConfig(
                 identity=Identity(login=LOGIN, id=UID, email=EMAIL, name=LOGIN), state="current"
             ),
@@ -565,12 +560,12 @@ class TestBelowT2WithDecoys:
         assert plan_.warnings[0].startswith("E-COMMIT-NO-KEY")
 
     def test_t0_commits_with_assisted_by(self, lab: Lab) -> None:
-        write_config(IdentityConfig(state="absent"), lab.home / ".carter" / "config.toml")
+        write_managed(IdentityConfig(state="absent"), lab.home / ".carter" / "config.toml")
         code, _ = lab.commit("-m", "t0")
         assert code == 0 and lab.show()["body"].strip().endswith("Assisted-by: Carter")
 
     def test_git_exit_codes_are_propagated(self, lab: Lab) -> None:
-        write_config(IdentityConfig(state="absent"), lab.home / ".carter" / "config.toml")
+        write_managed(IdentityConfig(state="absent"), lab.home / ".carter" / "config.toml")
         lab.git("commit", "-q", "-m", "first")
         code, _ = lab.commit("-m", "nothing staged")
         assert code == 1

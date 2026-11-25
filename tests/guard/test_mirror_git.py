@@ -21,8 +21,8 @@ from carter.guard import mirror_io, update_mirror
 from carter.guard.state import GuardState, load
 from carter.identity import mirror
 from carter.identity.schema import Identity, IdentityConfig, Signing, Workspace
-from carter.identity.writer import write_config
 from carter.install.paths import carter_gitconfig_path, guard_state_path
+from config_files import write_config
 from guard.helpers import replace_others
 
 LOGIN, UID = "llm-bot", 4242

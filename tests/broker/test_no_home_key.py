@@ -52,12 +52,3 @@ def test_a_broker_home_in_config_has_no_effect_on_the_broker(
     assert ctx.home == PASSWD_HOME and ctx.home != evil
     assert ctx.cfg.broker.min_dwell_ms == 900  # the known key in the same table still works
     assert env.account_home() == PASSWD_HOME
-
-
-def test_the_writer_refuses_to_rewrite_a_file_with_the_unknown_key() -> None:
-    from carter.identity.schema import IdentityConfig
-    from carter.identity.writer import UnmodelledKeysError, write_config
-
-    path = write('[broker]\nhome = "/x"\n')
-    with pytest.raises(UnmodelledKeysError):
-        write_config(IdentityConfig(), path)

@@ -42,6 +42,7 @@ from carter.home import STAMP_FORMAT, tilde
 from carter.identity import ConfigError, load_identity
 from carter.identity.errors import E_GIT_OLD, E_STATE_INVALID, IdentityError, registry
 from carter.identity.policyset import Statement, consent_groups
+from carter.identity.writer import WriterError
 from carter.install.atomic import atomic_write_bytes
 from carter.install.paths import backups_dir, carter_gitconfig_path, guard_state_path
 
@@ -80,6 +81,7 @@ def describe_error(exc: BaseException) -> tuple[str, str, str] | None:
         gitconfig.GitError,
         harness.DebugConfigError,
         plugin.PluginInstallError,
+        WriterError,
     )
     return (str(exc), "", "") if isinstance(exc, expected) else None
 
@@ -383,6 +385,7 @@ def _apply_entries(
 NEWS = {  # what a revision adds, for a group accepted earlier (a row of the question)
     ("g2", 2): "new: plugin isolates agent shells",
     ("g2", 3): "new: carter_push for devops (you approve)",
+    ("config-edit", 2): "new: config-managed.toml is protected",
     ("hooks", 2): "new: agent commits are checked",
     ("repo_hooks", 2): "new: commit hooks next to pre-push",
 }

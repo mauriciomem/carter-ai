@@ -57,8 +57,14 @@ def role_of(home: Path) -> str:
     return load_identity(home / ".carter" / "config.toml").identity.role
 
 
+def set_role(home: Path, role: str) -> None:
+    """What the note tells you to do: the role is your key, in your file."""
+    (home / ".carter").mkdir(exist_ok=True)
+    (home / ".carter" / "config.toml").write_text(f'[identity]\nrole = "{role}"\n')
+
+
 class TestAddRole:
-    def test_role_author_with_a_key_writes_the_role_and_tells_you_about_your_identity(
+    def test_role_author_with_a_key_checks_the_role_and_leaves_it_to_you_to_set(
         self, fake, home: Path, key: KeyPair, real_ssh_agent
     ) -> None:  # type: ignore[no-untyped-def]
         register(fake, key.blob)
@@ -74,7 +80,8 @@ class TestAddRole:
             "-v",
         )
         assert done.exit_code == 0, done.output
-        assert role_of(home) == "author"
+        assert role_of(home) == "co-author"  # Carter never writes config.toml
+        assert 'role is yours: set role = "author" in [identity]' in done.output
         assert "· author" in done.output
         assert "human identity: " in done.output and "! co-author link" in done.output  # a warning
         assert HUMAN[1] not in done.output and HUMAN[0] not in done.output  # names only
@@ -158,17 +165,18 @@ class TestAddRole:
         done = cli("--login", LOGIN, "--role", "author", "-v")
         assert done.exit_code == 0, done.output
         after = load_identity(home / ".carter" / "config.toml")
-        assert after.identity.role == "author" and after.signing == before_cfg.signing
+        assert after.identity.role == "co-author" and after.signing == before_cfg.signing
         assert (home / ".carter" / "bin" / "carter-ssh-sign").read_bytes() == shim_before
-        assert "role: author (config.toml only" in done.output
-        back = cli("--login", LOGIN, "--role", "co-author", input="y\n")
-        assert back.exit_code == 0 and role_of(home) == "co-author"
+        assert 'role is yours: set role = "author" in [identity]' in done.output
+        set_role(home, "author")
+        back = cli("--login", LOGIN, "--role", "co-author", "-v", input="y\n")
+        assert back.exit_code == 0 and 'set role = "co-author"' in back.output
 
     def test_without_role_an_existing_role_is_kept_on_a_key_rotation(
         self, fake, home: Path, key: KeyPair, throwaway_key, real_ssh_agent
     ) -> None:  # type: ignore[no-untyped-def]
         add_t2(fake, key, str(real_ssh_agent.sock))
-        assert cli("--login", LOGIN, "--role", "author", input="y\n").exit_code == 0
+        set_role(home, "author")
         other = throwaway_key("ed25519", True)
         register(fake, key.blob, other.blob)
         done = cli(
@@ -218,7 +226,7 @@ class TestAddRole:
 class TestShow:
     def author(self, fake, home: Path, key: KeyPair, sock: str) -> None:
         add_t2(fake, key, sock)
-        assert cli("--login", LOGIN, "--role", "author", input="y\n").exit_code == 0
+        set_role(home, "author")
 
     def test_role_author_at_t2_describes_the_shape_and_checks_the_humans_identity(
         self, fake, home: Path, key: KeyPair, real_ssh_agent
@@ -268,7 +276,7 @@ class TestShow:
 class TestVerify:
     def author(self, fake, home: Path, key: KeyPair, real_ssh_agent) -> None:  # type: ignore[no-untyped-def]
         add_t2(fake, key, str(real_ssh_agent.sock))
-        assert cli("--login", LOGIN, "--role", "author", input="y\n").exit_code == 0
+        set_role(home, "author")
         assert real_ssh_agent.add(key) == 0
 
     def test_role_b_expects_l_l_g_and_the_humans_trailer(

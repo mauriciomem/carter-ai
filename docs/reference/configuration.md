@@ -78,13 +78,13 @@ defaults, so you only write what you change; lists (`agents`,
 Optional: `carter init` does not write it, and a file without it is valid.
 
 Policy only. Nothing here changes attribution while agents run: `carter update` shows
-these two values and pins them in `~/.carter/config.toml` (see
+these two values and pins them in `~/.carter/config-managed.toml` (see
 [User config](#user-config-carterconfigtoml)).
 
 | Key | Default | Description |
 |-----|---------|-------------|
 | `role` | not set | `co-author` (the default role) or `author`. `author` makes the LLM the author and credits you by a trailer. It needs LLM signing on (a signing key); without it, or under a `max_tier` cap, commits are refused, never downgraded, and `carter update` refuses to pin it next to a cap |
-| `require_tier` | not set | The lowest tier this workspace accepts: `t0`, `t1` or `t2` |
+| `require_tier` | not set | The lowest tier this workspace accepts: `t0`, `t1` or `t2`. Raising it is pinned by the next `carter update`; lowering it (or removing it) asks you to confirm in a terminal, and is refused without one or in an agent shell |
 
 `allow_project_opencode_edit` and other settings that loosen a control are not accepted
 here. Edit-denied settings live only in `~/.carter/config.toml`.
@@ -185,15 +185,27 @@ English.
 
 ## User config: `~/.carter/config.toml`
 
-`carter install` creates it if it is missing, with one comment line and `schema = 2`, and never
-rewrites it. Only what you set is stored: a key that holds its default is not written, and the
-defaults below apply to every key that is absent. Commands that change the file (`identity add`,
-`carter update` pins) rewrite it in that form and drop its comments (a copy of the previous file goes
-to `~/.carter/backups/`); an older file that lists every key shrinks the first time. After
-`carter identity add` it looks like this:
+Carter keeps your settings and what it derives in two files in `~/.carter/`:
+
+| File | Owner | Holds |
+|------|-------|-------|
+| `config.toml` | you | Your decisions. Carter never writes it and `carter install` does not create it. It may be absent; comments and keys of your own stay as you left them |
+| `config-managed.toml` | Carter | What Carter derives. Mode `0600`; first line `# Written by Carter. Edit config.toml instead.` |
+
+Each key has one owning file. Only what differs from the default is stored, and the defaults
+below apply to every key that is absent.
+
+| Owner | Keys |
+|-------|------|
+| `config.toml` (you) | `[access]`; `[workspaces."<path>"]` `max_tier`, `allow_project_opencode_edit`; `[broker]`; `[attribution]`; `[identity.disclosure]`; `[github]` `probe_repo`; `[identity]` `role`, `mode`; `[identity.signing]` `ttl`, `ssh_bin_dir` |
+| `config-managed.toml` (Carter) | `[identity]` `login`, `id`, `name`, `email`; `[identity.signing]` `public_key`, `fingerprint`, `private_key_path`, `mode`, `previous_public_keys`, `agent_socket`, `program`; `[github]` `read_token_file`; `[pins."<path>"]` `role`, `require_tier` |
+
+`carter identity add`, `carter github-token set` and `carter update` (the pins from `carter.yaml`)
+write the managed file; `identity remove` takes the identity out of it. After `carter identity add`
+it looks like this:
 
 ```toml
-schema = 2
+# Written by Carter. Edit config.toml instead.
 
 [identity]
 login = "carter-bot"
@@ -202,19 +214,37 @@ name = "Carter Bot"
 email = "12345+carter-bot@users.noreply.github.com"
 
 [identity.signing]
-public_key_path = "/home/you/.ssh/carter-bot.pub"
 public_key = "ssh-ed25519 AAAA..."
 fingerprint = "SHA256:..."
 private_key_path = "/home/you/.ssh/carter-bot"
 ```
 
-A key Carter doesn't read is
-named by `carter check --host`, `carter install` and `carter update` with its file, for example
-``⚠ unknown key `x.y` in /home/you/.carter/config.toml → delete it``, and `carter identity add` refuses
-to rewrite the file until you delete it. Loading the file never writes to it. `carter check` reports
-unknown keys in `.carter/carter.yaml` and in plans the same way.
+How the two are read:
 
-Every key you may set, with its default:
+- A key of yours found in the managed file is ignored; `carter check --host` names it.
+- A table you also set in `config.toml` wins over the managed one; `check --host` says so in one
+  line. `identity add` and `update` then refuse to change it: edit `config.toml` yourself.
+- The signing values in the managed file are used only if they match what `carter identity add`
+  wrote into `~/.carter/hooks/allowed_signers`: the public key, the previous keys and the
+  `private_key_path` (a comment line there). Otherwise the whole file is ignored and
+  `check --host` says `allowed_signers does not match`. Values kept in `config.toml` are yours and
+  are not checked.
+- The managed file is trusted only if it is a regular file owned by you with no group or other
+  access, and neither it nor `~/.carter/` is a symlink. If a check fails, Carter reads it as empty:
+  no LLM identity, and `check --host` says `config-managed.toml unsafe`. Carter writes it through
+  a temporary file and a rename.
+
+**Upgrading.** A `config.toml` that already holds derived values (an older `identity add`) keeps
+loading as it is; Carter never moves or deletes them. To let Carter manage them again, delete
+`[identity]`, `[identity.signing]` and any pins from `config.toml`, then run `carter identity add`.
+`--role` on `identity add` only checks: set `role = "author"` under `[identity]` yourself.
+
+A key Carter doesn't read is named by `carter check --host`, `carter install` and `carter update`
+with its file, for example ``⚠ unknown key `x.y` in /home/you/.carter/config.toml → delete it``.
+It never blocks a command. Loading the files never writes to them. `carter check` reports unknown
+keys in `.carter/carter.yaml` and in plans the same way.
+
+Every key, with its default (each in the file named above):
 
 ```toml
 schema = 2
@@ -245,8 +275,12 @@ min_dwell_ms = 500        # how long an approval must take; 500 is the floor, 10
 
 [workspaces."/abs/path"]
 max_tier = "t1"           # optional cap: t0 | t1, set by hand, then run `carter update`
-role = "co-author"        # pinned by `carter update`
-require_tier = "t2"       # pinned by `carter update`
+                          # role and require_tier are pins: `carter update` writes them to
+                          # [pins."/abs/path"] in config-managed.toml
+
+[pins."/abs/path"]        # config-managed.toml only
+role = "co-author"
+require_tier = "t2"
 ```
 
 | Table | Keys |
@@ -257,7 +291,7 @@ require_tier = "t2"       # pinned by `carter update`
 | `[broker]` | Optional, for [`carter_push`](../guides/write-operations.md#letting-devops-ask-you-to-push). `min_dwell_ms`: the shortest an approval may take before it is refused as automatic; the effective value is never below 500 and never above 10000. It always uses the home in your system account entry (what OpenSSH reads) for its git and ssh calls and for the `~/.ssh/config` scan; there is no setting for it |
 | `[attribution]` | `footer`: appended to GitHub and Jira bodies |
 | `[access]` | What agents may do: `level` and one value per capability id. See [access](#access) |
-| `[workspaces."<path>"]` | `max_tier`, `role`, `require_tier`, `allow_project_opencode_edit`. The path is the resolved absolute path of the workspace |
+| `[workspaces."<path>"]` | `max_tier`, `allow_project_opencode_edit` (yours). A workspace inside a capped one has the strictest `max_tier` of every entry above it, so a pin for `/repo/sub` never lifts the cap of `/repo`; an opt-out applies to its exact path only. `role` and `require_tier` are pins in `[pins."<path>"]` of the managed file; an older `config.toml` may still hold them here. The path is the resolved absolute path of the workspace |
 
 ### access
 
@@ -310,8 +344,8 @@ The source column is `preset` (from the level), `override` (your key), `workspac
 value from `carter.yaml`) or `opt-out`. A workspace takes the same ids under `access:` in
 `.carter/carter.yaml` and can only tighten them; `policy.level` there is a deprecated alias of
 `access.level`. Any error in `[access]`, or a file that does not parse, renders `strict`;
-`carter update` and `carter access` say why. Today Carter keeps this table whenever it rewrites the
-file; a later release makes `config.toml` human-only and Carter stops rewriting it. See
+`carter update` and `carter access` say why. `[access]` is read only from `config.toml`, which
+Carter never writes; the same table in the managed file is ignored. See
 [Safety and permissions](../guides/safety-and-permissions.md#choose-a-level).
 
 ### Letting agents edit a project's OpenCode config

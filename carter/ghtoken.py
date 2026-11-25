@@ -31,7 +31,7 @@ from carter.checkitems import Item
 from carter.identity import ConfigError, load_identity
 from carter.identity.errors import E_CONFIG, E_PAT_PERM, E_PAT_TYPE, IdentityError
 from carter.identity.schema import Github
-from carter.identity.writer import WriterError, write_config
+from carter.identity.writer import WriterError, write_managed
 from carter.install.paths import carter_config_path, token_path
 
 PAT_PREFIX = "github_pat_"
@@ -114,7 +114,7 @@ def location_problem(path: Path, *, creating: bool) -> str:
 @dataclass(frozen=True)
 class Stored:
     path: Path
-    recorded: bool  # [github] read_token_file was written to config.toml
+    recorded: bool  # [github] read_token_file was written to config-managed.toml
     note: str = ""
 
 
@@ -140,17 +140,14 @@ def _write_private(path: Path, text: str) -> None:
 
 
 def _record(path: Path, base_dir: Path | None) -> tuple[bool, str]:
-    """Put ``[github] read_token_file`` into config.toml; (recorded, why not)."""
+    """Put ``[github] read_token_file`` into config-managed.toml; (recorded, why not)."""
     cfg_path = carter_config_path(base_dir)
     try:
         current = load_identity(cfg_path)
         github = Github(read_token_file=str(path))
-        write_config(replace(current, github=github, state="current"), cfg_path)
+        write_managed(replace(current, github=github, state="current"), cfg_path)
     except (ConfigError, WriterError, OSError):
-        return (
-            False,
-            "config.toml left unchanged (unreadable or unknown keys)",
-        )
+        return False, "token path not recorded (see: carter check --host)"
     return True, ""
 
 

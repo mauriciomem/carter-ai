@@ -97,7 +97,7 @@ only if the key has a passphrase), and writes:
 
 | What | Where |
 |------|-------|
-| the identity and the key's public half, and the private key's **path** (never its content) | `~/.carter/config.toml` (the previous file is kept in `~/.carter/backups/`) |
+| the identity and the key's public half, and the private key's **path** (never its content) | `~/.carter/config-managed.toml` (your `config.toml` is never written) |
 | a small signing script that only the LLM key can use | `~/.carter/bin/carter-ssh-sign` |
 | the public keys that count as the LLM's | `~/.carter/hooks/allowed_signers` |
 | the "hook tier" the git hooks read | `~/.carter/gitconfig` |

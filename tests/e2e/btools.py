@@ -35,7 +35,7 @@ from aplus.helpers import git as _unused  # noqa: F401  (keeps the tests dir on 
 from broker.fakes import FakeGhBin, FakeSsh, install_fake_gh, install_fake_ssh
 from carter.broker import audit, counter
 from carter.identity.schema import Identity, IdentityConfig, Signing
-from carter.identity.writer import write_config
+from config_files import write_config
 from e2e.g2 import CARTER_BIN, PYTHON
 from e2e.harness import Rig
 

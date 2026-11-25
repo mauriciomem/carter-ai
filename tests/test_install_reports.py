@@ -12,6 +12,17 @@ from carter.install.reports import _changes, render_uninstall
 from carter.install.uninstall import UninstallReport, Workspace, uninstall
 
 
+def test_install_never_creates_or_touches_config_toml(base_dir: Path, fake_opencode) -> None:
+    fake_opencode()
+    config = paths.carter_config_path(base_dir)
+    orchestrator.run(base_dir=base_dir, verbosity=1)
+    assert not config.exists()
+    text = '# mine\nschema = 2\n[attribution]\nfooter = "x"\n[extra]\nkeep = 1\n'
+    config.write_text(text)
+    orchestrator.run(base_dir=base_dir, verbosity=1)
+    assert config.read_text() == text
+
+
 @pytest.fixture
 def installed(base_dir: Path, fake_opencode) -> Path:
     fake_opencode()

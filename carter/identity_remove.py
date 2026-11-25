@@ -3,8 +3,8 @@
 Ownership discipline (ADR): every file is removed only if guard state records it and its hash
 still matches; an edited file stays and is reported. Order: the key leaves Carter's agent first
 (the ``lock --all`` logic, never ``ssh-agent -k``), then the ``[identity]`` and
-``[identity.signing]`` parts of ``config.toml`` (the writer, with a backup; workspace pins and
-the footer stay), the shim, ``allowed_signers``, the dedicated socket directory, the hook tier
+``[identity.signing]`` parts of ``config-managed.toml`` (the writer; pins and the human's
+``config.toml`` stay), the shim, ``allowed_signers``, the dedicated socket directory, the hook tier
 and its cap fragments.
 The guards, hooks, policies and the ``git ai-commit`` alias are not this command's business
 (``carter guard remove``), and neither is anything on GitHub or the private key file. Either
@@ -14,18 +14,17 @@ order of the two removals works. ``dry_run`` reads and reports, and writes nothi
 from __future__ import annotations
 
 from dataclasses import dataclass, field, replace
-from datetime import UTC, datetime
 from pathlib import Path
 
 from carter.guard import mirror_io
 from carter.guard.state import GuardState, load_or_empty_readonly, save
-from carter.home import STAMP_FORMAT
 from carter.identity import agent, agent_paths
 from carter.identity.agent_setup import setup_from_config
 from carter.identity.config import ConfigError, load_identity
+from carter.identity.managed import managed_path
 from carter.identity.schema import Identity, IdentityConfig, Signing
-from carter.identity.writer import dumps, write_config
-from carter.install.paths import backups_dir, guard_state_path
+from carter.identity.writer import WriterError, write_managed
+from carter.install.paths import guard_state_path
 
 
 @dataclass
@@ -103,31 +102,38 @@ def _config(
 ) -> None:
     if cfg is None:
         if path.exists():
-            report.kept.append(
-                f"{path} (not valid; its [identity] part is left, fix it and run again)"
-            )
+            report.kept.append(f"{path} (not valid; fix it and run again)")
         return
     if cfg.identity == Identity() and cfg.signing == Signing():
         return
     new = replace(cfg, identity=Identity(), signing=Signing())
-    nothing_left = dumps(new) == dumps(IdentityConfig(state="current"))
-    if nothing_left:  # the file held only the identity: the file goes too (the backup stays)
-        if not dry:
-            stamp = datetime.now(UTC).strftime(STAMP_FORMAT)
-            backup = backups_dir(base_dir) / stamp / "config.toml"
-            backup.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
-            backup.write_bytes(path.read_bytes())
-            backup.chmod(0o600)
-            path.unlink()
-        report.removed.append(f"{path} (it held only the identity; a copy is in backups/)")
-        return
+    target = managed_path(path)
     if not dry:
-        stamp = datetime.now(UTC).strftime(STAMP_FORMAT)
-        backup = backups_dir(base_dir) / stamp / "config.toml"
-        if path.exists() and path.read_text(encoding="utf-8") != dumps(new):
-            backup.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
-        write_config(new, path, backup_to=backup)
-    report.removed.append(f"{path}: the [identity] and [identity.signing] parts")
+        try:
+            write_managed(new, path)
+        except WriterError as exc:  # an identity kept in config.toml is the human's to delete
+            report.kept.append(f"{path} ({exc})")
+            return
+    report.removed.append(f"{target}: the identity and its signing key")
+
+
+def lock_identity(base_dir: Path | None = None) -> RemoveReport:
+    """What ``carter uninstall`` does with an identity it keeps: take the key out of Carter's
+    agent and stop it, remove the shim and the socket directory. The data stays (the managed
+    file, ``allowed_signers``, the hook tier); ``carter identity add`` brings the shim back."""
+    report = RemoveReport()
+    carter = mirror_io.carter_dir(base_dir)
+    read = load_or_empty_readonly(guard_state_path(base_dir))
+    try:
+        cfg: IdentityConfig | None = load_identity(carter / "config.toml")
+    except ConfigError:
+        cfg = None
+    _stop_key(cfg, base_dir, report, False)
+    _owned_file(carter / "bin" / "carter-ssh-sign", read.state, report, False)
+    _socket_dir(base_dir, report, False)
+    if read.status == "ok":
+        save(read.state, guard_state_path(base_dir))
+    return report
 
 
 def remove_identity(base_dir: Path | None = None, *, dry_run: bool = False) -> RemoveReport:

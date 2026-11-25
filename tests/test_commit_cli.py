@@ -21,7 +21,7 @@ from carter.cli import main
 from carter.commit_cli import commit_cmd
 from carter.identity.errors import E_SIGN_AGENT_REFUSE, registry
 from carter.identity.schema import Identity, IdentityConfig
-from carter.identity.writer import write_config
+from config_files import write_config
 from identity.test_commit import COAUTHOR, EMAIL, HUMAN, LOGIN, UID, Lab, fake, lab  # noqa: F401
 from ssh_rig import real_ssh
 
@@ -78,6 +78,19 @@ class TestRegistration:
         assert [p.name for p in commit_cmd.params] == ["help"] or not [
             p for p in commit_cmd.params if p.name != "help"
         ]
+
+
+class TestAnIgnoredManagedFile:
+    def test_the_reason_is_one_warning_and_the_commit_goes_on(self, repo: Path) -> None:
+        managed = Path(os.environ["HOME"]) / ".carter" / "config-managed.toml"
+        managed.write_text('[github]\nread_token_file = "/t"\n')
+        managed.chmod(0o666)  # unsafe: ignored, while the identity kept in config.toml still loads
+        stage(repo)
+        done = carter("-m", "x")
+        assert done.exit_code == 0, done.output
+        lines = [x for x in done.output.splitlines() if "ignored: unsafe" in x]
+        assert len(lines) == 1 and len(lines[0]) <= 80
+        assert "chmod 600" in done.output and COAUTHOR in last(repo)
 
 
 class TestFidelity:

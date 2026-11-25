@@ -26,7 +26,6 @@ class InstallReport:
     agents: dict[str, int]
     skills: dict[str, int]  # the statuses count files; "skills" counts directories
     knowledge: int = 0  # new knowledge files
-    config_created: bool = False
     pruned: int = 0  # old backup folders removed
     guards: list[str] = field(default_factory=list)  # accepted guard groups, none if skipped
     replaced: int = 0  # edited files copied to ``backup_dir`` before being overwritten
@@ -53,8 +52,6 @@ def render_install(report: InstallReport) -> None:
     ]
     if report.knowledge:
         table.append(Row("knowledge files", report.knowledge, "new"))
-    if report.config_created:
-        table.append(Row("config.toml", None, "created"))
     if report.pruned:
         table.append(
             Row("old backups", report.pruned, f"removed, older than {RETENTION_DAYS} days")
@@ -74,7 +71,6 @@ def render_install(report: InstallReport) -> None:
 # The Removed section: (key in ``report.removed``, label, whether it shows a count).
 _REMOVED = (
     ("guards", "guards", False),
-    ("identity", "LLM identity", False),
     ("agents", "agents", True),
     ("skills", "skills", True),
     ("plugin", "plugin", False),
@@ -142,6 +138,8 @@ def render_uninstall(report: UninstallReport) -> None:
     if kept:
         ui.section("Kept, because they are yours")
         ui.rows(kept, paths=True)
+    if report.identity_kept:
+        ui.info(f"Identity kept in {report.identity_kept}")
     if report.workspaces:
         ui.section("Workspaces, not touched", note="Carter files you can remove")
         ui.rows(_workspace_rows(report), paths=True)

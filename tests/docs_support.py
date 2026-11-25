@@ -28,7 +28,9 @@ def section(doc: str, heading: str, level: str = "##") -> str:
     """The body of ``<level> heading`` up to the next heading of the same or higher rank."""
     start = doc.index(f"\n{level} {heading}\n")
     rest = doc[start + 1 :]
-    nxt = re.search(rf"\n#{{1,{len(level)}}} ", rest[5:])
+    # a `# comment` line inside a code fence is not a heading: blank the fences while searching
+    plain = re.sub(r"```.*?```", lambda m: re.sub(r"[^\n]", " ", m.group(0)), rest, flags=re.S)
+    nxt = re.search(rf"\n#{{1,{len(level)}}} ", plain[5:])
     return rest if not nxt else rest[: nxt.start() + 5]
 
 

@@ -56,7 +56,9 @@ EXCEPTIONS = {
     ("aplus/repocfg.py", "applypatch-msg"): "the list of git hook names",
     ("cli.py", "Agents (the `agents:`"): "help prose: click re-wraps it to the terminal width",
     ("cli.py", "A workspace can only tighten"): "help prose: click re-wraps it",
-    ("identity/writer.py", "# Carter settings (schema 2)"): "header written to config.toml",
+    ("install/uninstall.py", "# Carter settings (schema 2)"): (
+        "the header an older install wrote to config.toml, to recognise it"
+    ),
     ("scaffold.py", "Strictness policy is"): "text of the agent files, not the terminal",
     ("scaffold.py", "the workspace `docs_language`"): "text of the agent files",
     ("guard/gitconfig.py", "# Managed by Carter"): "header written to ~/.carter/gitconfig",
