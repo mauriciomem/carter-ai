@@ -75,7 +75,7 @@ Carter install  v0.19.2
     agents            8  new
     skills           27  new
     knowledge files   4  new
-    guards               g2 · hooks · sudo-docker · read-edit-denies · config-edit
+    guards               g2 · hooks · docker · read-edit-denies · config-edit
 
 → restart the OpenCode server from a clean terminal to load the agents and plugin
 ```
@@ -106,10 +106,10 @@ Without a terminal (a script, CI) and without `--yes`, the guards are skipped wi
 
 | Group | What it does |
 |-------|--------------|
-| `g2` | Carter agents can't push from their shell, and `gh` can read and open, edit or comment on pull requests, nothing else. It also installs the Carter **plugin** (below), and `carter_push` for the devops agent ([Write operations](write-operations.md#letting-devops-ask-you-to-push)). |
+| `g2` | Carter agents can't push from their shell or run `sudo` (`doas`, `pkexec`; always refused, nothing to decline separately), and `gh` can read and open, edit or comment on pull requests, nothing else. It also installs the Carter **plugin** (below), and `carter_push` for the devops agent ([Write operations](write-operations.md#letting-devops-ask-you-to-push)). |
 | `hooks` | Git hooks (`pre-push`, `prepare-commit-msg`, `commit-msg`, `post-commit`) that call `~/.carter/hooks/carter-guard`: pushes from Carter agent shells are blocked, and agent commits are checked (committer, signing settings, `Co-authored-by`/`Assisted-by` trailer). Your own commits and pushes are unaffected and run no extra command. Needs git 2.54 or newer. |
 | `repo_hooks` | Git older than 2.54 only: the same hooks as files in your repositories. A hook or `core.hooksPath` that you or your tools own (husky, pre-commit) is never edited: Carter reports the repository as unguarded and prints a line to chain. |
-| `sudo-docker` | Agents can't run `sudo` or `docker`. Packer docker builds must be typed in your terminal. |
+| `docker` | Agents can't run `docker` or `podman`. Packer docker builds must be typed in your terminal. Decline it to let agents use docker (a docker user can reach root: your call). |
 | `read-edit-denies` | Agents can't read SSH keys, `gh`/git credentials or the GitHub token, and can't edit `~/.ssh`. |
 | `config-edit` | Agents can't edit OpenCode config, git hooks and config, or Carter's own config and control files (`config-managed.toml` too). |
 | `alias` | **Optional.** Adds the git alias `git ai-commit` (`carter commit`), unless you already have an `alias.ai-commit`. Never part of the one question or of `--yes`: use `carter guard install --only alias`. |
@@ -135,7 +135,7 @@ Another agent, such as OpenCode's `build` or `plan`, outside a Carter workspace 
 gate, no isolation, and Carter's hooks don't stop its `git push`. Use a Carter agent for anything
 you want guarded.
 
-The deny rules (push, `gh` writes, `sudo`/`docker`, reads of credentials, edits of OpenCode, git
+The deny rules (push, `gh` writes, `sudo`, `docker`, reads of credentials, edits of OpenCode, git
 and Carter config) are written into each Carter agent's own `permissions:` in
 `~/.config/opencode/agents/carter-*.md`, and into your workspace agents by `carter update`. Carter
 writes no global OpenCode policies. The one write in your OpenCode config is a `carter_push` deny

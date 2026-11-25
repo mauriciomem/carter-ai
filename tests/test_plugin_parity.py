@@ -73,7 +73,7 @@ def test_an_isolation_file_rendered_by_python_is_loaded_and_checked_by_the_ts(
         carter_path="/x/carter",
         false_path="/usr/bin/false",
         pat_file=str(home / ".carter/secrets/gh-read.token"),
-        declined_groups=("sudo-docker",),
+        declined_groups=("docker",),
     )
     raw = isolation.canonical_bytes(doc)
     target = tmp_path / "isolation.json"

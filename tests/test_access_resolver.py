@@ -279,7 +279,7 @@ class TestWarnings:
 
 
 class TestMissingGroupLines:
-    ALL = ("g2", "hooks", "sudo-docker", "read-edit-denies", "config-edit")
+    ALL = ("g2", "hooks", "docker", "read-edit-denies", "config-edit")
 
     def test_every_group_present_means_no_line(self):
         assert missing_group_lines(self.ALL) == ()
@@ -288,8 +288,8 @@ class TestMissingGroupLines:
         lines = missing_group_lines(())
         assert [ln.split()[1] for ln in lines] == [
             "g2",
-            "sudo-docker",
             "read-edit-denies",
+            "docker",
             "hooks",
             "config-edit",
         ]
@@ -297,7 +297,7 @@ class TestMissingGroupLines:
 
     def test_a_line_names_the_floor_ids_that_are_not_denied(self):
         (line,) = missing_group_lines([g for g in self.ALL if g != "g2"])
-        assert line == "! g2 off: push, gh_api, github_admin, carter_internals"
+        assert line == "! g2 off: push, gh_api, github_admin, sudo, carter_internals"
 
     def test_either_commit_hook_group_covers_the_commit_checks(self):
         have = [g for g in self.ALL if g != "hooks"]

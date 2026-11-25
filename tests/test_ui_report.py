@@ -99,13 +99,11 @@ def test_narrow_terminal_stacks_a_row_and_never_cuts_it(monkeypatch: pytest.Monk
 
 def test_only_the_rows_that_do_not_fit_stack(monkeypatch: pytest.MonkeyPatch) -> None:
     out = _tty(monkeypatch, columns=40)
-    ui.rows(
-        [Row("agents", 8, "new"), Row("guards", None, "g2 · hooks · sudo-docker · config-edit")]
-    )
+    ui.rows([Row("agents", 8, "new"), Row("guards", None, "g2 · hooks · docker · config-edit")])
     assert _text(out) == [
         "    agents  8  new",
         "    guards",
-        "      g2 · hooks · sudo-docker · config-edit",
+        "      g2 · hooks · docker · config-edit",
     ]
 
 

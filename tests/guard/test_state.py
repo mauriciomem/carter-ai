@@ -163,14 +163,14 @@ class TestInPlaceUpdate:
     def test_adding_a_consent_keeps_every_other_field(self, path: Path) -> None:
         gs.save(full_state(), path)
         st = gs.load(path)
-        st.consent("sudo-docker", "declined", "2026-11-03")
+        st.consent("docker", "declined", "2026-11-03")
         gs.save(st, path)
         again = gs.load(path)
         assert again.opencode_policies == full_state().opencode_policies
         assert again.agent_permissions == full_state().agent_permissions
         assert again.gitconfig == full_state().gitconfig
         assert again.consents["g2"] == {"decision": "accepted", "date": "2026-11-02", "rev": 1}
-        assert again.consents["sudo-docker"]["decision"] == "declined"
+        assert again.consents["docker"]["decision"] == "declined"
 
     def test_unknown_top_level_keys_survive_a_load_save(self, path: Path) -> None:
         data = full_state().to_dict()

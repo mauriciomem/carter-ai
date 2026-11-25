@@ -195,9 +195,15 @@ class TestOtherVerbs:
     def test_other_opencode_commands_pass(self, cmd: str) -> None:
         assert rule_of(cmd) is None
 
-    @pytest.mark.parametrize("verb", ["sudo", "docker", "podman", "doas", "pkexec"])
-    def test_a_declined_sudo_docker_group_lifts_exactly_these(self, verb: str) -> None:
-        assert rule_of(f"{verb} x", skip=("sudo-docker",)) is None
+    @pytest.mark.parametrize("verb", ["docker", "podman"])
+    def test_a_declined_docker_group_lifts_exactly_these(self, verb: str) -> None:
+        assert rule_of(f"{verb} x", skip=("docker",)) is None
+        assert rule_of(f"{verb} x") == "other-verbs"
+
+    @pytest.mark.parametrize("verb", ["sudo", "doas", "pkexec"])
+    def test_the_privilege_verbs_are_g2_and_no_other_group_lifts_them(self, verb: str) -> None:
+        every_other = ("docker", "hooks", "read-edit-denies", "config-edit", "alias", "repo_hooks")
+        assert rule_of(f"{verb} x", skip=every_other) == "other-verbs"
         assert rule_of(f"{verb} x") == "other-verbs"
 
     def test_declining_that_group_changes_nothing_else(self) -> None:
@@ -210,13 +216,13 @@ class TestOtherVerbs:
             "carter push",
             "tmux x",
         ):
-            assert rule_of(cmd, skip=("sudo-docker",)) == rule_of(cmd) is not None, cmd
+            assert rule_of(cmd, skip=("docker",)) == rule_of(cmd) is not None, cmd
 
     def test_the_other_groups_skip_their_own_rules(self) -> None:
         assert rule_of("cat ~/.ssh/id", skip=("read-edit-denies",)) is None
         assert rule_of("echo x > ~/.carter/isolation.json", skip=("config-edit",)) is None
         assert rule_of("git push", skip=("g2",)) is None
-        assert rule_of("sudo x", skip=("g2",)) == "other-verbs"
+        assert rule_of("docker x", skip=("g2",)) == "other-verbs"  # docker has its own group
 
     def test_a_security_keychain_read(self) -> None:
         for sub in ("find-generic-password", "find-internet-password"):
@@ -329,7 +335,7 @@ class TestInterpreters:
 
     def test_sudo_docker_podman_in_program_text(self) -> None:
         assert rule_of("python3 -c \"import os; os.system('sudo ls')\"") == "other-verbs"
-        assert rule_of("python3 -c \"os.system('docker ps')\"", skip=("sudo-docker",)) is None
+        assert rule_of("python3 -c \"os.system('docker ps')\"", skip=("docker",)) is None
 
     def test_program_text_naming_credentials_or_control_files(self) -> None:
         assert rule_of("python3 -c \"open('/home/u/.ssh/id_rsa').read()\"") == "credential-paths"

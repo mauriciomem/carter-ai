@@ -34,13 +34,13 @@ def rev1(stack) -> None:
     """An early install: g2 accepted at revision 1, no plugin (what every existing user has)."""
     stack.fake()
     state = GuardState()
-    for g in ("g2", "sudo-docker", "read-edit-denies", "config-edit"):
+    for g in ("g2", "docker", "read-edit-denies", "config-edit"):
         state.consent(g, "accepted", "2026-11-01", 1)
     from carter.guard.state import save
 
     save(state, guard_state_path(None))
     stack.fake()
-    assert guard("install", "--yes", "--only", "sudo-docker").exit_code == 0
+    assert guard("install", "--yes", "--only", "docker").exit_code == 0
     assert load(guard_state_path(None)).consents["g2"]["rev"] == 1
 
 
@@ -113,7 +113,7 @@ class TestMatrix:
 
 class TestNoSilentUpgrade:
     @pytest.mark.parametrize(
-        "args", [("install", "--yes"), ("install",), ("install", "--yes", "--only", "sudo-docker")]
+        "args", [("install", "--yes"), ("install",), ("install", "--yes", "--only", "docker")]
     )
     def test_guard_install_without_a_confirmation_changes_nothing(
         self, stack, args: tuple[str, ...], human_tty
@@ -179,7 +179,7 @@ class TestNoSilentUpgrade:
         assert res.exit_code == 0 and not plugin_present()
         assert state.consents["g2"] == {"decision": "accepted", "date": "2026-11-01", "rev": 1}
         assert state.extra["consent_offers"]["g2"]["decision"] == "declined"
-        assert state.consents["sudo-docker"]["decision"] == "accepted"  # the denies keep working
+        assert state.consents["docker"]["decision"] == "accepted"  # the denies keep working
 
     def test_the_dry_run_says_the_plugin_needs_confirmation(self, stack) -> None:
         rev1(stack)

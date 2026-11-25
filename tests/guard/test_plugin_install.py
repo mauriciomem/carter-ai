@@ -65,10 +65,10 @@ class TestRender:
 
     def test_declined_groups_follow_the_state(self, stack, human_tty) -> None:
         stack.fake()
-        decline("sudo-docker")
+        decline("docker")
         guard("install", "--yes")
         doc = json.loads(isolation_path(None).read_bytes())
-        assert doc["plugin"]["declined_groups"] == ["sudo-docker"]
+        assert doc["plugin"]["declined_groups"] == ["docker"]
 
 
 class TestFiles:

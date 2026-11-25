@@ -67,7 +67,7 @@ class TestTranslation:
 
     def test_accepted_groups_give_denies_then_allows(self, home: Path) -> None:
         state = GuardState()
-        for group in ("g2", "sudo-docker", "read-edit-denies", "config-edit"):
+        for group in ("g2", "docker", "read-edit-denies", "config-edit"):
             state.consent(group, "accepted", "2026-01-01", 1)
         rules = agent_rules.rules_for(state, home=str(home))
         effects = [r["effect"] for r in rules]
@@ -82,11 +82,10 @@ class TestTranslation:
     def test_a_declined_group_is_left_out(self, home: Path) -> None:
         state = GuardState()
         state.consent("g2", "accepted", "2026-01-01", 1)
-        state.consent("sudo-docker", "declined", "2026-01-01", 1)
+        state.consent("docker", "declined", "2026-01-01", 1)
         resources = {r["resource"] for r in agent_rules.rules_for(state, home=str(home))}
-        assert (
-            "git push *" in resources and "sudo *" not in resources and "docker *" not in resources
-        )
+        assert "git push *" in resources and "docker *" not in resources
+        assert "sudo *" in resources  # sudo is part of g2: not the group's to decline
 
 
 class TestRendering:
@@ -179,7 +178,7 @@ class TestGuardInstall:
 
     def test_a_declined_group_is_left_out_of_the_agent_files(self, stack, home: Path) -> None:
         stack.fake()
-        decline("sudo-docker")
+        decline("docker")
         assert guard("install", "--yes").exit_code == 0
         # no manifest yet (no `carter install`): the guard step alone writes no agent file
         assert not (home / ".config" / "opencode" / "agents").exists()
@@ -188,7 +187,8 @@ class TestGuardInstall:
         resources = {
             r["resource"] for r in agent_file(home)["permissions"] if r["action"] == "shell"
         }
-        assert "git push *" in resources and "sudo *" not in resources
+        assert "git push *" in resources and "docker *" not in resources
+        assert "sudo *" in resources
 
     def test_the_manifest_records_the_rewritten_agent_hashes(self, stack, home: Path) -> None:
         from carter.install.ownership import sha256_bytes
@@ -225,7 +225,7 @@ class TestUpgradeFromGlobalPolicies:
             json.dumps({"policies": [mine, *render_policies(statements)], "providers": {"p": {}}})
         )
         state = GuardState()
-        for group in ("g2", "sudo-docker", "read-edit-denies", "config-edit"):
+        for group in ("g2", "docker", "read-edit-denies", "config-edit"):
             state.consent(group, "accepted", "2026-01-01", 1)
         for s in statements:
             state.record_policy(s.id, s.action, s.resource, s.effect, preexisting=False)
@@ -298,11 +298,11 @@ class TestRemove:
 
     def test_remove_only_a_group_leaves_the_others(self, stack, home: Path) -> None:
         carter_install(stack)
-        assert guard("remove", "--only", "sudo-docker").exit_code == 0
+        assert guard("remove", "--only", "docker").exit_code == 0
         resources = {
             r["resource"] for r in agent_file(home)["permissions"] if r["action"] == "shell"
         }
-        assert "sudo *" not in resources and "gh *" in resources
+        assert "docker *" not in resources and "sudo *" in resources and "gh *" in resources
 
 
 class TestStatusAndHost:

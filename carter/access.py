@@ -89,14 +89,15 @@ ENFORCED: dict[str, tuple[str, str]] = {
 }
 
 # Consent groups whose rules hold floor items up: group -> the floor ids that are open while
-# it is missing. `g2` holds `carter_internals` through the human-only verbs and the env
-# overrides; its control paths come from `config-edit`, which has its own line below, as do
+# it is missing. `g2` holds `sudo` and `carter_internals` (through the human-only verbs and the
+# env overrides); its control paths come from `config-edit`, which has its own line below, as do
 # `hooks` (or `repo_hooks`).
 GROUP_FLOORS: dict[str, tuple[str, ...]] = {
-    "g2": ("push", "gh_api", "github_admin", "carter_internals"),
-    "sudo-docker": ("sudo",),
+    "g2": ("push", "gh_api", "github_admin", "sudo", "carter_internals"),
     "read-edit-denies": ("secrets",),
 }
+# A group that holds no row of the table but a refusal worth saying: group -> what is open.
+OFF_NOTES: dict[str, str] = {"docker": "agents may run docker"}
 _COMMIT_HOOKS = frozenset({"hooks", "repo_hooks"})  # either one does the job (git version)
 _CONFIG_EDIT = "config-edit"
 
@@ -110,6 +111,7 @@ def missing_group_lines(accepted: Iterable[str]) -> tuple[str, ...]:
         for group, ids in GROUP_FLOORS.items()
         if group not in have
     ]
+    lines += [f"! {group} off: {note}" for group, note in OFF_NOTES.items() if group not in have]
     if not have & _COMMIT_HOOKS:
         lines.append("! hooks off: agent commits are not checked")
     if _CONFIG_EDIT not in have:

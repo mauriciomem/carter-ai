@@ -36,6 +36,9 @@ GITCONFIG_FIELDS = ("file", "key", "value")
 GIT_CONFIG_FIELDS = ("file", "key", "value", "scope")
 REPO_HOOK_FIELDS = ("path", "sha256")
 INCLUDE_KEY = "include.path"
+# A group that was split: its consent record moves to the new name when the file is read.
+# `sudo-docker` became `docker`; its `sudo` half is part of `g2` (the floor), so it needs no record.
+LEGACY_GROUPS = {"sudo-docker": "docker"}
 _LISTS = ("files", "git_config", "opencode_policies", "agent_permissions", "repo_hooks")
 
 
@@ -160,6 +163,18 @@ class GuardState:
         return True
 
 
+def _migrated(consents: dict[str, dict[str, Any]]) -> dict[str, dict[str, Any]]:
+    """Move the record of a group that was split to its new name (read-time, in memory; the
+    next ``save`` writes the new name). Same decision, date and revision: nobody is asked again.
+    A record already under the new name wins."""
+    out = dict(consents)
+    for old, new in LEGACY_GROUPS.items():
+        if old in out:
+            record = out.pop(old)
+            out.setdefault(new, record)
+    return out
+
+
 def _invalid(detail: str) -> IdentityError:
     return IdentityError(E_STATE_INVALID, detail=detail)  # key names only, never values
 
@@ -188,6 +203,7 @@ def _parse(data: object) -> GuardState:
     if bad := [k for k, good in ok.items() if not good]:
         raise _invalid(f"wrong type: {', '.join(bad)}")
     known = {k: data[k] for k in STATE_KEYS if k in data}
+    known["consents"] = _migrated(known.get("consents", {}))
     return GuardState(**known, extra={k: v for k, v in data.items() if k not in STATE_KEYS})
 
 

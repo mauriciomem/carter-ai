@@ -92,7 +92,7 @@ class TestTheShellAndTheEditTool:
 class TestExistingUsersSeeOneNewRow:
     def accepted_at_revision_one(self) -> None:
         state = GuardState()
-        for name in ("g2", "sudo-docker", "read-edit-denies", GROUP):
+        for name in ("g2", "docker", "read-edit-denies", GROUP):
             state.consent(name, "accepted", "2026-11-03", 3 if name == "g2" else 1)
         path = guard_state_path(None)
         path.parent.mkdir(parents=True, exist_ok=True)

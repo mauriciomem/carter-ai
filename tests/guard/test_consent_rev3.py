@@ -36,11 +36,11 @@ def rev2(stack) -> None:
     """An install at revision 2: g2 with the plugin written, B off."""
     stack.fake()
     state = GuardState()
-    for g in ("g2", "sudo-docker", "read-edit-denies", "config-edit"):
+    for g in ("g2", "docker", "read-edit-denies", "config-edit"):
         state.consent(g, "accepted", "2026-11-01", 2 if g == "g2" else 1)
     save(state, guard_state_path(None))
     stack.fake()
-    assert guard("install", "--yes", "--only", "sudo-docker").exit_code == 0
+    assert guard("install", "--yes", "--only", "docker").exit_code == 0
     plugin.install(None, load(guard_state_path(None)), lambda _t: None, allow_temp=True)
     save_state = load(guard_state_path(None))
     save(save_state, guard_state_path(None))

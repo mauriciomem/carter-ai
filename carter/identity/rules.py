@@ -39,7 +39,7 @@ class ForbiddenClass:
     note: str = ""
     group: str = "g2"  # the consent group whose decline skips this rule (gate --skip-groups)
     hint: str = ""  # one line, shown to the model with the rule id; no leading `!`
-    item_groups: tuple[tuple[str, str], ...] = ()  # per-item group overrides (sudo/docker/podman)
+    item_groups: tuple[tuple[str, str], ...] = ()  # per-item group overrides (docker/podman)
 
 
 @dataclass(frozen=True)

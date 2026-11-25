@@ -35,7 +35,7 @@ def configure(home, text: str) -> None:  # type: ignore[no-untyped-def]
 def declined_hooks_state() -> None:
     """What the user's machine had: everything accepted, `hooks` declined at revision 2."""
     state = GuardState()
-    for name in ("g2", "sudo-docker", "read-edit-denies", "config-edit"):
+    for name in ("g2", "docker", "read-edit-denies", "config-edit"):
         state.consent(name, "accepted", "2026-11-03", {"g2": 3, "config-edit": 2}.get(name, 1))
     state.consent("hooks", "declined", "2026-11-08", 2)
     path = guard_state_path(None)

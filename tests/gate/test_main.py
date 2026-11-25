@@ -42,9 +42,10 @@ class TestProtocol:
         assert run("echo 'héllo wörld ✓'".encode(), "--json").returncode == 0
 
     def test_cwd_and_skip_groups(self, tmp_path: Path) -> None:
-        assert run(b"sudo ls", "--json").returncode == 1
-        assert run(b"sudo ls", "--json", "--skip-groups", "sudo-docker").returncode == 0
-        assert run(b"sudo ls", "--json", "--skip-groups", "x,sudo-docker,y").returncode == 0
+        assert run(b"docker ps", "--json").returncode == 1
+        assert run(b"docker ps", "--json", "--skip-groups", "docker").returncode == 0
+        assert run(b"docker ps", "--json", "--skip-groups", "x,docker,y").returncode == 0
+        assert run(b"sudo ls", "--json", "--skip-groups", "docker").returncode == 1  # not its group
         assert run(b"git frobnicate", "--json").returncode == 1  # no directory: fail closed
         assert run(b"git frobnicate", "--json", "--cwd", str(tmp_path)).returncode == 0
 
@@ -135,7 +136,7 @@ class TestWrapper:
         assert self.invoke("echo hi").output.strip() == "allow"
 
     def test_options(self, tmp_path: Path) -> None:
-        assert self.invoke("--skip-groups", "sudo-docker", "docker ps").exit_code == 0
+        assert self.invoke("--skip-groups", "docker", "docker ps").exit_code == 0
         assert self.invoke("--cwd", str(tmp_path), "git frobnicate").exit_code == 0
 
     def test_it_agrees_with_check_on_the_whole_corpus(self) -> None:

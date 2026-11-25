@@ -175,10 +175,10 @@ def scan_code(eng: Judge, text: str) -> None:
         eng.deny("human-only-carter")
     if GIT_WORD.search(text):
         eng.deny("interpreter-git")
-    if SUDO_WORD.search(text):
+    for word in SUDO_WORD.finditer(text):  # a declined docker group lifts only its own words
         eng.deny(
             "other-verbs",
             "an interpreter program may not start sudo, docker or podman.",
-            item_group="sudo-docker",
+            item_group=rules()["item_groups"].get(word.group(1)),
         )
     eng.scan_code_paths(text)

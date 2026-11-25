@@ -156,10 +156,10 @@ class TestOnlyPlugin:
     def test_plugin_can_be_combined_with_groups(self, stack) -> None:
         install(stack)
         reload(stack)
-        res = guard("remove", "--yes", "--only", "plugin,sudo-docker")
+        res = guard("remove", "--yes", "--only", "plugin,docker")
         assert res.exit_code == 0, res.output
         assert not isolation_path(None).exists()
-        assert load(guard_state_path(None)).consents["sudo-docker"]["decision"] == "declined"
+        assert load(guard_state_path(None)).consents["docker"]["decision"] == "declined"
 
     def test_removing_g2_removes_its_plugin_too(self, stack) -> None:
         install(stack)

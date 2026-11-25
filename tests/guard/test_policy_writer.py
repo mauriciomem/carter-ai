@@ -87,7 +87,7 @@ class TestMerge:
         assert data["policies"] == [mine, *as_json([A, ALLOW])]
 
     def test_denies_then_allows_in_the_given_order(self, tmp_path, cfg, fake_opencode):
-        stmts = list(policy_statements(("g2", "sudo-docker"), home=str(tmp_path)))
+        stmts = list(policy_statements(("g2", "docker"), home=str(tmp_path)))
         fake_opencode(config_sequence=[dbg(), dbg(stmts)])
         run_apply(tmp_path, stmts)
         effects = [p["effect"] for p in json.loads(cfg.read_text())["policies"]]

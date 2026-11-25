@@ -51,7 +51,7 @@ def read_all(path: Path, key: str) -> list[str]:
 class TestEntries:
     def test_only_when_hooks_is_accepted(self) -> None:
         assert gc.carter_git_entries() == []
-        assert gc.carter_git_entries(["g2", "sudo-docker"]) == []
+        assert gc.carter_git_entries(["g2", "docker"]) == []
         entries = dict(gc.carter_git_entries(["hooks"], hooks_rev=1))  # what revision 1 wrote
         assert set(entries) == {
             "hook.carter-guard-pre-push.event",

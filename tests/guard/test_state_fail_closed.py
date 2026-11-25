@@ -86,7 +86,7 @@ class TestRules:
     def test_never_looser_than_any_valid_state(self, broken: Path, home: Path) -> None:
         got = agent_rules.current_rules(home=str(home))
         every = GuardState()
-        for group in ("g2", "sudo-docker", "read-edit-denies", "config-edit", "hooks"):
+        for group in ("g2", "docker", "read-edit-denies", "config-edit", "hooks"):
             every.consent(group, "accepted", "2026-01-01", 9)
         assert denies(agent_rules.rules_for(every, home=str(home))) <= denies(got)
         assert ("shell", "git push *", "deny") in as_set(got)
@@ -120,7 +120,9 @@ class TestRules:
         state.consent("g2", "accepted", "2026-01-01", 3)
         save(state, guard_state_path(None))
         assert ("shell", "git push *", "deny") in as_set(agent_rules.current_rules(home=str(home)))
-        assert ("shell", "sudo *", "deny") not in as_set(agent_rules.current_rules(home=str(home)))
+        got = as_set(agent_rules.current_rules(home=str(home)))
+        assert ("shell", "sudo *", "deny") in got  # g2 refuses sudo
+        assert ("shell", "docker *", "deny") not in got  # docker waits for its own consent
 
 
 class TestAgentFiles:

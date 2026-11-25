@@ -243,12 +243,12 @@ class TestG2States:
 
     def test_declined_groups_are_listed_and_match_isolation_json(self, stack, human_tty) -> None:
         stack.fake()
-        decline("sudo-docker")
+        decline("docker")
         guard_in = CliRunner().invoke(main, ["guard", "install", "--yes"], catch_exceptions=False)
         assert guard_in.exit_code == 0, guard_in.output
         stack.fake(before=debug_config(stack.live))
         items = check()
-        assert find(items, "sudo-docker: not installed", "info")
+        assert find(items, "docker: not installed", "info")
         assert not find(items, "disagree on declined groups")
         iso = isolation_path(None)
         doc = json.loads(iso.read_bytes())
@@ -286,7 +286,7 @@ class TestOldGitRepos:
         repo = tmp_path / "r"
         subprocess.run(["git", "init", "-q", str(repo)], check=True)
         monkeypatch.chdir(repo)
-        assert guard("install", "--yes", "--only", "g2,sudo-docker").exit_code == 0
+        assert guard("install", "--yes", "--only", "g2,docker").exit_code == 0
         stack.fake(before=debug_config(stack.live))
         install_old_git(Path(os.environ["PATH"].split(":")[0]), REAL_GIT)
         t0 = check(cwd=repo, tier="t0")

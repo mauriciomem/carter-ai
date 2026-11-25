@@ -207,9 +207,9 @@ class TestMissingGroups:
         result = _access()
         lines = [ln for ln in result.stderr.splitlines() if NOT_INSTALLED.match(ln)]
         assert lines == [
-            "! g2 off: push, gh_api, github_admin, carter_internals",
-            "! sudo-docker off: sudo",
+            "! g2 off: push, gh_api, github_admin, sudo, carter_internals",
             "! read-edit-denies off: secrets",
+            "! docker off: agents may run docker",
             "! hooks off: agent commits are not checked",
             "! config-edit off: agents can edit this level",
         ]
@@ -219,11 +219,11 @@ class TestMissingGroups:
     def test_a_group_that_is_there_has_no_line(self, ws: Path) -> None:
         record_groups(*[g for g in ALL_GROUPS if g != "g2"])
         assert _access().stderr.splitlines() == [
-            "! g2 off: push, gh_api, github_admin, carter_internals"
+            "! g2 off: push, gh_api, github_admin, sudo, carter_internals"
         ]
 
     def test_either_commit_hook_group_counts(self, ws: Path) -> None:
-        record_groups("g2", "sudo-docker", "read-edit-denies", "config-edit", "repo_hooks")
+        record_groups("g2", "docker", "read-edit-denies", "config-edit", "repo_hooks")
         assert _access().stderr == ""
 
     def test_all_groups_means_no_line(self, ws: Path) -> None:

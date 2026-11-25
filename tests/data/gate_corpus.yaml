@@ -231,6 +231,24 @@ cases:
   expect: deny
   rule: other-verbs
   why: podman
+- id: split-sudo-with-docker-declined
+  command: sudo ls
+  skip_groups: [docker]
+  expect: deny
+  rule: other-verbs
+  why: sudo is part of g2; declining the docker group does not lift it
+- id: split-doas-with-docker-declined
+  command: doas ls
+  skip_groups: [docker]
+  expect: deny
+  rule: other-verbs
+  why: the same privilege class as sudo
+- id: split-program-text-sudo-with-docker-declined
+  command: python3 -c "import os; os.system('docker ps; sudo ls')"
+  skip_groups: [docker]
+  expect: deny
+  rule: other-verbs
+  why: the program text still names sudo
 - id: rfc-opencode-run
   command: opencode run hello
   expect: deny

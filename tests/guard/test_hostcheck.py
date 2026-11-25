@@ -158,7 +158,7 @@ class TestRedItems:
         from carter.identity.policyset import policy_statements
 
         stack.fake()
-        decline("sudo-docker")
+        decline("docker")
         res = CliRunner().invoke(main, ["guard", "install", "--yes"], catch_exceptions=False)
         assert res.exit_code == 0, res.output
         accepted = policy_statements(
@@ -167,7 +167,7 @@ class TestRedItems:
         stack.fake(before=debug_config(accepted))
         out = host()
         assert out.exit_code == 0, out.output
-        assert any("sudo-docker: not installed" in t for t in levels(out.output)["INFO"])
+        assert any("docker: not installed" in t for t in levels(out.output)["INFO"])
 
     def test_a_changed_guard_file_is_red(self, stack, home: Path) -> None:
         installed(stack)

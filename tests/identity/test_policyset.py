@@ -20,7 +20,7 @@ from carter.identity.policyset import (
 from carter.identity.rules import forbidden_classes, load_rules
 
 HOME = "/home/fixture"
-FROZEN_GROUPS = {"g2", "sudo-docker", "read-edit-denies", "config-edit"}
+FROZEN_GROUPS = {"g2", "docker", "read-edit-denies", "config-edit"}
 
 
 def raw() -> dict:
@@ -90,14 +90,12 @@ class TestStatementShape:
         for st in policy_set():
             assert re.match(r"^(shell|read|edit):\S", st.resource), st.id
 
-    def test_sudo_docker_holds_only_sudo_docker_podman_denies(self) -> None:
-        group = [s for s in policy_set() if s.group == "sudo-docker"]
+    def test_docker_holds_only_docker_podman_denies_and_sudo_is_in_g2(self) -> None:
+        group = [s for s in policy_set() if s.group == "docker"]
         assert {s.effect for s in group} == {"deny"}
-        assert {s.resource.split()[0] for s in group} <= {
-            "shell:sudo",
-            "shell:docker",
-            "shell:podman",
-        }
+        assert {s.resource.split()[0] for s in group} <= {"shell:docker", "shell:podman"}
+        assert {s.id for s in policy_set() if s.resource.startswith("shell:sudo")} == {"deny-sudo"}
+        assert next(s.group for s in policy_set() if s.id == "deny-sudo") == "g2"
 
     def test_the_consent_group_map_is_total(self) -> None:
         groups = {g.id for g in policyset.consent_groups()}
@@ -328,9 +326,9 @@ class TestRendering:
             assert set(st) == {"action", "resource", "effect"}
 
     def test_groups_filter_statements_and_gh_allows_follow_g2(self) -> None:
-        only_sudo = policy_statements(("sudo-docker",), home=HOME)
-        assert {s.group for s in only_sudo} == {"sudo-docker"}
-        assert not [s for s in only_sudo if s.effect == "allow"]
+        only_docker = policy_statements(("docker",), home=HOME)
+        assert {s.group for s in only_docker} == {"docker"}
+        assert not [s for s in only_docker if s.effect == "allow"]
         no_g2 = policy_statements(("read-edit-denies", "config-edit"), home=HOME)
         assert not [s for s in no_g2 if s.id.startswith(("allow-gh", "deny-gh"))]
 
