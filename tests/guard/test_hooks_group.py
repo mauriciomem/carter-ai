@@ -153,7 +153,7 @@ class TestInstall:
             and "carter-gitconfig" not in global_cfg().read_text()
         )
         state = load(guard_state_path(None))
-        assert "hooks" not in state.consents and "g2" in state.consents
+        assert state.consents["hooks"]["decision"] == "declined" and "g2" in state.consents
         assert state.agent_permissions  # the per-agent denies stay
 
 

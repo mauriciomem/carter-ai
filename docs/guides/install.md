@@ -114,10 +114,16 @@ Without a terminal (a script, CI) and without `--yes`, the guards are skipped wi
 | `config-edit` | Agents can't edit OpenCode config, git hooks and config, or Carter's own config and control files (`config-managed.toml` too). |
 | `alias` | **Optional.** Adds the git alias `git ai-commit` (`carter commit`), unless you already have an `alias.ai-commit`. Never part of the one question or of `--yes`: use `carter guard install --only alias`. |
 
-A group you decline stays declined. `carter guard status` and `carter check --host` list it, with
-the command that asks again (`carter guard install --only <group>`). The one exception: with the LLM
-signing on and no commit hooks installed, the single question offers a declined
-`hooks` again and says so in one line.
+To decline one group, answer **n** to `Install? [Y/n]`: Carter then asks `<group> [Y/n]` for each
+row. Every n is recorded as declined in `~/.carter/guard-state.json`. (Ctrl-C leaves without
+recording anything.) `carter guard remove --only <group>` records the same decision.
+
+A group you decline stays declined: later `carter install`, `carter guard install` and
+`carter update` do not offer it again and render none of its rules. `carter guard status` and
+`carter check --host` list it, with the command that asks again (`carter guard install --only <group>`).
+The one exception: with the LLM signing on and no commit hooks installed, the single question
+offers a declined `hooks` again and says so in one line. For scripts, `--yes --only <groups>`
+installs just those groups.
 Preview everything with `carter guard install --dry-run`: it lists every file it would write
 and writes nothing.
 
@@ -192,6 +198,9 @@ isolated, ask an agent to run `carter check --probe`.
 - `carter guard remove --only plugin` removes only the plugin, `isolation.json` and `run/`. The deny
   rules, hooks and token stay.
 - `carter guard remove --only broker` removes only `carter_push`.
+- `carter guard remove --only <group>` takes a group out and records it as **declined**: the next
+  install does not bring it back, and `isolation.json` is re-rendered in the same run so the command
+  gate stops enforcing that group. `carter guard install --only <group>` re-enables it.
 - `carter guard remove` (or `carter uninstall`) removes everything Carter wrote and you haven't
   changed. The read-only token file and `~/.carter/state/audit/` stay. `carter uninstall --keep-guards`
   leaves the guards in place.

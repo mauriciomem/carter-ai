@@ -83,6 +83,9 @@ def verbose(args: tuple[str, ...]) -> tuple[str, ...]:
     return tuple(args)
 
 
+NO_TO_ALL = "n\n" * 9  # a no to `Install?`, then a no to each group prompt that follows
+
+
 def decline(*groups: str) -> None:
     """Record these groups as declined in the guard state (a TTY could once decline one by one;
     made the install one question, so the state is the way to get a declined group)."""

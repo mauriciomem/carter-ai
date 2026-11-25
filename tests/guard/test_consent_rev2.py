@@ -21,7 +21,7 @@ from carter.guard import consent
 from carter.guard.state import GuardState, load
 from carter.identity.errors import E_STATE_INVALID
 from carter.install.paths import guard_state_path, isolation_path, plugin_dir
-from guard.helpers import debug_config, verbose
+from guard.helpers import NO_TO_ALL, debug_config, verbose
 
 PENDING = "has new content"
 
@@ -174,7 +174,7 @@ class TestNoSilentUpgrade:
         rev1(stack)
         human_tty(True)
         stack.fake(before=debug_config(stack.live), after=debug_config(stack.live))
-        res = guard("install", input="n\n")
+        res = guard("install", input=NO_TO_ALL)
         state = load(guard_state_path(None))
         assert res.exit_code == 0 and not plugin_present()
         assert state.consents["g2"] == {"decision": "accepted", "date": "2026-11-01", "rev": 1}

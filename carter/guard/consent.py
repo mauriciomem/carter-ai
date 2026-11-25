@@ -8,8 +8,10 @@ saves the result. Rules:
   prompted or recorded, and its reason is shown as a notice.
 - No TTY and no ``--yes``: nothing is decided and nothing is written (``skipped``).
 - ``--yes`` accepts every group in scope; a TTY gets one question for all of them (``to_offer``
-  says which), and its yes is the consent for each group, revisions included.
-- A recorded decision stands unless the group is named in ``--only``, which asks again.
+  says which), and its yes is the consent for each group, revisions included. A no leads to one
+  prompt per group (``decide_each``): each no is recorded as declined.
+- A recorded decision stands unless the group is named in ``--only``, which asks again. A group
+  declined (at a prompt or by ``guard remove --only``) stays declined across installs and updates.
 - **Revisions.** A group whose content grew (``g2`` rev 2: the plugin) is *stale* when accepted
   at a lower revision. A stale group is upgraded only by a TTY "yes" (the prompt shows the
   group's ``explain`` text) or by ``--yes --only <group>``. A bare ``--yes``, ``carter update``
@@ -139,6 +141,33 @@ def resolve_consents(
         if decision != prior or explicit:
             plan.asked.append(name)
         (plan.accepted if decision == "accepted" else plan.declined).append(name)
+    return plan
+
+
+def decide_each(
+    state: GuardState, answers: Mapping[str, bool], *, only: Sequence[str] | None = None
+) -> ConsentPlan:
+    """The plan for one yes or no per group (the per-group prompts after a no to the question).
+
+    A yes accepts the group (a revision upgrade or a declined group coming back included). A no
+    declines a group nobody decided; it stays declined until ``--only`` names it. A no never
+    withdraws an accepted group: one accepted at an older revision keeps its old consent and the
+    refusal is remembered (``refused_offers``) unless ``--only`` named it. A group that is
+    already declined stays as it is."""
+    plan = ConsentPlan()
+    revs = {g.id: g.rev for g in consent_groups()}
+    for name, yes in answers.items():
+        rec = state.consents.get(name, {})
+        prior = rec.get("decision")
+        if yes:
+            plan.asked.append(name)
+            plan.accepted.append(name)
+        elif prior is None:
+            plan.asked.append(name)
+            plan.declined.append(name)
+        elif prior == "accepted" and int(rec.get("rev", 1)) < revs[name]:
+            if only is None or name not in only:
+                plan.refused_offers.append(name)
     return plan
 
 

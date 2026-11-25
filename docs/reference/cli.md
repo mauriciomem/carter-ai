@@ -221,8 +221,10 @@ Carter plugin (`~/.config/opencode/plugins/carter/`, found by OpenCode without a
 
 It asks **one** question: a table with one short row per group (what each does: `carter guard --help`)
 and `Install? [Y/n]` (Enter is yes). That
-yes is the consent for every group it lists; a no installs nothing. `--yes` skips the question.
-Groups you declined earlier stay declined and are not asked again, with one exception: while the
+yes is the consent for every group it lists. A no asks `<group> [Y/n]` for each row and records
+every no as declined (Ctrl-C records nothing); if nothing is accepted, nothing is installed.
+`--yes` skips the question. Groups you declined (at a prompt, or with `guard remove --only`)
+stay declined, across `carter install`, `carter guard install` and `carter update`, with one exception: while the
 LLM signing is on and no commit-hook group is installed, a declined `hooks` (or
 `repo_hooks` on git older than 2.54) is offered again in the same question, with a line saying why.
 `--only hooks` asks about a declined group on purpose. The optional `alias` group only comes with
@@ -275,7 +277,7 @@ unchanged since Carter wrote it (anything you edited is kept and reported). Keep
 |--------|-------------|
 | `--dry-run` | Show what would be removed; write nothing |
 | `-v`, `--verbose` | List each statement and file removed or kept |
-| `--only GROUPS` | Remove only these groups (and forget their consent). `plugin` removes just the plugin, `isolation.json` and `~/.carter/run/`: the agent rules, per-agent denies, hooks and the token stay, and a bare `carter guard install --yes` doesn't bring the plugin back. `broker` turns only [`carter_push`](../guides/write-operations.md#letting-devops-ask-you-to-push) off: the plugin and `isolation.json` are re-rendered without it, and the headless profile is removed. They can be combined with group names |
+| `--only GROUPS` | Remove only these groups and record them as declined: later installs don't offer them again, and `isolation.json` is re-rendered in the same run; `guard install --only <group>` re-enables one. `plugin` removes just the plugin, `isolation.json` and `~/.carter/run/`: the agent rules, per-agent denies, hooks and the token stay, and a bare `carter guard install --yes` doesn't bring the plugin back. `broker` turns only [`carter_push`](../guides/write-operations.md#letting-devops-ask-you-to-push) off: the plugin and `isolation.json` are re-rendered without it, and the headless profile is removed. They can be combined with group names |
 
 **Emergency rollback without Carter.** If `carter` itself is broken, delete the plugin
 directory from your own terminal: `rm -r ~/.config/opencode/plugins/carter`. A running

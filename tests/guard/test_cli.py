@@ -26,7 +26,15 @@ from carter.identity.policyset import policy_statements
 from carter.install.mcp import config_target
 from carter.install.paths import backups_dir, carter_gitconfig_path, guard_state_path
 from guard.conftest import REAL_GIT
-from guard.helpers import STAND_IN, agents_json, debug_config, decline, tree_hash, verbose
+from guard.helpers import (
+    NO_TO_ALL,
+    STAND_IN,
+    agents_json,
+    debug_config,
+    decline,
+    tree_hash,
+    verbose,
+)
 
 BUILTINS = ["build", "plan", "general", "explore"]
 PAT_MESSAGE = "kept ~/.carter/secrets/gh-read.token: revoke the token if unused"
@@ -245,15 +253,20 @@ class TestInstall:
         assert "alias" not in state.consents  # optional: only --only brings it
         assert res.output.splitlines()[-1].startswith("✓ guards installed")
 
-    def test_enter_is_yes_and_no_installs_nothing(self, stack, human_tty) -> None:
+    def test_enter_is_yes(self, stack, human_tty) -> None:
         human_tty(True)
         stack.fake()
-        before = tree_hash(stack.home)
-        no = guard("install", input="n\n")
-        assert no.exit_code == 0 and "nothing installed" in no.output
-        assert tree_hash(stack.home) == before and not guard_state_path(None).exists()
         assert guard("install", input="\n").exit_code == 0
         assert load(guard_state_path(None)).consents
+
+    def test_a_no_to_every_group_installs_nothing_and_declines_them(self, stack, human_tty) -> None:
+        human_tty(True)
+        stack.fake()
+        no = guard("install", input=NO_TO_ALL)
+        assert no.exit_code == 0 and "nothing installed" in no.output
+        assert not config_target(None).exists() and not hooks.script_path(None).exists()
+        consents = load(guard_state_path(None)).consents
+        assert consents and {c["decision"] for c in consents.values()} == {"declined"}
 
     def test_yes_skips_the_question(self, stack, human_tty) -> None:
         human_tty(True)
@@ -631,7 +644,8 @@ class TestRemove:
         res = guard("remove", "--yes", "--only", "sudo-docker")
         assert res.exit_code == 0, res.output
         state = load(guard_state_path(None))
-        assert "sudo-docker" not in state.consents and "g2" in state.consents
+        assert state.consents["sudo-docker"]["decision"] == "declined"  # not forgotten
+        assert state.consents["g2"]["decision"] == "accepted"
         assert "policies" not in config_data()
 
     def test_a_corrupt_state_is_not_removed_blindly(self, stack) -> None:

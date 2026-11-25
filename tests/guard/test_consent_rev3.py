@@ -23,7 +23,7 @@ from carter.install.paths import (
     isolation_path,
     plugin_dir,
 )
-from guard.helpers import debug_config, verbose
+from guard.helpers import NO_TO_ALL, debug_config, verbose
 
 PENDING = "has new content"
 
@@ -142,7 +142,7 @@ class TestConfirming:
         rev2(stack)
         human_tty(True)
         stack.fake(before=debug_config(stack.live), after=debug_config(stack.live))
-        res = guard("install", input="n\n")
+        res = guard("install", input=NO_TO_ALL)
         assert res.exit_code == 0
         state = load(guard_state_path(None))
         assert state.consents["g2"]["rev"] == 2

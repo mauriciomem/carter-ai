@@ -82,7 +82,14 @@ def guards_help() -> str:
     for group in consent_groups():
         lines.append(f"  {group.id:<16}  {group.short}")
         lines += [" " * 20 + row for row in _wrap_code(group.effect, 58)]
-    lines += ["", "Without a terminal nothing is installed unless you pass --yes."]
+    lines += [
+        "",
+        "A no asks group by group. A group you decline, or take out with",
+        "`remove --only <group>`, stays declined (not offered, not installed,",
+        "its rules not rendered) until `carter guard install --only <group>`.",
+        "",
+        "Without a terminal nothing is installed unless you pass --yes.",
+    ]
     lines.append("A bad ~/.carter/guard-state.json keeps all guards.")
     return "\n".join(lines)
 
@@ -138,6 +145,8 @@ def remove_cmd(
         )
         if code == 0 and not dry_run:
             ui.ok("guards removed" if only is None else f"removed {ui.short_list(only)}")
+            if only is not None:
+                report.removed_groups(base_dir, only)
         return code
 
     _guarded(run)

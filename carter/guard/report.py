@@ -37,6 +37,13 @@ def accepted_groups(base_dir: Path | None) -> list[str]:
     return consent.accepted_groups(load_or_empty_readonly(guard_state_path(base_dir)).state)
 
 
+def removed_groups(base_dir: Path | None, only: list[str]) -> None:
+    """The line under ``guard remove --only``: a removed group is recorded as declined."""
+    state = load_or_empty_readonly(guard_state_path(base_dir)).state
+    if any(state.consents.get(name, {}).get("decision") == "declined" for name in only):
+        ui.info("· declined; the other guards stay (see: carter guard --help)")
+
+
 def installed(base_dir: Path | None) -> None:
     """The one line ``carter guard install`` ends with: what is accepted now."""
     done = accepted_groups(base_dir)

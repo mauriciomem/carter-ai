@@ -159,7 +159,7 @@ class TestOnlyPlugin:
         res = guard("remove", "--yes", "--only", "plugin,sudo-docker")
         assert res.exit_code == 0, res.output
         assert not isolation_path(None).exists()
-        assert "sudo-docker" not in load(guard_state_path(None)).consents
+        assert load(guard_state_path(None)).consents["sudo-docker"]["decision"] == "declined"
 
     def test_removing_g2_removes_its_plugin_too(self, stack) -> None:
         install(stack)

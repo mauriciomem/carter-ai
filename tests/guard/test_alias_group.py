@@ -65,12 +65,9 @@ class TestConsent:
         stack.fake()
         res = guard("install", "--only", "alias", input="n\n")  # Y/n, and no is no
         assert "Install? [Y/n]" in res.output and "nothing installed" in res.output
+        assert res.output.count("[Y/n]") == 1  # one group: the no is the answer, no second prompt
         assert ALIAS_KEY not in carter_entries()
-        assert (
-            "alias" not in load(guard_state_path(None)).consents
-            if guard_state_path(None).exists()
-            else True
-        )
+        assert load(guard_state_path(None)).consents["alias"]["decision"] == "declined"
         assert guard("install", "--only", "alias", input="\n").exit_code == 0  # Enter is yes
         assert carter_entries()[ALIAS_KEY] == ALIAS_VALUE
 

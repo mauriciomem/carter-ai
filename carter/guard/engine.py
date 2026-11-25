@@ -428,20 +428,26 @@ def _show_offer(offer: Sequence[str], state: GuardState, again: Sequence[str]) -
     ui.rows(_offer_rows(offer, state))
 
 
-def _remember_refusals(
-    state: GuardState, offer: Sequence[str], only: Sequence[str] | None, base_dir: Path | None
-) -> None:
-    """A no to a revision upgrade keeps the old consent and is not asked again."""
-    stale = [
-        g
-        for g in offer
-        if state.consents.get(g, {}).get("decision") == "accepted"
-        and not (only is not None and g in only)
-    ]
-    if stale:
-        path = guard_state_path(base_dir)
-        consent.record(state, consent.ConsentPlan(refused_offers=stale))
-        save(state, path)
+def _ask_each(
+    offer: Sequence[str], state: GuardState, only: Sequence[str] | None, confirm: Confirm
+) -> consent.ConsentPlan:
+    """A no to the one question: one short prompt per group (a lone group is answered already).
+    A no is a decision: the group stays declined, a revision upgrade keeps its old consent."""
+    if len(offer) == 1:
+        return consent.decide_each(state, {offer[0]: False}, only=only)
+    ui.info("· per group: a no stays declined (see: carter guard --help)")
+    return consent.decide_each(
+        state, {n: confirm(f"  {n}", default=True) for n in offer}, only=only
+    )
+
+
+def _say_decisions(plan: consent.ConsentPlan, echo: Echo) -> None:
+    groups = {g.id: g for g in consent_groups()}
+    for name in plan.declined:
+        kind = " (optional)" if groups[name].optional else ""
+        echo(f"Declined: {name}{kind} (see: carter guard --help)")
+    for name in plan.refused_offers:
+        echo(f"Not confirmed: {name} (old denies stay)")
 
 
 def install(
@@ -465,27 +471,38 @@ def install(
         return _dry_run(base_dir, state, only, home, echo, today, *_availability(echo))
 
     mode, unavailable = _availability(echo)
+    plan: consent.ConsentPlan | None = None
     if interactive and not assume_yes:
         again = _needed_groups(state, unavailable)
         offer = consent.to_offer(state, only=only, unavailable=unavailable, reoffer=again)
         again = [g for g in again if g in offer and g not in (only or [])]
         if offer:
-            groups_by_id = {g.id: g for g in consent_groups()}
             for name in offer:
-                if groups_by_id[name].rev > 1:  # what a revision adds, in full, with -v
-                    for line in groups_by_id[name].explain:
+                if groups[name].rev > 1:  # what a revision adds, in full, with -v
+                    for line in groups[name].explain:
                         echo(line)
             _show_offer(offer, state, again)
-            if not confirm("Install?", default=True):
-                _remember_refusals(state, offer, only, base_dir)
-                ui.info("· nothing installed")
-                return 0
-            # the one yes is the consent for every group it listed, revisions included
-            assume_yes = True
-            only = [*offer, *(g for g in (only or []) if g not in offer)]
-    plan = consent.resolve_consents(
-        state, only=only, assume_yes=assume_yes, interactive=interactive, unavailable=unavailable
-    )
+            if confirm("Install?", default=True):
+                # the one yes is the consent for every group it listed, revisions included
+                assume_yes = True
+                only = [*offer, *(g for g in (only or []) if g not in offer)]
+            else:
+                plan = _ask_each(offer, state, only, confirm)
+                if not plan.accepted:  # only decisions to keep: write them, install nothing
+                    consent.record(state, plan, today=today)
+                    _say_decisions(plan, echo)
+                    if state != GuardState():
+                        save(state, guard_state_path(base_dir))
+                    ui.info("· nothing installed")
+                    return 0
+    if plan is None:
+        plan = consent.resolve_consents(
+            state,
+            only=only,
+            assume_yes=assume_yes,
+            interactive=interactive,
+            unavailable=unavailable,
+        )
     for note in plan.notices():
         echo(note)
     if plan.skipped:
@@ -496,11 +513,7 @@ def install(
                 for line in groups[name].explain:
                     echo(line)
     consent.record(state, plan, today=today)
-    for name in plan.declined:
-        kind = " (optional)" if groups[name].optional else ""
-        echo(f"Declined: {name}{kind} (see: carter guard install --help)")
-    for name in plan.refused_offers:
-        echo(f"Not confirmed: {name} (old denies stay)")
+    _say_decisions(plan, echo)
     if consent.plugin_wanted(state):
         plugin.plan(base_dir, state)  # preflight: E-FALSE-MISSING, bad paths... before any write
     optouts = _active_optouts(state, echo=echo)
@@ -703,8 +716,11 @@ def remove(
     if scoped:
         target = copy.deepcopy(state) if dry_run else state
         names = [n for n in (only or []) if n not in (consent.PLUGIN, consent.BROKER)]
-        for name in names:
-            target.consents.pop(name, None)
+        day = datetime.now(UTC).date().isoformat()
+        revs = {g.id: g.rev for g in consent_groups()}
+        for name in names:  # declined, not forgotten: no later install offers it again
+            target.consent(name, "declined", day, revs[name])
+            target.clear_offer(name)
         if names:
             agents = builtin_agents() if "g2" in consent.accepted_groups(target) else []
             res = policies.apply(
@@ -724,6 +740,8 @@ def remove(
             _only_broker(base_dir, target, echo, dry_run=dry_run)
         elif "g2" in names and not dry_run:
             plugin.remove(base_dir, target, echo)  # the plugin belongs to g2
+        elif names and not dry_run and consent.plugin_wanted(target):
+            plugin.install(base_dir, target, echo)  # isolation.json lists the declined groups
         hook_groups = [g for g in (only or []) if g in ("hooks", "repo_hooks", "alias")]
         if hook_groups and dry_run:
             echo(f"  (the git keys of {ui.short_list(hook_groups)} would go too)")
