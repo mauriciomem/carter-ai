@@ -116,7 +116,8 @@ Without a terminal (a script, CI) and without `--yes`, the guards are skipped wi
 
 `sudo` is not a group: `sudo`, `sudoedit`, `sudo-rs`, `doas`, `pkexec`, `run0`, `su -c` and
 `machinectl shell` are refused for Carter agents whatever you consent to, as long as Carter keeps
-a guard state (`~/.carter/guard-state.json`). The command gate adds the same refusal when `g2` is on.
+a guard state (`~/.carter/guard-state.json`). The command gate adds the same refusal when `g2` is on,
+also when one of these words appears in the text of an interpreter program (`python -c`, `perl -e`).
 
 `guard-state.json` is schema 2 from this version on. An older Carter calls it "newer", keeps every
 deny and refuses `guard install` and `guard remove` until you upgrade it again.

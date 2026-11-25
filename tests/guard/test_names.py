@@ -197,7 +197,13 @@ GATE_ONLY_IDS = ("dynamic-command", "interpreter-git", "git-alias", "gate-input"
 # the consent group a rule belongs to (`--skip-groups`). Everything not listed is `g2`.
 GROUP_OF_RULE = {"credential-paths": "read-edit-denies", "control-files": "config-edit"}
 # `sudo`, `doas` and `pkexec` are the floor: no entry, so they stay with `g2`.
-GROUP_OF_VERB = {"docker": "docker", "podman": "docker"}
+GROUP_OF_VERB = {
+    "docker": "docker",
+    "podman": "docker",
+    "nerdctl": "docker",
+    "docker-compose": "docker",
+    "buildah": "docker",
+}
 
 # isolation.json schema v1. Unknown or missing keys mean the file is invalid.
 ISOLATION_TOP_LEVEL = (

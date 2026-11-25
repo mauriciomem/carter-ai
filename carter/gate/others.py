@@ -27,7 +27,12 @@ GH_HINT = (
 REPO_FLAG = re.compile(r"(?:--repo(?:=|\Z)|-[A-Za-z]*?R=?)(?P<value>.*)\Z", re.S)
 URL_HOST = re.compile(r"https?://([^/]+)")
 GIT_WORD = re.compile(r"(?<![\w.-])(git|gh)(?![\w-])")
-SUDO_WORD = re.compile(r"(?<![\w.-])(sudo|docker|podman)(?![\w-])")
+# privilege and container verbs named in program text; the lookahead keeps `docker-compose` whole
+SUDO_WORD = re.compile(
+    r"(?<![\w.-])(sudo|sudoedit|sudo-rs|doas|pkexec|run0|docker|podman|nerdctl|docker-compose"
+    r"|buildah|su\s+-[A-Za-z]*c|machinectl\s+shell)(?![\w-])"
+)
+SU_COMMAND = re.compile(r"-[A-Za-z]*c.*|--command(=.*)?", re.S)  # `su -c`, `-lc id`, `--command=id`
 
 
 def gh(eng: Judge, argv: list[Word]) -> None:
@@ -81,6 +86,10 @@ def other_verb(eng: Judge, name: str, argv: list[Word]) -> None:
     group = r["item_groups"].get(name)
     if name in r["other_single"]:
         eng.deny("other-verbs", item_group=group)
+    if (name == "su" and any(SU_COMMAND.fullmatch(a.text) for a in argv[1:])) or (
+        name == "machinectl" and any(a.text == "shell" for a in argv[1:])
+    ):
+        eng.deny("other-verbs")  # a root command line: the floor, like sudo
     if (
         name == "opencode"
         and [a.text for a in argv[1:2]] == ["service"]
@@ -179,6 +188,6 @@ def scan_code(eng: Judge, text: str) -> None:
         eng.deny(
             "other-verbs",
             "an interpreter program may not start sudo, docker or podman.",
-            item_group=rules()["item_groups"].get(word.group(1)),
+            item_group=rules()["item_groups"].get(word.group(1).split()[0]),
         )
     eng.scan_code_paths(text)
