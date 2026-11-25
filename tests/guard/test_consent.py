@@ -35,7 +35,13 @@ class TestStatementsFollowConsent:
     def test_only_consented_groups_are_emitted(self) -> None:
         got = consent.desired_statements(accepted("docker"), home=HOME)
         assert groups_of(got) == {"docker", "floor"}  # the floor is nobody's to accept
-        assert [s.id for s in got if s.group != "floor"] == ["deny-docker"]
+        assert [s.id for s in got if s.group != "floor"] == [
+            "deny-docker",
+            "deny-podman",
+            "deny-nerdctl",
+            "deny-docker-compose",
+            "deny-buildah",
+        ]
 
     def test_all_live_groups_give_denies_then_allows(self) -> None:
         got = consent.desired_statements(accepted(*LIVE), home=HOME)
@@ -238,14 +244,14 @@ class TestUpgrade:
         # A later Carter adds a statement to the same group.
         data = json.loads(json.dumps(policyset._data()))
         data["policy_set"].append(
-            {"id": "deny-podman", "group": "docker", "action": "tool.use",
-             "resource": "shell:podman *", "effect": "deny"}
+            {"id": "deny-skopeo", "group": "docker", "action": "tool.use",
+             "resource": "shell:skopeo *", "effect": "deny"}
         )  # fmt: skip
         monkeypatch.setattr(policyset, "_data", lambda: data)
         newer = consent.desired_statements(st, home=str(tmp_path))
         fake_opencode(config_sequence=[_dbg(wanted), _dbg(newer)])
         res = policies.apply(tmp_path, st, newer, backup_root=backups_dir(tmp_path) / "b")
-        assert res.added == ["deny-podman"] and res.removed == []
+        assert res.added == ["deny-skopeo"] and res.removed == []
 
     def test_a_new_group_is_not_applied_without_consent(
         self, monkeypatch: pytest.MonkeyPatch

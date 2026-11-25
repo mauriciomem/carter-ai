@@ -144,7 +144,7 @@ class TestDryRun:
         stack.fake()
         out = guard("install", "--dry-run", "--only", "docker").output
         floor = len(floor_statements(home=str(stack.home)))  # sudo and its relatives, always
-        assert f"would carry {floor + 1} guard rule(s)" in out and "deny-git-push" not in out
+        assert f"would carry {floor + 5} guard rule(s)" in out and "deny-git-push" not in out
         assert "per-agent" not in out
 
     def test_a_declined_group_stays_declined_in_the_preview(self, stack, human_tty) -> None:

@@ -75,6 +75,29 @@ class TestAllNoWhenSomethingIsInstalled:
         assert "nothing installed" in res.output and not isolation_path(None).exists()
 
 
+class TestAllNoOnAFirstInstall:
+    """Security round 2, F1: the floor is tied to the state's presence, so the run that creates
+    the state must put the always-on denies into the agent files."""
+
+    def agent_shell_denies(self, home) -> set[str]:  # type: ignore[no-untyped-def]
+        import yaml
+
+        text = (home / ".config" / "opencode" / "agents" / "carter-engineer.md").read_text()
+        rules = yaml.safe_load(text.split("---", 2)[1])["permissions"]
+        return {r["resource"] for r in rules if r["action"] == "shell" and r["effect"] == "deny"}
+
+    def test_carter_install_with_a_no_to_everything_leaves_sudo_denied(
+        self, stack, human_tty, home
+    ) -> None:
+        human_tty(True)
+        stack.fake()
+        res = CliRunner().invoke(main, ["install"], input="n\n" * 12, catch_exceptions=False)
+        assert res.exit_code == 0, res.output
+        assert set(decisions().values()) == {"declined"}
+        denies = self.agent_shell_denies(home)
+        assert {"sudo *", "doas *", "pkexec *", "su -c *", "su -lc *", "su root -c *"} <= denies
+
+
 class TestShortLines:
     def test_declined_is_said_once_when_it_is_decided_not_on_every_run(
         self, stack, human_tty

@@ -499,6 +499,7 @@ def install(
                     _say_decisions(plan, echo)
                     if changed:
                         save(state, guard_state_path(base_dir))
+                        _rerender(base_dir, echo)  # the state exists now: the floor denies apply
                     ui.info("· nothing installed")
                     return 0
     if plan is None:

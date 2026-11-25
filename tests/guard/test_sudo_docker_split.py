@@ -29,7 +29,19 @@ from guard.helpers import verbose
 HOME = "/home/u"
 OLD = "sudo-docker"
 SUDO, DOCKER = "shell:sudo *", "shell:docker *"
-FLOOR_VERBS = ("sudo", "sudoedit", "sudo-rs", "doas", "pkexec", "run0", "su -c", "machinectl shell")
+FLOOR_VERBS = (
+    "sudo",
+    "sudoedit",
+    "sudo-rs",
+    "doas",
+    "pkexec",
+    "run0",
+    "su -c",
+    "su -lc",
+    "su root -c",
+    "machinectl shell",
+)
+CONTAINER_VERBS = ("docker", "podman", "nerdctl", "docker-compose", "buildah")
 CONSENT_REVS = {"g2": 3, "hooks": 2, "read-edit-denies": 1, "config-edit": 2}
 
 
@@ -71,7 +83,9 @@ class TestTheData:
         assert groups["deny-sudo"] == "floor" and groups["deny-docker"] == "docker"
 
     def test_docker_alone_denies_only_docker_and_no_group_carries_sudo(self) -> None:
-        assert [s.resource for s in policy_statements(("docker",), home=HOME)] == [DOCKER]
+        assert [s.resource for s in policy_statements(("docker",), home=HOME)] == [
+            f"shell:{verb} *" for verb in CONTAINER_VERBS
+        ]
         every = {s.resource for s in policy_statements(home=HOME)}
         assert SUDO not in every and SUDO in {s.resource for s in floor_statements(home=HOME)}
 

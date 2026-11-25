@@ -93,7 +93,9 @@ class TestStatementShape:
     def test_docker_holds_only_docker_podman_denies_and_sudo_is_the_floor(self) -> None:
         group = [s for s in policy_set() if s.group == "docker"]
         assert {s.effect for s in group} == {"deny"}
-        assert {s.resource.split()[0] for s in group} <= {"shell:docker", "shell:podman"}
+        assert {s.resource.split()[0] for s in group} == {
+            f"shell:{verb}" for verb in ("docker", "podman", "nerdctl", "docker-compose", "buildah")
+        }
         floor = {s.id for s in policyset.floor_statements(home=HOME)}
         assert {"deny-sudo", "deny-doas", "deny-pkexec", "deny-sudoedit", "deny-sudo-rs"} <= floor
         assert {"deny-run0", "deny-su-c", "deny-machinectl-shell"} <= floor

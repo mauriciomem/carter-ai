@@ -26,9 +26,11 @@ IDS_BY_GROUP = {
         "deny-pkexec",
         "deny-run0",
         "deny-su-c",
+        "deny-su-lc",
+        "deny-su-root-c",
         "deny-machinectl-shell",
     ],
-    "docker": ["deny-docker"],
+    "docker": ["deny-docker", "deny-podman", "deny-nerdctl", "deny-docker-compose", "deny-buildah"],
     "read-edit-denies": [
         "deny-read-ssh",
         "deny-read-gh-config",
