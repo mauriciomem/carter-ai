@@ -634,6 +634,7 @@ class TestRemove:
         res = CliRunner().invoke(main, ["guard", "remove"], catch_exceptions=False)
         assert res.exit_code == 0 and res.output == "✓ guards removed\n"
 
+    @pytest.mark.usefixtures("at_terminal")
     def test_only_removes_one_group_and_its_consent(self, stack) -> None:
         install_all(stack)
         rest = policy_statements(("read-edit-denies", "config-edit", "g2"), home=str(stack.home))

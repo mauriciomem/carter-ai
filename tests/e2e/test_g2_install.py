@@ -110,7 +110,7 @@ def test_install_isolate_gate_and_restore(rig_factory, opencode_bin) -> None:
     assert all("carter-engineer" in ln or ln.startswith("\u2717 host:") for ln in crosses), crosses
 
     # 7. remove --only plugin: the plugin side goes, the denies, hooks and token stay
-    res = carter(rig, "guard", "remove", "--yes", "--only", "plugin")
+    res = rig.run_tty([*CARTER, "guard", "remove", "--yes", "--only", "plugin"], timeout=240.0)
     assert res.returncode == 0, res.stdout + res.stderr
     assert not (home / ".carter/isolation.json").exists() and not plugin_dir(home).exists()
     assert not (home / ".carter/run").exists() or not (home / ".carter/run/gh-empty").exists()

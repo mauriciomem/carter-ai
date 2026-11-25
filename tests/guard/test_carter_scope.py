@@ -296,6 +296,7 @@ class TestRemove:
         assert res.exit_code == 0, res.output
         assert ("git send-pack *", "deny") not in shell_rules(agent_file(home))
 
+    @pytest.mark.usefixtures("at_terminal")
     def test_remove_only_a_group_leaves_the_others(self, stack, home: Path) -> None:
         carter_install(stack)
         assert guard("remove", "--only", "docker").exit_code == 0

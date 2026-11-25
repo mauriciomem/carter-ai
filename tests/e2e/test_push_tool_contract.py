@@ -604,7 +604,7 @@ class TestRehearsal:
             assert lab.remote_ref() != lab.head()
 
             # 3. B off, the rest of g2 stays: the tools are gone after a restart
-            done = rig.run([*env, "guard", "remove", "--yes", "--only", "broker"], timeout=300)
+            done = rig.run_tty([*env, "guard", "remove", "--yes", "--only", "broker"], timeout=300)
             assert done.returncode == 0, done.stdout + done.stderr
             rig.restart()
             lab.sessions.clear()

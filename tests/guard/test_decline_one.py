@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import json
 
+import pytest
 from click.testing import CliRunner, Result
 
 from carter import ui
@@ -193,6 +194,7 @@ class TestRemoveOnlyIsPersistent:
         stack.fake()
         assert guard("install", "--yes").exit_code == 0
 
+    @pytest.mark.usefixtures("at_terminal")
     def test_it_records_the_group_as_declined(self, stack) -> None:
         self.installed(stack)
         stack.fake()
@@ -200,6 +202,7 @@ class TestRemoveOnlyIsPersistent:
         assert res.exit_code == 0, res.output
         assert decisions()[ONE] == "declined" and decisions()["g2"] == "accepted"
 
+    @pytest.mark.usefixtures("at_terminal")
     def test_the_next_install_does_not_bring_it_back(self, stack, human_tty) -> None:
         human_tty(True)
         self.installed(stack)
@@ -210,6 +213,7 @@ class TestRemoveOnlyIsPersistent:
         again = guard("install", input="y\n")
         assert "Install?" not in again.output and decisions()[ONE] == "declined"
 
+    @pytest.mark.usefixtures("at_terminal")
     def test_isolation_json_is_re_rendered_in_the_same_run(self, stack) -> None:
         self.installed(stack)
         assert isolation_declined() == []
@@ -217,6 +221,7 @@ class TestRemoveOnlyIsPersistent:
         assert isolation_declined() == [ONE]
         assert SSH_READ not in agent_rules.current_rules()
 
+    @pytest.mark.usefixtures("at_terminal")
     def test_install_only_brings_it_back(self, stack) -> None:
         self.installed(stack)
         guard("remove", "--only", ONE)
@@ -224,6 +229,7 @@ class TestRemoveOnlyIsPersistent:
         assert guard("install", "--yes", "--only", ONE).exit_code == 0
         assert decisions()[ONE] == "accepted" and isolation_declined() == []
 
+    @pytest.mark.usefixtures("at_terminal")
     def test_isolation_json_matches_the_state_after_every_change(self, stack) -> None:
         self.installed(stack)
         for step in (("remove", "--only", "hooks"), ("remove", "--only", ONE)):
@@ -234,6 +240,7 @@ class TestRemoveOnlyIsPersistent:
         guard("install", "--yes", "--only", "hooks")
         assert isolation_declined() == [ONE]
 
+    @pytest.mark.usefixtures("at_terminal")
     def test_it_says_in_two_short_lines_what_happened_and_where_to_read(self, stack) -> None:
         self.installed(stack)
         out = guard("remove", "--only", ONE).output.splitlines()
@@ -249,6 +256,7 @@ class TestRemoveOnlyIsPersistent:
         res = guard("remove", "--dry-run", "--only", ONE)
         assert res.exit_code == 0 and tree_hash(stack.home) == before
 
+    @pytest.mark.usefixtures("at_terminal")
     def test_removing_a_component_records_no_decision(self, stack) -> None:
         self.installed(stack)
         before = decisions()
@@ -257,6 +265,7 @@ class TestRemoveOnlyIsPersistent:
             g: d for g, d in before.items() if g != "g2"
         }
 
+    @pytest.mark.usefixtures("at_terminal")
     def test_removing_g2_declines_it_and_the_plugin_goes(self, stack) -> None:
         self.installed(stack)
         guard("remove", "--only", "g2")

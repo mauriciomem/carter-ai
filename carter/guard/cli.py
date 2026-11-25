@@ -136,7 +136,9 @@ def remove_cmd(
     del assume_yes  # accepted and ignored: nothing is asked any more
 
     def run() -> int:
-        terminal.require_human_terminal("guard remove", need_tty=False)
+        # a scoped remove is recorded as a decline that outlives it: a person must be there
+        scoped = only is not None and not dry_run
+        terminal.require_human_terminal("guard remove", need_tty=scoped, streams=("stdin",))
         code = engine.remove(
             base_dir=base_dir,
             only=only,

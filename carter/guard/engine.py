@@ -19,6 +19,7 @@ module is testable and click-free.
 
 from __future__ import annotations
 
+import contextlib
 import copy
 from collections.abc import Callable, Sequence
 from datetime import UTC, datetime
@@ -689,6 +690,68 @@ def _known_extra_files(
         state.forget_file(path)
 
 
+def _remove_scoped(
+    base_dir: Path | None, path: Path, state: GuardState, only: list[str], dry_run: bool,
+    echo: Echo, reader: configwrite.Reader | None, root: Path,
+) -> int:  # fmt: skip
+    """``remove --only``: each group is recorded as declined, its rules and files go, and
+    ``isolation.json`` follows in the same run. Like ``install``, a failure puts the OpenCode
+    config and the state file back (and re-renders the plugin files from the old state)."""
+    target = copy.deepcopy(state) if dry_run else state
+    before = copy.deepcopy(state)
+    previous = path.read_bytes()
+    res: policies.ApplyResult | None = None
+    names = [n for n in only if n not in (consent.PLUGIN, consent.BROKER)]
+    try:
+        day = datetime.now(UTC).date().isoformat()
+        revs = {g.id: g.rev for g in consent_groups()}
+        for name in names:  # declined, not forgotten: no later install offers it again
+            target.consent(name, "declined", day, revs[name])
+            target.clear_offer(name)
+        if names:
+            agents = builtin_agents() if "g2" in consent.accepted_groups(target) else []
+            res = policies.apply(
+                base_dir, target, [], agents=agents, backup_root=root, dry_run=dry_run,
+                reader=reader,
+            )  # fmt: skip
+            echo(f"OpenCode config: {tilde(res.target or '')}")
+            _show_diff(res, echo)
+        hook_groups = [g for g in only if g in ("hooks", "repo_hooks", "alias")]
+        if hook_groups and dry_run:
+            echo(f"  (the git keys of {ui.short_list(hook_groups)} would go too)")
+        elif hook_groups:
+            # what stays accepted keeps its keys: only the withdrawn group's entries go
+            mode, _ = _availability(echo)
+            _git_step(base_dir, target, echo, dry_run=False, mode=mode)
+            if "repo_hooks" in hook_groups:
+                _remove_repo_hooks(target, echo)
+            if not {"hooks", "repo_hooks"} & set(consent.accepted_groups(target)):
+                _remove_script(base_dir, target, echo)
+        if consent.PLUGIN in only:
+            _only_plugin(base_dir, target, echo, dry_run=dry_run)
+        elif consent.BROKER in only:
+            _only_broker(base_dir, target, echo, dry_run=dry_run)
+        elif "g2" in names and not dry_run:
+            plugin.remove(base_dir, target, echo)  # the plugin belongs to g2
+        elif names and not dry_run and consent.plugin_wanted(target):
+            plugin.install(base_dir, target, echo)  # isolation.json lists the declined groups
+        if not dry_run:
+            save(target, path)
+    except BaseException:
+        if res is not None and res.tx is not None and res.target is not None:
+            configwrite.restore(res.target, res.tx)
+        atomic_write_bytes(path, previous)
+        if consent.plugin_wanted(before):  # isolation.json must not outlive the old state
+            undo = copy.deepcopy(target)  # its file hashes are the ones on disk now
+            undo.consents, undo.extra = before.consents, before.extra
+            with contextlib.suppress(Exception):
+                plugin.install(base_dir, undo, lambda _text: None)
+        raise
+    if not dry_run:
+        _rerender(base_dir, echo)
+    return 0
+
+
 def remove(
     *,
     base_dir: Path | None,
@@ -709,54 +772,11 @@ def remove(
     if read.status == "absent" or state == GuardState():
         echo("Nothing to remove: Carter has no guard state here.")
         return 0
-    scoped = only is not None
     if dry_run:
         echo("carter guard remove (dry run: nothing is written)")
     root = backups_dir(base_dir) / _stamp()
-    if scoped:
-        target = copy.deepcopy(state) if dry_run else state
-        names = [n for n in (only or []) if n not in (consent.PLUGIN, consent.BROKER)]
-        day = datetime.now(UTC).date().isoformat()
-        revs = {g.id: g.rev for g in consent_groups()}
-        for name in names:  # declined, not forgotten: no later install offers it again
-            target.consent(name, "declined", day, revs[name])
-            target.clear_offer(name)
-        if names:
-            agents = builtin_agents() if "g2" in consent.accepted_groups(target) else []
-            res = policies.apply(
-                base_dir,
-                target,
-                [],
-                agents=agents,
-                backup_root=root,
-                dry_run=dry_run,
-                reader=reader,
-            )
-            echo(f"OpenCode config: {tilde(res.target or '')}")
-            _show_diff(res, echo)
-        if consent.PLUGIN in (only or []):
-            _only_plugin(base_dir, target, echo, dry_run=dry_run)
-        elif consent.BROKER in (only or []):
-            _only_broker(base_dir, target, echo, dry_run=dry_run)
-        elif "g2" in names and not dry_run:
-            plugin.remove(base_dir, target, echo)  # the plugin belongs to g2
-        elif names and not dry_run and consent.plugin_wanted(target):
-            plugin.install(base_dir, target, echo)  # isolation.json lists the declined groups
-        hook_groups = [g for g in (only or []) if g in ("hooks", "repo_hooks", "alias")]
-        if hook_groups and dry_run:
-            echo(f"  (the git keys of {ui.short_list(hook_groups)} would go too)")
-        elif hook_groups:
-            # what stays accepted keeps its keys: only the withdrawn group's entries go
-            mode, _ = _availability(echo)
-            _git_step(base_dir, target, echo, dry_run=False, mode=mode)
-            if "repo_hooks" in hook_groups:
-                _remove_repo_hooks(target, echo)
-            if not {"hooks", "repo_hooks"} & set(consent.accepted_groups(target)):
-                _remove_script(base_dir, target, echo)
-        if not dry_run:
-            save(target, path)
-            _rerender(base_dir, echo)
-        return 0
+    if only is not None:
+        return _remove_scoped(base_dir, path, state, only, dry_run, echo, reader, root)
     rem = policies.remove(base_dir, state, backup_root=root, dry_run=dry_run, reader=reader)
     for ident in rem.removed + rem.perms.removed:
         echo(f"  - {ident}")

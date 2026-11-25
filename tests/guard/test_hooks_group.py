@@ -142,6 +142,7 @@ class TestInstall:
         assert global_cfg().read_bytes() == before
         assert not guard_script_path(None).exists() and not carter_gitconfig_path(None).exists()
 
+    @pytest.mark.usefixtures("at_terminal")
     def test_remove_only_hooks_keeps_the_denies(self, stack) -> None:
         stack.fake()
         guard("install", "--yes")

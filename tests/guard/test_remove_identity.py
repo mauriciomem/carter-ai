@@ -147,6 +147,7 @@ class TestRoundTrip:
         identity_remove.remove_identity()
         assert git("config", "--global", "--get", "alias.ai-commit").stdout.strip() == "!echo mine"
 
+    @pytest.mark.usefixtures("at_terminal")
     def test_the_plugin_rollback_keeps_the_identity(self, stack, identity: KeyPair) -> None:
         stack.fake()
         assert guard("install", "--yes").exit_code == 0

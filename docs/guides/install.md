@@ -207,7 +207,9 @@ isolated, ask an agent to run `carter check --probe`.
 - `carter guard remove --only broker` removes only `carter_push`.
 - `carter guard remove --only <group>` takes a group out and records it as **declined**: the next
   install does not bring it back, and `isolation.json` is re-rendered in the same run so the command
-  gate stops enforcing that group. `carter guard install --only <group>` re-enables it.
+  gate stops enforcing that group. `carter guard install --only <group>` re-enables it. A scoped
+  remove needs a terminal on stdin (it is a decision that lasts), and if a step fails the OpenCode
+  config and the guard state are put back.
 - `carter guard remove` (or `carter uninstall`) removes everything Carter wrote and you haven't
   changed. The read-only token file and `~/.carter/state/audit/` stay. `carter uninstall --keep-guards`
   leaves the guards in place.

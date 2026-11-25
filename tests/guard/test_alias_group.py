@@ -12,6 +12,7 @@ import os
 import subprocess
 from pathlib import Path
 
+import pytest
 from click.testing import CliRunner
 
 from carter.cli import main
@@ -139,6 +140,7 @@ class TestUserOwnedAlias:
 
 
 class TestRemove:
+    @pytest.mark.usefixtures("at_terminal")
     def test_only_alias_leaves_the_hooks(self, stack) -> None:
         stack.fake()
         guard("install", "--yes", "--only", "hooks,alias")
@@ -148,6 +150,7 @@ class TestRemove:
         entries = carter_entries()
         assert ALIAS_KEY not in entries and "hook.carter-guard-post-commit.event" in entries
 
+    @pytest.mark.usefixtures("at_terminal")
     def test_only_hooks_leaves_the_alias(self, stack) -> None:
         stack.fake()
         guard("install", "--yes", "--only", "hooks,alias")

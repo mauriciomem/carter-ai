@@ -267,8 +267,10 @@ nothing an agent can call resets it). See [Write operations](../guides/write-ope
 carter guard remove [--dry-run] [--only GROUPS|plugin|broker] [-v]
 ```
 
-Asks nothing (the OpenCode config is backed up) and needs no terminal; an agent shell is
-refused. Removes the agent rules, per-agent denies and Carter's git files, each only where it is
+Asks nothing (the OpenCode config is backed up). A plain remove needs no terminal; `--only` (not
+`--dry-run`) needs your stdin to be a terminal, because it records a decline that outlives it. An
+agent shell is always refused. If a step of `--only` fails, the OpenCode config and the guard state
+are put back. Removes the agent rules, per-agent denies and Carter's git files, each only where it is
 unchanged since Carter wrote it (anything you edited is kept and reported). Keeps
 `~/.carter/secrets/gh-read.token` (with a reminder to delete and revoke it) and
 `~/.carter/state/audit/`.

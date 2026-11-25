@@ -177,6 +177,7 @@ class TestUndo:
         self, stack, human_tty
     ) -> None:
         self.confirmed(stack, human_tty)
+        human_tty(True)  # `confirmed` leaves no terminal; a scoped remove asks for one
         stack.fake(before=debug_config(stack.live), after=debug_config(stack.live))
         res = guard("remove", "--yes", "--only", "broker")
         assert res.exit_code == 0, res.output
@@ -189,6 +190,7 @@ class TestUndo:
 
     def test_a_bare_yes_does_not_bring_b_back(self, stack, human_tty) -> None:
         self.confirmed(stack, human_tty)
+        human_tty(True)  # `confirmed` leaves no terminal; a scoped remove asks for one
         stack.fake(before=debug_config(stack.live), after=debug_config(stack.live))
         guard("remove", "--yes", "--only", "broker")
         stack.fake(before=debug_config(stack.live), after=debug_config(stack.live))
@@ -197,6 +199,7 @@ class TestUndo:
 
     def test_remove_only_plugin_takes_the_profile_and_broker_ts_too(self, stack, human_tty) -> None:
         self.confirmed(stack, human_tty)
+        human_tty(True)  # `confirmed` leaves no terminal; a scoped remove asks for one
         stack.fake(before=debug_config(stack.live), after=debug_config(stack.live))
         assert guard("remove", "--yes", "--only", "plugin").exit_code == 0
         assert (
@@ -216,6 +219,7 @@ class TestUndo:
 
     def test_an_edited_profile_is_kept_and_reported(self, stack, human_tty) -> None:
         self.confirmed(stack, human_tty)
+        human_tty(True)  # `confirmed` leaves no terminal; a scoped remove asks for one
         headless_profile_path(None).write_text("{}\n")
         stack.fake(before=debug_config(stack.live), after=debug_config(stack.live))
         res = guard("remove", "--yes", "--only", "broker")
