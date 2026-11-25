@@ -134,7 +134,7 @@ class TestThePerGroupQuestion:
         stack.fake()
         guard("install", input=answers(ONE))
         out = guard("status").output
-        assert f"{ONE:<16} declined" in out and "see: carter guard install --help" in out
+        assert f"{ONE:<16} declined" in out and "see: carter guard --help" in out
 
     def test_the_group_comes_back_only_by_name(self, stack, human_tty) -> None:
         human_tty(True)

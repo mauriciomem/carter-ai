@@ -126,10 +126,11 @@ row. Every n is recorded as declined in `~/.carter/guard-state.json`. (Ctrl-C le
 recording anything.) `carter guard remove --only <group>` records the same decision.
 
 A group you decline stays declined: later `carter install`, `carter guard install` and
-`carter update` do not offer it again and render none of its rules. `carter guard status` and
+`carter update` do not offer it again and render none of its rules. `carter guard status -v` and
 `carter check --host` list it, with the command that asks again (`carter guard install --only <group>`).
 The one exception: with the LLM signing on and no commit hooks installed, the single question
-offers a declined `hooks` again and says so in one line. For scripts, `--yes --only <groups>`
+offers a declined `hooks` again and says so in one line (an unreadable `config.toml` hides that
+offer, and one warning line says so). For scripts, `--yes --only <groups>`
 installs just those groups.
 Preview everything with `carter guard install --dry-run`: it lists every file it would write
 and writes nothing.

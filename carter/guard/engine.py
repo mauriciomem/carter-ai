@@ -401,6 +401,8 @@ def _needed_groups(state: GuardState, unavailable: dict[str, str]) -> list[str]:
     try:
         t2 = configured_tier(load_identity(default_path())) == "t2"
     except ConfigError:
+        if consent.declined_commit_guards(state, unavailable):
+            ui.warn("config.toml invalid: hooks not re-asked (see: carter check)")
         return []
     return consent.declined_commit_guards(state, unavailable) if t2 else []
 
@@ -444,7 +446,7 @@ def _ask_each(
 
 def _say_decisions(plan: consent.ConsentPlan, echo: Echo) -> None:
     groups = {g.id: g for g in consent_groups()}
-    for name in plan.declined:
+    for name in (n for n in plan.declined if n in plan.asked):  # only what was decided just now
         kind = " (optional)" if groups[name].optional else ""
         echo(f"Declined: {name}{kind} (see: carter guard --help)")
     for name in plan.refused_offers:
@@ -489,10 +491,13 @@ def install(
                 only = [*offer, *(g for g in (only or []) if g not in offer)]
             else:
                 plan = _ask_each(offer, state, only, confirm)
-                if not plan.accepted:  # only decisions to keep: write them, install nothing
+                changed = bool(plan.asked or plan.refused_offers)
+                if not plan.accepted and not (changed and consent.accepted_groups(state)):
+                    # nothing accepted, and either nothing installed to bring in line or
+                    # nothing decided: keep the decisions, stop
                     consent.record(state, plan, today=today)
                     _say_decisions(plan, echo)
-                    if state != GuardState():
+                    if changed:
                         save(state, guard_state_path(base_dir))
                     ui.info("· nothing installed")
                     return 0

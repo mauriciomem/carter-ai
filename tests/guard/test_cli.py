@@ -519,7 +519,7 @@ class TestStatus:
         decline("docker")
         guard("install", "--yes")
         out = guard("status").output
-        assert "docker" in out and "declined" in out and "see: carter guard install --help" in out
+        assert "docker" in out and "declined" in out and "see: carter guard --help" in out
 
     def test_a_corrupt_state_is_reported_without_writing(self, stack) -> None:
         path = guard_state_path(None)
