@@ -89,28 +89,34 @@ ENFORCED: dict[str, tuple[str, str]] = {
 }
 
 # Consent groups whose rules hold floor items up: group -> the floor ids that are open while
-# it is missing. `g2` holds `sudo` and `carter_internals` (through the human-only verbs and the
-# env overrides); its control paths come from `config-edit`, which has its own line below, as do
+# it is missing. `g2` holds `carter_internals` (through the human-only verbs and the env
+# overrides); its control paths come from `config-edit`, which has its own line below, as do
 # `hooks` (or `repo_hooks`).
 GROUP_FLOORS: dict[str, tuple[str, ...]] = {
-    "g2": ("push", "gh_api", "github_admin", "sudo", "carter_internals"),
+    "g2": ("push", "gh_api", "github_admin", "carter_internals"),
     "read-edit-denies": ("secrets",),
 }
+# Floor ids no consent holds: Carter renders their denies into its agents whenever it keeps a
+# guard state. Without one (nothing was ever installed) they are open, and `g2` says so.
+STATE_FLOORS = ("sudo",)
 # A group that holds no row of the table but a refusal worth saying: group -> what is open.
-OFF_NOTES: dict[str, str] = {"docker": "agents may run docker"}
+OFF_NOTES: dict[str, str] = {"docker": "agents may run docker (root-equivalent)"}
 _COMMIT_HOOKS = frozenset({"hooks", "repo_hooks"})  # either one does the job (git version)
 _CONFIG_EDIT = "config-edit"
 
 
-def missing_group_lines(accepted: Iterable[str]) -> tuple[str, ...]:
+def missing_group_lines(accepted: Iterable[str], *, state: bool = True) -> tuple[str, ...]:
     """One ``!`` line (<= 60 chars) per consent group that is off: ``! g2 off: <ids>`` names
-    the floor rows that are therefore not denied. ``accepted`` is what the guard state records."""
+    the floor rows that are therefore not denied. ``accepted`` is what the guard state records;
+    ``state`` says whether Carter keeps a guard state at all (``sudo`` is denied only then)."""
     have = set(accepted)
-    lines = [
-        f"! {group} off: {', '.join(ids)}"
-        for group, ids in GROUP_FLOORS.items()
-        if group not in have
-    ]
+    open_ids = {"g2": () if state else STATE_FLOORS}
+
+    def floors(group: str) -> str:
+        ids = {*GROUP_FLOORS[group], *open_ids.get(group, ())}
+        return ", ".join(i for i in FLOOR_IDS if i in ids)
+
+    lines = [f"! {group} off: {floors(group)}" for group in GROUP_FLOORS if group not in have]
     lines += [f"! {group} off: {note}" for group, note in OFF_NOTES.items() if group not in have]
     if not have & _COMMIT_HOOKS:
         lines.append("! hooks off: agent commits are not checked")

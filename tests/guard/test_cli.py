@@ -22,7 +22,7 @@ from carter.guard.alias import ALIAS_KEY
 from carter.guard.state import load
 from carter.home import tilde
 from carter.identity.errors import E_HUMAN_TERMINAL, E_POLICIES_MISSING, E_STATE_INVALID, registry
-from carter.identity.policyset import policy_statements
+from carter.identity.policyset import floor_statements, policy_statements
 from carter.install.mcp import config_target
 from carter.install.paths import backups_dir, carter_gitconfig_path, guard_state_path
 from guard.conftest import REAL_GIT
@@ -143,7 +143,8 @@ class TestDryRun:
     def test_only_limits_the_preview(self, stack) -> None:
         stack.fake()
         out = guard("install", "--dry-run", "--only", "docker").output
-        assert "would carry 1 guard rule(s)" in out and "deny-git-push" not in out  # docker
+        floor = len(floor_statements(home=str(stack.home)))  # sudo and its relatives, always
+        assert f"would carry {floor + 1} guard rule(s)" in out and "deny-git-push" not in out
         assert "per-agent" not in out
 
     def test_a_declined_group_stays_declined_in_the_preview(self, stack, human_tty) -> None:

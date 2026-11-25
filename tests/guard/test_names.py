@@ -16,7 +16,18 @@ GROUPS = ("g2", "hooks", "docker", "read-edit-denies", "config-edit", "alias", "
 
 # statement ids per group. gh allows are generated from the allowlist.
 IDS_BY_GROUP = {
-    "g2": ["deny-git-push", "deny-git-send-pack", "deny-gh", "deny-sudo"],
+    "g2": ["deny-git-push", "deny-git-send-pack", "deny-gh"],
+    # the floor: no consent group, rendered whenever Carter keeps a guard state
+    "floor": [
+        "deny-sudo",
+        "deny-sudoedit",
+        "deny-sudo-rs",
+        "deny-doas",
+        "deny-pkexec",
+        "deny-run0",
+        "deny-su-c",
+        "deny-machinectl-shell",
+    ],
     "docker": ["deny-docker"],
     "read-edit-denies": [
         "deny-read-ssh",

@@ -1,13 +1,15 @@
-"""``sudo-docker`` is two statements: ``sudo`` is in the floor (``g2``), ``docker`` is a group.
+"""``sudo-docker`` is two statements: ``sudo`` is the floor, ``docker`` is a group.
 
-An existing ``guard-state.json`` that records ``sudo-docker`` migrates without a new prompt and
-no rule is loosened: what was denied stays denied, and ``sudo`` is denied for everyone now.
+The floor denies (``sudo`` and its relatives) are rendered into every Carter agent whenever
+Carter keeps a guard state, whatever was consented. An existing ``guard-state.json`` that records
+``sudo-docker`` migrates without a new prompt and no rule is loosened.
 """
 
 from __future__ import annotations
 
 import json
 
+import pytest
 from click.testing import CliRunner
 
 from carter import access, hostcheck_g2
@@ -15,13 +17,19 @@ from carter.cli import main
 from carter.gate import check
 from carter.guard import agent_rules, consent
 from carter.guard.state import GuardState, load, save
-from carter.identity.policyset import consent_groups, policy_set, policy_statements
+from carter.identity.policyset import (
+    consent_groups,
+    floor_statements,
+    policy_set,
+    policy_statements,
+)
 from carter.install.paths import guard_state_path, isolation_path
 from guard.helpers import verbose
 
 HOME = "/home/u"
 OLD = "sudo-docker"
 SUDO, DOCKER = "shell:sudo *", "shell:docker *"
+FLOOR_VERBS = ("sudo", "sudoedit", "sudo-rs", "doas", "pkexec", "run0", "su -c", "machinectl shell")
 CONSENT_REVS = {"g2": 3, "hooks": 2, "read-edit-denies": 1, "config-edit": 2}
 
 
@@ -29,11 +37,13 @@ def guard(*args: str, input: str | None = None):  # type: ignore[no-untyped-def]
     return CliRunner().invoke(main, ["guard", *verbose(args)], input=input, catch_exceptions=False)
 
 
-def write_old_state(sudo_docker: str | None, **others: str) -> None:
-    """What an earlier Carter wrote: ``sudo-docker`` and the other groups, as the file reads."""
+def write_old_state(sudo_docker: str | None, **others: str | None) -> None:
+    """What an earlier Carter wrote: ``sudo-docker`` and the other groups, as the file reads.
+    A group set to ``None`` has no record."""
     consents = {
         name: {"decision": others.get(name, "accepted"), "date": "2026-11-03", "rev": rev}
         for name, rev in CONSENT_REVS.items()
+        if others.get(name, "accepted") is not None
     }
     if sudo_docker:
         consents[OLD] = {"decision": sudo_docker, "date": "2026-11-03", "rev": 1}
@@ -56,14 +66,14 @@ class TestTheData:
         ids = [g.id for g in consent_groups()]
         assert OLD not in ids and "docker" in ids and "sudo" not in ids
 
-    def test_sudo_is_denied_by_g2_and_docker_by_its_own_group(self) -> None:
+    def test_sudo_is_the_floor_and_docker_has_its_own_group(self) -> None:
         groups = {s.id: s.group for s in policy_set()}
-        assert groups["deny-sudo"] == "g2" and groups["deny-docker"] == "docker"
+        assert groups["deny-sudo"] == "floor" and groups["deny-docker"] == "docker"
 
-    def test_docker_alone_denies_only_docker_and_g2_denies_sudo(self) -> None:
-        only_docker = policy_statements(("docker",), home=HOME)
-        assert [s.resource for s in only_docker] == [DOCKER]
-        assert SUDO in {s.resource for s in policy_statements(("g2",), home=HOME)}
+    def test_docker_alone_denies_only_docker_and_no_group_carries_sudo(self) -> None:
+        assert [s.resource for s in policy_statements(("docker",), home=HOME)] == [DOCKER]
+        every = {s.resource for s in policy_statements(home=HOME)}
+        assert SUDO not in every and SUDO in {s.resource for s in floor_statements(home=HOME)}
 
     def test_the_gate_asks_each_verb_of_its_group(self) -> None:
         skip = ("docker",)  # a declined docker group
@@ -80,9 +90,11 @@ class TestTheData:
         both = "python3 -c \"os.system('docker ps; sudo ls')\""
         assert check(both, skip_groups=skip).rule == "other-verbs"  # sudo is still named
 
-    def test_sudo_is_a_floor_row_held_by_g2(self) -> None:
-        assert "sudo" in access.GROUP_FLOORS["g2"] and OLD not in access.GROUP_FLOORS
-        assert "! g2 off: " in "\n".join(access.missing_group_lines(["hooks"]))
+    def test_sudo_is_no_group_floor_and_g2_off_does_not_claim_it_is_open(self) -> None:
+        assert not any("sudo" in ids for ids in access.GROUP_FLOORS.values())
+        assert OLD not in access.GROUP_FLOORS
+        (line,) = access.missing_group_lines(["hooks", "read-edit-denies", "config-edit", "docker"])
+        assert line.startswith("! g2 off: ") and "sudo" not in line
 
 
 class TestTheMigration:
@@ -149,6 +161,37 @@ class TestNoRuleIsLoosened:
         got = resources(load(guard_state_path(None)))
         assert SUDO in got and DOCKER not in got  # docker waits for its own consent
 
+    @pytest.mark.parametrize("old", ["accepted", "declined", None])
+    @pytest.mark.parametrize("g2", ["accepted", "declined", None])
+    def test_sudo_is_denied_in_every_combination_of_the_old_and_the_new_state(
+        self, g2: str | None, old: str | None
+    ) -> None:
+        """No state may open ``sudo`` (the review's loosening case: g2 declined or never decided
+        with ``sudo-docker`` accepted used to deny it, and must still)."""
+        write_old_state(old, g2=g2)
+        got = resources(load(guard_state_path(None)))
+        assert {f"shell:{verb} *" for verb in FLOOR_VERBS} <= got, (g2, old)
+        assert (DOCKER in got) == (old == "accepted")  # docker follows the old record
+
+    def test_the_floor_rules_are_rendered_even_with_no_group_accepted(self) -> None:
+        got = resources(GuardState())  # a state that holds nothing yet
+        assert {f"shell:{verb} *" for verb in FLOOR_VERBS} <= got
+        assert "shell:git push *" not in got and DOCKER not in got
+
+    def test_an_unreadable_state_keeps_the_floor_too(self) -> None:
+        path = guard_state_path(None)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("{broken")
+        got = agent_rules.current_rules(home=HOME)
+        assert {f"shell:{verb} *" for verb in FLOOR_VERBS} <= {
+            f"{r['action']}:{r['resource']}" for r in got
+        }
+
+    def test_no_state_at_all_renders_nothing_and_access_says_sudo_is_open(self) -> None:
+        assert agent_rules.current_rules(home=HOME) == []
+        lines = access.missing_group_lines([], state=False)
+        assert lines[0] == "! g2 off: push, gh_api, github_admin, sudo, carter_internals"
+
 
 class TestTheCommands:
     def test_install_does_not_ask_again_and_writes_the_new_name(self, stack, human_tty) -> None:
@@ -202,5 +245,5 @@ class TestTheCommands:
 
     def test_access_says_when_docker_is_off(self) -> None:
         lines = access.missing_group_lines(["g2", "hooks", "read-edit-denies", "config-edit"])
-        assert lines == ("! docker off: agents may run docker",)
+        assert lines == ("! docker off: agents may run docker (root-equivalent)",)
         assert all(len(line) <= 60 for line in lines)

@@ -23,6 +23,7 @@ from typing import Any
 
 HOME_PLACEHOLDER = "<home>"
 GH_GROUP = "g2"
+FLOOR_GROUP = "floor"  # statements of ``policy_set`` that belong to no consent group
 SHORT_MAX = 50  # one row of the install question: 4 + 16 (id) + 2 + 50 = 72 columns
 
 
@@ -91,6 +92,17 @@ def _check_home(home: str) -> str:
     if "*" in home or "?" in home:
         raise ValueError("home contains a glob character (* or ?); it would widen a deny")
     return home.rstrip("/") or "/"
+
+
+def floor_statements(*, home: str) -> tuple[Statement, ...]:
+    """The denies no consent decides (``sudo`` and its relatives): rendered whenever Carter
+    keeps a guard state. They are not a consent group, so ``policy_statements`` leaves them out."""
+    root = _check_home(home)
+    return tuple(
+        replace(s, resource=s.resource.replace(HOME_PLACEHOLDER, root))
+        for s in policy_set()
+        if s.group == FLOOR_GROUP
+    )
 
 
 def policy_statements(groups: Iterable[str] | None = None, *, home: str) -> tuple[Statement, ...]:

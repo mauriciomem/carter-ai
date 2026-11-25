@@ -19,7 +19,7 @@ from carter import ui
 from carter.guard import consent, optout
 from carter.guard.state import GuardState, load_or_empty_readonly
 from carter.identity import ConfigError, load_identity
-from carter.identity.policyset import Statement, policy_statements
+from carter.identity.policyset import Statement, floor_statements, policy_statements
 from carter.install.paths import carter_config_path, guard_state_path
 
 Rule = dict[str, str]
@@ -42,7 +42,7 @@ _told: set[str] = set()  # state files already reported by this process
 
 def _all_denies(home: str) -> list[Rule]:
     """Every group's rules and no opt-out: what an unreadable state falls back to."""
-    return [to_rule(s) for s in policy_statements(home=home)]
+    return [to_rule(s) for s in (*floor_statements(home=home), *policy_statements(home=home))]
 
 
 def current_rules(base_dir: Path | None = None, *, home: str | None = None) -> list[Rule]:

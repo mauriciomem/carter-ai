@@ -150,7 +150,10 @@ class TestThePerGroupQuestion:
         res = guard("install", input=answers(*OFFERED))
         assert res.exit_code == 0 and "nothing installed" in res.output
         assert set(decisions().values()) == {"declined"} and set(decisions()) == set(OFFERED)
-        assert agent_rules.current_rules() == [] and not isolation_path(None).exists()
+        rules = agent_rules.current_rules()
+        assert {r["resource"] for r in rules} >= {"sudo *"}  # the floor stays
+        assert not [r for r in rules if r["resource"] in ("git push *", "docker *")]
+        assert not isolation_path(None).exists()
 
     def test_leaving_midway_records_nothing(self, stack, human_tty) -> None:
         human_tty(True)

@@ -20,7 +20,7 @@ from carter.identity.policyset import (
 from carter.identity.rules import forbidden_classes, load_rules
 
 HOME = "/home/fixture"
-FROZEN_GROUPS = {"g2", "docker", "read-edit-denies", "config-edit"}
+FROZEN_GROUPS = {"g2", "docker", "read-edit-denies", "config-edit", "floor"}
 
 
 def raw() -> dict:
@@ -48,7 +48,7 @@ def decide(statements: list[Statement], action: str, value: str) -> str:
 
 @pytest.fixture
 def statements() -> list[Statement]:
-    return list(policy_statements(home=HOME))
+    return [*policyset.floor_statements(home=HOME), *policy_statements(home=HOME)]
 
 
 class TestOldLoaderContract:
@@ -78,8 +78,8 @@ class TestStatementShape:
     def test_groups_are_in_the_frozen_set(self) -> None:
         assert {e["group"] for e in raw()["policy_set"]} == FROZEN_GROUPS
 
-    def test_every_statement_belongs_to_a_known_group(self) -> None:
-        known = {g.id for g in policyset.consent_groups()}
+    def test_every_statement_belongs_to_a_known_group_or_the_floor(self) -> None:
+        known = {g.id for g in policyset.consent_groups()} | {policyset.FLOOR_GROUP}
         assert {s.group for s in policy_set()} <= known
 
     def test_data_holds_only_tool_use_denies(self) -> None:
@@ -90,15 +90,22 @@ class TestStatementShape:
         for st in policy_set():
             assert re.match(r"^(shell|read|edit):\S", st.resource), st.id
 
-    def test_docker_holds_only_docker_podman_denies_and_sudo_is_in_g2(self) -> None:
+    def test_docker_holds_only_docker_podman_denies_and_sudo_is_the_floor(self) -> None:
         group = [s for s in policy_set() if s.group == "docker"]
         assert {s.effect for s in group} == {"deny"}
         assert {s.resource.split()[0] for s in group} <= {"shell:docker", "shell:podman"}
-        assert {s.id for s in policy_set() if s.resource.startswith("shell:sudo")} == {"deny-sudo"}
-        assert next(s.group for s in policy_set() if s.id == "deny-sudo") == "g2"
+        floor = {s.id for s in policyset.floor_statements(home=HOME)}
+        assert {"deny-sudo", "deny-doas", "deny-pkexec", "deny-sudoedit", "deny-sudo-rs"} <= floor
+        assert {"deny-run0", "deny-su-c", "deny-machinectl-shell"} <= floor
+
+    def test_the_floor_is_in_no_consent_group_and_no_group_filter_drops_it(self) -> None:
+        groups = {g.id for g in policyset.consent_groups()}
+        floor = {s.id for s in policyset.floor_statements(home=HOME)}
+        assert floor and not floor & {s.id for s in policy_statements(home=HOME)}
+        assert all(s.group not in groups for s in policyset.floor_statements(home=HOME))
 
     def test_the_consent_group_map_is_total(self) -> None:
-        groups = {g.id for g in policyset.consent_groups()}
+        groups = {g.id for g in policyset.consent_groups()} | {policyset.FLOOR_GROUP}
         assert all(s.group in groups for s in policy_set())
         # ... and each group with policy content has at least one statement; the other groups
         # install files and git keys, not statements
@@ -127,8 +134,11 @@ class TestPushVerbsAreDenied:
                 assert not [a for a in allows if glob(a.resource, f"shell:{lit}")], lit
 
     def test_sudo_and_docker_are_denied(self, statements) -> None:
-        for cmd in ("sudo rm -rf /", "docker run x", "docker"):
+        for cmd in ("sudo rm -rf /", "docker run x", "docker", "doas sh", "pkexec id", "su -c id"):
             assert decide(statements, "shell", cmd) == "deny", cmd
+        for cmd in ("sudoedit /etc/x", "sudo-rs ls", "run0 id", "machinectl shell root@"):
+            assert decide(statements, "shell", cmd) == "deny", cmd
+        assert decide(statements, "shell", "su other") == "allow"  # only `su -c` is a rule
 
 
 class TestGhAllowlist:

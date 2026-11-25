@@ -44,6 +44,11 @@ def accepted_groups(base_dir: Path | None = None) -> list[str]:
     return consent.accepted_groups(read.state) if read.status == "ok" else []
 
 
+def guard_state_present(base_dir: Path | None = None) -> bool:
+    """True when Carter keeps a guard state (even a broken one): the floor denies are rendered."""
+    return load_or_empty_readonly(guard_state_path(base_dir)).status != "absent"
+
+
 def project_config_open(workspace: Path, accepted: list[str], base_dir: Path | None = None) -> bool:
     """True when ``config.toml`` opts this workspace out of the project-config edit deny.
 

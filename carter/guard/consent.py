@@ -28,7 +28,13 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 
 from carter.guard.state import GuardState
-from carter.identity.policyset import ConsentGroup, Statement, consent_groups, policy_statements
+from carter.identity.policyset import (
+    ConsentGroup,
+    Statement,
+    consent_groups,
+    floor_statements,
+    policy_statements,
+)
 from carter.ui import short_list as ui_list
 
 CONFIG_EDIT = "config-edit"
@@ -252,9 +258,10 @@ def desired_statements(
     state: GuardState, *, home: str, optouts: Sequence[Statement] = ()
 ) -> list[Statement]:
     """Statements for the accepted groups: denies, gh allows, then the opt-out allows
-    (only while ``config-edit`` is accepted, since they lift that group's denies)."""
+    (only while ``config-edit`` is accepted, since they lift that group's denies). The floor
+    denies (``sudo`` and its relatives) come first whatever was accepted."""
     accepted = accepted_groups(state)
-    out = list(policy_statements(accepted, home=home))
+    out = [*floor_statements(home=home), *policy_statements(accepted, home=home)]
     if CONFIG_EDIT in accepted:
         out += list(optouts)
     return out

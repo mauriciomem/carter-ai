@@ -106,13 +106,17 @@ Without a terminal (a script, CI) and without `--yes`, the guards are skipped wi
 
 | Group | What it does |
 |-------|--------------|
-| `g2` | Carter agents can't push from their shell or run `sudo` (`doas`, `pkexec`; always refused, nothing to decline separately), and `gh` can read and open, edit or comment on pull requests, nothing else. It also installs the Carter **plugin** (below), and `carter_push` for the devops agent ([Write operations](write-operations.md#letting-devops-ask-you-to-push)). |
+| `g2` | Carter agents can't push from their shell, and `gh` can read and open, edit or comment on pull requests, nothing else. It also installs the Carter **plugin** (below), and `carter_push` for the devops agent ([Write operations](write-operations.md#letting-devops-ask-you-to-push)). |
 | `hooks` | Git hooks (`pre-push`, `prepare-commit-msg`, `commit-msg`, `post-commit`) that call `~/.carter/hooks/carter-guard`: pushes from Carter agent shells are blocked, and agent commits are checked (committer, signing settings, `Co-authored-by`/`Assisted-by` trailer). Your own commits and pushes are unaffected and run no extra command. Needs git 2.54 or newer. |
 | `repo_hooks` | Git older than 2.54 only: the same hooks as files in your repositories. A hook or `core.hooksPath` that you or your tools own (husky, pre-commit) is never edited: Carter reports the repository as unguarded and prints a line to chain. |
-| `docker` | Agents can't run `docker` or `podman`. Packer docker builds must be typed in your terminal. Decline it to let agents use docker (a docker user can reach root: your call). |
+| `docker` | Agents can't run `docker` or `podman` (and `nerdctl`, `docker-compose`, `buildah`). Packer docker builds must be typed in your terminal. Decline it to let agents use docker (a docker user can reach root: your call). |
 | `read-edit-denies` | Agents can't read SSH keys, `gh`/git credentials or the GitHub token, and can't edit `~/.ssh`. |
 | `config-edit` | Agents can't edit OpenCode config, git hooks and config, or Carter's own config and control files (`config-managed.toml` too). |
 | `alias` | **Optional.** Adds the git alias `git ai-commit` (`carter commit`), unless you already have an `alias.ai-commit`. Never part of the one question or of `--yes`: use `carter guard install --only alias`. |
+
+`sudo` is not a group: `sudo`, `sudoedit`, `sudo-rs`, `doas`, `pkexec`, `run0`, `su -c` and
+`machinectl shell` are refused for Carter agents whatever you consent to, as long as Carter keeps
+a guard state (`~/.carter/guard-state.json`). The command gate adds the same refusal when `g2` is on.
 
 To decline one group, answer **n** to `Install? [Y/n]`: Carter then asks `<group> [Y/n]` for each
 row. Every n is recorded as declined in `~/.carter/guard-state.json`. (Ctrl-C leaves without

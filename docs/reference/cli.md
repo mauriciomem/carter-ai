@@ -627,10 +627,12 @@ The header names the level and where it comes from: `(default)` when `[access]` 
 A `!` line under the header is a fact to act on. It goes to stderr:
 
 - A consent group is not installed (`off`), so the floor rows it lists are not denied, for example
-  `! g2 off: push, gh_api, github_admin, sudo, carter_internals`. The groups are `g2`,
-  `read-edit-denies`, `docker` (`! docker off: agents may run docker`: no row, but agents can reach
-  root through it), `hooks` and `config-edit`. A group you declined shows the same way. Run
-  `carter guard install`, or `carter guard install --only <group>` for a declined one.
+  `! g2 off: push, gh_api, github_admin, carter_internals`. The groups are `g2`,
+  `read-edit-denies`, `docker` (`! docker off: agents may run docker (root-equivalent)`: no row, but
+  agents can reach root through it), `hooks` and `config-edit`. A group you declined shows the same
+  way. Run `carter guard install`, or `carter guard install --only <group>` for a declined one.
+  `sudo` is listed in the `g2` line only when Carter keeps no guard state at all: with one, its
+  denies are always rendered, whatever you consented to.
 - The error of an invalid `[access]`, or a workspace value that cannot loosen.
 
 `carter check` prints the invalid-`[access]` and workspace lines too, but only one line for the

@@ -34,12 +34,13 @@ def groups_of(statements) -> set[str]:
 class TestStatementsFollowConsent:
     def test_only_consented_groups_are_emitted(self) -> None:
         got = consent.desired_statements(accepted("docker"), home=HOME)
-        assert groups_of(got) == {"docker"}
-        assert [s.id for s in got] == ["deny-docker"]
+        assert groups_of(got) == {"docker", "floor"}  # the floor is nobody's to accept
+        assert [s.id for s in got if s.group != "floor"] == ["deny-docker"]
 
     def test_all_live_groups_give_denies_then_allows(self) -> None:
         got = consent.desired_statements(accepted(*LIVE), home=HOME)
-        assert groups_of(got) == set(LIVE) - {"hooks", "repo_hooks", "alias"}  # files and git keys
+        # files and git keys have no statements; the floor comes with every state
+        assert groups_of(got) == set(LIVE) - {"hooks", "repo_hooks", "alias"} | {"floor"}
         effects = [s.effect for s in got]
         assert effects == sorted(effects, key=lambda e: e == "allow")
 
@@ -65,8 +66,9 @@ class TestStatementsFollowConsent:
             s for s in consent.desired_statements(accepted("g2"), home=HOME) if s.effect == "allow"
         ]
 
-    def test_no_consent_no_statements(self) -> None:
-        assert consent.desired_statements(GuardState(), home=HOME) == []
+    def test_no_consent_means_only_the_floor(self) -> None:
+        got = consent.desired_statements(GuardState(), home=HOME)
+        assert got and groups_of(got) == {"floor"}
 
     def test_a_reserved_group_in_state_adds_nothing(self) -> None:
         st = accepted("g2")

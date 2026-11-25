@@ -1,5 +1,5 @@
 Access level: guarded  (~/.carter/config.toml)
-! g2 off: push, gh_api, github_admin, sudo, carter_internals
+! g2 off: push, gh_api, github_admin, carter_internals
     Workspace edits   [workspace_edit]    allowed  preset
     Run commands      [run_commands]      allowed  preset
     Git commit        [git_commit]        allowed  preset
