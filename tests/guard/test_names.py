@@ -146,7 +146,7 @@ STATE_TOP_LEVEL = [
 
 def test_guard_state_top_level_keys() -> None:
     assert list(state.GuardState().to_dict()) == STATE_TOP_LEVEL
-    assert state.SCHEMA == 1
+    assert state.SCHEMA == 2
 
 
 def test_guard_state_entry_shapes() -> None:

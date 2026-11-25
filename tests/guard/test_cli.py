@@ -385,11 +385,11 @@ class TestStateGuards:
     def test_a_newer_schema_is_refused_and_never_rewritten(self, stack) -> None:
         path = guard_state_path(None)
         path.parent.mkdir(parents=True)
-        path.write_text('{"schema": 2}')
+        path.write_text('{"schema": 3}')
         stack.fake()
         res = guard("install", "--yes")
         assert res.exit_code == 1 and E_STATE_INVALID in res.output
-        assert path.read_text() == '{"schema": 2}' and not config_target(None).exists()
+        assert path.read_text() == '{"schema": 3}' and not config_target(None).exists()
 
 
 class TestGitStepAtomicity:
@@ -533,7 +533,7 @@ class TestStatus:
     def test_a_newer_schema_is_reported(self, stack) -> None:
         path = guard_state_path(None)
         path.parent.mkdir(parents=True)
-        path.write_text('{"schema": 2}')
+        path.write_text('{"schema": 3}')
         assert "NEWER" in guard("status").output
 
     def test_file_drift_is_shown(self, stack, home: Path) -> None:

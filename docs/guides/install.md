@@ -118,6 +118,9 @@ Without a terminal (a script, CI) and without `--yes`, the guards are skipped wi
 `machinectl shell` are refused for Carter agents whatever you consent to, as long as Carter keeps
 a guard state (`~/.carter/guard-state.json`). The command gate adds the same refusal when `g2` is on.
 
+`guard-state.json` is schema 2 from this version on. An older Carter calls it "newer", keeps every
+deny and refuses `guard install` and `guard remove` until you upgrade it again.
+
 To decline one group, answer **n** to `Install? [Y/n]`: Carter then asks `<group> [Y/n]` for each
 row. Every n is recorded as declined in `~/.carter/guard-state.json`. (Ctrl-C leaves without
 recording anything.) `carter guard remove --only <group>` records the same decision.

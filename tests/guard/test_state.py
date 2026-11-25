@@ -59,7 +59,7 @@ class TestShapeIsFrozen:
     def test_an_empty_state_has_every_key_with_the_1g_defaults(self, path: Path) -> None:
         data = GuardState().to_dict()
         assert tuple(data) == gs.STATE_KEYS
-        assert data["schema"] == 1
+        assert data["schema"] == 2
         assert data["consents"] == {} and data["files"] == [] and data["git_config"] == []
         assert data["gitconfig"] is None and data["guard_version"] is None
         assert data["opencode_config"] is None and data["repo_hooks"] == []
@@ -92,7 +92,7 @@ class TestRoundTrip:
     def test_output_is_pretty_json_with_trailing_newline(self, path: Path) -> None:
         gs.save(full_state(), path)
         text = path.read_text()
-        assert text.endswith("}\n") and text.startswith('{\n  "schema": 1')
+        assert text.endswith("}\n") and text.startswith('{\n  "schema": 2')
 
     def test_saving_an_equal_state_writes_nothing(self, path: Path) -> None:
         gs.save(full_state(), path)
@@ -328,7 +328,7 @@ class TestCorruption:
             "[]",
             "{}",  # no schema
             '{"schema": "1"}',
-            '{"schema": 2}',  # from the future
+            '{"schema": 3}',  # from the future
             '{"schema": 1, "consents": []}',
             '{"schema": 1, "opencode_policies": {"a": 1}}',
             '{"schema": 1, "opencode_policies": ["x"]}',
@@ -347,10 +347,10 @@ class TestCorruption:
         self, path: Path
     ) -> None:
         path.parent.mkdir(parents=True)
-        path.write_text('{"schema": 2}')
+        path.write_text('{"schema": 3}')
         with pytest.raises(IdentityError):
             gs.load(path)
-        assert path.read_text() == '{"schema": 2}'
+        assert path.read_text() == '{"schema": 3}'
 
     def test_error_detail_names_the_key_not_the_value(self, path: Path) -> None:
         path.parent.mkdir(parents=True)
@@ -373,7 +373,7 @@ class TestCorruption:
         gs.save(full_state(), path)
         ok = gs.load_or_empty_readonly(path)
         assert ok.status == "ok" and ok.state == full_state()
-        path.write_text('{"schema": 2}')
+        path.write_text('{"schema": 3}')
         assert gs.load_or_empty_readonly(path).status == "newer"
 
     def test_quarantine_moves_a_corrupt_file_aside_with_a_timestamp(self, path: Path) -> None:

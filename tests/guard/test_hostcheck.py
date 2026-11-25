@@ -201,7 +201,7 @@ class TestRedItems:
         path.write_text("{broken")
         res = host()
         assert res.exit_code == 1 and E_STATE_INVALID in res.output and "corrupt" in res.output
-        path.write_text('{"schema": 2}')
+        path.write_text('{"schema": 3}')
         res = host()
         assert res.exit_code == 1 and "newer" in res.output
 

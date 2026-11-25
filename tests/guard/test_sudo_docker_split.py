@@ -109,14 +109,33 @@ class TestTheMigration:
         state = load(guard_state_path(None))
         assert OLD not in state.consents and state.consents["docker"]["decision"] == "declined"
 
-    def test_a_docker_record_already_there_wins(self) -> None:
+    @pytest.mark.parametrize(
+        ("old", "new", "wanted"),
+        [
+            ("declined", "accepted", "accepted"),  # an older Carter declined, the new one accepted
+            ("accepted", "declined", "accepted"),  # the order of the writes does not matter
+            ("accepted", "accepted", "accepted"),
+            ("declined", "declined", "declined"),
+        ],
+    )
+    def test_when_both_names_are_recorded_an_accepted_one_wins(
+        self, old: str, new: str, wanted: str
+    ) -> None:
+        write_old_state(old)
+        path = guard_state_path(None)
+        data = json.loads(path.read_text())
+        data["consents"]["docker"] = {"decision": new, "date": "2026-11-20", "rev": 1}
+        path.write_text(json.dumps(data))
+        state = load(path)
+        assert OLD not in state.consents and state.consents["docker"]["decision"] == wanted
+
+    def test_the_record_under_the_new_name_keeps_its_date_when_nothing_is_accepted(self) -> None:
         write_old_state("declined")
         path = guard_state_path(None)
         data = json.loads(path.read_text())
-        data["consents"]["docker"] = {"decision": "accepted", "date": "2026-11-20", "rev": 1}
+        data["consents"]["docker"] = {"decision": "declined", "date": "2026-11-20", "rev": 1}
         path.write_text(json.dumps(data))
-        state = load(path)
-        assert OLD not in state.consents and state.consents["docker"]["decision"] == "accepted"
+        assert load(path).consents["docker"]["date"] == "2026-11-20"
 
     def test_nothing_recorded_stays_nothing_recorded(self) -> None:
         write_old_state(None)
@@ -130,6 +149,23 @@ class TestTheMigration:
         save(state, path)
         assert OLD not in json.loads(path.read_text())["consents"]
         assert "docker" in json.loads(path.read_text())["consents"]
+
+    def test_a_schema_1_file_is_read_and_the_next_save_writes_schema_2(self) -> None:
+        """An older Carter then calls the file "newer" and keeps every deny (it would otherwise
+        read it as "no sudo-docker consent" and render neither deny)."""
+        write_old_state("accepted")
+        path = guard_state_path(None)
+        assert json.loads(path.read_text())["schema"] == 1
+        state = load(path)
+        assert state.schema == 2
+        state.consent("hooks", "accepted", "2026-11-25", 2)
+        save(state, path)
+        assert json.loads(path.read_text())["schema"] == 2
+
+    def test_a_reader_that_knows_only_schema_1_refuses_the_new_file(self) -> None:
+        """The older Carter's own rule, applied to the number we write: newer means refused."""
+        state = GuardState()
+        assert state.schema > 1  # what an older ``load`` compares against its SCHEMA (1)
 
     def test_the_migrated_record_is_not_stale_so_nobody_is_asked(self) -> None:
         write_old_state("accepted")

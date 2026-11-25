@@ -23,7 +23,8 @@ from carter.identity.errors import E_STATE_INVALID, IdentityError
 from carter.install.atomic import atomic_write_bytes
 from carter.install.ownership import sha256_bytes
 
-SCHEMA = 1
+# 2: ``sudo-docker`` is stored as ``docker``; an older Carter sees "newer" and keeps every deny.
+SCHEMA = 2
 STATE_KEYS = (
     "schema", "consents", "files", "gitconfig", "git_config", "opencode_config",
     "opencode_policies", "agent_permissions", "repo_hooks", "guard_version",
@@ -36,8 +37,7 @@ GITCONFIG_FIELDS = ("file", "key", "value")
 GIT_CONFIG_FIELDS = ("file", "key", "value", "scope")
 REPO_HOOK_FIELDS = ("path", "sha256")
 INCLUDE_KEY = "include.path"
-# A group that was split: its consent record moves to the new name when the file is read.
-# `sudo-docker` became `docker`; its `sudo` half is part of `g2` (the floor), so it needs no record.
+# Split groups: the record moves to the new name on read (`sudo` became the floor: no record).
 LEGACY_GROUPS = {"sudo-docker": "docker"}
 _LISTS = ("files", "git_config", "opencode_policies", "agent_permissions", "repo_hooks")
 
@@ -164,14 +164,13 @@ class GuardState:
 
 
 def _migrated(consents: dict[str, dict[str, Any]]) -> dict[str, dict[str, Any]]:
-    """Move the record of a group that was split to its new name (read-time, in memory; the
-    next ``save`` writes the new name). Same decision, date and revision: nobody is asked again.
-    A record already under the new name wins."""
+    """Move a split group's record to its new name (in memory; the next save writes it). Nobody
+    is asked again. With both names recorded, an ``accepted`` one wins (the stricter reading)."""
     out = dict(consents)
     for old, new in LEGACY_GROUPS.items():
-        if old in out:
-            record = out.pop(old)
-            out.setdefault(new, record)
+        record = out.pop(old, None)
+        if record and (new not in out or record.get("decision") == "accepted"):
+            out[new] = record
     return out
 
 
@@ -204,6 +203,7 @@ def _parse(data: object) -> GuardState:
         raise _invalid(f"wrong type: {', '.join(bad)}")
     known = {k: data[k] for k in STATE_KEYS if k in data}
     known["consents"] = _migrated(known.get("consents", {}))
+    known["schema"] = SCHEMA  # schema 1 is read as is; the next save writes 2
     return GuardState(**known, extra={k: v for k, v in data.items() if k not in STATE_KEYS})
 
 
