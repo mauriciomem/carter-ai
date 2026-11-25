@@ -23,7 +23,7 @@ from carter.install.paths import (
     isolation_path,
     plugin_dir,
 )
-from guard.helpers import debug_config, verbose
+from guard.helpers import NO_TO_ALL, debug_config, verbose
 
 PENDING = "has new content"
 
@@ -36,11 +36,11 @@ def rev2(stack) -> None:
     """An install at revision 2: g2 with the plugin written, B off."""
     stack.fake()
     state = GuardState()
-    for g in ("g2", "sudo-docker", "read-edit-denies", "config-edit"):
+    for g in ("g2", "docker", "read-edit-denies", "config-edit"):
         state.consent(g, "accepted", "2026-11-01", 2 if g == "g2" else 1)
     save(state, guard_state_path(None))
     stack.fake()
-    assert guard("install", "--yes", "--only", "sudo-docker").exit_code == 0
+    assert guard("install", "--yes", "--only", "docker").exit_code == 0
     plugin.install(None, load(guard_state_path(None)), lambda _t: None, allow_temp=True)
     save_state = load(guard_state_path(None))
     save(save_state, guard_state_path(None))
@@ -142,7 +142,7 @@ class TestConfirming:
         rev2(stack)
         human_tty(True)
         stack.fake(before=debug_config(stack.live), after=debug_config(stack.live))
-        res = guard("install", input="n\n")
+        res = guard("install", input=NO_TO_ALL)
         assert res.exit_code == 0
         state = load(guard_state_path(None))
         assert state.consents["g2"]["rev"] == 2
@@ -177,6 +177,7 @@ class TestUndo:
         self, stack, human_tty
     ) -> None:
         self.confirmed(stack, human_tty)
+        human_tty(True)  # `confirmed` leaves no terminal; a scoped remove asks for one
         stack.fake(before=debug_config(stack.live), after=debug_config(stack.live))
         res = guard("remove", "--yes", "--only", "broker")
         assert res.exit_code == 0, res.output
@@ -189,6 +190,7 @@ class TestUndo:
 
     def test_a_bare_yes_does_not_bring_b_back(self, stack, human_tty) -> None:
         self.confirmed(stack, human_tty)
+        human_tty(True)  # `confirmed` leaves no terminal; a scoped remove asks for one
         stack.fake(before=debug_config(stack.live), after=debug_config(stack.live))
         guard("remove", "--yes", "--only", "broker")
         stack.fake(before=debug_config(stack.live), after=debug_config(stack.live))
@@ -197,6 +199,7 @@ class TestUndo:
 
     def test_remove_only_plugin_takes_the_profile_and_broker_ts_too(self, stack, human_tty) -> None:
         self.confirmed(stack, human_tty)
+        human_tty(True)  # `confirmed` leaves no terminal; a scoped remove asks for one
         stack.fake(before=debug_config(stack.live), after=debug_config(stack.live))
         assert guard("remove", "--yes", "--only", "plugin").exit_code == 0
         assert (
@@ -216,6 +219,7 @@ class TestUndo:
 
     def test_an_edited_profile_is_kept_and_reported(self, stack, human_tty) -> None:
         self.confirmed(stack, human_tty)
+        human_tty(True)  # `confirmed` leaves no terminal; a scoped remove asks for one
         headless_profile_path(None).write_text("{}\n")
         stack.fake(before=debug_config(stack.live), after=debug_config(stack.live))
         res = guard("remove", "--yes", "--only", "broker")

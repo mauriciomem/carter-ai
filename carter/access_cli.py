@@ -125,5 +125,5 @@ def access_cmd() -> None:
     show(
         resolved,
         opt_out=accessload.project_config_open(root, accepted),
-        lines=missing_group_lines(accepted),
+        lines=missing_group_lines(accepted, state=accessload.guard_state_present()),
     )

@@ -19,6 +19,7 @@ module is testable and click-free.
 
 from __future__ import annotations
 
+import contextlib
 import copy
 from collections.abc import Callable, Sequence
 from datetime import UTC, datetime
@@ -400,6 +401,8 @@ def _needed_groups(state: GuardState, unavailable: dict[str, str]) -> list[str]:
     try:
         t2 = configured_tier(load_identity(default_path())) == "t2"
     except ConfigError:
+        if consent.declined_commit_guards(state, unavailable):
+            ui.warn("config.toml invalid: hooks not re-asked (see: carter check)")
         return []
     return consent.declined_commit_guards(state, unavailable) if t2 else []
 
@@ -428,20 +431,26 @@ def _show_offer(offer: Sequence[str], state: GuardState, again: Sequence[str]) -
     ui.rows(_offer_rows(offer, state))
 
 
-def _remember_refusals(
-    state: GuardState, offer: Sequence[str], only: Sequence[str] | None, base_dir: Path | None
-) -> None:
-    """A no to a revision upgrade keeps the old consent and is not asked again."""
-    stale = [
-        g
-        for g in offer
-        if state.consents.get(g, {}).get("decision") == "accepted"
-        and not (only is not None and g in only)
-    ]
-    if stale:
-        path = guard_state_path(base_dir)
-        consent.record(state, consent.ConsentPlan(refused_offers=stale))
-        save(state, path)
+def _ask_each(
+    offer: Sequence[str], state: GuardState, only: Sequence[str] | None, confirm: Confirm
+) -> consent.ConsentPlan:
+    """A no to the one question: one short prompt per group (a lone group is answered already).
+    A no is a decision: the group stays declined, a revision upgrade keeps its old consent."""
+    if len(offer) == 1:
+        return consent.decide_each(state, {offer[0]: False}, only=only)
+    ui.info("· per group: a no stays declined (see: carter guard --help)")
+    return consent.decide_each(
+        state, {n: confirm(f"  {n}", default=True) for n in offer}, only=only
+    )
+
+
+def _say_decisions(plan: consent.ConsentPlan, echo: Echo) -> None:
+    groups = {g.id: g for g in consent_groups()}
+    for name in (n for n in plan.declined if n in plan.asked):  # only what was decided just now
+        kind = " (optional)" if groups[name].optional else ""
+        echo(f"Declined: {name}{kind} (see: carter guard --help)")
+    for name in plan.refused_offers:
+        echo(f"Not confirmed: {name} (old denies stay)")
 
 
 def install(
@@ -465,27 +474,42 @@ def install(
         return _dry_run(base_dir, state, only, home, echo, today, *_availability(echo))
 
     mode, unavailable = _availability(echo)
+    plan: consent.ConsentPlan | None = None
     if interactive and not assume_yes:
         again = _needed_groups(state, unavailable)
         offer = consent.to_offer(state, only=only, unavailable=unavailable, reoffer=again)
         again = [g for g in again if g in offer and g not in (only or [])]
         if offer:
-            groups_by_id = {g.id: g for g in consent_groups()}
             for name in offer:
-                if groups_by_id[name].rev > 1:  # what a revision adds, in full, with -v
-                    for line in groups_by_id[name].explain:
+                if groups[name].rev > 1:  # what a revision adds, in full, with -v
+                    for line in groups[name].explain:
                         echo(line)
             _show_offer(offer, state, again)
-            if not confirm("Install?", default=True):
-                _remember_refusals(state, offer, only, base_dir)
-                ui.info("· nothing installed")
-                return 0
-            # the one yes is the consent for every group it listed, revisions included
-            assume_yes = True
-            only = [*offer, *(g for g in (only or []) if g not in offer)]
-    plan = consent.resolve_consents(
-        state, only=only, assume_yes=assume_yes, interactive=interactive, unavailable=unavailable
-    )
+            if confirm("Install?", default=True):
+                # the one yes is the consent for every group it listed, revisions included
+                assume_yes = True
+                only = [*offer, *(g for g in (only or []) if g not in offer)]
+            else:
+                plan = _ask_each(offer, state, only, confirm)
+                changed = bool(plan.asked or plan.refused_offers)
+                if not plan.accepted and not (changed and consent.accepted_groups(state)):
+                    # nothing accepted, and either nothing installed to bring in line or
+                    # nothing decided: keep the decisions, stop
+                    consent.record(state, plan, today=today)
+                    _say_decisions(plan, echo)
+                    if changed:
+                        save(state, guard_state_path(base_dir))
+                        _rerender(base_dir, echo)  # the state exists now: the floor denies apply
+                    ui.info("· nothing installed")
+                    return 0
+    if plan is None:
+        plan = consent.resolve_consents(
+            state,
+            only=only,
+            assume_yes=assume_yes,
+            interactive=interactive,
+            unavailable=unavailable,
+        )
     for note in plan.notices():
         echo(note)
     if plan.skipped:
@@ -496,11 +520,7 @@ def install(
                 for line in groups[name].explain:
                     echo(line)
     consent.record(state, plan, today=today)
-    for name in plan.declined:
-        kind = " (optional)" if groups[name].optional else ""
-        echo(f"Declined: {name}{kind} (see: carter guard install --help)")
-    for name in plan.refused_offers:
-        echo(f"Not confirmed: {name} (old denies stay)")
+    _say_decisions(plan, echo)
     if consent.plugin_wanted(state):
         plugin.plan(base_dir, state)  # preflight: E-FALSE-MISSING, bad paths... before any write
     optouts = _active_optouts(state, echo=echo)
@@ -676,6 +696,68 @@ def _known_extra_files(
         state.forget_file(path)
 
 
+def _remove_scoped(
+    base_dir: Path | None, path: Path, state: GuardState, only: list[str], dry_run: bool,
+    echo: Echo, reader: configwrite.Reader | None, root: Path,
+) -> int:  # fmt: skip
+    """``remove --only``: each group is recorded as declined, its rules and files go, and
+    ``isolation.json`` follows in the same run. Like ``install``, a failure puts the OpenCode
+    config and the state file back (and re-renders the plugin files from the old state)."""
+    target = copy.deepcopy(state) if dry_run else state
+    before = copy.deepcopy(state)
+    previous = path.read_bytes()
+    res: policies.ApplyResult | None = None
+    names = [n for n in only if n not in (consent.PLUGIN, consent.BROKER)]
+    try:
+        day = datetime.now(UTC).date().isoformat()
+        revs = {g.id: g.rev for g in consent_groups()}
+        for name in names:  # declined, not forgotten: no later install offers it again
+            target.consent(name, "declined", day, revs[name])
+            target.clear_offer(name)
+        if names:
+            agents = builtin_agents() if "g2" in consent.accepted_groups(target) else []
+            res = policies.apply(
+                base_dir, target, [], agents=agents, backup_root=root, dry_run=dry_run,
+                reader=reader,
+            )  # fmt: skip
+            echo(f"OpenCode config: {tilde(res.target or '')}")
+            _show_diff(res, echo)
+        hook_groups = [g for g in only if g in ("hooks", "repo_hooks", "alias")]
+        if hook_groups and dry_run:
+            echo(f"  (the git keys of {ui.short_list(hook_groups)} would go too)")
+        elif hook_groups:
+            # what stays accepted keeps its keys: only the withdrawn group's entries go
+            mode, _ = _availability(echo)
+            _git_step(base_dir, target, echo, dry_run=False, mode=mode)
+            if "repo_hooks" in hook_groups:
+                _remove_repo_hooks(target, echo)
+            if not {"hooks", "repo_hooks"} & set(consent.accepted_groups(target)):
+                _remove_script(base_dir, target, echo)
+        if consent.PLUGIN in only:
+            _only_plugin(base_dir, target, echo, dry_run=dry_run)
+        elif consent.BROKER in only:
+            _only_broker(base_dir, target, echo, dry_run=dry_run)
+        elif "g2" in names and not dry_run:
+            plugin.remove(base_dir, target, echo)  # the plugin belongs to g2
+        elif names and not dry_run and consent.plugin_wanted(target):
+            plugin.install(base_dir, target, echo)  # isolation.json lists the declined groups
+        if not dry_run:
+            save(target, path)
+    except BaseException:
+        if res is not None and res.tx is not None and res.target is not None:
+            configwrite.restore(res.target, res.tx)
+        atomic_write_bytes(path, previous)
+        if consent.plugin_wanted(before):  # isolation.json must not outlive the old state
+            undo = copy.deepcopy(target)  # its file hashes are the ones on disk now
+            undo.consents, undo.extra = before.consents, before.extra
+            with contextlib.suppress(Exception):
+                plugin.install(base_dir, undo, lambda _text: None)
+        raise
+    if not dry_run:
+        _rerender(base_dir, echo)
+    return 0
+
+
 def remove(
     *,
     base_dir: Path | None,
@@ -696,49 +778,11 @@ def remove(
     if read.status == "absent" or state == GuardState():
         echo("Nothing to remove: Carter has no guard state here.")
         return 0
-    scoped = only is not None
     if dry_run:
         echo("carter guard remove (dry run: nothing is written)")
     root = backups_dir(base_dir) / _stamp()
-    if scoped:
-        target = copy.deepcopy(state) if dry_run else state
-        names = [n for n in (only or []) if n not in (consent.PLUGIN, consent.BROKER)]
-        for name in names:
-            target.consents.pop(name, None)
-        if names:
-            agents = builtin_agents() if "g2" in consent.accepted_groups(target) else []
-            res = policies.apply(
-                base_dir,
-                target,
-                [],
-                agents=agents,
-                backup_root=root,
-                dry_run=dry_run,
-                reader=reader,
-            )
-            echo(f"OpenCode config: {tilde(res.target or '')}")
-            _show_diff(res, echo)
-        if consent.PLUGIN in (only or []):
-            _only_plugin(base_dir, target, echo, dry_run=dry_run)
-        elif consent.BROKER in (only or []):
-            _only_broker(base_dir, target, echo, dry_run=dry_run)
-        elif "g2" in names and not dry_run:
-            plugin.remove(base_dir, target, echo)  # the plugin belongs to g2
-        hook_groups = [g for g in (only or []) if g in ("hooks", "repo_hooks", "alias")]
-        if hook_groups and dry_run:
-            echo(f"  (the git keys of {ui.short_list(hook_groups)} would go too)")
-        elif hook_groups:
-            # what stays accepted keeps its keys: only the withdrawn group's entries go
-            mode, _ = _availability(echo)
-            _git_step(base_dir, target, echo, dry_run=False, mode=mode)
-            if "repo_hooks" in hook_groups:
-                _remove_repo_hooks(target, echo)
-            if not {"hooks", "repo_hooks"} & set(consent.accepted_groups(target)):
-                _remove_script(base_dir, target, echo)
-        if not dry_run:
-            save(target, path)
-            _rerender(base_dir, echo)
-        return 0
+    if only is not None:
+        return _remove_scoped(base_dir, path, state, only, dry_run, echo, reader, root)
     rem = policies.remove(base_dir, state, backup_root=root, dry_run=dry_run, reader=reader)
     for ident in rem.removed + rem.perms.removed:
         echo(f"  - {ident}")

@@ -19,7 +19,7 @@ from click.testing import CliRunner
 
 from carter import ui
 from carter.cli import main
-from guard.helpers import decline
+from guard.helpers import NO_TO_ALL, decline
 
 HOME_AS_SEEN = "/home/dev"
 ANSI = re.compile(r"\x1b\[[0-9;]*m")
@@ -62,7 +62,7 @@ def at_a_terminal(stack, human_tty) -> None:
 
 
 def test_the_install_question_is_a_short_table(at_a_terminal) -> None:
-    lines = run("guard", "install", input="n\n")
+    lines = run("guard", "install", input=NO_TO_ALL)
     rows = question_rows(lines)
     check(lines, target=True, table=tuple(rows))
     assert any("(details: carter guard --help)" in ln for ln in lines)  # where the rest is
@@ -74,7 +74,7 @@ def test_the_install_question_is_a_short_table(at_a_terminal) -> None:
 
 def test_the_question_for_a_revision_names_what_is_new(at_a_terminal) -> None:
     decline("hooks")
-    lines = run("guard", "install", input="n\n")
+    lines = run("guard", "install", input=NO_TO_ALL)
     check(lines, target=True, table=tuple(question_rows(lines)))
 
 

@@ -164,7 +164,7 @@ test("the gate is called by absolute python_path with gate_args, the command on 
     await f.hooks["tool.execute.before"](e)
     delete process.env.SSH_AUTH_SOCK
     assert.equal(f.recorded("gate.stdin"), "git status -s")
-    assert.deepEqual(f.recorded("gate.args").trim().split("\n"), ["-I", "-m", "carter.gate", "--json", "--cwd", "/work/repo", "--skip-groups", "sudo-docker"])
+    assert.deepEqual(f.recorded("gate.args").trim().split("\n"), ["-I", "-m", "carter.gate", "--json", "--cwd", "/work/repo", "--skip-groups", "docker"])
     // the child reports its physical directory: /private/var/... for a /var/... temp dir on macOS
     assert.equal(realpathSync(f.recorded("gate.cwd").trim()), realpathSync(f.home))
     assert.equal(f.recorded("gate.sshsock").trim(), "1")

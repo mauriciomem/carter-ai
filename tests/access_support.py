@@ -6,7 +6,7 @@ from carter.guard.state import GuardState, save
 from carter.identity.policyset import consent_groups
 from carter.install.paths import guard_state_path
 
-ALL_GROUPS = ("g2", "hooks", "sudo-docker", "read-edit-denies", "config-edit")
+ALL_GROUPS = ("g2", "hooks", "docker", "read-edit-denies", "config-edit")
 
 
 def record_groups(*groups: str) -> None:

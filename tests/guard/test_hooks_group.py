@@ -51,7 +51,7 @@ def read_all(path: Path, key: str) -> list[str]:
 class TestEntries:
     def test_only_when_hooks_is_accepted(self) -> None:
         assert gc.carter_git_entries() == []
-        assert gc.carter_git_entries(["g2", "sudo-docker"]) == []
+        assert gc.carter_git_entries(["g2", "docker"]) == []
         entries = dict(gc.carter_git_entries(["hooks"], hooks_rev=1))  # what revision 1 wrote
         assert set(entries) == {
             "hook.carter-guard-pre-push.event",
@@ -123,7 +123,7 @@ class TestInstall:
         assert not guard_script_path(None).exists() and not carter_gitconfig_path(None).exists()
         assert "include" not in global_cfg().read_text()
         out = guard("status").output
-        assert "hooks" in out and "declined" in out and "see: carter guard install --help" in out
+        assert "hooks" in out and "declined" in out and "see: carter guard --help" in out
 
     def test_the_consent_prompt_shows_the_effect_line(self, stack, human_tty) -> None:
         human_tty(True)
@@ -142,6 +142,7 @@ class TestInstall:
         assert global_cfg().read_bytes() == before
         assert not guard_script_path(None).exists() and not carter_gitconfig_path(None).exists()
 
+    @pytest.mark.usefixtures("at_terminal")
     def test_remove_only_hooks_keeps_the_denies(self, stack) -> None:
         stack.fake()
         guard("install", "--yes")
@@ -153,7 +154,7 @@ class TestInstall:
             and "carter-gitconfig" not in global_cfg().read_text()
         )
         state = load(guard_state_path(None))
-        assert "hooks" not in state.consents and "g2" in state.consents
+        assert state.consents["hooks"]["decision"] == "declined" and "g2" in state.consents
         assert state.agent_permissions  # the per-agent denies stay
 
 

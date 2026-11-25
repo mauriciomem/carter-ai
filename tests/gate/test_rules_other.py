@@ -195,10 +195,54 @@ class TestOtherVerbs:
     def test_other_opencode_commands_pass(self, cmd: str) -> None:
         assert rule_of(cmd) is None
 
-    @pytest.mark.parametrize("verb", ["sudo", "docker", "podman", "doas", "pkexec"])
-    def test_a_declined_sudo_docker_group_lifts_exactly_these(self, verb: str) -> None:
-        assert rule_of(f"{verb} x", skip=("sudo-docker",)) is None
+    @pytest.mark.parametrize("verb", ["docker", "podman"])
+    def test_a_declined_docker_group_lifts_exactly_these(self, verb: str) -> None:
+        assert rule_of(f"{verb} x", skip=("docker",)) is None
         assert rule_of(f"{verb} x") == "other-verbs"
+
+    PRIVILEGE = ("sudo", "doas", "pkexec", "sudoedit", "sudo-rs", "run0")
+    EVERY_OTHER = ("docker", "hooks", "read-edit-denies", "config-edit", "alias", "repo_hooks")
+
+    @pytest.mark.parametrize("verb", PRIVILEGE)
+    def test_the_privilege_verbs_are_g2_and_no_other_group_lifts_them(self, verb: str) -> None:
+        assert rule_of(f"{verb} x", skip=self.EVERY_OTHER) == "other-verbs"
+        assert rule_of(f"{verb} x") == "other-verbs"
+        assert rule_of(f"env {verb} x", skip=self.EVERY_OTHER) == "other-verbs"
+        assert rule_of(f"/usr/bin/{verb} x", skip=self.EVERY_OTHER) == "other-verbs"
+
+    @pytest.mark.parametrize(
+        "cmd",
+        [
+            "su -c id",
+            "su root -c id",
+            "su -lc id",
+            "su -cid",
+            "su --command=id",
+            "su --command id",
+            "/usr/bin/su -c id",
+            "env su -c id",
+            "machinectl shell root@",
+            "machinectl -H host shell",
+        ],
+    )
+    def test_su_with_a_command_and_machinectl_shell_are_the_floor(self, cmd: str) -> None:
+        assert rule_of(cmd) == "other-verbs"
+        assert rule_of(cmd, skip=self.EVERY_OTHER) == "other-verbs"
+
+    @pytest.mark.parametrize(
+        "cmd", ["su", "su bob", "su - bob", "su --help", "machinectl list", "machinectl status x"]
+    )
+    def test_su_without_a_command_and_the_rest_of_machinectl_pass(self, cmd: str) -> None:
+        assert rule_of(cmd) is None
+
+    @pytest.mark.parametrize("verb", ["docker", "podman", "nerdctl", "docker-compose", "buildah"])
+    def test_every_container_verb_is_the_docker_group(self, verb: str) -> None:
+        assert rule_of(f"{verb} x") == "other-verbs"
+        assert rule_of(f"{verb} x", skip=("docker",)) is None
+        assert rule_of(f"env {verb} x") == "other-verbs"
+
+    def test_declining_docker_lifts_no_privilege_verb_in_the_same_line(self) -> None:
+        assert rule_of("nerdctl ps; doas ls", skip=("docker",)) == "other-verbs"
 
     def test_declining_that_group_changes_nothing_else(self) -> None:
         for cmd in (
@@ -210,13 +254,13 @@ class TestOtherVerbs:
             "carter push",
             "tmux x",
         ):
-            assert rule_of(cmd, skip=("sudo-docker",)) == rule_of(cmd) is not None, cmd
+            assert rule_of(cmd, skip=("docker",)) == rule_of(cmd) is not None, cmd
 
     def test_the_other_groups_skip_their_own_rules(self) -> None:
         assert rule_of("cat ~/.ssh/id", skip=("read-edit-denies",)) is None
         assert rule_of("echo x > ~/.carter/isolation.json", skip=("config-edit",)) is None
         assert rule_of("git push", skip=("g2",)) is None
-        assert rule_of("sudo x", skip=("g2",)) == "other-verbs"
+        assert rule_of("docker x", skip=("g2",)) == "other-verbs"  # docker has its own group
 
     def test_a_security_keychain_read(self) -> None:
         for sub in ("find-generic-password", "find-internet-password"):
@@ -329,7 +373,41 @@ class TestInterpreters:
 
     def test_sudo_docker_podman_in_program_text(self) -> None:
         assert rule_of("python3 -c \"import os; os.system('sudo ls')\"") == "other-verbs"
-        assert rule_of("python3 -c \"os.system('docker ps')\"", skip=("sudo-docker",)) is None
+        assert rule_of("python3 -c \"os.system('docker ps')\"", skip=("docker",)) is None
+
+    @pytest.mark.parametrize(
+        "word",
+        [
+            "doas ls",
+            "pkexec id",
+            "sudoedit f",
+            "sudo-rs ls",
+            "run0 id",
+            "su -c id",
+            "su -lc x",
+            "machinectl shell root@",
+        ],
+    )
+    def test_the_other_privilege_words_in_program_text_are_the_floor(self, word: str) -> None:
+        every_other = ("docker", "hooks", "read-edit-denies", "config-edit")
+        for cmd in (
+            f"python3 -c \"import os; os.system('{word}')\"",
+            f"perl -e 'system(\"{word}\")'",
+        ):
+            assert rule_of(cmd) == "other-verbs", cmd
+            assert rule_of(cmd, skip=every_other) == "other-verbs", cmd
+
+    @pytest.mark.parametrize("word", ["nerdctl ps", "docker-compose up", "buildah bud ."])
+    def test_the_other_container_words_in_program_text_follow_the_docker_group(
+        self, word: str
+    ) -> None:
+        cmd = f"python3 -c \"import os; os.system('{word}')\""
+        assert rule_of(cmd) == "other-verbs"
+        assert rule_of(cmd, skip=("docker",)) is None
+
+    def test_words_that_only_contain_a_verb_pass_in_program_text(self) -> None:
+        for text in ("pseudo = 1", "run01 = 2", "sudoers = 3", "result = 'su'", "x = 'resume -c'"):
+            assert rule_of(f'python3 -c "{text}"') is None, text
 
     def test_program_text_naming_credentials_or_control_files(self) -> None:
         assert rule_of("python3 -c \"open('/home/u/.ssh/id_rsa').read()\"") == "credential-paths"

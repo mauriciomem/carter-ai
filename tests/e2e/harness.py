@@ -507,6 +507,20 @@ class Rig:
             timeout=timeout,
         )
 
+    def run_tty(
+        self, argv: Sequence[str], *, timeout: float = 120.0
+    ) -> subprocess.CompletedProcess[str]:
+        """``run`` on a pty, for the human-only commands that ask for a terminal
+        (``guard remove --only``). The transcript comes back as ``stdout``."""
+        from ssh_rig import pty_run  # noqa: PLC0415
+
+        self._ensure_service_port()
+        wrapped = self._wrap(list(argv))
+        wrapped[0] = shutil.which(wrapped[0]) or wrapped[0]  # the pty child execs it as given
+        done = pty_run(wrapped, self.env(), [], cwd=self.home, timeout=timeout)
+        code = done.rc if isinstance(done.rc, int) else 124
+        return subprocess.CompletedProcess(wrapped, code, done.output, "")
+
     def _ensure_service_port(self) -> None:
         if getattr(self, "_service_port_set", False):
             return

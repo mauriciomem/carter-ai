@@ -21,7 +21,7 @@ from carter import terminal, ui
 from carter.broker import counter
 from carter.cliguard import guarded, verbose_option
 from carter.dotfiles_help import INSTALL_EPILOG, UNINSTALL_EPILOG
-from carter.guard import consent, engine, report, status
+from carter.guard import agent_rules, consent, engine, report, status
 from carter.identity.policyset import consent_groups
 from carter.install.paths import run_dir
 
@@ -82,7 +82,15 @@ def guards_help() -> str:
     for group in consent_groups():
         lines.append(f"  {group.id:<16}  {group.short}")
         lines += [" " * 20 + row for row in _wrap_code(group.effect, 58)]
-    lines += ["", "Without a terminal nothing is installed unless you pass --yes."]
+    lines += [
+        "",
+        "A no asks group by group. A group you decline, or take out with",
+        "`remove --only <group>`, stays declined (not offered, not installed,",
+        "its rules not rendered) until `carter guard install --only <group>`.",
+        "",
+        "Without a terminal nothing is installed unless you pass --yes.",
+    ]
+    lines.append("A bad ~/.carter/guard-state.json keeps all guards.")
     return "\n".join(lines)
 
 
@@ -128,7 +136,9 @@ def remove_cmd(
     del assume_yes  # accepted and ignored: nothing is asked any more
 
     def run() -> int:
-        terminal.require_human_terminal("guard remove", need_tty=False)
+        # a scoped remove is recorded as a decline that outlives it: a person must be there
+        scoped = only is not None and not dry_run
+        terminal.require_human_terminal("guard remove", need_tty=scoped, streams=("stdin",))
         code = engine.remove(
             base_dir=base_dir,
             only=only,
@@ -137,6 +147,8 @@ def remove_cmd(
         )
         if code == 0 and not dry_run:
             ui.ok("guards removed" if only is None else f"removed {ui.short_list(only)}")
+            if only is not None:
+                report.removed_groups(base_dir, only)
         return code
 
     _guarded(run)
@@ -163,6 +175,10 @@ def status_cmd(base_dir: Path | None, reset_b: bool) -> None:
         if ui.verbose():
             for line in lines:
                 ui.line(line)
+        if any(f": {bad}:" in lines[0] for bad in ("CORRUPT", "NEWER")):
+            ui.warn(agent_rules.UNUSABLE_STATE)  # never "✓ guards: 1 installed"
+            return 0
+        if ui.verbose():
             return 0
         problems = 0
         for before, line in zip(["", *lines], lines, strict=False):

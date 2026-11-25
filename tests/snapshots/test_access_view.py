@@ -21,7 +21,7 @@ from carter.access import Access, missing_group_lines, resolve
 from snapshots.term import ANSI, Term
 
 GOLDEN = Path(__file__).parent / "golden"
-ALL_GROUPS = ["g2", "hooks", "sudo-docker", "read-edit-denies", "config-edit"]
+ALL_GROUPS = ["g2", "hooks", "docker", "read-edit-denies", "config-edit"]
 _FOREIGN = ("NO_COLOR", "COLORTERM", "FORCE_COLOR", "TTY_COMPATIBLE", "TTY_INTERACTIVE")
 
 

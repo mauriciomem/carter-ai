@@ -18,7 +18,7 @@ from snapshots.term import Term
 
 VERSION = "v0.19.2"
 NEXT_STEP = "restart OpenCode from a clean terminal"
-GUARDS = ["g2", "hooks", "sudo-docker", "read-edit-denies", "config-edit"]
+GUARDS = ["g2", "hooks", "docker", "read-edit-denies", "config-edit"]
 HOME = Path("/home/u")
 BACKUP = HOME / ".carter/backups/20261112T101500"
 OC = HOME / ".config/opencode"

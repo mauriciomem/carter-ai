@@ -61,7 +61,7 @@ Carter install  v0.19.2
     agents            8  new
     skills           27  new
     knowledge files   4  new
-    guards               g2 · hooks · sudo-docker · read-edit-denies · config-edit
+    guards               g2 · hooks · docker · read-edit-denies · config-edit
 
 → restart the OpenCode server from a clean terminal to load the agents and plugin
 ```
@@ -221,8 +221,10 @@ Carter plugin (`~/.config/opencode/plugins/carter/`, found by OpenCode without a
 
 It asks **one** question: a table with one short row per group (what each does: `carter guard --help`)
 and `Install? [Y/n]` (Enter is yes). That
-yes is the consent for every group it lists; a no installs nothing. `--yes` skips the question.
-Groups you declined earlier stay declined and are not asked again, with one exception: while the
+yes is the consent for every group it lists. A no asks `<group> [Y/n]` for each row and records
+every no as declined (Ctrl-C records nothing); if nothing is accepted, nothing is installed.
+`--yes` skips the question. Groups you declined (at a prompt, or with `guard remove --only`)
+stay declined, across `carter install`, `carter guard install` and `carter update`, with one exception: while the
 LLM signing is on and no commit-hook group is installed, a declined `hooks` (or
 `repo_hooks` on git older than 2.54) is offered again in the same question, with a line saying why.
 `--only hooks` asks about a declined group on purpose. The optional `alias` group only comes with
@@ -233,7 +235,7 @@ of each group and the diff. Restart the OpenCode server after the plugin is inst
 |--------|-------------|
 | `--dry-run` | Show the groups, how many rules the Carter agents would carry and the per-agent denies; write nothing |
 | `-y`, `--yes` | Skip the question. Without a terminal and without `--yes` nothing is installed (a notice says so, exit 0) |
-| `--only GROUPS` | Comma-separated: `g2`, `hooks`, `sudo-docker`, `read-edit-denies`, `config-edit`, `alias`, `repo_hooks`. `hooks` needs git 2.54 and `repo_hooks` is for older git (the one that does not apply is skipped). `--yes --only g2` accepts that group without the question, for scripts. `plugin` is not accepted here |
+| `--only GROUPS` | Comma-separated: `g2`, `hooks`, `docker`, `read-edit-denies`, `config-edit`, `alias`, `repo_hooks`. `hooks` needs git 2.54 and `repo_hooks` is for older git (the one that does not apply is skipped). `--yes --only g2` accepts that group without the question, for scripts. `plugin` is not accepted here |
 | `-v`, `--verbose` | Show the explanation of each group and the diff |
 
 If a provider is missing after the write, the config is restored from the
@@ -265,8 +267,10 @@ nothing an agent can call resets it). See [Write operations](../guides/write-ope
 carter guard remove [--dry-run] [--only GROUPS|plugin|broker] [-v]
 ```
 
-Asks nothing (the OpenCode config is backed up) and needs no terminal; an agent shell is
-refused. Removes the agent rules, per-agent denies and Carter's git files, each only where it is
+Asks nothing (the OpenCode config is backed up). A plain remove needs no terminal; `--only` (not
+`--dry-run`) needs your stdin to be a terminal, because it records a decline that outlives it. An
+agent shell is always refused. If a step of `--only` fails, the OpenCode config and the guard state
+are put back. Removes the agent rules, per-agent denies and Carter's git files, each only where it is
 unchanged since Carter wrote it (anything you edited is kept and reported). Keeps
 `~/.carter/secrets/gh-read.token` (with a reminder to delete and revoke it) and
 `~/.carter/state/audit/`.
@@ -275,7 +279,7 @@ unchanged since Carter wrote it (anything you edited is kept and reported). Keep
 |--------|-------------|
 | `--dry-run` | Show what would be removed; write nothing |
 | `-v`, `--verbose` | List each statement and file removed or kept |
-| `--only GROUPS` | Remove only these groups (and forget their consent). `plugin` removes just the plugin, `isolation.json` and `~/.carter/run/`: the agent rules, per-agent denies, hooks and the token stay, and a bare `carter guard install --yes` doesn't bring the plugin back. `broker` turns only [`carter_push`](../guides/write-operations.md#letting-devops-ask-you-to-push) off: the plugin and `isolation.json` are re-rendered without it, and the headless profile is removed. They can be combined with group names |
+| `--only GROUPS` | Remove only these groups and record them as declined: later installs don't offer them again, and `isolation.json` is re-rendered in the same run; `guard install --only <group>` re-enables one. `plugin` removes just the plugin, `isolation.json` and `~/.carter/run/`: the agent rules, per-agent denies, hooks and the token stay, and a bare `carter guard install --yes` doesn't bring the plugin back. `broker` turns only [`carter_push`](../guides/write-operations.md#letting-devops-ask-you-to-push) off: the plugin and `isolation.json` are re-rendered without it, and the headless profile is removed. They can be combined with group names |
 
 **Emergency rollback without Carter.** If `carter` itself is broken, delete the plugin
 directory from your own terminal: `rm -r ~/.config/opencode/plugins/carter`. A running
@@ -625,8 +629,12 @@ The header names the level and where it comes from: `(default)` when `[access]` 
 A `!` line under the header is a fact to act on. It goes to stderr:
 
 - A consent group is not installed (`off`), so the floor rows it lists are not denied, for example
-  `! g2 off: push, gh_api, github_admin, carter_internals`. The groups are `g2`, `sudo-docker`,
-  `read-edit-denies`, `hooks` and `config-edit`. Run `carter guard install`.
+  `! g2 off: push, gh_api, github_admin, carter_internals`. The groups are `g2`,
+  `read-edit-denies`, `docker` (`! docker off: agents may run docker (root-equivalent)`: no row, but
+  agents can reach root through it), `hooks` and `config-edit`. A group you declined shows the same
+  way. Run `carter guard install`, or `carter guard install --only <group>` for a declined one.
+  `sudo` is listed in the `g2` line only when Carter keeps no guard state at all: with one, its
+  denies are always rendered, whatever you consented to.
 - The error of an invalid `[access]`, or a workspace value that cannot loosen.
 
 `carter check` prints the invalid-`[access]` and workspace lines too, but only one line for the

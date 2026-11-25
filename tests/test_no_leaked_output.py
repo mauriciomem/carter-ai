@@ -47,7 +47,7 @@ def noisy_opencode(tmp_path: Path) -> tuple[dict[str, str], Path]:
 
 def installed_state() -> None:
     state = GuardState()
-    for name in ("g2", "hooks", "sudo-docker", "read-edit-denies", "config-edit"):
+    for name in ("g2", "hooks", "docker", "read-edit-denies", "config-edit"):
         state.consent(name, "accepted", "2026-11-09", 3 if name == "g2" else 2)
     path = guard_state_path(None)
     path.parent.mkdir(parents=True, exist_ok=True)

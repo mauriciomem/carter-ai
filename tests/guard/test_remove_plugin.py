@@ -96,6 +96,7 @@ class TestRoundTrip:
 
 
 class TestOnlyPlugin:
+    @pytest.mark.usefixtures("at_terminal")
     def test_it_removes_the_plugin_side_and_keeps_everything_else(self, stack) -> None:
         install(stack)
         before = load(guard_state_path(None))
@@ -116,6 +117,7 @@ class TestOnlyPlugin:
             f for f in state.files if "plugins" in f["path"] or f["path"].endswith("isolation.json")
         ]
 
+    @pytest.mark.usefixtures("at_terminal")
     def test_a_bare_yes_never_brings_it_back_but_only_g2_does(self, stack) -> None:
         install(stack)
         reload(stack)
@@ -135,12 +137,19 @@ class TestOnlyPlugin:
         assert res.exit_code == 0 and "would remove" in res.output
         assert tree_hash(home, skip=("backups",)) == before
 
-    def test_it_asks_nothing_and_needs_no_terminal(self, stack, human_tty) -> None:
+    @pytest.mark.usefixtures("at_terminal")
+    def test_it_asks_nothing(self, stack) -> None:
+        install(stack)
+        res = guard("remove", "--only", "plugin")  # no input given: a question would abort
+        assert res.exit_code == 0 and not any(p.exists() for p in plugin_files())
+
+    def test_it_needs_a_terminal_like_every_scoped_remove(self, stack, human_tty) -> None:
         install(stack)
         human_tty(False)
         res = guard("remove", "--only", "plugin")
-        assert res.exit_code == 0 and not any(p.exists() for p in plugin_files())
+        assert res.exit_code == 1 and all(p.exists() for p in plugin_files())
 
+    @pytest.mark.usefixtures("at_terminal")
     def test_an_agent_shell_is_refused(self, stack, monkeypatch: pytest.MonkeyPatch) -> None:
         install(stack)
         monkeypatch.setenv("AGENT", "1")
@@ -153,14 +162,16 @@ class TestOnlyPlugin:
         res = guard("install", "--yes", "--only", "plugin")
         assert res.exit_code == 2 and "use --only g2" in res.output
 
+    @pytest.mark.usefixtures("at_terminal")
     def test_plugin_can_be_combined_with_groups(self, stack) -> None:
         install(stack)
         reload(stack)
-        res = guard("remove", "--yes", "--only", "plugin,sudo-docker")
+        res = guard("remove", "--yes", "--only", "plugin,docker")
         assert res.exit_code == 0, res.output
         assert not isolation_path(None).exists()
-        assert "sudo-docker" not in load(guard_state_path(None)).consents
+        assert load(guard_state_path(None)).consents["docker"]["decision"] == "declined"
 
+    @pytest.mark.usefixtures("at_terminal")
     def test_removing_g2_removes_its_plugin_too(self, stack) -> None:
         install(stack)
         reload(stack)
@@ -169,6 +180,7 @@ class TestOnlyPlugin:
 
 
 class TestEdited:
+    @pytest.mark.usefixtures("at_terminal")
     def test_an_edited_plugin_file_is_kept_and_the_rm_line_printed(self, stack) -> None:
         install(stack)
         index = plugin_dir(None) / "index.ts"
@@ -215,6 +227,7 @@ class TestUninstallWiring:
         assert res.exit_code == 0 and all(p.exists() for p in plugin_files())
 
 
+@pytest.mark.usefixtures("at_terminal")
 def test_git_still_works_after_every_step(stack, tmp_path: Path) -> None:
     install(stack)
     reload(stack)

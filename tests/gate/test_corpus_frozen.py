@@ -10,8 +10,8 @@ from __future__ import annotations
 from gate import corpus
 
 # The hash covers every field but ``why``. The counts only grow.
-FROZEN_SHA256 = "2cfca0b4d84d664db248bf1721abab3d9af0bf8bc37803e9ee8ae96ebc9126e0"
-FROZEN_COUNTS = {"deny": 295, "allow": 159}
+FROZEN_SHA256 = "73388ccca863dd79d6b1af9ee34c0f9f504708cc599e434fc2e1c53b8458a661"
+FROZEN_COUNTS = {"deny": 312, "allow": 159}
 
 
 def test_the_corpus_hash_is_the_reviewed_one() -> None:

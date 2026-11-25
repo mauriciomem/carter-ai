@@ -236,9 +236,9 @@ class TestSchema:
                 isolation.validate(value)
 
     def test_declined_groups_are_known_group_names_and_sorted(self) -> None:
-        assert doc(declined_groups=("sudo-docker", "config-edit"))["plugin"]["declined_groups"] == [
+        assert doc(declined_groups=("docker", "config-edit"))["plugin"]["declined_groups"] == [
             "config-edit",
-            "sudo-docker",
+            "docker",
         ]
 
     def test_errors_name_keys_never_values(self) -> None:
@@ -281,7 +281,7 @@ class TestHash:
             carter_path="/opt/carter/bin/carter",
             false_path="/usr/bin/false",
             pat_file=f"{HOME}/.carter/secrets/gh-read.token",
-            declined_groups=("sudo-docker",),
+            declined_groups=("docker",),
         )
         assert rendered == golden["doc"]
         assert isolation.sha256_hex(isolation.canonical_bytes(rendered)) == golden["sha256"]

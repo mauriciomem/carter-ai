@@ -23,7 +23,8 @@ from carter.identity.errors import E_STATE_INVALID, IdentityError
 from carter.install.atomic import atomic_write_bytes
 from carter.install.ownership import sha256_bytes
 
-SCHEMA = 1
+# 2: ``sudo-docker`` is stored as ``docker``; an older Carter sees "newer" and keeps every deny.
+SCHEMA = 2
 STATE_KEYS = (
     "schema", "consents", "files", "gitconfig", "git_config", "opencode_config",
     "opencode_policies", "agent_permissions", "repo_hooks", "guard_version",
@@ -36,6 +37,8 @@ GITCONFIG_FIELDS = ("file", "key", "value")
 GIT_CONFIG_FIELDS = ("file", "key", "value", "scope")
 REPO_HOOK_FIELDS = ("path", "sha256")
 INCLUDE_KEY = "include.path"
+# Split groups: the record moves to the new name on read (`sudo` became the floor: no record).
+LEGACY_GROUPS = {"sudo-docker": "docker"}
 _LISTS = ("files", "git_config", "opencode_policies", "agent_permissions", "repo_hooks")
 
 
@@ -160,6 +163,17 @@ class GuardState:
         return True
 
 
+def _migrated(consents: dict[str, dict[str, Any]]) -> dict[str, dict[str, Any]]:
+    """Move a split group's record to its new name (in memory; the next save writes it). Nobody
+    is asked again. With both names recorded, an ``accepted`` one wins (the stricter reading)."""
+    out = dict(consents)
+    for old, new in LEGACY_GROUPS.items():
+        record = out.pop(old, None)
+        if record and (new not in out or record.get("decision") == "accepted"):
+            out[new] = record
+    return out
+
+
 def _invalid(detail: str) -> IdentityError:
     return IdentityError(E_STATE_INVALID, detail=detail)  # key names only, never values
 
@@ -188,6 +202,8 @@ def _parse(data: object) -> GuardState:
     if bad := [k for k, good in ok.items() if not good]:
         raise _invalid(f"wrong type: {', '.join(bad)}")
     known = {k: data[k] for k in STATE_KEYS if k in data}
+    known["consents"] = _migrated(known.get("consents", {}))
+    known["schema"] = SCHEMA  # schema 1 is read as is; the next save writes 2
     return GuardState(**known, extra={k: v for k, v in data.items() if k not in STATE_KEYS})
 
 
@@ -216,6 +232,8 @@ class ReadResult:
 def load_or_empty_readonly(path: Path) -> ReadResult:
     """For read paths (``check``, ``status``): report the problem, never raise or write."""
     if not path.exists():
+        if path.is_symlink():  # a link to nothing is not "no guards": something was there
+            return ReadResult(GuardState(), "corrupt", "dangling symlink")
         return ReadResult(GuardState(), "absent")
     try:
         return ReadResult(load(path), "ok")

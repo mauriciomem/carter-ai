@@ -72,7 +72,7 @@ class TestInstallCallsGuard:
         assert res.exit_code == 0, res.output
         assert res.output.count("Install?") == 1
         state = load(guard_state_path(base_dir))
-        assert state.consents["sudo-docker"]["decision"] == "accepted"
+        assert state.consents["docker"]["decision"] == "accepted"
 
     def test_a_guard_failure_exits_1_but_the_rest_of_the_install_stands(
         self, stack, base_dir: Path

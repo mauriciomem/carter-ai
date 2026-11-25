@@ -29,6 +29,12 @@ def _guard_tests_never_write_the_dev_repo(
 
 
 @pytest.fixture
+def at_terminal(human_tty) -> None:  # type: ignore[no-untyped-def]
+    """A human at a terminal: a scoped ``guard remove --only`` asks for one."""
+    human_tty(True)
+
+
+@pytest.fixture
 def home(_hermetic_env: Path) -> Path:
     return _hermetic_env
 

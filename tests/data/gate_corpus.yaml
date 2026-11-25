@@ -231,6 +231,94 @@ cases:
   expect: deny
   rule: other-verbs
   why: podman
+- id: split-sudo-with-docker-declined
+  command: sudo ls
+  skip_groups: [docker]
+  expect: deny
+  rule: other-verbs
+  why: sudo is part of g2; declining the docker group does not lift it
+- id: split-doas-with-docker-declined
+  command: doas ls
+  skip_groups: [docker]
+  expect: deny
+  rule: other-verbs
+  why: the same privilege class as sudo
+- id: split-program-text-sudo-with-docker-declined
+  command: python3 -c "import os; os.system('docker ps; sudo ls')"
+  skip_groups: [docker]
+  expect: deny
+  rule: other-verbs
+  why: the program text still names sudo
+- id: floor-sudoedit
+  command: sudoedit /etc/hosts
+  expect: deny
+  rule: other-verbs
+  why: sudoedit shares sudo's credential cache
+- id: floor-sudo-rs
+  command: sudo-rs ls
+  expect: deny
+  rule: other-verbs
+  why: sudo-rs is sudo
+- id: floor-run0
+  command: run0 id
+  expect: deny
+  rule: other-verbs
+  why: run0 is systemd's sudo
+- id: floor-su-command
+  command: su root -c id
+  expect: deny
+  rule: other-verbs
+  why: su with a command line runs it as root
+- id: floor-su-cluster
+  command: su -lc id
+  expect: deny
+  rule: other-verbs
+  why: the -c flag in a cluster
+- id: floor-su-wrapped
+  command: env su -c id
+  expect: deny
+  rule: other-verbs
+  why: su behind env
+- id: floor-machinectl-shell
+  command: machinectl shell root@
+  expect: deny
+  rule: other-verbs
+  why: machinectl shell opens a root shell
+- id: floor-doas-program-text
+  command: python3 -c "import os; os.system('doas ls')"
+  expect: deny
+  rule: other-verbs
+  why: doas named in program text
+- id: floor-pkexec-program-text
+  command: perl -e 'system("pkexec id")'
+  expect: deny
+  rule: other-verbs
+  why: pkexec named in program text
+- id: floor-su-program-text
+  command: python3 -c "import os; os.system('su -c id')"
+  expect: deny
+  rule: other-verbs
+  why: su -c named in program text
+- id: docker-group-nerdctl
+  command: nerdctl run alpine
+  expect: deny
+  rule: other-verbs
+  why: nerdctl is a docker-compatible client
+- id: docker-group-compose
+  command: docker-compose up
+  expect: deny
+  rule: other-verbs
+  why: docker-compose drives the docker daemon
+- id: docker-group-buildah
+  command: buildah bud .
+  expect: deny
+  rule: other-verbs
+  why: buildah builds container images as the user
+- id: docker-group-program-text
+  command: python3 -c "import os; os.system('nerdctl ps')"
+  expect: deny
+  rule: other-verbs
+  why: a container client named in program text
 - id: rfc-opencode-run
   command: opencode run hello
   expect: deny

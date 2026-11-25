@@ -26,7 +26,7 @@ cases:
 - {id: wr-global-config, command: git config --global user.name x, rule: git-config-writes, habit: "the human changes global git config"}
 - {id: wr-author-env, command: GIT_AUTHOR_NAME=x git commit -m y, rule: env-overrides, habit: "never change the author; the trailer credits Carter"}
 - {id: wr-export-token, command: export GITHUB_TOKEN=x, rule: env-overrides, habit: "never export a token; the read-only token lives in a file"}
-- {id: wr-sudo, command: sudo ls, rule: other-verbs, habit: "the human runs it, or the consent group sudo-docker is declined"}
+- {id: wr-sudo, command: sudo ls, rule: other-verbs, habit: "the human runs it (sudo is part of g2: nothing to decline)"}
 - {id: wr-guard, command: carter guard install --yes, rule: human-only-carter, habit: "the human runs carter guard in their own terminal"}
 - {id: wr-guard-status, command: carter guard status, rule: human-only-carter, habit: "carter check --host (read-only, allowed)"}
 - {id: wr-dynamic, command: "eval \"$cmd\"", rule: dynamic-command, habit: "write the command out literally"}

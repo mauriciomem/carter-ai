@@ -15,7 +15,7 @@ from carter.install.mcp import config_target
 from carter.install.paths import backups_dir
 
 HOME = "/home/fixture"
-LIVE = ["g2", "hooks", "sudo-docker", "read-edit-denies", "config-edit", "alias", "repo_hooks"]
+LIVE = ["g2", "hooks", "docker", "read-edit-denies", "config-edit", "alias", "repo_hooks"]
 BARE_YES = [g for g in LIVE if g != "alias"]  # `alias` is optional: a bare --yes skips it
 
 
@@ -33,27 +33,34 @@ def groups_of(statements) -> set[str]:
 
 class TestStatementsFollowConsent:
     def test_only_consented_groups_are_emitted(self) -> None:
-        got = consent.desired_statements(accepted("sudo-docker"), home=HOME)
-        assert groups_of(got) == {"sudo-docker"}
-        assert [s.id for s in got] == ["deny-sudo", "deny-docker"]
+        got = consent.desired_statements(accepted("docker"), home=HOME)
+        assert groups_of(got) == {"docker", "floor"}  # the floor is nobody's to accept
+        assert [s.id for s in got if s.group != "floor"] == [
+            "deny-docker",
+            "deny-podman",
+            "deny-nerdctl",
+            "deny-docker-compose",
+            "deny-buildah",
+        ]
 
     def test_all_live_groups_give_denies_then_allows(self) -> None:
         got = consent.desired_statements(accepted(*LIVE), home=HOME)
-        assert groups_of(got) == set(LIVE) - {"hooks", "repo_hooks", "alias"}  # files and git keys
+        # files and git keys have no statements; the floor comes with every state
+        assert groups_of(got) == set(LIVE) - {"hooks", "repo_hooks", "alias"} | {"floor"}
         effects = [s.effect for s in got]
         assert effects == sorted(effects, key=lambda e: e == "allow")
 
     def test_a_declined_group_is_recorded_and_absent(self) -> None:
         st = accepted("g2")
-        st.consent("sudo-docker", "declined", "2026-11-02")
+        st.consent("docker", "declined", "2026-11-02")
         got = consent.desired_statements(st, home=HOME)
-        assert "sudo-docker" not in groups_of(got)
-        assert st.consents["sudo-docker"] == {
+        assert "docker" not in groups_of(got)
+        assert st.consents["docker"] == {
             "decision": "declined",
             "date": "2026-11-02",
             "rev": 1,
         }
-        assert consent.declined_groups(st) == ["sudo-docker"]
+        assert consent.declined_groups(st) == ["docker"]
 
     def test_gh_allows_belong_to_g2_only(self) -> None:
         assert not [
@@ -65,8 +72,9 @@ class TestStatementsFollowConsent:
             s for s in consent.desired_statements(accepted("g2"), home=HOME) if s.effect == "allow"
         ]
 
-    def test_no_consent_no_statements(self) -> None:
-        assert consent.desired_statements(GuardState(), home=HOME) == []
+    def test_no_consent_means_only_the_floor(self) -> None:
+        got = consent.desired_statements(GuardState(), home=HOME)
+        assert got and groups_of(got) == {"floor"}
 
     def test_a_reserved_group_in_state_adds_nothing(self) -> None:
         st = accepted("g2")
@@ -118,18 +126,18 @@ class TestResolve:
         assert asked == LIVE and plan.accepted == LIVE
 
     def test_a_no_declines_that_group_only(self) -> None:
-        answers = dict.fromkeys(LIVE, True) | {"sudo-docker": False}
+        answers = dict.fromkeys(LIVE, True) | {"docker": False}
         plan = consent.resolve_consents(
             GuardState(), only=None, assume_yes=False, interactive=True, ask=lambda g: answers[g.id]
         )
-        assert plan.declined == ["sudo-docker"] and "sudo-docker" not in plan.accepted
+        assert plan.declined == ["docker"] and "docker" not in plan.accepted
 
     def test_only_limits_the_groups_asked(self) -> None:
         ask, asked = self.ask_all(True)
         plan = consent.resolve_consents(
-            GuardState(), only=["g2", "sudo-docker"], assume_yes=False, interactive=True, ask=ask
+            GuardState(), only=["g2", "docker"], assume_yes=False, interactive=True, ask=ask
         )
-        assert asked == ["g2", "sudo-docker"] and plan.accepted == ["g2", "sudo-docker"]
+        assert asked == ["g2", "docker"] and plan.accepted == ["g2", "docker"]
 
     def test_an_optional_group_is_accepted_only_by_name_or_a_terminal_yes(self) -> None:
         ask, asked = self.ask_all(False)  # the terminal default for an optional group is No
@@ -159,7 +167,7 @@ class TestResolve:
         plan = consent.resolve_consents(
             GuardState(), only=None, assume_yes=False, interactive=True, ask=ask, unavailable=why
         )
-        assert asked == ["g2", "sudo-docker", "read-edit-denies", "config-edit", "alias"]
+        assert asked == ["g2", "docker", "read-edit-denies", "config-edit", "alias"]
         assert plan.unavailable == why and "hooks" not in plan.accepted + plan.declined
         assert "hooks: E-GIT-OLD: old" in plan.notices()
         explicit = consent.resolve_consents(
@@ -172,21 +180,19 @@ class TestResolve:
 
     def test_recorded_decisions_stand_without_asking_again(self) -> None:
         st = accepted("g2")
-        st.consent("sudo-docker", "declined", "2026-11-01")
+        st.consent("docker", "declined", "2026-11-01")
         ask, asked = self.ask_all(True)
         plan = consent.resolve_consents(st, only=None, assume_yes=False, interactive=True, ask=ask)
         assert asked == ["hooks", "read-edit-denies", "config-edit", "alias", "repo_hooks"]
-        assert plan.declined == ["sudo-docker"] and "g2" in plan.accepted
+        assert plan.declined == ["docker"] and "g2" in plan.accepted
 
     def test_naming_a_declined_group_asks_again(self) -> None:
         st = GuardState()
-        st.consent("sudo-docker", "declined", "2026-11-01")
-        plan = consent.resolve_consents(
-            st, only=["sudo-docker"], assume_yes=True, interactive=False
-        )
-        assert plan.accepted == ["sudo-docker"]
+        st.consent("docker", "declined", "2026-11-01")
+        plan = consent.resolve_consents(st, only=["docker"], assume_yes=True, interactive=False)
+        assert plan.accepted == ["docker"]
         consent.record(st, plan, today="2026-11-05")
-        assert st.consents["sudo-docker"] == {
+        assert st.consents["docker"] == {
             "decision": "accepted",
             "date": "2026-11-05",
             "rev": 1,
@@ -210,11 +216,11 @@ class TestOnlyParsing:
         assert consent.parse_only(None) is None
 
     def test_accepts_all_seven_names(self) -> None:
-        names = "g2,hooks,sudo-docker,read-edit-denies,config-edit,alias,repo_hooks"
+        names = "g2,hooks,docker,read-edit-denies,config-edit,alias,repo_hooks"
         assert consent.parse_only(names) == names.split(",")
 
     def test_spaces_and_duplicates(self) -> None:
-        assert consent.parse_only("g2, sudo-docker,g2") == ["g2", "sudo-docker"]
+        assert consent.parse_only("g2, docker,g2") == ["g2", "docker"]
 
     def test_unknown_group_names_the_valid_ones(self) -> None:
         with pytest.raises(ValueError, match="nope") as exc:
@@ -230,7 +236,7 @@ class TestUpgrade:
     def test_a_statement_added_to_a_consented_group_applies_with_a_diff(
         self, tmp_path: Path, fake_opencode, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        st = accepted("sudo-docker")
+        st = accepted("docker")
         wanted = consent.desired_statements(st, home=str(tmp_path))
         fake_opencode(config_sequence=[_dbg([]), _dbg(wanted)])
         policies.apply(tmp_path, st, wanted, backup_root=backups_dir(tmp_path) / "a")
@@ -238,14 +244,14 @@ class TestUpgrade:
         # A later Carter adds a statement to the same group.
         data = json.loads(json.dumps(policyset._data()))
         data["policy_set"].append(
-            {"id": "deny-podman", "group": "sudo-docker", "action": "tool.use",
-             "resource": "shell:podman *", "effect": "deny"}
+            {"id": "deny-skopeo", "group": "docker", "action": "tool.use",
+             "resource": "shell:skopeo *", "effect": "deny"}
         )  # fmt: skip
         monkeypatch.setattr(policyset, "_data", lambda: data)
         newer = consent.desired_statements(st, home=str(tmp_path))
         fake_opencode(config_sequence=[_dbg(wanted), _dbg(newer)])
         res = policies.apply(tmp_path, st, newer, backup_root=backups_dir(tmp_path) / "b")
-        assert res.added == ["deny-podman"] and res.removed == []
+        assert res.added == ["deny-skopeo"] and res.removed == []
 
     def test_a_new_group_is_not_applied_without_consent(
         self, monkeypatch: pytest.MonkeyPatch
@@ -269,7 +275,7 @@ def _dbg(statements) -> str:
 
 
 def test_the_target_file_is_created_under_the_base_dir(tmp_path: Path, fake_opencode) -> None:
-    st = accepted("sudo-docker")
+    st = accepted("docker")
     wanted = consent.desired_statements(st, home=str(tmp_path))
     fake_opencode(config_sequence=[_dbg([]), _dbg(wanted)])
     policies.apply(tmp_path, st, wanted, backup_root=backups_dir(tmp_path) / "a")

@@ -12,12 +12,25 @@ from carter.identity import policyset
 from carter.identity.rules import load_rules
 
 # The seven consent groups.
-GROUPS = ("g2", "hooks", "sudo-docker", "read-edit-denies", "config-edit", "alias", "repo_hooks")
+GROUPS = ("g2", "hooks", "docker", "read-edit-denies", "config-edit", "alias", "repo_hooks")
 
 # statement ids per group. gh allows are generated from the allowlist.
 IDS_BY_GROUP = {
     "g2": ["deny-git-push", "deny-git-send-pack", "deny-gh"],
-    "sudo-docker": ["deny-sudo", "deny-docker"],
+    # the floor: no consent group, rendered whenever Carter keeps a guard state
+    "floor": [
+        "deny-sudo",
+        "deny-sudoedit",
+        "deny-sudo-rs",
+        "deny-doas",
+        "deny-pkexec",
+        "deny-run0",
+        "deny-su-c",
+        "deny-su-lc",
+        "deny-su-root-c",
+        "deny-machinectl-shell",
+    ],
+    "docker": ["deny-docker", "deny-podman", "deny-nerdctl", "deny-docker-compose", "deny-buildah"],
     "read-edit-denies": [
         "deny-read-ssh",
         "deny-read-gh-config",
@@ -135,7 +148,7 @@ STATE_TOP_LEVEL = [
 
 def test_guard_state_top_level_keys() -> None:
     assert list(state.GuardState().to_dict()) == STATE_TOP_LEVEL
-    assert state.SCHEMA == 1
+    assert state.SCHEMA == 2
 
 
 def test_guard_state_entry_shapes() -> None:
@@ -185,12 +198,13 @@ FORBIDDEN_IDS = (
 GATE_ONLY_IDS = ("dynamic-command", "interpreter-git", "git-alias", "gate-input")
 # the consent group a rule belongs to (`--skip-groups`). Everything not listed is `g2`.
 GROUP_OF_RULE = {"credential-paths": "read-edit-denies", "control-files": "config-edit"}
+# `sudo`, `doas` and `pkexec` are the floor: no entry, so they stay with `g2`.
 GROUP_OF_VERB = {
-    "sudo": "sudo-docker",
-    "docker": "sudo-docker",
-    "podman": "sudo-docker",
-    "doas": "sudo-docker",  # gate additions: the same privilege class
-    "pkexec": "sudo-docker",
+    "docker": "docker",
+    "podman": "docker",
+    "nerdctl": "docker",
+    "docker-compose": "docker",
+    "buildah": "docker",
 }
 
 # isolation.json schema v1. Unknown or missing keys mean the file is invalid.
@@ -381,7 +395,7 @@ COMMIT_REFUSED_FLAGS = (
 CONSENT_REVS = {
     "g2": 3,
     "hooks": 2,
-    "sudo-docker": 1,
+    "docker": 1,
     "read-edit-denies": 1,
     "config-edit": 2,
     "alias": 1,

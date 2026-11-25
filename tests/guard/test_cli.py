@@ -22,11 +22,19 @@ from carter.guard.alias import ALIAS_KEY
 from carter.guard.state import load
 from carter.home import tilde
 from carter.identity.errors import E_HUMAN_TERMINAL, E_POLICIES_MISSING, E_STATE_INVALID, registry
-from carter.identity.policyset import policy_statements
+from carter.identity.policyset import floor_statements, policy_statements
 from carter.install.mcp import config_target
 from carter.install.paths import backups_dir, carter_gitconfig_path, guard_state_path
 from guard.conftest import REAL_GIT
-from guard.helpers import STAND_IN, agents_json, debug_config, decline, tree_hash, verbose
+from guard.helpers import (
+    NO_TO_ALL,
+    STAND_IN,
+    agents_json,
+    debug_config,
+    decline,
+    tree_hash,
+    verbose,
+)
 
 BUILTINS = ["build", "plan", "general", "explore"]
 PAT_MESSAGE = "kept ~/.carter/secrets/gh-read.token: revoke the token if unused"
@@ -118,7 +126,7 @@ class TestDryRun:
         assert res.exit_code == 0, res.output
         out = res.output
         assert "dry run" in out
-        for group in ("g2", "hooks", "sudo-docker", "read-edit-denies", "config-edit"):
+        for group in ("g2", "hooks", "docker", "read-edit-denies", "config-edit"):
             assert f"{group:<16} would ask" in out
         assert f"{'alias':<16} optional: --only alias" in out
         assert f"{'repo_hooks':<16} not on this machine: not needed" in out  # git >= 2.54 here
@@ -134,17 +142,18 @@ class TestDryRun:
 
     def test_only_limits_the_preview(self, stack) -> None:
         stack.fake()
-        out = guard("install", "--dry-run", "--only", "sudo-docker").output
-        assert "would carry 2 guard rule(s)" in out and "deny-git-push" not in out  # sudo, docker
+        out = guard("install", "--dry-run", "--only", "docker").output
+        floor = len(floor_statements(home=str(stack.home)))  # sudo and its relatives, always
+        assert f"would carry {floor + 5} guard rule(s)" in out and "deny-git-push" not in out
         assert "per-agent" not in out
 
     def test_a_declined_group_stays_declined_in_the_preview(self, stack, human_tty) -> None:
         human_tty(True)
         stack.fake()
-        decline("sudo-docker")
+        decline("docker")
         guard("install", "--yes")
         out = guard("install", "--dry-run").output
-        assert "sudo-docker" in out and "declined earlier" in out
+        assert "docker" in out and "declined earlier" in out
 
     def test_a_real_config_shape_gets_a_readable_diff_and_is_not_touched(self, stack) -> None:
         target = config_target(None)
@@ -182,7 +191,7 @@ class TestInstall:
             assert actions == ["carter_push"]
         state = load(guard_state_path(None))
         assert sorted(g for g, c in state.consents.items() if c["decision"] == "accepted") == [
-            "config-edit", "g2", "hooks", "read-edit-denies", "sudo-docker",
+            "config-edit", "docker", "g2", "hooks", "read-edit-denies",
         ]  # fmt: skip
         assert state.opencode_policies == [] and len(state.agent_permissions) == 4
         assert state.opencode_config == str(config_target(None))
@@ -235,25 +244,28 @@ class TestInstall:
         assert "Install this group?" not in res.output
         head = res.output.split("Install?")[0]
         assert len([ln for ln in head.splitlines() if ln.strip()]) <= 6  # a short summary
-        assert "g2" in head and "isolates agent shells" in head and "sudo-docker" in head
+        assert "g2" in head and "isolates agent shells" in head and "docker" in head
         assert "(details: carter guard --help)" in head and "(all repos)" in head
         state = load(guard_state_path(None))
-        assert {"g2", "hooks", "sudo-docker", "read-edit-denies", "config-edit"} <= set(
-            state.consents
-        )
+        assert {"g2", "hooks", "docker", "read-edit-denies", "config-edit"} <= set(state.consents)
         assert all(r["decision"] == "accepted" for r in state.consents.values())
         assert "alias" not in state.consents  # optional: only --only brings it
         assert res.output.splitlines()[-1].startswith("✓ guards installed")
 
-    def test_enter_is_yes_and_no_installs_nothing(self, stack, human_tty) -> None:
+    def test_enter_is_yes(self, stack, human_tty) -> None:
         human_tty(True)
         stack.fake()
-        before = tree_hash(stack.home)
-        no = guard("install", input="n\n")
-        assert no.exit_code == 0 and "nothing installed" in no.output
-        assert tree_hash(stack.home) == before and not guard_state_path(None).exists()
         assert guard("install", input="\n").exit_code == 0
         assert load(guard_state_path(None)).consents
+
+    def test_a_no_to_every_group_installs_nothing_and_declines_them(self, stack, human_tty) -> None:
+        human_tty(True)
+        stack.fake()
+        no = guard("install", input=NO_TO_ALL)
+        assert no.exit_code == 0 and "nothing installed" in no.output
+        assert not config_target(None).exists() and not hooks.script_path(None).exists()
+        consents = load(guard_state_path(None)).consents
+        assert consents and {c["decision"] for c in consents.values()} == {"declined"}
 
     def test_yes_skips_the_question(self, stack, human_tty) -> None:
         human_tty(True)
@@ -264,19 +276,19 @@ class TestInstall:
     def test_a_declined_group_stays_declined_and_is_not_asked_again(self, stack, human_tty) -> None:
         human_tty(True)
         stack.fake()
-        decline("sudo-docker")
+        decline("docker")
         res = guard("install", input="y\n")
         assert res.exit_code == 0, res.output
         state = load(guard_state_path(None))
-        assert state.consents["sudo-docker"]["decision"] == "declined"
-        assert "sudo-docker" not in res.output.split("Install?")[0]
+        assert state.consents["docker"]["decision"] == "declined"
+        assert "docker" not in res.output.split("Install?")[0]
 
     def test_only_installs_just_those_groups(self, stack) -> None:
         stack.fake()
-        res = guard("install", "--yes", "--only", "sudo-docker")
+        res = guard("install", "--yes", "--only", "docker")
         assert res.exit_code == 0, res.output
         state = load(guard_state_path(None))
-        assert list(state.consents) == ["sudo-docker"] and state.agent_permissions == []
+        assert list(state.consents) == ["docker"] and state.agent_permissions == []
         assert not config_target(None).exists()  # nothing global to write for this group
 
     def test_an_unknown_group_is_a_usage_error_naming_the_valid_ones(self, stack) -> None:
@@ -373,11 +385,11 @@ class TestStateGuards:
     def test_a_newer_schema_is_refused_and_never_rewritten(self, stack) -> None:
         path = guard_state_path(None)
         path.parent.mkdir(parents=True)
-        path.write_text('{"schema": 2}')
+        path.write_text('{"schema": 3}')
         stack.fake()
         res = guard("install", "--yes")
         assert res.exit_code == 1 and E_STATE_INVALID in res.output
-        assert path.read_text() == '{"schema": 2}' and not config_target(None).exists()
+        assert path.read_text() == '{"schema": 3}' and not config_target(None).exists()
 
 
 class TestGitStepAtomicity:
@@ -504,12 +516,10 @@ class TestStatus:
 
     def test_declined_groups_are_residuals(self, stack, human_tty) -> None:
         stack.fake()
-        decline("sudo-docker")
+        decline("docker")
         guard("install", "--yes")
         out = guard("status").output
-        assert (
-            "sudo-docker" in out and "declined" in out and "see: carter guard install --help" in out
-        )
+        assert "docker" in out and "declined" in out and "see: carter guard --help" in out
 
     def test_a_corrupt_state_is_reported_without_writing(self, stack) -> None:
         path = guard_state_path(None)
@@ -523,7 +533,7 @@ class TestStatus:
     def test_a_newer_schema_is_reported(self, stack) -> None:
         path = guard_state_path(None)
         path.parent.mkdir(parents=True)
-        path.write_text('{"schema": 2}')
+        path.write_text('{"schema": 3}')
         assert "NEWER" in guard("status").output
 
     def test_file_drift_is_shown(self, stack, home: Path) -> None:
@@ -624,14 +634,16 @@ class TestRemove:
         res = CliRunner().invoke(main, ["guard", "remove"], catch_exceptions=False)
         assert res.exit_code == 0 and res.output == "✓ guards removed\n"
 
+    @pytest.mark.usefixtures("at_terminal")
     def test_only_removes_one_group_and_its_consent(self, stack) -> None:
         install_all(stack)
         rest = policy_statements(("read-edit-denies", "config-edit", "g2"), home=str(stack.home))
         stack.fake(before=debug_config(stack.live), after=debug_config(rest))
-        res = guard("remove", "--yes", "--only", "sudo-docker")
+        res = guard("remove", "--yes", "--only", "docker")
         assert res.exit_code == 0, res.output
         state = load(guard_state_path(None))
-        assert "sudo-docker" not in state.consents and "g2" in state.consents
+        assert state.consents["docker"]["decision"] == "declined"  # not forgotten
+        assert state.consents["g2"]["decision"] == "accepted"
         assert "policies" not in config_data()
 
     def test_a_corrupt_state_is_not_removed_blindly(self, stack) -> None:

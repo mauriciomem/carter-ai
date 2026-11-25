@@ -9,6 +9,7 @@ from carter.access import (
     FLOOR_IDS,
     GROUP_FLOORS,
     LEVELS,
+    STATE_FLOORS,
     missing_group_lines,
     missing_groups_summary,
     resolve,
@@ -279,7 +280,7 @@ class TestWarnings:
 
 
 class TestMissingGroupLines:
-    ALL = ("g2", "hooks", "sudo-docker", "read-edit-denies", "config-edit")
+    ALL = ("g2", "hooks", "docker", "read-edit-denies", "config-edit")
 
     def test_every_group_present_means_no_line(self):
         assert missing_group_lines(self.ALL) == ()
@@ -288,8 +289,8 @@ class TestMissingGroupLines:
         lines = missing_group_lines(())
         assert [ln.split()[1] for ln in lines] == [
             "g2",
-            "sudo-docker",
             "read-edit-denies",
+            "docker",
             "hooks",
             "config-edit",
         ]
@@ -305,8 +306,14 @@ class TestMissingGroupLines:
         assert missing_group_lines([*have, "repo_hooks"]) == ()
 
     def test_every_floor_id_is_named_by_the_group_that_backs_it(self):
-        named = {i for ids in GROUP_FLOORS.values() for i in ids}
+        named = {i for ids in GROUP_FLOORS.values() for i in ids} | set(STATE_FLOORS)
         assert named == set(FLOOR_IDS)  # carter_internals rides on g2 (verbs, env overrides)
+
+    def test_sudo_is_no_consent_it_is_open_only_without_a_guard_state(self):
+        assert not {"sudo"} & {i for ids in GROUP_FLOORS.values() for i in ids}
+        (line,) = missing_group_lines([g for g in self.ALL if g != "g2"], state=False)
+        assert line == "! g2 off: push, gh_api, github_admin, sudo, carter_internals"
+        assert len(line) <= 60
 
     def test_check_gets_one_short_line_for_all_of_them(self):
         assert missing_groups_summary(missing_group_lines(self.ALL)) == ""

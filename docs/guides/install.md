@@ -75,7 +75,7 @@ Carter install  v0.19.2
     agents            8  new
     skills           27  new
     knowledge files   4  new
-    guards               g2 · hooks · sudo-docker · read-edit-denies · config-edit
+    guards               g2 · hooks · docker · read-edit-denies · config-edit
 
 → restart the OpenCode server from a clean terminal to load the agents and plugin
 ```
@@ -109,15 +109,30 @@ Without a terminal (a script, CI) and without `--yes`, the guards are skipped wi
 | `g2` | Carter agents can't push from their shell, and `gh` can read and open, edit or comment on pull requests, nothing else. It also installs the Carter **plugin** (below), and `carter_push` for the devops agent ([Write operations](write-operations.md#letting-devops-ask-you-to-push)). |
 | `hooks` | Git hooks (`pre-push`, `prepare-commit-msg`, `commit-msg`, `post-commit`) that call `~/.carter/hooks/carter-guard`: pushes from Carter agent shells are blocked, and agent commits are checked (committer, signing settings, `Co-authored-by`/`Assisted-by` trailer). Your own commits and pushes are unaffected and run no extra command. Needs git 2.54 or newer. |
 | `repo_hooks` | Git older than 2.54 only: the same hooks as files in your repositories. A hook or `core.hooksPath` that you or your tools own (husky, pre-commit) is never edited: Carter reports the repository as unguarded and prints a line to chain. |
-| `sudo-docker` | Agents can't run `sudo` or `docker`. Packer docker builds must be typed in your terminal. |
+| `docker` | Agents can't run `docker` or `podman` (and `nerdctl`, `docker-compose`, `buildah`). Packer docker builds must be typed in your terminal. Decline it to let agents use docker (a docker user can reach root: your call). |
 | `read-edit-denies` | Agents can't read SSH keys, `gh`/git credentials or the GitHub token, and can't edit `~/.ssh`. |
 | `config-edit` | Agents can't edit OpenCode config, git hooks and config, or Carter's own config and control files (`config-managed.toml` too). |
 | `alias` | **Optional.** Adds the git alias `git ai-commit` (`carter commit`), unless you already have an `alias.ai-commit`. Never part of the one question or of `--yes`: use `carter guard install --only alias`. |
 
-A group you decline stays declined. `carter guard status` and `carter check --host` list it, with
-the command that asks again (`carter guard install --only <group>`). The one exception: with the LLM
-signing on and no commit hooks installed, the single question offers a declined
-`hooks` again and says so in one line.
+`sudo` is not a group: `sudo`, `sudoedit`, `sudo-rs`, `doas`, `pkexec`, `run0`, `su -c` and
+`machinectl shell` are refused for Carter agents whatever you consent to, as long as Carter keeps
+a guard state (`~/.carter/guard-state.json`). The command gate adds the same refusal when `g2` is on,
+also when one of these words appears in the text of an interpreter program (`python -c`, `perl -e`).
+
+`guard-state.json` is schema 2 from this version on. An older Carter calls it "newer", keeps every
+deny and refuses `guard install` and `guard remove` until you upgrade it again.
+
+To decline one group, answer **n** to `Install? [Y/n]`: Carter then asks `<group> [Y/n]` for each
+row. Every n is recorded as declined in `~/.carter/guard-state.json`. (Ctrl-C leaves without
+recording anything.) `carter guard remove --only <group>` records the same decision.
+
+A group you decline stays declined: later `carter install`, `carter guard install` and
+`carter update` do not offer it again and render none of its rules. `carter guard status -v` and
+`carter check --host` list it, with the command that asks again (`carter guard install --only <group>`).
+The one exception: with the LLM signing on and no commit hooks installed, the single question
+offers a declined `hooks` again and says so in one line (an unreadable `config.toml` hides that
+offer, and one warning line says so). For scripts, `--yes --only <groups>`
+installs just those groups.
 Preview everything with `carter guard install --dry-run`: it lists every file it would write
 and writes nothing.
 
@@ -129,7 +144,7 @@ Another agent, such as OpenCode's `build` or `plan`, outside a Carter workspace 
 gate, no isolation, and Carter's hooks don't stop its `git push`. Use a Carter agent for anything
 you want guarded.
 
-The deny rules (push, `gh` writes, `sudo`/`docker`, reads of credentials, edits of OpenCode, git
+The deny rules (push, `gh` writes, `sudo`, `docker`, reads of credentials, edits of OpenCode, git
 and Carter config) are written into each Carter agent's own `permissions:` in
 `~/.config/opencode/agents/carter-*.md`, and into your workspace agents by `carter update`. Carter
 writes no global OpenCode policies. The one write in your OpenCode config is a `carter_push` deny
@@ -192,6 +207,11 @@ isolated, ask an agent to run `carter check --probe`.
 - `carter guard remove --only plugin` removes only the plugin, `isolation.json` and `run/`. The deny
   rules, hooks and token stay.
 - `carter guard remove --only broker` removes only `carter_push`.
+- `carter guard remove --only <group>` takes a group out and records it as **declined**: the next
+  install does not bring it back, and `isolation.json` is re-rendered in the same run so the command
+  gate stops enforcing that group. `carter guard install --only <group>` re-enables it. A scoped
+  remove needs a terminal on stdin (it is a decision that lasts), and if a step fails the OpenCode
+  config and the guard state are put back.
 - `carter guard remove` (or `carter uninstall`) removes everything Carter wrote and you haven't
   changed. The read-only token file and `~/.carter/state/audit/` stay. `carter uninstall --keep-guards`
   leaves the guards in place.

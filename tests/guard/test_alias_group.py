@@ -12,6 +12,7 @@ import os
 import subprocess
 from pathlib import Path
 
+import pytest
 from click.testing import CliRunner
 
 from carter.cli import main
@@ -65,12 +66,9 @@ class TestConsent:
         stack.fake()
         res = guard("install", "--only", "alias", input="n\n")  # Y/n, and no is no
         assert "Install? [Y/n]" in res.output and "nothing installed" in res.output
+        assert res.output.count("[Y/n]") == 1  # one group: the no is the answer, no second prompt
         assert ALIAS_KEY not in carter_entries()
-        assert (
-            "alias" not in load(guard_state_path(None)).consents
-            if guard_state_path(None).exists()
-            else True
-        )
+        assert load(guard_state_path(None)).consents["alias"]["decision"] == "declined"
         assert guard("install", "--only", "alias", input="\n").exit_code == 0  # Enter is yes
         assert carter_entries()[ALIAS_KEY] == ALIAS_VALUE
 
@@ -142,6 +140,7 @@ class TestUserOwnedAlias:
 
 
 class TestRemove:
+    @pytest.mark.usefixtures("at_terminal")
     def test_only_alias_leaves_the_hooks(self, stack) -> None:
         stack.fake()
         guard("install", "--yes", "--only", "hooks,alias")
@@ -151,6 +150,7 @@ class TestRemove:
         entries = carter_entries()
         assert ALIAS_KEY not in entries and "hook.carter-guard-post-commit.event" in entries
 
+    @pytest.mark.usefixtures("at_terminal")
     def test_only_hooks_leaves_the_alias(self, stack) -> None:
         stack.fake()
         guard("install", "--yes", "--only", "hooks,alias")

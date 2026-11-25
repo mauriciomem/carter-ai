@@ -588,7 +588,9 @@ def check(target_dir: str, no_harness: bool, host: bool, probe: bool) -> None:
         raise click.ClickException(str(e)) from e
     _report_ignored_policy(config, "check")
     _report_access_notes(config)
-    summary = missing_groups_summary(missing_group_lines(accessload.accepted_groups()))
+    summary = missing_groups_summary(
+        missing_group_lines(accessload.accepted_groups(), state=accessload.guard_state_present())
+    )
     if summary:
         ui.warn(summary.removeprefix("! "))  # `carter access` lists them
 

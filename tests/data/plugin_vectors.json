@@ -725,7 +725,7 @@
     ],
     "carter_path": "/opt/carter/bin/carter",
     "declined_groups": [
-     "sudo-docker"
+     "docker"
     ],
     "env_args": [
      "-I",
@@ -827,7 +827,7 @@
    },
    "schema_version": 2
   },
-  "sha256": "58b6b53b8d3786bfc9cf8fc6141566dabba63e75d3a75f3d9a469ff22b9f5625",
+  "sha256": "d06b91958b90afeada9e71d16cec50b124b7601b33045a046da00a3d9cb3eae1",
   "apply": [
    {
     "name": "clean env, token accepted",

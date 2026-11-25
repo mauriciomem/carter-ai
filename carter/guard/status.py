@@ -35,7 +35,7 @@ def _consents(state: GuardState, echo: Echo) -> None:
         elif group.optional:
             echo(f"  {group.id:<16} declined {rec['date']}  (optional)")
         else:
-            echo(f"  {group.id:<16} declined {rec['date']}  (see: carter guard install --help)")
+            echo(f"  {group.id:<16} declined {rec['date']}  (see: carter guard --help)")
 
 
 def _policies(state: GuardState, base_dir: Path | None, echo: Echo) -> None:
