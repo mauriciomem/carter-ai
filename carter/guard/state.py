@@ -216,6 +216,8 @@ class ReadResult:
 def load_or_empty_readonly(path: Path) -> ReadResult:
     """For read paths (``check``, ``status``): report the problem, never raise or write."""
     if not path.exists():
+        if path.is_symlink():  # a link to nothing is not "no guards": something was there
+            return ReadResult(GuardState(), "corrupt", "dangling symlink")
         return ReadResult(GuardState(), "absent")
     try:
         return ReadResult(load(path), "ok")

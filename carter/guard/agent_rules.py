@@ -15,10 +15,11 @@ from __future__ import annotations
 from collections.abc import Sequence
 from pathlib import Path
 
+from carter import ui
 from carter.guard import consent, optout
 from carter.guard.state import GuardState, load_or_empty_readonly
 from carter.identity import ConfigError, load_identity
-from carter.identity.policyset import Statement
+from carter.identity.policyset import Statement, policy_statements
 from carter.install.paths import carter_config_path, guard_state_path
 
 Rule = dict[str, str]
@@ -35,12 +36,30 @@ def rules_for(state: GuardState, *, home: str, optouts: Sequence[Statement] = ()
     return [to_rule(s) for s in consent.desired_statements(state, home=home, optouts=optouts)]
 
 
+UNUSABLE_STATE = "guard state unusable: guards kept (see: carter guard --help)"
+_told: set[str] = set()  # state files already reported by this process
+
+
+def _all_denies(home: str) -> list[Rule]:
+    """Every group's rules and no opt-out: what an unreadable state falls back to."""
+    return [to_rule(s) for s in policy_statements(home=home)]
+
+
 def current_rules(base_dir: Path | None = None, *, home: str | None = None) -> list[Rule]:
     """The rules this machine's guard state calls for (none when nothing is installed).
 
     The opt-outs are read live from ``config.toml``: they exist only while ``config-edit``
-    is accepted, and a broken file contributes none (the denies stay)."""
-    read = load_or_empty_readonly(guard_state_path(base_dir))
+    is accepted, and a broken file contributes none (the denies stay).
+
+    A state file that exists but cannot be read or trusted fails closed: every group's rules
+    and no opt-out, so a re-render never loosens an agent file. The file is left as it is."""
+    path = guard_state_path(base_dir)
+    read = load_or_empty_readonly(path)
+    if read.status in ("corrupt", "newer"):
+        if str(path) not in _told:
+            _told.add(str(path))
+            ui.warn(UNUSABLE_STATE)
+        return _all_denies(home or str(Path.home()))
     if read.status != "ok":
         return []
     state = read.state

@@ -15,6 +15,7 @@ from pathlib import Path
 from carter.guard import gitconfig, mirror_io
 from carter.guard.state import GuardState, load_or_empty_readonly, save
 from carter.identity import mirror
+from carter.identity.errors import E_STATE_INVALID, IdentityError
 from carter.identity.schema import IdentityConfig
 from carter.install.paths import carter_gitconfig_path, guard_state_path
 
@@ -60,6 +61,8 @@ def apply(base_dir: Path | None, cfg: IdentityConfig) -> mirror_io.SyncResult:
     """Write the mirror and save the guard state. Raises ``MirrorError`` / ``GitError``."""
     path = guard_state_path(base_dir)
     read = load_or_empty_readonly(path)
+    if read.status in ("corrupt", "newer"):  # saving an empty state would wipe the consents
+        raise IdentityError(E_STATE_INVALID, detail=read.detail)
     state: GuardState = read.state
     result = mirror_io.sync(base_dir, state, cfg)
     save(state, path)
